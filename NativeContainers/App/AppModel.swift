@@ -87,6 +87,18 @@ final class AppModel {
     }
   }
 
+  func restartContainer(id: String) async {
+    await performMutation {
+      try await self.containerService.restartContainer(id: id)
+    }
+  }
+
+  func forceStopContainer(id: String) async {
+    await performMutation {
+      try await self.containerService.forceStopContainer(id: id)
+    }
+  }
+
   func deleteContainer(id: String) async {
     await performMutation {
       try await self.containerService.deleteContainer(id: id)
@@ -128,8 +140,12 @@ final class AppModel {
     errorMessage = nil
   }
 
-  func makeContainerInspector(containerID: String) -> ContainerInspectorModel {
-    ContainerInspectorModel(containerID: containerID, service: containerService)
+  func makeContainerInspector(for container: ContainerRecord) -> ContainerInspectorModel {
+    ContainerInspectorModel(
+      containerID: container.id,
+      allocatedCPUCount: container.cpuCount,
+      service: containerService
+    )
   }
 
   func makeContainerProvisioningModel() -> ContainerProvisioningModel {

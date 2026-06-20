@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContainersView: View {
   let model: AppModel
@@ -26,6 +27,8 @@ struct ContainersView: View {
                   onSelect: { selectedContainerID = container.id },
                   onStart: { Task { await model.startContainer(id: container.id) } },
                   onStop: { Task { await model.stopContainer(id: container.id) } },
+                  onRestart: { Task { await model.restartContainer(id: container.id) } },
+                  onForceStop: { Task { await model.forceStopContainer(id: container.id) } },
                   onDelete: { pendingDeletion = container }
                 )
               }
@@ -102,6 +105,8 @@ struct ContainerRow: View {
   let onSelect: () -> Void
   let onStart: () -> Void
   let onStop: () -> Void
+  let onRestart: () -> Void
+  let onForceStop: () -> Void
   let onDelete: () -> Void
 
   var body: some View {
@@ -131,6 +136,8 @@ struct ContainerRow: View {
         isRunning: container.state.isRunning,
         onStart: onStart,
         onStop: onStop,
+        onRestart: onRestart,
+        onForceStop: onForceStop,
         onDelete: onDelete
       )
     }
@@ -168,11 +175,14 @@ struct ContainerInspectorView: View {
   let appModel: AppModel
   @State private var model: ContainerInspectorModel
   @State private var selectedLog = ContainerLogKind.standardOutput
+  @State private var isLive = true
+  @State private var followsLogs = true
+  @State private var logQuery = ""
 
   init(container: ContainerRecord, appModel: AppModel) {
     self.container = container
     self.appModel = appModel
-    _model = State(initialValue: appModel.makeContainerInspector(containerID: container.id))
+    _model = State(initialValue: appModel.makeContainerInspector(for: container))
   }
 
   var body: some View {
@@ -181,9 +191,13 @@ struct ContainerInspectorView: View {
         ContainerInspectorHeader(
           container: container,
           isLoading: model.isLoading,
+          lastUpdated: model.lastUpdated,
+          isLive: $isLive,
           onRefresh: { Task { await model.load() } },
           onStart: { Task { await appModel.startContainer(id: container.id) } },
-          onStop: { Task { await appModel.stopContainer(id: container.id) } }
+          onStop: { Task { await appModel.stopContainer(id: container.id) } },
+          onRestart: { Task { await appModel.restartContainer(id: container.id) } },
+          onForceStop: { Task { await appModel.forceStopContainer(id: container.id) } }
         )
 
         if let errorMessage = model.errorMessage {
@@ -194,11 +208,19 @@ struct ContainerInspectorView: View {
         ContainerAllocationSection(container: container)
 
         if let inspection = model.inspection {
-          ContainerMetricsSection(inspection: inspection)
+          ContainerMetricsSection(
+            inspection: inspection,
+            latestSample: model.samples.last,
+            sampleCount: model.samples.count
+          )
           ContainerPortsSection(ports: container.ports)
           ContainerLogsSection(
+            containerID: container.id,
             inspection: inspection,
-            selection: $selectedLog
+            isRunning: container.state.isRunning,
+            selection: $selectedLog,
+            followsLogs: $followsLogs,
+            query: $logQuery
           )
         } else if model.isLoading {
           ProgressView("Loading container details…")
@@ -208,43 +230,84 @@ struct ContainerInspectorView: View {
       .padding(24)
     }
     .background(.background)
-    .task {
+    .task(id: ContainerMonitorConfiguration(isLive: isLive, followsLogs: followsLogs)) {
       await model.load()
+      guard isLive, container.state.isRunning else { return }
+      await model.monitor(followLogs: followsLogs)
     }
   }
+}
+
+private struct ContainerMonitorConfiguration: Hashable {
+  let isLive: Bool
+  let followsLogs: Bool
 }
 
 struct ContainerInspectorHeader: View {
   let container: ContainerRecord
   let isLoading: Bool
+  let lastUpdated: Date?
+  @Binding var isLive: Bool
   let onRefresh: () -> Void
   let onStart: () -> Void
   let onStop: () -> Void
+  let onRestart: () -> Void
+  let onForceStop: () -> Void
 
   var body: some View {
-    HStack(alignment: .top, spacing: 14) {
-      Image(systemName: "shippingbox.fill")
-        .font(.largeTitle)
-        .foregroundStyle(.blue)
-      VStack(alignment: .leading, spacing: 4) {
-        HStack(spacing: 8) {
-          Text(container.id)
-            .font(.title.bold())
-          RuntimeStateBadge(state: container.state)
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .top, spacing: 14) {
+        Image(systemName: "shippingbox.fill")
+          .font(.largeTitle)
+          .foregroundStyle(.blue)
+        VStack(alignment: .leading, spacing: 4) {
+          HStack(spacing: 8) {
+            Text(container.id)
+              .font(.title.bold())
+              .lineLimit(1)
+            RuntimeStateBadge(state: container.state)
+          }
+          Text(container.imageReference)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .textSelection(.enabled)
         }
-        Text(container.imageReference)
-          .foregroundStyle(.secondary)
-          .textSelection(.enabled)
+        Spacer()
       }
-      Spacer()
-      Button("Refresh", systemImage: "arrow.clockwise", action: onRefresh)
-        .labelStyle(.iconOnly)
-        .disabled(isLoading)
-      if container.state.isRunning {
-        Button("Stop", systemImage: "stop.fill", action: onStop)
-      } else {
-        Button("Start", systemImage: "play.fill", action: onStart)
-          .buttonStyle(.borderedProminent)
+
+      HStack {
+        if let lastUpdated {
+          Text("Updated \(lastUpdated, format: .relative(presentation: .named))")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+        }
+        Spacer()
+        if container.state.isRunning {
+          Toggle("Live", systemImage: "waveform.path.ecg", isOn: $isLive)
+            .toggleStyle(.button)
+            .help("Sample runtime statistics every two seconds")
+        }
+        Button("Refresh", systemImage: "arrow.clockwise", action: onRefresh)
+          .labelStyle(.iconOnly)
+          .disabled(isLoading)
+        if container.state.isRunning {
+          Button("Restart", systemImage: "arrow.trianglehead.2.clockwise", action: onRestart)
+            .labelStyle(.iconOnly)
+            .help("Restart container")
+          Button("Stop", systemImage: "stop.fill", action: onStop)
+          Menu("More", systemImage: "ellipsis.circle") {
+            Button(
+              "Force Stop",
+              systemImage: "bolt.fill",
+              role: .destructive,
+              action: onForceStop
+            )
+          }
+          .menuStyle(.borderlessButton)
+        } else {
+          Button("Start", systemImage: "play.fill", action: onStart)
+            .buttonStyle(.borderedProminent)
+        }
       }
     }
   }
@@ -276,13 +339,23 @@ struct ContainerAllocationSection: View {
 
 struct ContainerMetricsSection: View {
   let inspection: ContainerInspection
+  let latestSample: ContainerRuntimeSample?
+  let sampleCount: Int
 
   private let columns = [GridItem(.adaptive(minimum: 125, maximum: 190), spacing: 10)]
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Text("Resource usage")
-        .font(.headline)
+      HStack {
+        Text("Resource usage")
+          .font(.headline)
+        Spacer()
+        if sampleCount > 1 {
+          Label("\(sampleCount) live samples", systemImage: "waveform.path.ecg")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      }
       LazyVGrid(columns: columns, spacing: 10) {
         ContainerMetricCard(
           title: "Disk",
@@ -296,8 +369,8 @@ struct ContainerMetricsSection: View {
             systemImage: "memorychip"
           )
           ContainerMetricCard(
-            title: "CPU time",
-            value: formattedCPUTime(statistics.cpuUsageMicroseconds),
+            title: "CPU",
+            value: formattedCPU(statistics),
             systemImage: "cpu"
           )
           ContainerMetricCard(
@@ -335,10 +408,14 @@ struct ContainerMetricsSection: View {
     return "\(used) / \(Int64(clamping: limit).formatted(.byteCount(style: .memory)))"
   }
 
-  private func formattedCPUTime(_ microseconds: UInt64?) -> String {
+  private func formattedCPU(_ statistics: ContainerStatistics) -> String {
+    if let cpuPercentage = latestSample?.cpuPercentage {
+      return cpuPercentage.formatted(.number.precision(.fractionLength(1))) + "%"
+    }
+    let microseconds = statistics.cpuUsageMicroseconds
     guard let microseconds else { return "—" }
     let seconds = Double(microseconds) / 1_000_000
-    return seconds.formatted(.number.precision(.fractionLength(1))) + " s"
+    return seconds.formatted(.number.precision(.fractionLength(1))) + " s total"
   }
 
   private func formattedPair(received: UInt64?, sent: UInt64?) -> String {
@@ -414,8 +491,14 @@ enum ContainerLogKind: String, CaseIterable, Identifiable {
 }
 
 struct ContainerLogsSection: View {
+  let containerID: String
   let inspection: ContainerInspection
+  let isRunning: Bool
   @Binding var selection: ContainerLogKind
+  @Binding var followsLogs: Bool
+  @Binding var query: String
+  @State private var isExporting = false
+  @State private var exportError: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -423,6 +506,9 @@ struct ContainerLogsSection: View {
         Text("Logs")
           .font(.headline)
         Spacer()
+        Toggle("Follow", systemImage: "dot.radiowaves.left.and.right", isOn: $followsLogs)
+          .toggleStyle(.button)
+          .disabled(!isRunning)
         Picker("Log source", selection: $selection) {
           ForEach(ContainerLogKind.allCases) { kind in
             Text(kind.title).tag(kind)
@@ -433,12 +519,28 @@ struct ContainerLogsSection: View {
         .frame(width: 180)
       }
 
+      HStack {
+        TextField("Search logs", text: $query)
+          .textFieldStyle(.roundedBorder)
+        if !query.isEmpty {
+          Text("\(matchCount) matching lines")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Button("Export", systemImage: "square.and.arrow.up") {
+          isExporting = true
+        }
+        .disabled(filteredLogText.isEmpty)
+      }
+
       ScrollView([.horizontal, .vertical]) {
         Group {
-          if logText.isEmpty {
+          if !query.isEmpty && filteredLogText.isEmpty {
+            Text("No matching log lines.")
+          } else if filteredLogText.isEmpty {
             Text("No log output.")
           } else {
-            Text(logText)
+            Text(filteredLogText)
           }
         }
         .font(.system(.caption, design: .monospaced))
@@ -455,6 +557,23 @@ struct ContainerLogsSection: View {
           .font(.caption)
           .foregroundStyle(.secondary)
       }
+      if let exportError {
+        Text(exportError)
+          .font(.caption)
+          .foregroundStyle(.red)
+      }
+    }
+    .fileExporter(
+      isPresented: $isExporting,
+      document: ContainerLogDocument(text: filteredLogText),
+      contentType: .plainText,
+      defaultFilename: "\(containerID)-\(selection.rawValue).log"
+    ) { result in
+      if case .failure(let error) = result {
+        exportError = error.localizedDescription
+      } else {
+        exportError = nil
+      }
     }
   }
 
@@ -463,6 +582,39 @@ struct ContainerLogsSection: View {
     case .standardOutput: inspection.standardOutput
     case .boot: inspection.bootLog
     }
+  }
+
+  private var filteredLines: [String] {
+    let lines = logText.components(separatedBy: .newlines)
+    guard !query.isEmpty else { return lines }
+    return lines.filter { $0.localizedCaseInsensitiveContains(query) }
+  }
+
+  private var filteredLogText: String {
+    filteredLines.joined(separator: "\n")
+  }
+
+  private var matchCount: Int {
+    query.isEmpty ? 0 : filteredLines.count
+  }
+}
+
+struct ContainerLogDocument: FileDocument {
+  static let readableContentTypes: [UTType] = [.plainText]
+
+  let text: String
+
+  init(text: String) {
+    self.text = text
+  }
+
+  init(configuration: ReadConfiguration) throws {
+    let data = configuration.file.regularFileContents ?? Data()
+    text = String(decoding: data, as: UTF8.self)
+  }
+
+  func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+    FileWrapper(regularFileWithContents: Data(text.utf8))
   }
 }
 

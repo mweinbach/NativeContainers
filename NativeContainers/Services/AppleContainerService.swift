@@ -346,7 +346,7 @@ actor AppleContainerService: ContainerManaging {
   func inspectContainer(id: String) async throws -> ContainerInspection {
     let snapshot = try await containerClient.get(id: id)
     async let diskUsageRequest = containerClient.diskUsage(id: id)
-    async let logsRequest = readLogs(id: id)
+    async let logsRequest = loadContainerLogs(id: id)
 
     let statistics: ContainerStatistics?
     if snapshot.status == .running {
@@ -369,6 +369,31 @@ actor AppleContainerService: ContainerManaging {
     return ContainerInspection(
       diskUsageBytes: diskUsage,
       statistics: statistics,
+      standardOutput: logs.standardOutput,
+      bootLog: logs.bootLog,
+      logsAreTruncated: logs.logsAreTruncated
+    )
+  }
+
+  func sampleContainer(id: String) async throws -> ContainerStatistics? {
+    let snapshot = try await containerClient.get(id: id)
+    guard snapshot.status == .running else { return nil }
+    let value = try await containerClient.stats(id: id)
+    return ContainerStatistics(
+      memoryUsageBytes: value.memoryUsageBytes,
+      memoryLimitBytes: value.memoryLimitBytes,
+      cpuUsageMicroseconds: value.cpuUsageUsec,
+      networkReceivedBytes: value.networkRxBytes,
+      networkTransmittedBytes: value.networkTxBytes,
+      blockReadBytes: value.blockReadBytes,
+      blockWrittenBytes: value.blockWriteBytes,
+      processCount: value.numProcesses
+    )
+  }
+
+  func loadContainerLogs(id: String) async throws -> ContainerLogsSnapshot {
+    let logs = try await readLogs(id: id)
+    return ContainerLogsSnapshot(
       standardOutput: logs.standardOutput.text,
       bootLog: logs.boot.text,
       logsAreTruncated: logs.standardOutput.isTruncated || logs.boot.isTruncated
@@ -376,7 +401,22 @@ actor AppleContainerService: ContainerManaging {
   }
 
   func stopContainer(id: String) async throws {
-    try await containerClient.stop(id: id)
+    try await containerClient.stop(
+      id: id,
+      opts: ContainerStopOptions(timeoutInSeconds: 5, signal: nil)
+    )
+  }
+
+  func restartContainer(id: String) async throws {
+    let snapshot = try await containerClient.get(id: id)
+    if snapshot.status == .running {
+      try await stopContainer(id: id)
+    }
+    try await startContainer(id: id)
+  }
+
+  func forceStopContainer(id: String) async throws {
+    try await containerClient.kill(id: id, signal: "KILL")
   }
 
   func deleteContainer(id: String) async throws {

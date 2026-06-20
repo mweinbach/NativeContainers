@@ -7,8 +7,8 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- Eleven deterministic Swift Testing cases pass. A twelfth opt-in integration
-  test covers live Apple-service provisioning.
+- Thirteen deterministic Swift Testing cases pass. A fourteenth opt-in
+  integration test covers live Apple-service provisioning.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview and split container inspector render successfully in
   Xcode Preview in light mode.
@@ -32,6 +32,14 @@ Updated: 2026-06-20.
 - A live Xcode test-host smoke created a stopped Alpine container through the
   app’s direct Swift service, verified its state/resources, deleted it, and
   verified cleanup.
+- Running-container inspectors now sample statistics every two seconds, retain
+  a bounded 60-sample in-memory history, calculate allocation-normalized CPU
+  usage, and can pause live work immediately through structured task
+  cancellation.
+- Log following reuses bounded tails rather than unbounded memory, with source
+  selection, case-insensitive line filtering, match counts, and native text-file
+  export. Lifecycle controls include five-second graceful stop, restart, and
+  explicit force stop.
 
 ## Known configuration issue
 
@@ -46,8 +54,8 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add live stat refresh, log following/search/export, and lifecycle depth.
-2. Add exec/terminal plus file copy and image-management depth.
+1. Add exec/terminal plus file copy and image-management depth.
+2. Add volume/network lifecycle and open-in-browser helpers.
 3. Implement local/latest IPSW selection, resumable download, and transactional
    macOS VM preparation while the entitlement tooling issue remains isolated.
 4. Spike a pinned Socktainer process and a product-specific Docker context.

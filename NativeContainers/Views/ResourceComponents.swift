@@ -55,12 +55,20 @@ struct ResourceActionMenu: View {
   let isRunning: Bool
   let onStart: () -> Void
   let onStop: () -> Void
+  var onRestart: (() -> Void)? = nil
+  var onForceStop: (() -> Void)? = nil
   let onDelete: () -> Void
 
   var body: some View {
     Menu("Actions", systemImage: "ellipsis.circle") {
       if isRunning {
         Button("Stop", systemImage: "stop.fill", action: onStop)
+        if let onRestart {
+          Button("Restart", systemImage: "arrow.trianglehead.2.clockwise", action: onRestart)
+        }
+        if let onForceStop {
+          Button("Force Stop", systemImage: "bolt.fill", role: .destructive, action: onForceStop)
+        }
       } else {
         Button("Start", systemImage: "play.fill", action: onStart)
       }

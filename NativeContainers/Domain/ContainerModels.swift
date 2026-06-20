@@ -100,3 +100,28 @@ struct ContainerInspection: Equatable, Sendable {
   let bootLog: String
   let logsAreTruncated: Bool
 }
+
+struct ContainerLogsSnapshot: Equatable, Sendable {
+  let standardOutput: String
+  let bootLog: String
+  let logsAreTruncated: Bool
+}
+
+struct ContainerRuntimeSample: Equatable, Sendable, Identifiable {
+  let id: UUID
+  let capturedAt: Date
+  let statistics: ContainerStatistics
+  let cpuPercentage: Double?
+
+  init(
+    id: UUID = UUID(),
+    capturedAt: Date = Date(),
+    statistics: ContainerStatistics,
+    cpuPercentage: Double?
+  ) {
+    self.id = id
+    self.capturedAt = capturedAt
+    self.statistics = statistics
+    self.cpuPercentage = cpuPercentage
+  }
+}

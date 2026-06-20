@@ -18,11 +18,11 @@ must leave a usable, test-backed product slice.
 
 - [x] Container start, stop, and delete from the native management UI.
 - [x] Validated create-only/create-and-start flow with progress and rollback.
-- [ ] Graceful-stop policy, kill, and restart controls.
+- [x] Five-second graceful stop, force stop, and restart controls.
 - [x] Bounded stdout and boot-log inspection.
-- [ ] Log follow, search, and export.
+- [x] Bounded log follow, search, and native file export.
 - [x] One-shot CPU, memory, disk, network, block-I/O, and process statistics.
-- [ ] Live statistics sampling and history.
+- [x] Two-second live statistics sampling and bounded in-memory history.
 - [ ] Exec terminal and file copy in/out.
 - [x] Image pull with platform selection and byte/item progress.
 - [ ] Image build, tag, push, inspect, and prune.

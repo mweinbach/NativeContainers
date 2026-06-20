@@ -99,7 +99,7 @@ struct AppModelTests {
       logsAreTruncated: false
     )
     let service = MockContainerService(inventory: emptyInventory(), inspection: inspection)
-    let model = ContainerInspectorModel(containerID: "web", service: service)
+    let model = ContainerInspectorModel(containerID: "web", allocatedCPUCount: 2, service: service)
 
     await model.load()
 
@@ -190,6 +190,57 @@ struct AppModelTests {
 
     #expect(progress.fractionCompleted == 0.25)
   }
+
+  @Test
+  func inspectorSamplesStatisticsAndFollowsLogsUntilCancelled() async throws {
+    let inspection = ContainerInspection(
+      diskUsageBytes: 42,
+      statistics: ContainerStatistics(
+        memoryUsageBytes: 12,
+        memoryLimitBytes: 100,
+        cpuUsageMicroseconds: 900,
+        networkReceivedBytes: 4,
+        networkTransmittedBytes: 5,
+        blockReadBytes: 6,
+        blockWrittenBytes: 7,
+        processCount: 2
+      ),
+      standardOutput: "ready\n",
+      bootLog: "booted\n",
+      logsAreTruncated: false
+    )
+    let service = MockContainerService(inventory: emptyInventory(), inspection: inspection)
+    let model = ContainerInspectorModel(containerID: "web", allocatedCPUCount: 2, service: service)
+    await model.load()
+
+    let monitoring = Task {
+      await model.monitor(followLogs: true, interval: .milliseconds(5))
+    }
+    try await Task.sleep(for: .milliseconds(30))
+    monitoring.cancel()
+    await monitoring.value
+
+    #expect(model.samples.count > 1)
+    #expect(model.lastUpdated != nil)
+    #expect(await service.sampleCount > 0)
+    #expect(await service.logLoadCount > 0)
+  }
+
+  @Test
+  func restartAndForceStopRefreshInventory() async {
+    let service = MockContainerService(inventory: emptyInventory())
+    let model = AppModel(
+      containerService: service,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [])
+    )
+
+    await model.restartContainer(id: "web")
+    await model.forceStopContainer(id: "worker")
+
+    #expect(await service.restartedContainerIDs == ["web"])
+    #expect(await service.forceStoppedContainerIDs == ["worker"])
+    #expect(await service.loadCount == 2)
+  }
 }
 
 private func emptyInventory() -> ContainerInventory {
@@ -215,7 +266,11 @@ private actor MockContainerService: ContainerManaging {
   private(set) var inspectedContainerIDs: [String] = []
   private(set) var createdRequests: [ContainerCreationRequest] = []
   private(set) var pulledImageReferences: [String] = []
+  private(set) var restartedContainerIDs: [String] = []
+  private(set) var forceStoppedContainerIDs: [String] = []
   private(set) var loadCount = 0
+  private(set) var sampleCount = 0
+  private(set) var logLoadCount = 0
 
   init(
     inventory: ContainerInventory,
@@ -259,8 +314,24 @@ private actor MockContainerService: ContainerManaging {
     return inspection
   }
 
+  func sampleContainer(id: String) async throws -> ContainerStatistics? {
+    sampleCount += 1
+    return inspection.statistics
+  }
+
+  func loadContainerLogs(id: String) async throws -> ContainerLogsSnapshot {
+    logLoadCount += 1
+    return ContainerLogsSnapshot(
+      standardOutput: inspection.standardOutput,
+      bootLog: inspection.bootLog,
+      logsAreTruncated: inspection.logsAreTruncated
+    )
+  }
+
   func startContainer(id: String) async throws { startedContainerIDs.append(id) }
   func stopContainer(id: String) async throws {}
+  func restartContainer(id: String) async throws { restartedContainerIDs.append(id) }
+  func forceStopContainer(id: String) async throws { forceStoppedContainerIDs.append(id) }
   func deleteContainer(id: String) async throws {}
   func startMachine(id: String) async throws {}
   func stopMachine(id: String) async throws {}
