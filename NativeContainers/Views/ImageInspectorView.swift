@@ -6,6 +6,7 @@ struct ImageInspectorView: View {
   @State private var inspector: ImageInspectorModel
   @State private var operations: ImageOperationsModel
   @State private var isShowingTag = false
+  @State private var isShowingPush = false
 
   init(image: ImageRecord, appModel: AppModel) {
     self.image = image
@@ -42,6 +43,9 @@ struct ImageInspectorView: View {
     }
     .sheet(isPresented: $isShowingTag) {
       ImageTagView(reference: image.reference, appModel: appModel)
+    }
+    .sheet(isPresented: $isShowingPush) {
+      ImagePushView(reference: image.reference, appModel: appModel)
     }
     .confirmationDialog(
       "Delete image reference?",
@@ -84,6 +88,9 @@ struct ImageInspectorView: View {
       Spacer()
       Button("Tag", systemImage: "tag") {
         isShowingTag = true
+      }
+      Button("Push", systemImage: "arrow.up.to.line") {
+        isShowingPush = true
       }
       Button("Delete", systemImage: "trash", role: .destructive) {
         Task { _ = await operations.prepareDeletion() }

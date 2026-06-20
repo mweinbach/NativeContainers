@@ -7,8 +7,10 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- Sixty-seven deterministic Swift Testing cases pass. Three opt-in integration
-  tests cover live provisioning, interactive PTY, and image-reference behavior.
+- Seventy-seven deterministic Swift Testing cases pass. Three opt-in integration
+  tests pass against Apple’s live runtime for provisioning, interactive PTY,
+  and image-reference behavior. A fourth push/pull round-trip test is hard-gated
+  to a disposable localhost registry and is not run against public services.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview and split container inspector render successfully in
   Xcode Preview in light mode.
@@ -105,6 +107,28 @@ Updated: 2026-06-20.
   are never loaded back into the settings model. Full reviewed metadata is
   revalidated after ping and immediately before save/delete; cancellation and
   post-mutation refresh failures have explicit semantics.
+- Standalone pulls now review the normalized reference, exact current/arm64/
+  amd64/all-platform scope, resolved HTTPS/HTTP transport, replacement of an
+  existing local tag, unpack choice, and download concurrency. All-platform and
+  HTTP transfers require explicit confirmation, and Apple-managed builder/
+  vminit references are blocked before review and again under the mutation lock.
+- Pull execution uses Apple’s direct `ClientImage.pull`, validates exact
+  platform equality, and materializes each requested snapshot through
+  `getCreateSnapshot`. Per-platform results distinguish an existing snapshot, a
+  newly created snapshot, and failure; the app never treats Apple’s silently
+  skipped all-platform unpack as success. If download commits a new local digest
+  before validation, unpack, or cancellation fails, the UI reports the durable
+  partial result and refreshes inventory instead of claiming the pull failed
+  atomically.
+- Image push uses the selected canonical local alias exactly, revalidates its
+  digest, platform, infrastructure status, and resolved transport under the
+  shared runtime mutation lock, and always confirms that the remote mutable tag
+  may be replaced. Transfer tasks are retained by their sheets, cancellable,
+  and cancelled on disappearance so they cannot become invisible mutations.
+- Direct safety tests cover authorization refusal, automatic transport drift,
+  stale digests, exact platform absence, infrastructure references, partial
+  pull publication, verified unpack outcomes, and serialization across actor
+  suspension points.
 
 ## Known configuration issue
 
@@ -119,9 +143,8 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add reviewed image pull platform/transport selection and native image push.
-2. Add an isolated native `ContainerBuild` worker and builder lifecycle.
-3. Add volume/network lifecycle and open-in-browser helpers.
-4. Add the entitlement through a functioning Xcode capability surface, then
+1. Add an isolated native `ContainerBuild` worker and builder lifecycle.
+2. Add volume/network lifecycle and open-in-browser helpers.
+3. Add the entitlement through a functioning Xcode capability surface, then
    implement and live-verify macOS installation and VM lifecycle.
-5. Spike a pinned Socktainer process and a product-specific Docker context.
+4. Spike a pinned Socktainer process and a product-specific Docker context.

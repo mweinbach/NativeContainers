@@ -189,3 +189,35 @@ confirm HTTP independently. `KeychainHelper.save` deletes before adding a
 replacement, so an uncommon add failure can lose the previous credential.
 Apple 1.0 also provides no atomic cross-process compare-and-swap, leaving a
 narrow external-CLI race after the final metadata check.
+
+## ADR-013: Review image transfers and report durable partial completion
+
+**Status:** Accepted — 2026-06-20
+
+Pull and push use immutable plans. Review records the canonical local reference,
+digest, exact platform scope, requested and resolved transport, and transfer
+options. Execution holds the same runtime mutation coordinator used by image
+CRUD, reloads live state, rejects transport or digest drift, repeats normalized
+builder/vminit protection, and checks cancellation immediately before the Apple
+network or snapshot call. HTTP, all-platform download, local tag replacement,
+and remote mutable-tag replacement are fail-closed confirmations.
+
+Apple’s pull commits its local reference before app-side platform validation and
+snapshot creation. The app does not describe those later failures as an atomic
+pull failure or silently try to restore a mutable prior tag. It publishes a
+typed partial-completion result containing the committed reference/digest and
+refreshes inventory. Snapshot outcomes are recorded per exact OCI platform as
+already present, newly created, or failed.
+
+All-platform snapshot creation enumerates non-attestation manifests and calls
+`getCreateSnapshot` for each platform. This deliberately avoids
+`unpack(platform:nil)`, whose pinned implementation can return success after
+silently skipping platforms without an unpacker. A transfer is only described
+as unpacked when every enumerated platform has a verified snapshot.
+
+Push publishes the selected `ClientImage.reference` because Apple’s API has no
+destination argument. The user must create a local destination tag first. The
+app validates an exact requested platform before push, retains and cancels UI
+tasks across sheet lifetime, and provides an opt-in round-trip smoke only for a
+disposable localhost registry. If push throws after the network call begins,
+remote state is reported as uncertain rather than safe to retry blindly.

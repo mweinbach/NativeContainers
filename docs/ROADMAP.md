@@ -26,10 +26,10 @@ must leave a usable, test-backed product slice.
 - [x] Bounded non-interactive exec console and file copy in/out.
 - [x] Interactive PTY terminal with resize, input, and signal forwarding.
 - [x] Image pull with byte/item progress.
-- [ ] Explicit platform selection for standalone image pulls.
+- [x] Reviewed platform/transport/concurrency selection for standalone pulls.
 - [x] Lazy multi-platform image inspect and safe tag/delete flows.
 - [x] Reviewed dangling/all-unused prune with mutation-time revalidation.
-- [ ] Image push (registry credential management is live).
+- [x] Reviewed native image push with digest/platform/transport revalidation.
 - [ ] Volume and network create/inspect/delete flows.
 - [x] TCP/UDP host-port publishing on Apple’s built-in network and DNS.
 - [ ] Socket publishing, host-access helpers, and open-in-browser.

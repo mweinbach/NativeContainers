@@ -119,6 +119,14 @@ enum ImageManagementError: LocalizedError, Equatable, Sendable {
   case imageInUse(reference: String, containerIDs: [String])
   case tagWouldReplace(reference: String)
   case stalePlan(String)
+  case insecureTransportRequiresConfirmation(String)
+  case pullWouldReplace(String)
+  case allPlatformPullRequiresConfirmation
+  case remoteTagReplacementRequiresConfirmation(String)
+  case platformUnavailable(platform: String, reference: String)
+  case noRunnablePlatforms(String)
+  case invalidConcurrentDownloads
+  case missingRegistryHost(String)
 
   var errorDescription: String? {
     switch self {
@@ -129,13 +137,29 @@ enum ImageManagementError: LocalizedError, Equatable, Sendable {
     case .missingTargetReference:
       "Enter a target image reference."
     case .infrastructureImage(let reference):
-      "“\(reference)” is managed by Apple’s container runtime and cannot be removed here."
+      "“\(reference)” is managed by Apple’s container runtime and cannot be modified here."
     case .imageInUse(let reference, let containerIDs):
       "“\(reference)” is used by: \(containerIDs.joined(separator: ", "))."
     case .tagWouldReplace(let reference):
       "The tag “\(reference)” already points to a different image."
     case .stalePlan(let operation):
       "The image changed after the \(operation) was reviewed. Review it again before continuing."
+    case .insecureTransportRequiresConfirmation(let hostname):
+      "Confirm plain-text HTTP before transferring image data with \(hostname)."
+    case .pullWouldReplace(let reference):
+      "Confirm updating the existing local image reference “\(reference)”."
+    case .allPlatformPullRequiresConfirmation:
+      "Confirm pulling every platform because downloading and optional unpacking can consume substantial disk space."
+    case .remoteTagReplacementRequiresConfirmation(let reference):
+      "Confirm pushing “\(reference)”; the remote mutable tag may be replaced."
+    case .platformUnavailable(let platform, let reference):
+      "“\(reference)” does not contain the exact \(platform) platform."
+    case .noRunnablePlatforms(let reference):
+      "“\(reference)” does not contain a runnable image platform."
+    case .invalidConcurrentDownloads:
+      "Concurrent image downloads must be between 1 and 16."
+    case .missingRegistryHost(let reference):
+      "“\(reference)” does not contain a registry hostname. Tag it with a fully qualified reference first."
     }
   }
 }

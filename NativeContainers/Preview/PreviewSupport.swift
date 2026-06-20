@@ -149,11 +149,51 @@ private actor PreviewContainerService: ContainerManaging {
   }
 
   func loadInventory() async throws -> ContainerInventory { inventory }
-  func pullImage(
+  func prepareImagePull(
     reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport,
+    unpackAfterPull: Bool,
+    maxConcurrentDownloads: Int
+  ) async throws -> ImagePullPlan {
+    ImagePullPlan(
+      normalizedReference: reference,
+      registryHost: "docker.io",
+      existingDigest: nil,
+      platform: .specific(
+        OCIPlatformValue(os: "linux", architecture: "arm64", variant: "v8")
+      ),
+      requestedTransport: transport,
+      resolvedTransport: .https,
+      unpackAfterPull: unpackAfterPull,
+      maxConcurrentDownloads: maxConcurrentDownloads,
+      generatedAt: Date()
+    )
+  }
+  func pullImage(
+    _ plan: ImagePullPlan,
+    authorization: ImagePullAuthorization,
     progress: @escaping ContainerProgressHandler
-  ) async throws {
+  ) async throws -> ImagePullResult {
     await progress(ContainerOperationProgress(phase: .completed, message: "Image ready"))
+    return ImagePullResult(
+      reference: plan.normalizedReference,
+      digest: "sha256:preview",
+      replacedDigest: plan.existingDigest,
+      unpackOutcome: plan.unpackAfterPull
+        ? ImageUnpackOutcome(
+          platforms: [
+            ImagePlatformUnpackOutcome(
+              platform: OCIPlatformValue(
+                os: "linux",
+                architecture: "arm64",
+                variant: "v8"
+              ),
+              state: .created
+            )
+          ]
+        ) : nil
+    )
   }
   func inspectImage(reference: String) async throws -> ImageInspection {
     ImageInspection(
@@ -229,6 +269,31 @@ private actor PreviewContainerService: ContainerManaging {
       removedBlobDigests: [],
       reclaimedBytes: 0
     )
+  }
+  func prepareImagePush(
+    reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport
+  ) async throws -> ImagePushPlan {
+    ImagePushPlan(
+      reference: reference,
+      displayReference: reference,
+      sourceDigest: "sha256:1234567890abcdef",
+      registryHost: "ghcr.io",
+      platform: .specific(
+        OCIPlatformValue(os: "linux", architecture: "arm64", variant: "v8")
+      ),
+      requestedTransport: transport,
+      resolvedTransport: .https,
+      generatedAt: Date()
+    )
+  }
+  func pushImage(
+    _ plan: ImagePushPlan,
+    authorization: ImagePushAuthorization,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    await progress(ContainerOperationProgress(phase: .completed, message: "Image pushed"))
   }
   func createContainer(
     request: ContainerCreationRequest,

@@ -15,7 +15,9 @@
 		19E20564B7D56C32F75FE527 /* RestoreImageDownloadServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C0B3804B6A81EC6343C2BD /* RestoreImageDownloadServiceTests.swift */; };
 		1BBD6A591ECFFBA28911EA50 /* ContainerAPIClient in Frameworks */ = {isa = PBXBuildFile; productRef = FEDBA359A3DD0CDF024FA4CD /* ContainerAPIClient */; };
 		1BF0DD0A425B04128E9B1440 /* RegistrySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FEF8ABF9E1EC1708B2D30C2 /* RegistrySettingsView.swift */; };
+		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
+		2607934497FE5507A6C92B7E /* RuntimeMutationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34E2FB5D1DA19E2805498B0A /* RuntimeMutationCoordinator.swift */; };
 		267B8B7DEB728875D45C11CC /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 50A6FE055FE52A768F0F9C9A /* Localizable.xcstrings */; };
 		28033CCAC546F43031537AAF /* VirtualMachineLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C1F9CEF3FD52963FD22CEEF /* VirtualMachineLibraryTests.swift */; };
 		2CEB095A2F3E92AB8DD58DF8 /* RegistryManaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = F837DF4795B3D693B4C0C538 /* RegistryManaging.swift */; };
@@ -89,6 +91,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageTransferModels.swift; sourceTree = "<group>"; };
 		05138B07ACDBE2D65FF8A6DC /* ImageOperationsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageOperationsModel.swift; sourceTree = "<group>"; };
 		092D4DA1EB30193AC095265A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachinesView.swift; sourceTree = "<group>"; };
@@ -96,6 +99,7 @@
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
 		2F24FF99A077D017F8ABA497 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		34E2FB5D1DA19E2805498B0A /* RuntimeMutationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeMutationCoordinator.swift; sourceTree = "<group>"; };
 		357DD8753B23B96AFD013E55 /* NativeContainersTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NativeContainersTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		392CAC7B7617C3194AB4EC1E /* RestoreImageDownloadModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageDownloadModels.swift; sourceTree = "<group>"; };
 		3B6C635AC318F3EB740EBE02 /* ContainerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerModels.swift; sourceTree = "<group>"; };
@@ -206,6 +210,7 @@
 				4A7C02B64F7B13D689544C97 /* ContainerTerminalModels.swift */,
 				E0A17DF6DFEB39965C7E7C58 /* ContainerToolModels.swift */,
 				6D478C585C1B6DC5D8A72C50 /* ImageManagementModels.swift */,
+				0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */,
 				60911C46B5774AEC27DB6B96 /* RegistryModels.swift */,
 				392CAC7B7617C3194AB4EC1E /* RestoreImageDownloadModels.swift */,
 				C6494E2249097A4BB56E1115 /* VirtualMachineModels.swift */,
@@ -242,6 +247,7 @@
 				C559BC791E8C3A91155CE7D2 /* MacRestoreImageService.swift */,
 				F837DF4795B3D693B4C0C538 /* RegistryManaging.swift */,
 				AF2DE73C2235A83091C7DFBC /* RestoreImageDownloadService.swift */,
+				34E2FB5D1DA19E2805498B0A /* RuntimeMutationCoordinator.swift */,
 				FF7D72F56C28FAC26CFCC861 /* VirtualMachineConsoleView.swift */,
 				8425A4E68B15EEC200CBDA07 /* VirtualMachineLibrary.swift */,
 			);
@@ -470,6 +476,7 @@
 				09827E0EC05BF4BA13CA3F8B /* ImageManagementModels.swift in Sources */,
 				89BC7AFF7D77A8BEBC3C1009 /* ImageOperationViews.swift in Sources */,
 				DABB4EFDC45B763D6E0BA7FC /* ImageOperationsModel.swift in Sources */,
+				21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */,
 				455E49DED3838B07FB756991 /* ImagesView.swift in Sources */,
 				6EFDAA07140EDCC9B4FB8615 /* LinuxMachinesView.swift in Sources */,
 				78D8757B9A4FE8F19E8883AF /* MacPlatformArtifactPreparer.swift in Sources */,
@@ -486,6 +493,7 @@
 				4C866FE48A250D91907E0D23 /* RestoreImageDownloadModels.swift in Sources */,
 				BEF88012C7F13A21B4B2C57E /* RestoreImageDownloadService.swift in Sources */,
 				72D23C0E9992E41005DDACDC /* RootView.swift in Sources */,
+				2607934497FE5507A6C92B7E /* RuntimeMutationCoordinator.swift in Sources */,
 				9D0A93C7B104FECF0AC7E446 /* SettingsView.swift in Sources */,
 				DE0FF5308EB763EEE31EE921 /* SidebarDestination.swift in Sources */,
 				544A5C0316B516173A705366 /* SidebarView.swift in Sources */,

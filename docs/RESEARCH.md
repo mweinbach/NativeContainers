@@ -113,6 +113,44 @@ release and isolating it behind an adapter are both deliberate.
   `Constants.keychainID`, not Containerization’s separate cctl domain. Apple’s
   image service reads that domain automatically after checking its registry
   environment-variable override.
+- `ClientImage.pull(platform:nil)` downloads every platform but does not unpack
+  it. Apple’s CLI performs a second `image.unpack(platform:samePlatform)` call.
+  Platform filtering is exact `Platform` equality, so the app constructs
+  `linux/arm64/v8` explicitly rather than relying on a parser that may omit the
+  ARM variant.
+- `ClientImage.unpack(platform:nil)` cannot prove readiness: the pinned
+  `SnapshotStore` silently skips a platform when its unpack strategy returns no
+  unpacker. `getCreateSnapshot(platform:)` first returns an existing verified
+  snapshot or unpacks and then calls `getSnapshot`; that final read proves the
+  snapshot and its filesystem metadata exist. All-platform readiness therefore
+  requires enumerating non-attestation OCI manifest platforms and verifying
+  each one separately.
+- Pull commits the returned reference/digest before app-side exact-platform and
+  snapshot verification. Later validation, cancellation, or unpack failure is
+  partial completion, not rollback: inventory is refreshed and the committed
+  digest plus per-platform outcomes are shown. A reviewed plan becomes stale
+  once that local reference moves.
+- `ClientImage.push` has no destination parameter; it publishes
+  `image.reference`. A different destination must first be created as an exact
+  local tag. A filtered push can publish an empty index when the requested
+  platform is absent, so the app validates the exact local platform before the
+  network call. A network error or cancellation can arrive after a registry has
+  accepted the manifest, so the UI treats remote state as uncertain and tells
+  the user to inspect the registry before retrying.
+- Registry `auto` is resolved both at review and execution. Any HTTPS-to-HTTP
+  drift invalidates the plan. Image-service registry environment credentials
+  take precedence over the shared Keychain, so login metadata cannot be treated
+  as proof of which credential a separately configured service will use.
+- Pull, unpack, push, tag, delete, prune, and container creation share one
+  `AsyncLock`-backed coordinator. Cancellation is checked immediately before
+  each irreversible transfer/snapshot call. This closes same-process actor
+  reentrancy, while Apple’s reference-only XPC requests still cannot provide a
+  cross-process compare-and-swap against the CLI.
+- Apple’s `Utility.isInfraImage` only compares literal builder/vminit strings.
+  The app additionally compares normalized configured references and repeats
+  the guard under the mutation lock before pull or push.
+- A live push smoke is restricted in code to a unique repository tag on a
+  disposable localhost registry. Public registries are never mutation-tested.
 - The CLI resolves `docker.io` to `registry-1.docker.io`; the app additionally
   canonicalizes Docker’s historical `index.docker.io` and
   `https://index.docker.io/v1` credential-helper aliases so a login cannot be

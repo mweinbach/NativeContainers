@@ -1,6 +1,18 @@
 import Foundation
 
 protocol ImageManaging: Sendable {
+  func prepareImagePull(
+    reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport,
+    unpackAfterPull: Bool,
+    maxConcurrentDownloads: Int
+  ) async throws -> ImagePullPlan
+  func pullImage(
+    _ plan: ImagePullPlan,
+    authorization: ImagePullAuthorization,
+    progress: @escaping ContainerProgressHandler
+  ) async throws -> ImagePullResult
   func inspectImage(reference: String) async throws -> ImageInspection
   func prepareImageTag(source: String, target: String) async throws -> ImageTagPlan
   func tagImage(_ plan: ImageTagPlan, replacingExisting: Bool) async throws
@@ -8,9 +20,37 @@ protocol ImageManaging: Sendable {
   func deleteImage(_ plan: ImageDeletionPlan) async throws -> ImageCleanupResult
   func prepareImagePrune(mode: ImagePruneMode) async throws -> ImagePrunePlan
   func pruneImages(_ plan: ImagePrunePlan) async throws -> ImageCleanupResult
+  func prepareImagePush(
+    reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport
+  ) async throws -> ImagePushPlan
+  func pushImage(
+    _ plan: ImagePushPlan,
+    authorization: ImagePushAuthorization,
+    progress: @escaping ContainerProgressHandler
+  ) async throws
 }
 
 extension ImageManaging {
+  func prepareImagePull(
+    reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport,
+    unpackAfterPull: Bool,
+    maxConcurrentDownloads: Int
+  ) async throws -> ImagePullPlan {
+    throw ImageManagementError.unsupported
+  }
+
+  func pullImage(
+    _ plan: ImagePullPlan,
+    authorization: ImagePullAuthorization,
+    progress: @escaping ContainerProgressHandler
+  ) async throws -> ImagePullResult {
+    throw ImageManagementError.unsupported
+  }
+
   func inspectImage(reference: String) async throws -> ImageInspection {
     throw ImageManagementError.unsupported
   }
@@ -38,14 +78,26 @@ extension ImageManaging {
   func pruneImages(_ plan: ImagePrunePlan) async throws -> ImageCleanupResult {
     throw ImageManagementError.unsupported
   }
+
+  func prepareImagePush(
+    reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport
+  ) async throws -> ImagePushPlan {
+    throw ImageManagementError.unsupported
+  }
+
+  func pushImage(
+    _ plan: ImagePushPlan,
+    authorization: ImagePushAuthorization,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    throw ImageManagementError.unsupported
+  }
 }
 
 protocol ContainerManaging: ImageManaging {
   func loadInventory() async throws -> ContainerInventory
-  func pullImage(
-    reference: String,
-    progress: @escaping ContainerProgressHandler
-  ) async throws
   func createContainer(
     request: ContainerCreationRequest,
     progress: @escaping ContainerProgressHandler

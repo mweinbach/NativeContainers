@@ -7,6 +7,8 @@ final class ContainerProvisioningModel {
   private(set) var isWorking = false
   private(set) var progress: ContainerOperationProgress?
   private(set) var errorMessage: String?
+  private(set) var pullPlan: ImagePullPlan?
+  private(set) var pullResult: ImagePullResult?
 
   private let service: any ContainerManaging
   private let didComplete: @MainActor @Sendable () async -> Void
@@ -27,17 +29,79 @@ final class ContainerProvisioningModel {
     }
   }
 
-  func pullImage(reference: String) async -> Bool {
-    let reference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !reference.isEmpty else {
-      errorMessage = ContainerCreationValidationError.missingImageReference.localizedDescription
+  func prepareImagePull(
+    reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport,
+    unpackAfterPull: Bool,
+    maxConcurrentDownloads: Int
+  ) async -> ImagePullPlan? {
+    guard !isWorking else { return nil }
+    isWorking = true
+    progress = nil
+    errorMessage = nil
+    pullResult = nil
+    defer { isWorking = false }
+    do {
+      let plan = try await service.prepareImagePull(
+        reference: reference,
+        platform: platform,
+        transport: transport,
+        unpackAfterPull: unpackAfterPull,
+        maxConcurrentDownloads: maxConcurrentDownloads
+      )
+      pullPlan = plan
+      return plan
+    } catch is CancellationError {
+      return nil
+    } catch {
+      errorMessage = error.localizedDescription
+      return nil
+    }
+  }
+
+  func pullReviewedImage(
+    _ reviewedPlan: ImagePullPlan? = nil,
+    authorization: ImagePullAuthorization
+  ) async -> Bool {
+    guard let plan = reviewedPlan ?? pullPlan else {
+      errorMessage = ImageManagementError.stalePlan("pull operation").localizedDescription
       return false
     }
-    return await perform { [self] in
-      try await service.pullImage(reference: reference) { update in
+    guard !isWorking else { return false }
+    isWorking = true
+    progress = nil
+    errorMessage = nil
+    pullResult = nil
+    defer { isWorking = false }
+
+    do {
+      let result = try await service.pullImage(plan, authorization: authorization) { update in
         await self.receive(update)
       }
+      pullResult = result
+      pullPlan = nil
+      await didComplete()
+      return true
+    } catch let error as ImagePullPartialCompletionError {
+      pullResult = error.result
+      pullPlan = nil
+      errorMessage = error.localizedDescription
+      await didComplete()
+      return false
+    } catch is CancellationError {
+      errorMessage = "The operation was cancelled."
+      await didComplete()
+      return false
+    } catch {
+      errorMessage = error.localizedDescription
+      await didComplete()
+      return false
     }
+  }
+
+  func clearPullPlan() {
+    pullPlan = nil
   }
 
   func clearError() {
@@ -59,9 +123,11 @@ final class ContainerProvisioningModel {
       return true
     } catch is CancellationError {
       errorMessage = "The operation was cancelled."
+      await didComplete()
       return false
     } catch {
       errorMessage = error.localizedDescription
+      await didComplete()
       return false
     }
   }

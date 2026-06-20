@@ -119,7 +119,21 @@ struct LiveAppleContainerSmokeTests {
     let containerID = "nativecontainers-image-use-\(UUID().uuidString.lowercased().prefix(8))"
 
     do {
-      try await service.pullImage(reference: source) { _ in }
+      let pullPlan = try await service.prepareImagePull(
+        reference: source,
+        platform: .current,
+        transport: .automatic,
+        unpackAfterPull: true,
+        maxConcurrentDownloads: 3
+      )
+      _ = try await service.pullImage(
+        pullPlan,
+        authorization: ImagePullAuthorization(
+          allowsInsecureTransport: pullPlan.requiresInsecureConfirmation,
+          allowsExistingReferenceReplacement: pullPlan.replacesExistingReference,
+          allowsAllPlatforms: false
+        )
+      ) { _ in }
       let tagPlan = try await service.prepareImageTag(source: source, target: target)
       try await service.tagImage(tagPlan, replacingExisting: false)
 
@@ -167,6 +181,83 @@ struct LiveAppleContainerSmokeTests {
     }
   }
 
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LOCAL_REGISTRY_REPOSITORY"]
+        != nil,
+      "Set NATIVECONTAINERS_LOCAL_REGISTRY_REPOSITORY to a repository in a disposable localhost registry."
+    )
+  )
+  func pushAndPullDisposableLocalRegistry() async throws {
+    guard
+      let repository = ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LOCAL_REGISTRY_REPOSITORY"
+      ]
+    else { return }
+    try requireLocalRegistry(repository)
+
+    let service = AppleContainerService()
+    let source = "docker.io/library/alpine:3.21"
+    let target = "\(repository):nativecontainers-\(UUID().uuidString.lowercased())"
+
+    do {
+      let sourcePull = try await service.prepareImagePull(
+        reference: source,
+        platform: .current,
+        transport: .https,
+        unpackAfterPull: false,
+        maxConcurrentDownloads: 3
+      )
+      let sourceResult = try await service.pullImage(
+        sourcePull,
+        authorization: ImagePullAuthorization(
+          allowsInsecureTransport: false,
+          allowsExistingReferenceReplacement: sourcePull.replacesExistingReference,
+          allowsAllPlatforms: false
+        )
+      ) { _ in }
+
+      let tagPlan = try await service.prepareImageTag(source: source, target: target)
+      try await service.tagImage(tagPlan, replacingExisting: false)
+      let pushPlan = try await service.prepareImagePush(
+        reference: target,
+        platform: .current,
+        transport: .http
+      )
+      try await service.pushImage(
+        pushPlan,
+        authorization: ImagePushAuthorization(
+          allowsInsecureTransport: true,
+          confirmsRemoteTagReplacement: true
+        )
+      ) { _ in }
+
+      await cleanUpImageReference(target, service: service)
+      let roundTripPull = try await service.prepareImagePull(
+        reference: target,
+        platform: .current,
+        transport: .http,
+        unpackAfterPull: true,
+        maxConcurrentDownloads: 3
+      )
+      let roundTrip = try await service.pullImage(
+        roundTripPull,
+        authorization: ImagePullAuthorization(
+          allowsInsecureTransport: true,
+          allowsExistingReferenceReplacement: false,
+          allowsAllPlatforms: false
+        )
+      ) { _ in }
+
+      #expect(roundTrip.digest == sourceResult.digest)
+      #expect(roundTrip.unpacked)
+      await cleanUpImageReference(target, service: service)
+    } catch {
+      await cleanUpImageReference(target, service: service)
+      throw error
+    }
+  }
+
   private func waitForTerminalOutput(
     _ session: any ContainerTerminalSession,
     stage: LiveTerminalSmokeStage,
@@ -209,6 +300,20 @@ struct LiveAppleContainerSmokeTests {
     guard let plan = try? await service.prepareImageDeletion(reference: reference) else { return }
     _ = try? await service.deleteImage(plan)
   }
+
+  private func requireLocalRegistry(_ repository: String) throws {
+    guard let authority = repository.split(separator: "/", maxSplits: 1).first else {
+      throw LocalRegistrySmokeError.invalidRepository(repository)
+    }
+    let authorityValue = String(authority).lowercased()
+    guard
+      authorityValue == "localhost" || authorityValue.hasPrefix("localhost:")
+        || authorityValue == "127.0.0.1" || authorityValue.hasPrefix("127.0.0.1:")
+        || authorityValue == "[::1]" || authorityValue.hasPrefix("[::1]:")
+    else {
+      throw LocalRegistrySmokeError.nonLocalRepository(repository)
+    }
+  }
 }
 
 private enum LiveTerminalSmokeStage: String {
@@ -223,6 +328,20 @@ private enum LiveTerminalSmokeError: LocalizedError {
     switch self {
     case .timedOut(let stage, let details):
       "Timed out waiting for \(stage.rawValue) terminal output: \(details)"
+    }
+  }
+}
+
+private enum LocalRegistrySmokeError: LocalizedError {
+  case invalidRepository(String)
+  case nonLocalRepository(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidRepository(let repository):
+      "“\(repository)” is not a registry repository."
+    case .nonLocalRepository(let repository):
+      "Live push smoke tests are restricted to disposable localhost registries, not “\(repository)”."
     }
   }
 }

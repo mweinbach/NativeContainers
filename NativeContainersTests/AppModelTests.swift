@@ -178,11 +178,92 @@ struct AppModelTests {
     )
     let model = appModel.makeContainerProvisioningModel()
 
-    let succeeded = await model.pullImage(reference: "  alpine:latest  ")
+    let plan = await model.prepareImagePull(
+      reference: "  alpine:latest  ",
+      platform: .current,
+      transport: .automatic,
+      unpackAfterPull: true,
+      maxConcurrentDownloads: 3
+    )
+    let succeeded = await model.pullReviewedImage(plan, authorization: .none)
 
     #expect(succeeded)
     #expect(model.progress?.phase == .completed)
     #expect(await service.pulledImageReferences == ["alpine:latest"])
+    #expect(await service.loadCount == 1)
+  }
+
+  @Test
+  func failedPullStillRefreshesPotentiallyPartialInventory() async {
+    let service = MockContainerService(
+      inventory: emptyInventory(),
+      pullError: AppModelTestError.transferFailed
+    )
+    let appModel = AppModel(
+      containerService: service,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [])
+    )
+    let model = appModel.makeContainerProvisioningModel()
+    let plan = await model.prepareImagePull(
+      reference: "alpine:latest",
+      platform: .current,
+      transport: .https,
+      unpackAfterPull: true,
+      maxConcurrentDownloads: 3
+    )
+
+    let succeeded = await model.pullReviewedImage(plan, authorization: .none)
+
+    #expect(!succeeded)
+    #expect(model.errorMessage?.contains("transfer failed") == true)
+    #expect(await service.loadCount == 1)
+  }
+
+  @Test
+  func partialPullPublishesCommittedDigestAndClearsStalePlan() async {
+    let platform = OCIPlatformValue(os: "linux", architecture: "arm64", variant: "v8")
+    let result = ImagePullResult(
+      reference: "registry-1.docker.io/library/alpine:latest",
+      digest: "sha256:downloaded",
+      replacedDigest: "sha256:old",
+      unpackOutcome: ImageUnpackOutcome(
+        platforms: [
+          ImagePlatformUnpackOutcome(
+            platform: platform,
+            state: .failed("Snapshot service unavailable")
+          )
+        ]
+      )
+    )
+    let partialError = ImagePullPartialCompletionError(
+      result: result,
+      stage: .unpacking,
+      failureMessage: "linux/arm64/v8: Snapshot service unavailable",
+      wasCancelled: false
+    )
+    let service = MockContainerService(
+      inventory: emptyInventory(),
+      pullError: partialError
+    )
+    let appModel = AppModel(
+      containerService: service,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [])
+    )
+    let model = appModel.makeContainerProvisioningModel()
+    let plan = await model.prepareImagePull(
+      reference: "alpine:latest",
+      platform: .current,
+      transport: .https,
+      unpackAfterPull: true,
+      maxConcurrentDownloads: 3
+    )
+
+    let succeeded = await model.pullReviewedImage(plan, authorization: .none)
+
+    #expect(!succeeded)
+    #expect(model.pullResult == result)
+    #expect(model.pullPlan == nil)
+    #expect(model.errorMessage?.contains("now points to sha256:downloaded") == true)
     #expect(await service.loadCount == 1)
   }
 
@@ -420,6 +501,7 @@ private actor MockContainerService: ContainerManaging {
   private var inventories: [ContainerInventory]
   let inspection: ContainerInspection
   let loadError: (any Error)?
+  let pullError: (any Error)?
   private(set) var startedContainerIDs: [String] = []
   private(set) var inspectedContainerIDs: [String] = []
   private(set) var createdRequests: [ContainerCreationRequest] = []
@@ -437,6 +519,7 @@ private actor MockContainerService: ContainerManaging {
     inventory: ContainerInventory,
     subsequentInventories: [ContainerInventory] = [],
     loadError: (any Error)? = nil,
+    pullError: (any Error)? = nil,
     inspection: ContainerInspection = ContainerInspection(
       diskUsageBytes: 0,
       statistics: nil,
@@ -447,6 +530,7 @@ private actor MockContainerService: ContainerManaging {
   ) {
     inventories = [inventory] + subsequentInventories
     self.loadError = loadError
+    self.pullError = pullError
     self.inspection = inspection
   }
 
@@ -459,13 +543,55 @@ private actor MockContainerService: ContainerManaging {
     return inventories[0]
   }
 
-  func pullImage(
+  func prepareImagePull(
     reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport,
+    unpackAfterPull: Bool,
+    maxConcurrentDownloads: Int
+  ) async throws -> ImagePullPlan {
+    ImagePullPlan(
+      normalizedReference: reference.trimmingCharacters(in: .whitespacesAndNewlines),
+      registryHost: "registry-1.docker.io",
+      existingDigest: nil,
+      platform: .specific(
+        OCIPlatformValue(os: "linux", architecture: "arm64", variant: "v8")
+      ),
+      requestedTransport: transport,
+      resolvedTransport: .https,
+      unpackAfterPull: unpackAfterPull,
+      maxConcurrentDownloads: maxConcurrentDownloads,
+      generatedAt: Date(timeIntervalSince1970: 1)
+    )
+  }
+
+  func pullImage(
+    _ plan: ImagePullPlan,
+    authorization: ImagePullAuthorization,
     progress: @escaping ContainerProgressHandler
-  ) async throws {
-    pulledImageReferences.append(reference)
+  ) async throws -> ImagePullResult {
+    pulledImageReferences.append(plan.normalizedReference)
     await progress(ContainerOperationProgress(phase: .fetchingImage, message: "Fetching image"))
+    if let pullError { throw pullError }
     await progress(ContainerOperationProgress(phase: .completed, message: "Image ready"))
+    return ImagePullResult(
+      reference: plan.normalizedReference,
+      digest: "sha256:test",
+      replacedDigest: plan.existingDigest,
+      unpackOutcome: plan.unpackAfterPull
+        ? ImageUnpackOutcome(
+          platforms: [
+            ImagePlatformUnpackOutcome(
+              platform: OCIPlatformValue(
+                os: "linux",
+                architecture: "arm64",
+                variant: "v8"
+              ),
+              state: .created
+            )
+          ]
+        ) : nil
+    )
   }
 
   func createContainer(
@@ -527,8 +653,14 @@ private actor MockContainerService: ContainerManaging {
 
 private enum AppModelTestError: LocalizedError {
   case runtimeUnavailable
+  case transferFailed
 
-  var errorDescription: String? { "Apple container services are offline." }
+  var errorDescription: String? {
+    switch self {
+    case .runtimeUnavailable: "Apple container services are offline."
+    case .transferFailed: "The image transfer failed after downloading content."
+    }
+  }
 }
 
 private actor MockVirtualMachineLibrary: VirtualMachineLibraryProtocol {

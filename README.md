@@ -31,7 +31,8 @@ Foundation work is underway. See:
 
 The current foundation includes native container lifecycle and inspection,
 exec/copy and interactive PTY workflows, safe OCI image management, Apple
-Keychain-backed registry login management, and macOS restore-image preparation.
+Keychain-backed registry login management, reviewed native pull/push transfers,
+and macOS restore-image preparation.
 
 ## Build
 
@@ -50,3 +51,8 @@ reversible live provisioning, PTY, and image-reference smokes, set
 `NATIVECONTAINERS_LIVE_TESTS=1` for the test action. They create uniquely named
 Alpine resources, verify native lifecycle, interactive-terminal, and image
 tag/inspect/delete behavior, and delete every uniquely created test resource.
+
+Remote push is never exercised against a public registry. An additional
+round-trip smoke is available only when
+`NATIVECONTAINERS_LOCAL_REGISTRY_REPOSITORY` names a repository on a disposable
+`localhost`, `127.0.0.1`, or `[::1]` registry.

@@ -33,7 +33,7 @@ actor AppleRegistryService: RegistryManaging {
   ) async throws -> RegistryLoginPlan {
     let requestedServer = server.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !requestedServer.isEmpty else { throw RegistryManagementError.missingServer }
-    let endpoint = try RegistryEndpoint(server: requestedServer)
+    let endpoint = try AppleRegistryEndpoint(server: requestedServer)
     let username = username.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !username.isEmpty else { throw RegistryManagementError.missingUsername }
     let resolvedTransport = try await transportResolver.resolve(
@@ -127,7 +127,7 @@ actor AppleRegistryService: RegistryManaging {
 
   func logoutRegistry(_ registry: RegistryCredentialRecord) async throws {
     try await credentialMutationGate.withLock { _ in
-      let endpoint = try RegistryEndpoint(server: registry.hostname)
+      let endpoint = try AppleRegistryEndpoint(server: registry.hostname)
       let current = try await self.credentialStore.list().first {
         $0.hostname == endpoint.hostname
       }
@@ -138,7 +138,7 @@ actor AppleRegistryService: RegistryManaging {
   }
 }
 
-private struct RegistryEndpoint {
+struct AppleRegistryEndpoint {
   let hostname: String
   let connectionHost: String
 

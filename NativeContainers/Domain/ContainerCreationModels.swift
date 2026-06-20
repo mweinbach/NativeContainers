@@ -200,6 +200,7 @@ struct ContainerOperationProgress: Equatable, Sendable {
     case preparing
     case fetchingImage
     case unpackingImage
+    case pushingImage
     case fetchingKernel
     case fetchingInitImage
     case unpackingInitImage

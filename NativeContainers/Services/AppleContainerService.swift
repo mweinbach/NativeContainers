@@ -16,7 +16,7 @@ actor AppleContainerService: ContainerManaging {
 
   private let containerClient = ContainerClient()
   private let machineClient = MachineClient()
-  private let runtimeMutationGate = AsyncLock()
+  private let runtimeMutationCoordinator = RuntimeMutationCoordinator()
   private let terminalProcessLauncher: any ContainerTerminalProcessLaunching
 
   init(
@@ -148,36 +148,203 @@ actor AppleContainerService: ContainerManaging {
     try await process.start()
   }
 
-  func pullImage(
+  func prepareImagePull(
     reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport,
+    unpackAfterPull: Bool,
+    maxConcurrentDownloads: Int
+  ) async throws -> ImagePullPlan {
+    let reference = try validatedImageReference(reference)
+    guard (1...16).contains(maxConcurrentDownloads) else {
+      throw ImageManagementError.invalidConcurrentDownloads
+    }
+    let configuration = try await loadSystemConfiguration()
+    let normalizedReference = try ClientImage.normalizeReference(
+      reference,
+      containerSystemConfig: configuration
+    )
+    try ensureUserManaged(reference: normalizedReference, configuration: configuration)
+    let resolvedPlatform = try resolvePlatform(platform)
+    let registry = try resolveRegistryTransport(
+      reference: normalizedReference,
+      requestedTransport: transport,
+      configuration: configuration
+    )
+    let existingDigest = try await ClientImage.list().first {
+      $0.reference == normalizedReference
+    }?.digest
+    return ImagePullPlan(
+      normalizedReference: normalizedReference,
+      registryHost: registry.hostname,
+      existingDigest: existingDigest,
+      platform: resolvedPlatform.scope,
+      requestedTransport: transport,
+      resolvedTransport: registry.transport,
+      unpackAfterPull: unpackAfterPull,
+      maxConcurrentDownloads: maxConcurrentDownloads,
+      generatedAt: Date()
+    )
+  }
+
+  func pullImage(
+    _ plan: ImagePullPlan,
+    authorization: ImagePullAuthorization,
     progress: @escaping ContainerProgressHandler
-  ) async throws {
+  ) async throws -> ImagePullResult {
     try await withRuntimeMutation {
-      try await self.pullImageWhileLocked(reference: reference, progress: progress)
+      try await self.pullImageWhileLocked(
+        plan,
+        authorization: authorization,
+        progress: progress
+      )
     }
   }
 
   private func pullImageWhileLocked(
-    reference: String,
+    _ plan: ImagePullPlan,
+    authorization: ImagePullAuthorization,
     progress: @escaping ContainerProgressHandler
-  ) async throws {
-    let reference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !reference.isEmpty else {
-      throw ContainerCreationValidationError.missingImageReference
-    }
+  ) async throws -> ImagePullResult {
+    let configuration = try await loadSystemConfiguration()
+    try ensureUserManaged(reference: plan.normalizedReference, configuration: configuration)
+    let registry = try resolveRegistryTransport(
+      reference: plan.normalizedReference,
+      requestedTransport: plan.requestedTransport,
+      configuration: configuration
+    )
+    let currentDigest = try await ClientImage.list().first {
+      $0.reference == plan.normalizedReference
+    }?.digest
+    try ImageTransferExecutionSafety.validatePull(
+      plan: plan,
+      authorization: authorization,
+      resolvedRegistryHost: registry.hostname,
+      resolvedTransport: registry.transport,
+      currentDigest: currentDigest,
+      isInfrastructureImage: isInfrastructureReference(
+        plan.normalizedReference,
+        configuration: configuration
+      )
+    )
 
     let relay = AppleContainerProgressRelay(handler: progress)
     await relay.emit(phase: .fetchingImage, message: "Fetching image")
-    let systemConfiguration = try await loadSystemConfiguration()
-    _ = try await ClientImage.pull(
-      reference: reference,
-      platform: .current,
-      containerSystemConfig: systemConfiguration,
+    let applePlatform = try applePlatform(for: plan.platform)
+    try Task.checkCancellation()
+    let image = try await ClientImage.pull(
+      reference: plan.normalizedReference,
+      platform: applePlatform,
+      scheme: try RequestScheme(plan.resolvedTransport.rawValue),
+      containerSystemConfig: configuration,
       progressUpdate: { events in
         await relay.consume(events)
-      }
+      },
+      maxConcurrentDownloads: plan.maxConcurrentDownloads
     )
+    var result = ImagePullResult(
+      reference: image.reference,
+      digest: image.digest,
+      replacedDigest: plan.existingDigest,
+      unpackOutcome: nil
+    )
+
+    do {
+      try Task.checkCancellation()
+      let platforms = try await transferPlatforms(
+        for: plan.platform,
+        in: image,
+        requireAllPlatforms: plan.unpackAfterPull
+      )
+      if plan.unpackAfterPull {
+        var outcomes: [ImagePlatformUnpackOutcome] = []
+        for platform in platforms {
+          let platformValue = Self.platformValue(platform)
+          do {
+            try Task.checkCancellation()
+            await relay.emit(
+              phase: .unpackingImage,
+              message: "Preparing \(platform.description) snapshot"
+            )
+            let state: ImagePlatformUnpackState
+            do {
+              _ = try await image.getSnapshot(platform: platform)
+              state = .alreadyPresent
+            } catch is CancellationError {
+              throw CancellationError()
+            } catch {
+              try Task.checkCancellation()
+              _ = try await image.getCreateSnapshot(platform: platform) { events in
+                await relay.consume(events)
+              }
+              state = .created
+            }
+            outcomes.append(
+              ImagePlatformUnpackOutcome(platform: platformValue, state: state)
+            )
+          } catch is CancellationError {
+            result = ImagePullResult(
+              reference: image.reference,
+              digest: image.digest,
+              replacedDigest: plan.existingDigest,
+              unpackOutcome: ImageUnpackOutcome(platforms: outcomes)
+            )
+            throw ImagePullPartialCompletionError(
+              result: result,
+              stage: .unpacking,
+              failureMessage: "Snapshot preparation was cancelled.",
+              wasCancelled: true
+            )
+          } catch {
+            outcomes.append(
+              ImagePlatformUnpackOutcome(
+                platform: platformValue,
+                state: .failed(error.localizedDescription)
+              )
+            )
+          }
+        }
+
+        let unpackOutcome = ImageUnpackOutcome(platforms: outcomes)
+        result = ImagePullResult(
+          reference: image.reference,
+          digest: image.digest,
+          replacedDigest: plan.existingDigest,
+          unpackOutcome: unpackOutcome
+        )
+        guard unpackOutcome.isComplete else {
+          let failures = outcomes.compactMap { outcome -> String? in
+            guard case .failed(let message) = outcome.state else { return nil }
+            return "\(outcome.platform.description): \(message)"
+          }
+          throw ImagePullPartialCompletionError(
+            result: result,
+            stage: .unpacking,
+            failureMessage: failures.joined(separator: "; "),
+            wasCancelled: false
+          )
+        }
+      }
+    } catch let error as ImagePullPartialCompletionError {
+      throw error
+    } catch is CancellationError {
+      throw ImagePullPartialCompletionError(
+        result: result,
+        stage: .validatingPlatform,
+        failureMessage: "Validation was cancelled.",
+        wasCancelled: true
+      )
+    } catch {
+      throw ImagePullPartialCompletionError(
+        result: result,
+        stage: .validatingPlatform,
+        failureMessage: error.localizedDescription,
+        wasCancelled: false
+      )
+    }
+
     await relay.emit(phase: .completed, message: "Image ready")
+    return result
   }
 
   func inspectImage(reference: String) async throws -> ImageInspection {
@@ -458,6 +625,101 @@ actor AppleContainerService: ContainerManaging {
       removedBlobDigests: result.removedBlobDigests,
       reclaimedBytes: result.reclaimedBytes
     )
+  }
+
+  func prepareImagePush(
+    reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport
+  ) async throws -> ImagePushPlan {
+    let reference = try validatedImageReference(reference)
+    let configuration = try await loadSystemConfiguration()
+    let image = try await ClientImage.get(
+      reference: reference,
+      containerSystemConfig: configuration
+    )
+    try ensureUserManaged(image, configuration: configuration)
+    let resolvedPlatform = try resolvePlatform(platform)
+    if let applePlatform = resolvedPlatform.platform {
+      try await validatePlatform(applePlatform, in: image)
+    }
+    let registry = try resolveRegistryTransport(
+      reference: image.reference,
+      requestedTransport: transport,
+      configuration: configuration
+    )
+    return ImagePushPlan(
+      reference: image.reference,
+      displayReference: try ClientImage.denormalizeReference(
+        image.reference,
+        containerSystemConfig: configuration
+      ),
+      sourceDigest: image.digest,
+      registryHost: registry.hostname,
+      platform: resolvedPlatform.scope,
+      requestedTransport: transport,
+      resolvedTransport: registry.transport,
+      generatedAt: Date()
+    )
+  }
+
+  func pushImage(
+    _ plan: ImagePushPlan,
+    authorization: ImagePushAuthorization,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    try await withRuntimeMutation {
+      try await self.pushImageWhileLocked(
+        plan,
+        authorization: authorization,
+        progress: progress
+      )
+    }
+  }
+
+  private func pushImageWhileLocked(
+    _ plan: ImagePushPlan,
+    authorization: ImagePushAuthorization,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    let configuration = try await loadSystemConfiguration()
+    let registry = try resolveRegistryTransport(
+      reference: plan.reference,
+      requestedTransport: plan.requestedTransport,
+      configuration: configuration
+    )
+    let image = try await ClientImage.get(
+      reference: plan.reference,
+      containerSystemConfig: configuration
+    )
+    try ensureUserManaged(image, configuration: configuration)
+    try ImageTransferExecutionSafety.validatePush(
+      plan: plan,
+      authorization: authorization,
+      resolvedRegistryHost: registry.hostname,
+      resolvedTransport: registry.transport,
+      currentDigest: image.digest,
+      isInfrastructureImage: isInfrastructureReference(
+        image.reference,
+        configuration: configuration
+      )
+    )
+    let applePlatform = try applePlatform(for: plan.platform)
+    if let applePlatform {
+      try await validatePlatform(applePlatform, in: image)
+    }
+
+    let relay = AppleContainerProgressRelay(handler: progress)
+    await relay.emit(phase: .pushingImage, message: "Pushing image")
+    try Task.checkCancellation()
+    try await image.push(
+      platform: applePlatform,
+      scheme: try RequestScheme(plan.resolvedTransport.rawValue),
+      containerSystemConfig: configuration
+    ) { events in
+      await relay.consume(events)
+    }
+    await relay.emit(phase: .completed, message: "Image pushed")
   }
 
   func createContainer(
@@ -978,6 +1240,116 @@ actor AppleContainerService: ContainerManaging {
     return reference
   }
 
+  private func resolvePlatform(
+    _ request: ImagePlatformRequest
+  ) throws -> (scope: ImagePlatformScope, platform: ContainerizationOCI.Platform?) {
+    switch request {
+    case .all:
+      return (.all, nil)
+    case .current:
+      let platform = ContainerizationOCI.Platform.current
+      return (.specific(Self.platformValue(platform)), platform)
+    case .arm64:
+      let platform = try ContainerizationOCI.Platform(from: "linux/arm64/v8")
+      return (.specific(Self.platformValue(platform)), platform)
+    case .amd64:
+      let platform = try ContainerizationOCI.Platform(from: "linux/amd64")
+      return (.specific(Self.platformValue(platform)), platform)
+    }
+  }
+
+  private func applePlatform(
+    for scope: ImagePlatformScope
+  ) throws -> ContainerizationOCI.Platform? {
+    switch scope {
+    case .all:
+      nil
+    case .specific(let platform):
+      try ContainerizationOCI.Platform(from: platform.description)
+    }
+  }
+
+  private static func platformValue(
+    _ platform: ContainerizationOCI.Platform
+  ) -> OCIPlatformValue {
+    OCIPlatformValue(
+      os: platform.os,
+      architecture: platform.architecture,
+      variant: platform.variant
+    )
+  }
+
+  private func validatePlatform(
+    _ platform: ContainerizationOCI.Platform,
+    in image: ClientImage
+  ) async throws {
+    let available = try await availablePlatforms(in: image)
+    try ImageTransferExecutionSafety.validatePlatform(
+      Self.platformValue(platform),
+      available: available.map(Self.platformValue),
+      reference: image.reference
+    )
+    _ = try await image.config(for: platform)
+  }
+
+  private func transferPlatforms(
+    for scope: ImagePlatformScope,
+    in image: ClientImage,
+    requireAllPlatforms: Bool
+  ) async throws -> [ContainerizationOCI.Platform] {
+    switch scope {
+    case .specific:
+      guard let platform = try applePlatform(for: scope) else {
+        throw ImageManagementError.noRunnablePlatforms(image.reference)
+      }
+      try await validatePlatform(platform, in: image)
+      return [platform]
+    case .all:
+      guard requireAllPlatforms else { return [] }
+      let platforms = try await availablePlatforms(in: image)
+      guard !platforms.isEmpty else {
+        throw ImageManagementError.noRunnablePlatforms(image.reference)
+      }
+      return platforms
+    }
+  }
+
+  private func availablePlatforms(
+    in image: ClientImage
+  ) async throws -> [ContainerizationOCI.Platform] {
+    let index = try await image.index()
+    var unique: [String: ContainerizationOCI.Platform] = [:]
+    for descriptor in index.manifests {
+      guard
+        descriptor.annotations?["vnd.docker.reference.type"] != "attestation-manifest",
+        let platform = descriptor.platform
+      else { continue }
+      unique[platform.description] = platform
+    }
+    return unique.values.sorted { $0.description < $1.description }
+  }
+
+  private func resolveRegistryTransport(
+    reference: String,
+    requestedTransport: RegistryTransport,
+    configuration: ContainerSystemConfig
+  ) throws -> (hostname: String, transport: RegistryTransport) {
+    let parsed = try Reference.parse(reference)
+    guard let domain = parsed.domain else {
+      throw ImageManagementError.missingRegistryHost(reference)
+    }
+    let endpoint = try AppleRegistryEndpoint(server: domain)
+    let requestedScheme = try RequestScheme(requestedTransport.rawValue)
+    let resolvedScheme = try requestedScheme.schemeFor(
+      host: endpoint.connectionHost,
+      internalDnsDomain: configuration.dns.domain
+    )
+    guard let resolvedTransport = RegistryTransport(rawValue: resolvedScheme.rawValue) else {
+      throw RegistryManagementError.invalidResolvedTransport
+    }
+    return (endpoint.hostname, resolvedTransport)
+  }
+
   private func ensureUserManaged(
     _ image: ClientImage,
     configuration: ContainerSystemConfig
@@ -989,14 +1361,36 @@ actor AppleContainerService: ContainerManaging {
     reference: String,
     configuration: ContainerSystemConfig
   ) throws {
-    guard
-      !Utility.isInfraImage(
-        name: reference,
-        builderImage: configuration.build.image,
-        initImage: configuration.vminit.image
-      )
-    else {
+    guard !isInfrastructureReference(reference, configuration: configuration) else {
       throw ImageManagementError.infrastructureImage(reference)
+    }
+  }
+
+  private func isInfrastructureReference(
+    _ reference: String,
+    configuration: ContainerSystemConfig
+  ) -> Bool {
+    if Utility.isInfraImage(
+      name: reference,
+      builderImage: configuration.build.image,
+      initImage: configuration.vminit.image
+    ) {
+      return true
+    }
+    guard
+      let normalizedReference = try? ClientImage.normalizeReference(
+        reference,
+        containerSystemConfig: configuration
+      )
+    else { return false }
+    return [configuration.build.image, configuration.vminit.image].contains { managedReference in
+      guard
+        let normalizedManagedReference = try? ClientImage.normalizeReference(
+          managedReference,
+          containerSystemConfig: configuration
+        )
+      else { return false }
+      return normalizedManagedReference == normalizedReference
     }
   }
 
@@ -1136,10 +1530,7 @@ actor AppleContainerService: ContainerManaging {
   private func withRuntimeMutation<T: Sendable>(
     _ operation: @escaping @Sendable () async throws -> T
   ) async throws -> T {
-    try await runtimeMutationGate.withLock { _ in
-      try Task.checkCancellation()
-      return try await operation()
-    }
+    try await runtimeMutationCoordinator.perform(operation)
   }
 
   private func loadSystemConfiguration() async throws -> ContainerSystemConfig {
@@ -1248,6 +1639,8 @@ private actor AppleContainerProgressRelay {
       .unpackingImage
     case let value where value.contains("kernel"):
       .fetchingKernel
+    case let value where value.contains("push") || value.contains("upload"):
+      .pushingImage
     case let value where value.contains("fetch") || value.contains("pull"):
       .fetchingImage
     default:
