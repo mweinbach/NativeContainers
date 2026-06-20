@@ -25,6 +25,8 @@ struct SettingsView: View {
         LabeledContent("VM backend", value: "Virtualization.framework")
         LabeledContent("Networking", value: "Apple runtime / NAT")
       }
+
+      RegistrySettingsSection(appModel: model)
     }
     .formStyle(.grouped)
     .padding()

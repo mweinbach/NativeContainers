@@ -164,3 +164,28 @@ XPC mutation. Apple 1.0.0’s tag and delete requests do not carry a digest
 precondition, so a concurrent external CLI or process can still race the final
 reference-only request; full cross-process compare-and-swap safety requires an
 upstream API addition.
+
+## ADR-012: Share Apple container registry credentials without owning secrets
+
+**Status:** Accepted — 2026-06-20
+
+Registry login metadata is presented through a narrow `RegistryManaging`
+adapter, while credentials are written by ContainerizationOCI’s
+`KeychainHelper` to `Constants.keychainID` (`com.apple.container.registry`).
+This is the same domain used by Apple’s CLI and image XPC service. The app never
+lists stored passwords; a new password/token remains in secure SwiftUI state
+only for the validation-and-save operation.
+
+Login resolves and canonicalizes the endpoint, pings `/v2/` with the proposed
+credential before saving, and confirms both resolved HTTP and replacement of a
+different stored user. Login/logout use Apple’s async lock and immutable review
+metadata, then re-list immediately before mutation. Cancellation is checked
+after the network ping and immediately before save. A post-mutation list failure
+is reported as a refresh warning rather than pretending the Keychain mutation
+failed.
+
+Apple’s Keychain entry stores no transport; pulls and pushes must resolve and
+confirm HTTP independently. `KeychainHelper.save` deletes before adding a
+replacement, so an uncommon add failure can lose the previous credential.
+Apple 1.0 also provides no atomic cross-process compare-and-swap, leaving a
+narrow external-CLI race after the final metadata check.

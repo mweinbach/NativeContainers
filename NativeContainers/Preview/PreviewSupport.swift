@@ -98,6 +98,7 @@ extension AppModel {
     )
     return AppModel(
       containerService: PreviewContainerService(inventory: inventory),
+      registryService: PreviewRegistryService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: true),
       initialInventory: inventory,
       initialVirtualMachines: [macVM]
@@ -120,9 +121,23 @@ extension AppModel {
     )
     return AppModel(
       containerService: PreviewContainerService(inventory: inventory),
+      registryService: PreviewRegistryService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: false),
       initialInventory: inventory
     )
+  }
+}
+
+private actor PreviewRegistryService: RegistryManaging {
+  func listRegistries() async throws -> [RegistryCredentialRecord] {
+    [
+      RegistryCredentialRecord(
+        hostname: "ghcr.io",
+        username: "example",
+        createdAt: Date().addingTimeInterval(-86_400),
+        modifiedAt: Date().addingTimeInterval(-3_600)
+      )
+    ]
   }
 }
 

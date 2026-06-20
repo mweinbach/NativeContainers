@@ -109,8 +109,21 @@ release and isolating it behind an adapter are both deliberate.
   exact reference/digest set before deletion. Apple 1.0.0’s own prune command
   does not exclude infrastructure images, so the app adds that safety boundary.
 - Push uses the same Apple image service and Keychain-backed registry domain.
-  Registry credential UI and push are the next image slice; passwords must not
-  be mirrored into observable app state.
+  Registry login/list/logout now use `KeychainHelper` with
+  `Constants.keychainID`, not Containerization’s separate cctl domain. Apple’s
+  image service reads that domain automatically after checking its registry
+  environment-variable override.
+- The CLI resolves `docker.io` to `registry-1.docker.io`; the app additionally
+  canonicalizes Docker’s historical `index.docker.io` and
+  `https://index.docker.io/v1` credential-helper aliases so a login cannot be
+  saved under a key the image service will not query.
+- Registry `auto` is a static policy, not TLS negotiation: localhost, private
+  IPv4, and Apple’s internal DNS suffix resolve to HTTP. Host classification
+  must omit the port, and resolved HTTP is confirmed before sending credentials.
+  Keychain stores no scheme, so pull/push must resolve and confirm it again.
+- `RegistryClient.ping()` proves `/v2/` authentication, not repository-specific
+  push permission. `KeychainHelper.save` replaces by delete-then-add and cannot
+  atomically preserve the prior secret if the add fails.
 - Apple’s public `ContainerBuild.Builder` remains the native build path, but it
   owns NIO/gRPC resources without a public shutdown surface and relies on a
   reserved `buildkit` container. Builds will run in a bundled per-build worker

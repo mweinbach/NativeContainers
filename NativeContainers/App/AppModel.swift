@@ -17,6 +17,7 @@ final class AppModel {
   private(set) var errorMessage: String?
 
   private let containerService: any ContainerManaging
+  private let registryService: any RegistryManaging
   private let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   private let restoreImageDiscovery: any MacRestoreImageDiscovering
   private let restoreImageDownloader: any MacRestoreImageDownloading
@@ -26,6 +27,7 @@ final class AppModel {
 
   init(
     containerService: any ContainerManaging = AppleContainerService(),
+    registryService: any RegistryManaging = AppleRegistryService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
     restoreImageDiscovery: any MacRestoreImageDiscovering = MacRestoreImageService(),
     restoreImageDownloader: any MacRestoreImageDownloading = RestoreImageDownloadService(),
@@ -33,6 +35,7 @@ final class AppModel {
     initialVirtualMachines: [VirtualMachineManifest] = []
   ) {
     self.containerService = containerService
+    self.registryService = registryService
     self.virtualMachineLibrary = virtualMachineLibrary
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageDownloader = restoreImageDownloader
@@ -200,6 +203,10 @@ final class AppModel {
     ImageOperationsModel(sourceReference: reference, service: containerService) { [weak self] in
       await self?.refresh()
     }
+  }
+
+  func makeRegistrySettingsModel() -> RegistrySettingsModel {
+    RegistrySettingsModel(service: registryService)
   }
 
   func makeContainerToolsModel(containerID: String) -> ContainerToolsModel {

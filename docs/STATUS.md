@@ -7,7 +7,7 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- Fifty-six deterministic Swift Testing cases pass. Three opt-in integration
+- Sixty-seven deterministic Swift Testing cases pass. Three opt-in integration
   tests cover live provisioning, interactive PTY, and image-reference behavior.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview and split container inspector render successfully in
@@ -98,6 +98,13 @@ Updated: 2026-06-20.
 - A live Apple-service smoke pulled Alpine, created a unique local tag, resolved
   its real OCI variant/configuration, deleted only that alias, verified removal,
   and left no containers or temporary image references behind.
+- Settings now lists Apple container registry logins and supports validated
+  login/logout through the runtime’s shared Keychain domain. Docker Hub aliases
+  are canonicalized, automatic transport is resolved against the portless host,
+  HTTP and different-user replacement require confirmation, and stored secrets
+  are never loaded back into the settings model. Full reviewed metadata is
+  revalidated after ping and immediately before save/delete; cancellation and
+  post-mutation refresh failures have explicit semantics.
 
 ## Known configuration issue
 
@@ -112,7 +119,7 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add native registry login/logout/list and image push workflows.
+1. Add reviewed image pull platform/transport selection and native image push.
 2. Add an isolated native `ContainerBuild` worker and builder lifecycle.
 3. Add volume/network lifecycle and open-in-browser helpers.
 4. Add the entitlement through a functioning Xcode capability surface, then

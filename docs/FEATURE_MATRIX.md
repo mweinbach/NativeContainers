@@ -13,7 +13,7 @@ called out rather than papered over.
 | Direct container IP and published ports | Apple vmnet/socket forwarders | M1 | No exact shared host loopback |
 | Docker CLI and Engine API | Socktainer compatibility service | M2 | Partial API v1.51 today |
 | Docker Compose | Docker CLI through compatibility service | M2 | Compatibility matrix required |
-| Registry credentials | Apple Keychain client | M1 | Never mirror secrets in app state |
+| Registry credentials | Apple Keychain client | M1 | Login/list/logout live; stored secrets never leave Keychain |
 | Rosetta `linux/amd64` applications | Apple Containerization | M1 | ARM Linux guest; not an x86 VM |
 | Persistent Linux dev machines | `MachineClient` | M2 | Foundation inventory/lifecycle is wired |
 | Shared-kernel/project density | Experimental `LinuxPod` | M5 | Opt-in only after upstream stabilization |

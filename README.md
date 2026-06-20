@@ -29,6 +29,10 @@ Foundation work is underway. See:
 - [Architecture decisions](docs/DECISIONS.md)
 - [Current status](docs/STATUS.md)
 
+The current foundation includes native container lifecycle and inspection,
+exec/copy and interactive PTY workflows, safe OCI image management, Apple
+Keychain-backed registry login management, and macOS restore-image preparation.
+
 ## Build
 
 The Xcode project is generated from `project.yml` so project configuration is

@@ -52,6 +52,15 @@ adapter and use immutable review plans. Tag replacement, deletion, and prune
 therefore re-fetch current references, digests, container usage, and protected
 builder/vminit images immediately before acting.
 
+Registry credentials use Apple Containerization’s `KeychainHelper` with the
+runtime’s exact `com.apple.container.registry` security domain. The settings
+model lists host, user, and timestamps only; stored passwords never leave
+Keychain. A newly entered secret lives in a secure field just long enough to
+ping the registry and save. Registry mutations are serialized and revalidate
+the full reviewed metadata immediately before save/delete. Transport is not a
+Keychain attribute, so every transfer resolves it separately and must reconfirm
+plain-text HTTP.
+
 Interactive terminals remain in this lane. The app asks
 `ContainerClient.createProcess` for a terminal-mode child, passes pipe file
 descriptors through Apple’s XPC boundary, and streams the resulting bytes into

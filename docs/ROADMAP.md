@@ -29,11 +29,11 @@ must leave a usable, test-backed product slice.
 - [ ] Explicit platform selection for standalone image pulls.
 - [x] Lazy multi-platform image inspect and safe tag/delete flows.
 - [x] Reviewed dangling/all-unused prune with mutation-time revalidation.
-- [ ] Image push and registry credential management.
+- [ ] Image push (registry credential management is live).
 - [ ] Volume and network create/inspect/delete flows.
 - [x] TCP/UDP host-port publishing on Apple’s built-in network and DNS.
 - [ ] Socket publishing, host-access helpers, and open-in-browser.
-- [ ] Registry authentication through Keychain-backed Apple APIs.
+- [x] Registry login/list/logout through Apple’s shared Keychain domain.
 
 ## M2 — Developer workflow and Docker compatibility
 
