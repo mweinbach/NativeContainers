@@ -1,23 +1,34 @@
 import SwiftUI
 
 struct ImagesView: View {
-  let images: [ImageRecord]
+  let model: AppModel
+  @State private var isShowingPull = false
 
   var body: some View {
     VStack(spacing: 0) {
-      if images.isEmpty {
+      if model.images.isEmpty {
         ContentUnavailableView(
           "No images",
           systemImage: "square.stack.3d.up",
           description: Text("Pull or build an OCI image to populate the local image store.")
         )
       } else {
-        List(images) { image in
+        List(model.images) { image in
           ImageRow(image: image)
         }
       }
     }
     .navigationTitle("Images")
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button("Pull Image", systemImage: "square.and.arrow.down") {
+          isShowingPull = true
+        }
+      }
+    }
+    .sheet(isPresented: $isShowingPull) {
+      ImagePullView(appModel: model)
+    }
   }
 }
 

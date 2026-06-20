@@ -63,3 +63,17 @@ Compose compatibility will live behind a separate adapter, initially based on
 Socktainer and backed by protocol conformance fixtures. The native app remains
 fully usable without that compatibility mode.
 
+## ADR-008: Compose container creation from public client primitives
+
+**Status:** Accepted — 2026-06-20
+
+The GUI uses `ClientImage`, `ClientKernel`, `NetworkClient`,
+`ContainerConfiguration`, and `ContainerClient` directly for provisioning. It
+does not invoke `Utility.containerConfigFromFlags`, even though that helper is
+public: repeated Xcode preview and test-host probes exited the host process with
+status 1 inside that CLI-oriented orchestration path. The equivalent direct
+sequence passed a live create/inspect/delete smoke test and gives the app clear
+transaction, progress, and error boundaries.
+
+Parser helpers remain appropriate for OCI command/environment merging,
+resource syntax, and port descriptors. The app owns orchestration and rollback.

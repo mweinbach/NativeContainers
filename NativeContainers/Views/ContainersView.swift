@@ -4,6 +4,7 @@ struct ContainersView: View {
   let model: AppModel
   @State private var pendingDeletion: ContainerRecord?
   @State private var selectedContainerID: ContainerRecord.ID?
+  @State private var isShowingCreation = false
 
   var body: some View {
     Group {
@@ -72,6 +73,16 @@ struct ContainersView: View {
       Text(
         "The container \(container.id) and its writable filesystem will be removed. Named volumes are retained."
       )
+    }
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button("New Container", systemImage: "plus") {
+          isShowingCreation = true
+        }
+      }
+    }
+    .sheet(isPresented: $isShowingCreation) {
+      ContainerCreationView(appModel: model)
     }
   }
 

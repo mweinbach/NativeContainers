@@ -132,6 +132,12 @@ final class AppModel {
     ContainerInspectorModel(containerID: containerID, service: containerService)
   }
 
+  func makeContainerProvisioningModel() -> ContainerProvisioningModel {
+    ContainerProvisioningModel(service: containerService) { [weak self] in
+      await self?.refresh()
+    }
+  }
+
   private func performMutation(
     _ operation: @escaping @Sendable () async throws -> Void
   ) async {

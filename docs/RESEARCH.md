@@ -33,6 +33,14 @@ Verified architecture:
 - Release 1.0.0 publishes Swift library products including
   `ContainerAPIClient`, `ContainerResource`, `MachineAPIClient`, and related
   service clients. Those are preferable to scraping CLI table output.
+- The public `Utility.containerConfigFromFlags` helper mirrors CLI creation but
+  is not safe to assume as a GUI boundary. On this host it exited both Xcode’s
+  snippet process and the XCTest host with status 1 before returning. Rebuilding
+  the same sequence from public image, snapshot, kernel, network,
+  configuration, and lifecycle clients passed live.
+- `ClientImage.fetch` in 1.0.0 only falls back to a pull for a missing local
+  reference. If a cached reference lacks the requested platform, its
+  `.unsupported` error must be handled by an explicit platform pull.
 - Release 1.0.0 pins Containerization 0.33.3. Its XPC compatibility shim was
   removed and protocol negotiation is not yet available, so client/server
   versions must remain matched.
@@ -47,6 +55,10 @@ The installed Apple documentation confirms:
 
 - A process using Virtualization APIs needs the
   `com.apple.security.virtualization` entitlement.
+- That entitlement is a normal Boolean capability, not a restricted entitlement
+  requiring Apple approval. Apple’s own runtime is locally ad-hoc signed with
+  it. The current blocker is Xcode MCP’s entitlement catalog rejecting the key,
+  not the developer account or provisioning profile.
 - `VZMacOSRestoreImage.latestSupported` discovers the newest restore image the
   current host supports; local images can be loaded explicitly.
 - The restore image’s most featureful supported configuration supplies the

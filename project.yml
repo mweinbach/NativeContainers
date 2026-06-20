@@ -19,6 +19,9 @@ packages:
   AppleContainer:
     url: https://github.com/apple/container.git
     exactVersion: 1.0.0
+  SwiftSystem:
+    url: https://github.com/apple/swift-system.git
+    from: 1.6.4
 
 targets:
   NativeContainers:
@@ -32,7 +35,13 @@ targets:
       - package: AppleContainer
         product: ContainerResource
       - package: AppleContainer
+        product: ContainerPersistence
+      - package: AppleContainer
+        product: TerminalProgress
+      - package: AppleContainer
         product: MachineAPIClient
+      - package: SwiftSystem
+        product: SystemPackage
       - sdk: Virtualization.framework
     settings:
       base:
@@ -60,4 +69,3 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nativecontainers.tests
         GENERATE_INFOPLIST_FILE: YES
-

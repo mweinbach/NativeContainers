@@ -32,7 +32,7 @@ Foundation work is underway. See:
 ## Build
 
 The Xcode project is generated from `project.yml` so project configuration is
-reviewable. Once the source scaffold lands:
+reviewable:
 
 ```sh
 xcodegen generate
@@ -40,3 +40,8 @@ open NativeContainers.xcodeproj
 ```
 
 Build and test with the `NativeContainers` scheme on `My Mac`.
+
+The deterministic suite runs without mutating the local runtime. To run the
+reversible live provisioning smoke, set `NATIVECONTAINERS_LIVE_TESTS=1` for the
+test action; it creates, verifies, and deletes a uniquely named stopped Alpine
+container.

@@ -108,6 +108,88 @@ struct AppModelTests {
     #expect(!model.isLoading)
     #expect(await service.inspectedContainerIDs == ["web"])
   }
+
+  @Test
+  func provisioningCreatesValidatedRequestAndRefreshesInventory() async throws {
+    let service = MockContainerService(inventory: emptyInventory())
+    let appModel = AppModel(
+      containerService: service,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [])
+    )
+    let model = appModel.makeContainerProvisioningModel()
+    let request = try ContainerCreationRequest(
+      operationID: UUID(uuidString: "E8ECF872-F7B9-4B5B-89A4-8B73A6588711")!,
+      name: "web-api",
+      imageReference: "alpine:latest",
+      cpuCount: 2,
+      memoryBytes: 512 * ContainerCreationRequest.bytesPerMiB,
+      environment: [try ContainerEnvironmentVariable(key: "MODE", value: "test")],
+      publishedPorts: [
+        try ContainerPortPublication(
+          hostAddress: "127.0.0.1",
+          hostPort: 8_080,
+          containerPort: 80,
+          transportProtocol: .tcp
+        )
+      ]
+    )
+
+    let succeeded = await model.createContainer(request)
+
+    #expect(succeeded)
+    #expect(model.progress?.phase == .completed)
+    #expect(model.errorMessage == nil)
+    #expect(await service.createdRequests == [request])
+    #expect(await service.loadCount == 1)
+  }
+
+  @Test
+  func provisioningPullsImageAndRefreshesInventory() async {
+    let service = MockContainerService(inventory: emptyInventory())
+    let appModel = AppModel(
+      containerService: service,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [])
+    )
+    let model = appModel.makeContainerProvisioningModel()
+
+    let succeeded = await model.pullImage(reference: "  alpine:latest  ")
+
+    #expect(succeeded)
+    #expect(model.progress?.phase == .completed)
+    #expect(await service.pulledImageReferences == ["alpine:latest"])
+    #expect(await service.loadCount == 1)
+  }
+
+  @Test
+  func creationRequestRejectsInvalidUserInput() throws {
+    #expect(throws: ContainerCreationValidationError.invalidName) {
+      try ContainerCreationRequest(name: "!", imageReference: "alpine")
+    }
+    #expect(throws: ContainerCreationValidationError.invalidEnvironmentKey("BAD KEY")) {
+      try ContainerEnvironmentVariable(key: "BAD KEY", value: "value")
+    }
+    #expect(throws: ContainerCreationValidationError.invalidMemory) {
+      try ContainerCreationRequest(
+        name: "tiny-memory",
+        imageReference: "alpine",
+        memoryBytes: 128 * ContainerCreationRequest.bytesPerMiB
+      )
+    }
+  }
+
+  @Test
+  func operationProgressPrefersByteFraction() {
+    let progress = ContainerOperationProgress(
+      phase: .fetchingImage,
+      message: "Fetching image",
+      completedItems: 9,
+      totalItems: 10,
+      transferredBytes: 25,
+      totalBytes: 100
+    )
+
+    #expect(progress.fractionCompleted == 0.25)
+  }
 }
 
 private func emptyInventory() -> ContainerInventory {
@@ -131,6 +213,8 @@ private actor MockContainerService: ContainerManaging {
   let inspection: ContainerInspection
   private(set) var startedContainerIDs: [String] = []
   private(set) var inspectedContainerIDs: [String] = []
+  private(set) var createdRequests: [ContainerCreationRequest] = []
+  private(set) var pulledImageReferences: [String] = []
   private(set) var loadCount = 0
 
   init(
@@ -150,6 +234,24 @@ private actor MockContainerService: ContainerManaging {
   func loadInventory() async throws -> ContainerInventory {
     loadCount += 1
     return inventory
+  }
+
+  func pullImage(
+    reference: String,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    pulledImageReferences.append(reference)
+    await progress(ContainerOperationProgress(phase: .fetchingImage, message: "Fetching image"))
+    await progress(ContainerOperationProgress(phase: .completed, message: "Image ready"))
+  }
+
+  func createContainer(
+    request: ContainerCreationRequest,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    createdRequests.append(request)
+    await progress(ContainerOperationProgress(phase: .creating, message: "Creating container"))
+    await progress(ContainerOperationProgress(phase: .completed, message: "Container ready"))
   }
 
   func inspectContainer(id: String) async throws -> ContainerInspection {

@@ -129,6 +129,18 @@ private actor PreviewContainerService: ContainerManaging {
   }
 
   func loadInventory() async throws -> ContainerInventory { inventory }
+  func pullImage(
+    reference: String,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    await progress(ContainerOperationProgress(phase: .completed, message: "Image ready"))
+  }
+  func createContainer(
+    request: ContainerCreationRequest,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    await progress(ContainerOperationProgress(phase: .completed, message: "Container ready"))
+  }
   func inspectContainer(id: String) async throws -> ContainerInspection {
     ContainerInspection(
       diskUsageBytes: 286_261_248,

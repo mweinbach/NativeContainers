@@ -17,15 +17,18 @@ must leave a usable, test-backed product slice.
 ## M1 — Daily container management
 
 - [x] Container start, stop, and delete from the native management UI.
+- [x] Validated create-only/create-and-start flow with progress and rollback.
 - [ ] Graceful-stop policy, kill, and restart controls.
 - [x] Bounded stdout and boot-log inspection.
 - [ ] Log follow, search, and export.
 - [x] One-shot CPU, memory, disk, network, block-I/O, and process statistics.
 - [ ] Live statistics sampling and history.
 - [ ] Exec terminal and file copy in/out.
-- [ ] Image pull, build, tag, push, inspect, and prune.
+- [x] Image pull with platform selection and byte/item progress.
+- [ ] Image build, tag, push, inspect, and prune.
 - [ ] Volume and network create/inspect/delete flows.
-- [ ] Port/socket publishing, host access, local DNS, and open-in-browser.
+- [x] TCP/UDP host-port publishing on Apple’s built-in network and DNS.
+- [ ] Socket publishing, host-access helpers, and open-in-browser.
 - [ ] Registry authentication through Keychain-backed Apple APIs.
 
 ## M2 — Developer workflow and Docker compatibility
