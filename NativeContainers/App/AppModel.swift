@@ -22,10 +22,22 @@ final class AppModel {
 
   init(
     containerService: any ContainerManaging = AppleContainerService(),
-    virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary()
+    virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
+    initialInventory: ContainerInventory? = nil,
+    initialVirtualMachines: [VirtualMachineManifest] = []
   ) {
     self.containerService = containerService
     self.virtualMachineLibrary = virtualMachineLibrary
+    if let initialInventory {
+      systemInfo = initialInventory.system
+      containers = initialInventory.containers
+      images = initialInventory.images
+      volumes = initialInventory.volumes
+      linuxMachines = initialInventory.machines
+      virtualMachines = initialVirtualMachines
+      hasLoaded = true
+      lastRefresh = Date()
+    }
   }
 
   func loadIfNeeded() async {
@@ -114,6 +126,10 @@ final class AppModel {
 
   func clearError() {
     errorMessage = nil
+  }
+
+  func makeContainerInspector(containerID: String) -> ContainerInspectorModel {
+    ContainerInspectorModel(containerID: containerID, service: containerService)
   }
 
   private func performMutation(

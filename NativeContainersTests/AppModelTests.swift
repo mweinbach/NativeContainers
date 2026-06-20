@@ -79,20 +79,82 @@ struct AppModelTests {
     #expect(await service.startedContainerIDs == ["web"])
     #expect(await service.loadCount == 1)
   }
+
+  @Test
+  func inspectorLoadsBoundedServiceSnapshot() async {
+    let inspection = ContainerInspection(
+      diskUsageBytes: 42,
+      statistics: ContainerStatistics(
+        memoryUsageBytes: 12,
+        memoryLimitBytes: 100,
+        cpuUsageMicroseconds: 900,
+        networkReceivedBytes: 4,
+        networkTransmittedBytes: 5,
+        blockReadBytes: 6,
+        blockWrittenBytes: 7,
+        processCount: 2
+      ),
+      standardOutput: "ready\n",
+      bootLog: "booted\n",
+      logsAreTruncated: false
+    )
+    let service = MockContainerService(inventory: emptyInventory(), inspection: inspection)
+    let model = ContainerInspectorModel(containerID: "web", service: service)
+
+    await model.load()
+
+    #expect(model.inspection == inspection)
+    #expect(model.errorMessage == nil)
+    #expect(!model.isLoading)
+    #expect(await service.inspectedContainerIDs == ["web"])
+  }
+}
+
+private func emptyInventory() -> ContainerInventory {
+  ContainerInventory(
+    system: ContainerSystemInfo(
+      version: "1.0.0",
+      build: "release",
+      commit: "abc123",
+      applicationRoot: URL(filePath: "/tmp/data"),
+      installRoot: URL(filePath: "/usr/local")
+    ),
+    containers: [],
+    images: [],
+    volumes: [],
+    machines: []
+  )
 }
 
 private actor MockContainerService: ContainerManaging {
   let inventory: ContainerInventory
+  let inspection: ContainerInspection
   private(set) var startedContainerIDs: [String] = []
+  private(set) var inspectedContainerIDs: [String] = []
   private(set) var loadCount = 0
 
-  init(inventory: ContainerInventory) {
+  init(
+    inventory: ContainerInventory,
+    inspection: ContainerInspection = ContainerInspection(
+      diskUsageBytes: 0,
+      statistics: nil,
+      standardOutput: "",
+      bootLog: "",
+      logsAreTruncated: false
+    )
+  ) {
     self.inventory = inventory
+    self.inspection = inspection
   }
 
   func loadInventory() async throws -> ContainerInventory {
     loadCount += 1
     return inventory
+  }
+
+  func inspectContainer(id: String) async throws -> ContainerInspection {
+    inspectedContainerIDs.append(id)
+    return inspection
   }
 
   func startContainer(id: String) async throws { startedContainerIDs.append(id) }

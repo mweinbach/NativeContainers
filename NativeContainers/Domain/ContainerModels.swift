@@ -81,3 +81,22 @@ struct ContainerInventory: Equatable, Sendable {
   let volumes: [VolumeRecord]
   let machines: [LinuxMachineRecord]
 }
+
+struct ContainerStatistics: Codable, Equatable, Sendable {
+  let memoryUsageBytes: UInt64?
+  let memoryLimitBytes: UInt64?
+  let cpuUsageMicroseconds: UInt64?
+  let networkReceivedBytes: UInt64?
+  let networkTransmittedBytes: UInt64?
+  let blockReadBytes: UInt64?
+  let blockWrittenBytes: UInt64?
+  let processCount: UInt64?
+}
+
+struct ContainerInspection: Equatable, Sendable {
+  let diskUsageBytes: UInt64
+  let statistics: ContainerStatistics?
+  let standardOutput: String
+  let bootLog: String
+  let logsAreTruncated: Bool
+}

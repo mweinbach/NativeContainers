@@ -16,9 +16,12 @@ must leave a usable, test-backed product slice.
 
 ## M1 — Daily container management
 
-- [ ] Container start, graceful stop, kill, restart, and delete.
-- [ ] Logs with follow/search/export.
-- [ ] Live CPU, memory, disk, network, and process statistics.
+- [x] Container start, stop, and delete from the native management UI.
+- [ ] Graceful-stop policy, kill, and restart controls.
+- [x] Bounded stdout and boot-log inspection.
+- [ ] Log follow, search, and export.
+- [x] One-shot CPU, memory, disk, network, block-I/O, and process statistics.
+- [ ] Live statistics sampling and history.
 - [ ] Exec terminal and file copy in/out.
 - [ ] Image pull, build, tag, push, inspect, and prune.
 - [ ] Volume and network create/inspect/delete flows.

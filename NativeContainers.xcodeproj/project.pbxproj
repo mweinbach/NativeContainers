@@ -35,6 +35,7 @@
 		B1148E3495B9B990BDE15006 /* AppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64FCAE44305E93880025D275 /* AppModelTests.swift */; };
 		C2C2661B8E02F3B836209B2A /* VirtualMachineModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75005055A132B627A00B3FA2 /* VirtualMachineModelsTests.swift */; };
 		C97458AB7FAA1014800D8EB3 /* ResourceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A0681391CAB1853E5FE397 /* ResourceComponents.swift */; };
+		CF01A590ABF08323E6B93DC7 /* ContainerInspectorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5106D84EA701494900018CC2 /* ContainerInspectorModel.swift */; };
 		DE0FF5308EB763EEE31EE921 /* SidebarDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE214C3E45AA0DB0B16E98B /* SidebarDestination.swift */; };
 /* End PBXBuildFile section */
 
@@ -59,6 +60,7 @@
 		467A7DAF55C068899D8C9B81 /* PreviewSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewSupport.swift; sourceTree = "<group>"; };
 		47B62BFC2522EEAA0D77920A /* NativeContainers.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NativeContainers.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		50A6FE055FE52A768F0F9C9A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		5106D84EA701494900018CC2 /* ContainerInspectorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerInspectorModel.swift; sourceTree = "<group>"; };
 		594129E25C393F840817F89F /* ContainersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainersView.swift; sourceTree = "<group>"; };
 		5AE214C3E45AA0DB0B16E98B /* SidebarDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarDestination.swift; sourceTree = "<group>"; };
 		64FCAE44305E93880025D275 /* AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelTests.swift; sourceTree = "<group>"; };
@@ -163,6 +165,7 @@
 			isa = PBXGroup;
 			children = (
 				95490ED77FEE23FBBF921592 /* AppModel.swift */,
+				5106D84EA701494900018CC2 /* ContainerInspectorModel.swift */,
 				F023DF90411E232804D84D7E /* NativeContainersApp.swift */,
 			);
 			path = App;
@@ -319,6 +322,7 @@
 			files = (
 				6DF203F008ABAD5C4AB7903C /* AppModel.swift in Sources */,
 				9797C01E4560B0E89E706FBF /* AppleContainerService.swift in Sources */,
+				CF01A590ABF08323E6B93DC7 /* ContainerInspectorModel.swift in Sources */,
 				9B0B0A2D8D7E816F5DB11F1E /* ContainerManaging.swift in Sources */,
 				5EF45D5EC2FC881A0CADCA99 /* ContainerModels.swift in Sources */,
 				A0AE31A3A8A12AAEE077BBC1 /* ContainersView.swift in Sources */,

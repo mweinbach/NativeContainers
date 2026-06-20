@@ -1,6 +1,12 @@
 import Foundation
 
 extension AppModel {
+  static var previewContainers: AppModel {
+    let model = preview
+    model.selection = .containers
+    return model
+  }
+
   static var preview: AppModel {
     let now = Date()
     let inventory = ContainerInventory(
@@ -75,9 +81,21 @@ extension AppModel {
         )
       ]
     )
+    let machineResources = try! VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    let macVM = try! VirtualMachineManifest(
+      name: "macOS Sequoia",
+      guest: .macOS,
+      resources: machineResources
+    )
     return AppModel(
       containerService: PreviewContainerService(inventory: inventory),
-      virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: true)
+      virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: true),
+      initialInventory: inventory,
+      initialVirtualMachines: [macVM]
     )
   }
 
@@ -97,7 +115,8 @@ extension AppModel {
     )
     return AppModel(
       containerService: PreviewContainerService(inventory: inventory),
-      virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: false)
+      virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: false),
+      initialInventory: inventory
     )
   }
 }
@@ -110,6 +129,24 @@ private actor PreviewContainerService: ContainerManaging {
   }
 
   func loadInventory() async throws -> ContainerInventory { inventory }
+  func inspectContainer(id: String) async throws -> ContainerInspection {
+    ContainerInspection(
+      diskUsageBytes: 286_261_248,
+      statistics: ContainerStatistics(
+        memoryUsageBytes: 187_695_104,
+        memoryLimitBytes: 2 * VirtualMachineResources.bytesPerGiB,
+        cpuUsageMicroseconds: 4_820_000,
+        networkReceivedBytes: 8_421_912,
+        networkTransmittedBytes: 1_928_140,
+        blockReadBytes: 42_991_616,
+        blockWrittenBytes: 9_437_184,
+        processCount: 7
+      ),
+      standardOutput: "Server listening on http://0.0.0.0:8080\nConnected to postgres\n",
+      bootLog: "vminitd: container runtime ready\n",
+      logsAreTruncated: false
+    )
+  }
   func startContainer(id: String) async throws {}
   func stopContainer(id: String) async throws {}
   func deleteContainer(id: String) async throws {}
