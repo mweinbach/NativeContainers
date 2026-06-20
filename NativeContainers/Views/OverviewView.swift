@@ -16,6 +16,7 @@ struct OverviewView: View {
           containerCount: model.containers.count,
           imageCount: model.images.count,
           volumeCount: model.volumes.count,
+          networkCount: model.networks.count,
           linuxMachineCount: model.linuxMachines.count,
           virtualMachineCount: model.virtualMachines.count
         )
@@ -74,6 +75,7 @@ struct ResourceSummaryGrid: View {
   let containerCount: Int
   let imageCount: Int
   let volumeCount: Int
+  let networkCount: Int
   let linuxMachineCount: Int
   let virtualMachineCount: Int
 
@@ -103,6 +105,13 @@ struct ResourceSummaryGrid: View {
         detail: "persistent stores",
         systemImage: "externaldrive",
         tint: .orange
+      )
+      SummaryCard(
+        title: "Networks",
+        value: networkCount.formatted(),
+        detail: "virtual subnets",
+        systemImage: "network",
+        tint: .teal
       )
       SummaryCard(
         title: "Linux Machines",

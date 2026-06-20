@@ -5,6 +5,7 @@ struct ContainerCreationView: View {
   @State private var model: ContainerProvisioningModel
   @State private var draft = ContainerCreationDraft()
   @State private var validationMessage: String?
+  @State private var operationTask: Task<Void, Never>?
 
   init(appModel: AppModel) {
     _model = State(initialValue: appModel.makeContainerProvisioningModel())
@@ -106,26 +107,40 @@ struct ContainerCreationView: View {
         }
       }
       .formStyle(.grouped)
-      .disabled(model.isWorking)
+      .disabled(model.isWorking || operationTask != nil)
       .navigationTitle("New Container")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") {
-            dismiss()
+          if model.isWorking || operationTask != nil {
+            Button("Cancel and Clean Up") {
+              operationTask?.cancel()
+            }
+            .help("Cancel creation, force-stop any owned container, and remove partial state")
+          } else {
+            Button("Cancel") {
+              dismiss()
+            }
           }
-          .disabled(model.isWorking)
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Create") {
             create()
           }
           .buttonStyle(.borderedProminent)
-          .disabled(model.isWorking || draft.name.isEmpty || draft.imageReference.isEmpty)
+          .disabled(
+            model.isWorking
+              || operationTask != nil
+              || draft.name.isEmpty
+              || draft.imageReference.isEmpty
+          )
         }
       }
     }
     .frame(minWidth: 650, minHeight: 720)
-    .interactiveDismissDisabled(model.isWorking)
+    .interactiveDismissDisabled(model.isWorking || operationTask != nil)
+    .onDisappear {
+      operationTask?.cancel()
+    }
   }
 
   private var maximumSuggestedCPUCount: Int {
@@ -133,10 +148,12 @@ struct ContainerCreationView: View {
   }
 
   private func create() {
+    guard operationTask == nil, !model.isWorking else { return }
     do {
       let request = try draft.makeRequest()
       validationMessage = nil
-      Task {
+      operationTask = Task {
+        defer { operationTask = nil }
         if await model.createContainer(request) {
           dismiss()
         }

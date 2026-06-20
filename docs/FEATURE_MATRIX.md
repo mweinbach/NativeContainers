@@ -9,8 +9,8 @@ called out rather than papered over.
 | Dockerfile/Containerfile builds | Apple `ContainerBuild` + shared BuildKit VM | M2 | Reviewed exact-platform OCI builds are live through a signed worker; 1.0.0 requires Dockerfiles below 16 KiB and lacks structured progress/cache prune |
 | Container lifecycle | `ContainerClient` | M1 | Foundation start/stop/delete is wired |
 | Exec, logs, copy, inspect, stats | `ContainerClient` + SwiftTerm | M1 | Non-interactive exec and native interactive PTY are live |
-| Volumes and named networks | Apple services | M1 | Preserve sparse ext4/APFS clone optimizations |
-| Direct container IP and published ports | Apple vmnet/socket forwarders | M1 | No exact shared host loopback |
+| Volumes and named networks | Apple services | M1 | Reviewed create/delete/prune, capacity versus allocated usage, built-in protection, and configured-container use checks are live; Apple 1.0 has no conditional delete token |
+| Direct container IP and published ports | Apple vmnet/socket forwarders | M1 | Dedicated IPs and TCP/UDP ranges are inventoried; TCP host publications offer explicit revalidated HTTP/HTTPS opening; no exact shared host loopback |
 | Docker CLI and Engine API | Socktainer compatibility service | M2 | Partial API v1.51 today |
 | Docker Compose | Docker CLI through compatibility service | M2 | Compatibility matrix required |
 | Registry credentials | Apple Keychain client | M1 | Login/list/logout live; stored secrets never leave Keychain |

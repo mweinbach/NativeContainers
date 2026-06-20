@@ -11,6 +11,7 @@ struct SidebarView: View {
         SidebarRow(destination: .images)
         SidebarRow(destination: .builds)
         SidebarRow(destination: .volumes)
+        SidebarRow(destination: .networks)
       }
 
       Section("Virtual Machines") {

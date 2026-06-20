@@ -10,6 +10,8 @@ must leave a usable, test-backed product slice.
 - [x] Direct Apple client adapter reports container system health.
 - [x] Live inventories for containers, images, volumes, and Linux machines.
 - [x] Stable domain models and mockable service protocols.
+- [ ] Extract lifecycle, inventory, volume, network, and reconciliation logic
+      from the monolithic Apple runtime adapter into focused services.
 - [x] Persistent VM bundle library with schema versioning and atomic writes.
 - [x] SwiftUI management shell with useful empty/error/loading states.
 - [x] Diagnostics screen records runtime and package versions.
@@ -30,9 +32,10 @@ must leave a usable, test-backed product slice.
 - [x] Lazy multi-platform image inspect and safe tag/delete flows.
 - [x] Reviewed dangling/all-unused prune with mutation-time revalidation.
 - [x] Reviewed native image push with digest/platform/transport revalidation.
-- [ ] Volume and network create/inspect/delete flows.
+- [x] Reviewed volume and network create/inspect/delete/prune flows.
 - [x] TCP/UDP host-port publishing on Apple’s built-in network and DNS.
-- [ ] Socket publishing, host-access helpers, and open-in-browser.
+- [x] Explicit HTTP/HTTPS open-in-browser for revalidated TCP host publications.
+- [ ] Socket publishing and privileged host-access helpers.
 - [x] Registry login/list/logout through Apple’s shared Keychain domain.
 
 ## M2 — Developer workflow and Docker compatibility

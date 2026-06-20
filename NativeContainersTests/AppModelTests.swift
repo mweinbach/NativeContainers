@@ -31,6 +31,24 @@ struct AppModelTests {
       ],
       images: [],
       volumes: [],
+      networks: [
+        NetworkRecord(
+          id: "default",
+          name: "default",
+          mode: .nat,
+          createdAt: Date(timeIntervalSince1970: 1),
+          configuredIPv4Subnet: nil,
+          configuredIPv6Subnet: nil,
+          assignedIPv4Subnet: "192.168.64.0/24",
+          ipv4Gateway: "192.168.64.1",
+          assignedIPv6Subnet: nil,
+          labels: ["com.apple.container.resource.role": "builtin"],
+          plugin: "container-network-vmnet",
+          options: [:],
+          isBuiltin: true,
+          usedByContainerIDs: ["web"]
+        )
+      ],
       machines: []
     )
     let resources = try VirtualMachineResources(
@@ -47,6 +65,7 @@ struct AppModelTests {
 
     #expect(model.systemInfo == inventory.system)
     #expect(model.containers == inventory.containers)
+    #expect(model.networks == inventory.networks)
     #expect(model.virtualMachines == [manifest])
     #expect(model.errorMessage == nil)
     #expect(model.lastRefresh != nil)
@@ -66,6 +85,7 @@ struct AppModelTests {
       containers: [],
       images: [],
       volumes: [],
+      networks: [],
       machines: []
     )
     let service = MockContainerService(inventory: inventory)
@@ -282,6 +302,52 @@ struct AppModelTests {
         memoryBytes: 128 * ContainerCreationRequest.bytesPerMiB
       )
     }
+
+    let ipv6 = try ContainerPortPublication(
+      hostAddress: "[::1]",
+      hostPort: 8_080,
+      containerPort: 80,
+      transportProtocol: .tcp
+    )
+    #expect(ipv6.hostAddress == "::1")
+    #expect(ipv6.appleSpecification == "[::1]:8080:80/tcp")
+
+    #expect(throws: ContainerCreationValidationError.invalidHostAddress("localhost")) {
+      try ContainerPortPublication(
+        hostAddress: "localhost",
+        hostPort: 8_080,
+        containerPort: 80,
+        transportProtocol: .tcp
+      )
+    }
+    #expect(throws: ContainerCreationValidationError.invalidPort) {
+      try ContainerPortPublication(
+        hostAddress: "127.0.0.1",
+        hostPort: 1,
+        containerPort: 80,
+        transportProtocol: .tcp
+      )
+    }
+
+    let first = try ContainerPortPublication(
+      hostAddress: "127.0.0.1",
+      hostPort: 8_080,
+      containerPort: 80,
+      transportProtocol: .tcp
+    )
+    let overlapping = try ContainerPortPublication(
+      hostAddress: "0.0.0.0",
+      hostPort: 8_080,
+      containerPort: 8_000,
+      transportProtocol: .tcp
+    )
+    #expect(throws: ContainerCreationValidationError.duplicatePortPublication) {
+      try ContainerCreationRequest(
+        name: "overlapping-ports",
+        imageReference: "alpine",
+        publishedPorts: [first, overlapping]
+      )
+    }
   }
 
   @Test
@@ -382,6 +448,7 @@ struct AppModelTests {
         )
       ],
       volumes: [],
+      networks: [],
       machines: []
     )
     let service = MockContainerService(
@@ -475,6 +542,7 @@ private func emptyInventory() -> ContainerInventory {
     containers: [],
     images: [],
     volumes: [],
+    networks: [],
     machines: []
   )
 }
@@ -493,6 +561,7 @@ private func inventoryWithImage(digest: String) -> ContainerInventory {
       )
     ],
     volumes: [],
+    networks: [],
     machines: []
   )
 }

@@ -67,8 +67,46 @@ extension AppModel {
           source: "/example/postgres-data",
           createdAt: now.addingTimeInterval(-86_400),
           sizeBytes: 536_870_912,
-          isAnonymous: false
+          allocatedBytes: 48_234_496,
+          labels: ["com.example.purpose": "database"],
+          options: ["size": "536870912B", "journal": "ordered"],
+          isAnonymous: false,
+          usedByContainerIDs: ["postgres"]
         )
+      ],
+      networks: [
+        NetworkRecord(
+          id: "default",
+          name: "default",
+          mode: .nat,
+          createdAt: now.addingTimeInterval(-172_800),
+          configuredIPv4Subnet: nil,
+          configuredIPv6Subnet: nil,
+          assignedIPv4Subnet: "192.168.64.0/24",
+          ipv4Gateway: "192.168.64.1",
+          assignedIPv6Subnet: nil,
+          labels: ["com.apple.container.resource.role": "builtin"],
+          plugin: "container-network-vmnet",
+          options: [:],
+          isBuiltin: true,
+          usedByContainerIDs: ["api", "postgres"]
+        ),
+        NetworkRecord(
+          id: "backend",
+          name: "backend",
+          mode: .hostOnly,
+          createdAt: now.addingTimeInterval(-86_400),
+          configuredIPv4Subnet: "192.168.100.0/24",
+          configuredIPv6Subnet: nil,
+          assignedIPv4Subnet: "192.168.100.0/24",
+          ipv4Gateway: "192.168.100.1",
+          assignedIPv6Subnet: nil,
+          labels: ["com.example.purpose": "internal"],
+          plugin: "container-network-vmnet",
+          options: [:],
+          isBuiltin: false,
+          usedByContainerIDs: []
+        ),
       ],
       machines: [
         LinuxMachineRecord(
@@ -117,6 +155,7 @@ extension AppModel {
       containers: [],
       images: [],
       volumes: [],
+      networks: [],
       machines: []
     )
     return AppModel(

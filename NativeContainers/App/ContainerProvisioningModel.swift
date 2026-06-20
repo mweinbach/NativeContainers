@@ -81,21 +81,21 @@ final class ContainerProvisioningModel {
       }
       pullResult = result
       pullPlan = nil
-      await didComplete()
+      await refreshIgnoringCancellation()
       return true
     } catch let error as ImagePullPartialCompletionError {
       pullResult = error.result
       pullPlan = nil
       errorMessage = error.localizedDescription
-      await didComplete()
+      await refreshIgnoringCancellation()
       return false
     } catch is CancellationError {
       errorMessage = "The operation was cancelled."
-      await didComplete()
+      await refreshIgnoringCancellation()
       return false
     } catch {
       errorMessage = error.localizedDescription
-      await didComplete()
+      await refreshIgnoringCancellation()
       return false
     }
   }
@@ -119,17 +119,24 @@ final class ContainerProvisioningModel {
 
     do {
       try await operation()
-      await didComplete()
+      await refreshIgnoringCancellation()
       return true
     } catch is CancellationError {
       errorMessage = "The operation was cancelled."
-      await didComplete()
+      await refreshIgnoringCancellation()
       return false
     } catch {
       errorMessage = error.localizedDescription
-      await didComplete()
+      await refreshIgnoringCancellation()
       return false
     }
+  }
+
+  private func refreshIgnoringCancellation() async {
+    let didComplete = self.didComplete
+    await Task.detached {
+      await didComplete()
+    }.value
   }
 
   private func receive(_ update: ContainerOperationProgress) {

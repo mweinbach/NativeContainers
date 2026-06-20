@@ -288,3 +288,36 @@ cancellation-aware FIFO lock and cleans a queued plan immediately on cancel.
 Builder preparation and final image-store mutation share the runtime mutation
 lock; the long BuildKit solve uses the separate single-flight lock so ordinary
 container lifecycle work is not blocked for the entire build.
+
+## ADR-015: Review named infrastructure by intrinsic configuration identity
+
+**Status:** Accepted — 2026-06-20
+
+Volumes and networks remain authoritative in Apple’s container service. A
+create review pins absence and carries a hidden operation UUID label so a lost
+XPC reply can be reconciled without blindly retrying. Delete and prune reviews
+pin every intrinsic configuration field plus current referring container IDs;
+execution re-fetches that state under the shared runtime mutation coordinator
+and fails closed on replacement, new use, or a built-in network.
+
+Every infrastructure request owns a fresh XPC connection. User cancellation
+closes it immediately and a 60-second watchdog closes it automatically. Because
+the server may commit before a connection closes, post-error reconciliation is
+mandatory and runs in a fresh task that does not inherit the cancelled state.
+Owned resources created before cancellation are removed and verified; partial
+prune results retain exact removed, remaining, and reclaimed state. Apple’s
+name-only delete API still lacks compare-and-swap semantics,
+so cross-process replacement between the final check and call cannot be made
+impossible in 1.0.
+
+## ADR-016: Bound and verify failed container-creation cleanup
+
+**Status:** Accepted — 2026-06-20
+
+Every failed or cancelled container creation performs ownership-checked cleanup
+after releasing the shared runtime mutation lease. A dedicated short-lived XPC
+client sends `KILL` for a running owned container, requests force deletion,
+retries once, and verifies absence. Cleanup never acts on a replacement with a
+different operation label. If the postcondition cannot be verified, the app
+reports both the original operation error and cleanup failure instead of
+claiming rollback succeeded.

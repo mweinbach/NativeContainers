@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 enum ContainerArchitecture: String, CaseIterable, Codable, Identifiable, Sendable {
   case arm64
@@ -43,9 +44,18 @@ struct ContainerPortPublication: Codable, Equatable, Hashable, Sendable, Identif
     containerPort: UInt16,
     transportProtocol: ContainerTransportProtocol
   ) throws {
-    let hostAddress = hostAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+    var hostAddress = hostAddress.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !hostAddress.isEmpty else {
       throw ContainerCreationValidationError.missingHostAddress
+    }
+    if hostAddress.hasPrefix("["), hostAddress.hasSuffix("]") {
+      hostAddress = String(hostAddress.dropFirst().dropLast())
+    }
+    guard IPv4Address(hostAddress) != nil || IPv6Address(hostAddress) != nil else {
+      throw ContainerCreationValidationError.invalidHostAddress(hostAddress)
+    }
+    guard hostPort > 1, containerPort > 1 else {
+      throw ContainerCreationValidationError.invalidPort
     }
     self.hostAddress = hostAddress
     self.hostPort = hostPort
@@ -57,8 +67,13 @@ struct ContainerPortPublication: Codable, Equatable, Hashable, Sendable, Identif
     "\(hostAddress):\(hostPort):\(containerPort)/\(transportProtocol.rawValue)"
   }
 
+  var hostBindingID: String {
+    "\(hostPort)/\(transportProtocol.rawValue)"
+  }
+
   var appleSpecification: String {
-    "\(hostAddress):\(hostPort):\(containerPort)/\(transportProtocol.rawValue)"
+    let formattedHost = hostAddress.contains(":") ? "[\(hostAddress)]" : hostAddress
+    return "\(formattedHost):\(hostPort):\(containerPort)/\(transportProtocol.rawValue)"
   }
 }
 
@@ -129,7 +144,7 @@ struct ContainerCreationRequest: Equatable, Sendable {
     for variable in environment where !environmentKeys.insert(variable.key).inserted {
       throw ContainerCreationValidationError.duplicateEnvironmentKey(variable.key)
     }
-    guard Set(publishedPorts.map(\.id)).count == publishedPorts.count else {
+    guard Set(publishedPorts.map(\.hostBindingID)).count == publishedPorts.count else {
       throw ContainerCreationValidationError.duplicatePortPublication
     }
 
@@ -161,6 +176,7 @@ enum ContainerCreationValidationError: LocalizedError, Equatable {
   case invalidEnvironmentKey(String)
   case duplicateEnvironmentKey(String)
   case missingHostAddress
+  case invalidHostAddress(String)
   case invalidPort
   case tooManyPortPublications
   case duplicatePortPublication
@@ -185,8 +201,10 @@ enum ContainerCreationValidationError: LocalizedError, Equatable {
       "Environment variable “\(key)” appears more than once."
     case .missingHostAddress:
       "Enter a host address for every published port."
+    case .invalidHostAddress(let address):
+      "“\(address)” is not an IPv4 or IPv6 address."
     case .invalidPort:
-      "Ports must be between 1 and 65535."
+      "Ports must be between 2 and 65535."
     case .tooManyPortPublications:
       "Apple’s runtime supports at most 64 published-port entries per container."
     case .duplicatePortPublication:

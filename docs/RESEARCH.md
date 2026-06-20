@@ -33,6 +33,22 @@ Verified architecture:
 - Release 1.0.0 publishes Swift library products including
   `ContainerAPIClient`, `ContainerResource`, `MachineAPIClient`, and related
   service clients. Those are preferable to scraping CLI table output.
+- The exact 1.0.0 `ClientVolume` surface provides create, list, inspect, delete,
+  and allocated-disk-usage calls. Volumes are sparse local ext4 images;
+  configured capacity and physically allocated bytes are distinct. Any
+  container configuration, running or stopped, blocks deletion. Prune is
+  client-side orchestration and each server delete repeats the in-use check.
+- The exact 1.0.0 `NetworkClient` surface provides create, list, get, delete,
+  and built-in lookup. `NetworkConfiguration` supports NAT/host-only mode and
+  optional IPv4/IPv6 subnets, but attachment options expose hostname, MAC, and
+  MTU rather than a requested static IP. The built-in network is undeletable.
+- OCI configuration at the pinned revision does not model an HTTP scheme for a
+  published port. Browser helpers must therefore offer explicit HTTP/HTTPS,
+  use the published host endpoint, expand `PublishPort.count` ranges, reject
+  UDP, and revalidate the exact live mapping before opening.
+- Host DNS and packet-filter helpers mutate privileged `/etc/resolver` and PF
+  state. They remain outside the unprivileged GUI until the signed privileged
+  helper lane is implemented.
 - The public `Utility.containerConfigFromFlags` helper mirrors CLI creation but
   is not safe to assume as a GUI boundary. On this host it exited both Xcode’s
   snippet process and the XCTest host with status 1 before returning. Rebuilding

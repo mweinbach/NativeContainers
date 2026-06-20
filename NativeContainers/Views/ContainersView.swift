@@ -219,7 +219,12 @@ struct ContainerInspectorView: View {
             latestSample: model.samples.last,
             sampleCount: model.samples.count
           )
-          ContainerPortsSection(ports: container.ports)
+          ContainerPortsSection(
+            containerID: container.id,
+            containerCreatedAt: container.createdAt,
+            ports: container.ports,
+            appModel: appModel
+          )
           ContainerLogsSection(
             containerID: container.id,
             inspection: inspection,
@@ -470,7 +475,11 @@ struct ContainerMetricCard: View {
 }
 
 struct ContainerPortsSection: View {
+  @Environment(\.openURL) private var openURL
+  let containerID: String
+  let containerCreatedAt: Date
   let ports: [ContainerPort]
+  let appModel: AppModel
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -482,20 +491,65 @@ struct ContainerPortsSection: View {
       } else {
         VStack(spacing: 0) {
           ForEach(ports) { port in
-            HStack {
-              Text("\(port.hostAddress):\(port.hostPort)")
-                .textSelection(.enabled)
-              Image(systemName: "arrow.right")
-                .foregroundStyle(.tertiary)
-              Text("\(port.containerPort)/\(port.protocolName)")
-                .monospaced()
-              Spacer()
-            }
-            .padding(.vertical, 7)
+            ContainerPortRow(
+              hostAddress: port.hostAddress,
+              hostPort: port.hostPort,
+              containerPort: port.containerPort,
+              protocolName: port.protocolName,
+              onOpenHTTP: {
+                open(port: port, scheme: .http)
+              },
+              onOpenHTTPS: {
+                open(port: port, scheme: .https)
+              }
+            )
           }
         }
       }
     }
+  }
+
+  private func open(port: ContainerPort, scheme: ContainerBrowserScheme) {
+    Task {
+      let target = ContainerBrowserTarget(
+        containerID: containerID,
+        containerCreatedAt: containerCreatedAt,
+        portID: port.id,
+        scheme: scheme
+      )
+      if let url = await appModel.resolveContainerBrowserURL(target) {
+        openURL(url)
+      }
+    }
+  }
+}
+
+struct ContainerPortRow: View {
+  let hostAddress: String
+  let hostPort: UInt16
+  let containerPort: UInt16
+  let protocolName: String
+  let onOpenHTTP: () -> Void
+  let onOpenHTTPS: () -> Void
+
+  var body: some View {
+    HStack {
+      Text("\(hostAddress):\(hostPort)")
+        .textSelection(.enabled)
+      Image(systemName: "arrow.right")
+        .foregroundStyle(.tertiary)
+      Text("\(containerPort)/\(protocolName)")
+        .monospaced()
+      Spacer()
+      if protocolName.lowercased() == ContainerTransportProtocol.tcp.rawValue {
+        Menu("Open in Browser", systemImage: "safari") {
+          Button("HTTP", action: onOpenHTTP)
+          Button("HTTPS", action: onOpenHTTPS)
+        }
+        .menuStyle(.borderlessButton)
+      }
+    }
+    .padding(.vertical, 7)
   }
 }
 

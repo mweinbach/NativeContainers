@@ -10,6 +10,7 @@ final class AppModel {
   private(set) var containers: [ContainerRecord] = []
   private(set) var images: [ImageRecord] = []
   private(set) var volumes: [VolumeRecord] = []
+  private(set) var networks: [NetworkRecord] = []
   private(set) var linuxMachines: [LinuxMachineRecord] = []
   private(set) var virtualMachines: [VirtualMachineManifest] = []
   private(set) var isRefreshing = false
@@ -47,6 +48,7 @@ final class AppModel {
       containers = initialInventory.containers
       images = initialInventory.images
       volumes = initialInventory.volumes
+      networks = initialInventory.networks
       linuxMachines = initialInventory.machines
       virtualMachines = initialVirtualMachines
       hasLoaded = true
@@ -91,12 +93,16 @@ final class AppModel {
       containers = inventory.containers
       images = inventory.images
       volumes = inventory.volumes
+      networks = inventory.networks
       linuxMachines = inventory.machines
+    } catch is CancellationError {
+      return
     } catch {
       systemInfo = nil
       containers = []
       images = []
       volumes = []
+      networks = []
       linuxMachines = []
       messages.append("Apple container services: \(error.localizedDescription)")
     }
@@ -205,6 +211,27 @@ final class AppModel {
   func makeImageOperations(reference: String? = nil) -> ImageOperationsModel {
     ImageOperationsModel(sourceReference: reference, service: containerService) { [weak self] in
       await self?.refresh()
+    }
+  }
+
+  func makeVolumeManagementModel() -> VolumeManagementModel {
+    VolumeManagementModel(service: containerService) { [weak self] in
+      await self?.refresh()
+    }
+  }
+
+  func makeNetworkManagementModel() -> NetworkManagementModel {
+    NetworkManagementModel(service: containerService) { [weak self] in
+      await self?.refresh()
+    }
+  }
+
+  func resolveContainerBrowserURL(_ target: ContainerBrowserTarget) async -> URL? {
+    do {
+      return try await containerService.resolveContainerBrowserURL(target)
+    } catch {
+      errorMessage = error.localizedDescription
+      return nil
     }
   }
 

@@ -96,7 +96,79 @@ extension ImageManaging {
   }
 }
 
-protocol ContainerManaging: ImageManaging {
+protocol InfrastructureManaging: Sendable {
+  func prepareVolumeCreation(_ request: VolumeCreateRequest) async throws -> VolumeCreationPlan
+  func createVolume(_ plan: VolumeCreationPlan) async throws -> VolumeRecord
+  func prepareVolumeDeletion(name: String) async throws -> VolumeDeletionPlan
+  func deleteVolume(_ plan: VolumeDeletionPlan) async throws
+  func prepareVolumePrune() async throws -> VolumePrunePlan
+  func pruneVolumes(_ plan: VolumePrunePlan) async throws -> ResourceCleanupResult
+
+  func prepareNetworkCreation(_ request: NetworkCreateRequest) async throws -> NetworkCreationPlan
+  func createNetwork(_ plan: NetworkCreationPlan) async throws -> NetworkRecord
+  func prepareNetworkDeletion(id: String) async throws -> NetworkDeletionPlan
+  func deleteNetwork(_ plan: NetworkDeletionPlan) async throws
+  func prepareNetworkPrune() async throws -> NetworkPrunePlan
+  func pruneNetworks(_ plan: NetworkPrunePlan) async throws -> ResourceCleanupResult
+
+  func resolveContainerBrowserURL(_ target: ContainerBrowserTarget) async throws -> URL
+}
+
+extension InfrastructureManaging {
+  func prepareVolumeCreation(_ request: VolumeCreateRequest) async throws -> VolumeCreationPlan {
+    throw ResourceManagementError.unsupported
+  }
+
+  func createVolume(_ plan: VolumeCreationPlan) async throws -> VolumeRecord {
+    throw ResourceManagementError.unsupported
+  }
+
+  func prepareVolumeDeletion(name: String) async throws -> VolumeDeletionPlan {
+    throw ResourceManagementError.unsupported
+  }
+
+  func deleteVolume(_ plan: VolumeDeletionPlan) async throws {
+    throw ResourceManagementError.unsupported
+  }
+
+  func prepareVolumePrune() async throws -> VolumePrunePlan {
+    throw ResourceManagementError.unsupported
+  }
+
+  func pruneVolumes(_ plan: VolumePrunePlan) async throws -> ResourceCleanupResult {
+    throw ResourceManagementError.unsupported
+  }
+
+  func prepareNetworkCreation(_ request: NetworkCreateRequest) async throws -> NetworkCreationPlan {
+    throw ResourceManagementError.unsupported
+  }
+
+  func createNetwork(_ plan: NetworkCreationPlan) async throws -> NetworkRecord {
+    throw ResourceManagementError.unsupported
+  }
+
+  func prepareNetworkDeletion(id: String) async throws -> NetworkDeletionPlan {
+    throw ResourceManagementError.unsupported
+  }
+
+  func deleteNetwork(_ plan: NetworkDeletionPlan) async throws {
+    throw ResourceManagementError.unsupported
+  }
+
+  func prepareNetworkPrune() async throws -> NetworkPrunePlan {
+    throw ResourceManagementError.unsupported
+  }
+
+  func pruneNetworks(_ plan: NetworkPrunePlan) async throws -> ResourceCleanupResult {
+    throw ResourceManagementError.unsupported
+  }
+
+  func resolveContainerBrowserURL(_ target: ContainerBrowserTarget) async throws -> URL {
+    throw ResourceManagementError.unsupported
+  }
+}
+
+protocol ContainerManaging: ImageManaging, InfrastructureManaging {
   func loadInventory() async throws -> ContainerInventory
   func createContainer(
     request: ContainerCreationRequest,

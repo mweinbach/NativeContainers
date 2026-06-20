@@ -7,8 +7,8 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 164 test declarations. The current full
-  app-hosted Xcode run passed all 158 deterministic tests, with six destructive
+- The suite currently contains 175 test declarations. The current full
+  app-hosted Xcode run passed all 168 deterministic tests, with seven destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes the short-pipe framing, builder mount normalization, and strict
   path-component-containment regressions. Existing opt-in tests pass against
@@ -20,7 +20,10 @@ Updated: 2026-06-20.
   Xcode Preview in light mode.
 - A live Xcode snippet called `AppleContainerService.loadInventory()` against
   the installed XPC services and returned the 1.0.0 server plus live container,
-  image, volume, and machine counts.
+  image, volume, network, and machine counts.
+- A live app-hosted Xcode smoke created, inspected, inventoried, and deleted a
+  unique 64 MiB sparse ext4 volume and host-only network through the reviewed
+  adapter. Follow-up CLI inventory confirmed no probe resources remained.
 - VM draft creation uses a staging directory, atomic manifest write, sparse disk
   allocation, and final rename; tests verify reload and cleanup.
 - The macOS VM preparation sheet discovers Apple’s latest supported IPSW,
@@ -38,6 +41,25 @@ Updated: 2026-06-20.
   boot logs. Log reads are bounded to the newest 512 KiB per stream.
 - Container start, stop, delete, selection, and refresh actions are wired into
   the native management UI.
+- Volume inventory distinguishes sparse ext4 capacity from allocated host
+  storage and derives every referring container configuration. Reviewed
+  create/delete/prune revalidates complete configuration identity, blocks use
+  by stopped or running containers, reconciles ambiguous replies by operation
+  UUID, and exposes cancellable work in the SwiftUI UI.
+- Named-network inventory and management show NAT/host-only mode, requested and
+  assigned subnets, gateway, plugin metadata, built-in state, and configured
+  consumers. Built-in or newly used networks fail closed at execution.
+- Infrastructure XPC waits own cancellable connections with a 60-second close
+  watchdog. Reconciliation and inventory refresh continue in fresh,
+  cancellation-independent tasks. Container creation cancellation sends
+  `KILL`, force-deletes only the exact operation-labeled partial container,
+  retries once, and verifies that it is absent; an unverifiable cleanup is
+  surfaced instead of being silently ignored.
+- Published TCP port ranges are expanded into exact endpoints. Creation
+  validates literal IPv4/IPv6 hosts, brackets IPv6 for Apple's parser, and
+  rejects host-port/protocol overlap before image work begins. The inspector
+  offers explicit HTTP and HTTPS actions after re-fetching the same container
+  creation identity and exact mapping; UDP never receives a browser action.
 - Native sheets now pull OCI images for the current platform and create
   containers with validated names, native/Intel platform selection, CPU/memory,
   OCI arguments and environment,
@@ -172,9 +194,13 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add volume/network lifecycle and open-in-browser helpers.
-2. Add explicit builder-cache management plus build secrets, SSH forwarding,
+1. Decompose the monolithic runtime adapter into focused lifecycle, volume,
+   network, inventory, and reconciliation services behind narrow protocols,
+   while preserving the current UI-facing facade.
+2. Add named-volume/network attachment selection plus Unix-socket publishing
+   and privileged host-access helpers.
+3. Add explicit builder-cache management plus build secrets, SSH forwarding,
    cache import/export, history, and alternate outputs.
-3. Add the entitlement through a functioning Xcode capability surface, then
+4. Add the entitlement through a functioning Xcode capability surface, then
    implement and live-verify macOS installation and VM lifecycle.
-4. Spike a pinned Socktainer process and a product-specific Docker context.
+5. Spike a pinned Socktainer process and a product-specific Docker context.

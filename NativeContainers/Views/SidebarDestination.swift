@@ -6,6 +6,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
   case images
   case builds
   case volumes
+  case networks
   case linuxMachines
   case macOSVirtualMachines
   case settings
@@ -19,6 +20,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
     case .images: "Images"
     case .builds: "Builds"
     case .volumes: "Volumes"
+    case .networks: "Networks"
     case .linuxMachines: "Linux Machines"
     case .macOSVirtualMachines: "macOS VMs"
     case .settings: "Settings"
@@ -32,6 +34,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
     case .images: "square.stack.3d.up"
     case .builds: "hammer"
     case .volumes: "externaldrive"
+    case .networks: "network"
     case .linuxMachines: "terminal"
     case .macOSVirtualMachines: "macwindow"
     case .settings: "gearshape"

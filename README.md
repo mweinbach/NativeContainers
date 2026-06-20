@@ -30,10 +30,11 @@ Foundation work is underway. See:
 - [Current status](docs/STATUS.md)
 
 The current foundation includes native container lifecycle and inspection,
-exec/copy and interactive PTY workflows, safe OCI image management, Apple
-Keychain-backed registry login management, reviewed native pull/push transfers,
-reviewed Dockerfile/Containerfile builds through Apple’s public BuildKit APIs,
-and macOS restore-image preparation.
+exec/copy and interactive PTY workflows, safe OCI image management, reviewed
+volume/network lifecycle, explicit HTTP/HTTPS opening for published TCP ports,
+Apple Keychain-backed registry login management, reviewed native pull/push
+transfers, reviewed Dockerfile/Containerfile builds through Apple’s public
+BuildKit APIs, and macOS restore-image preparation.
 
 ## Build
 

@@ -58,6 +58,36 @@ adapter and use immutable review plans. Tag replacement, deletion, and prune
 therefore re-fetch current references, digests, container usage, and protected
 builder/vminit images immediately before acting.
 
+Volume and network mutations cross the parallel `InfrastructureManaging`
+facet. Create plans pin absence plus an operation UUID stored in a namespaced
+resource label. Delete and prune plans pin the complete intrinsic
+configuration identity and every referring container configuration, including
+stopped containers. Execution uses the shared runtime mutation coordinator,
+re-fetches immediately before mutation, and treats built-in networks and new
+references as hard stops. Apple remains the final atomic in-use authority.
+
+Infrastructure XPC requests use a fresh connection with cancellation-triggered
+close and a 60-second close watchdog. A timeout never implies rollback: create
+and delete reconcile live state and the operation label before reporting an
+outcome. Apple 1.0 delete calls accept only a name, not an expected revision, so
+a narrow external same-name replacement race remains documented rather than
+hidden.
+
+Cancellation reconciliation, owned-resource rollback, and inventory refresh
+run in fresh tasks so the cancellation that closed the original connection
+cannot also cancel recovery. Container rollback uses a dedicated bounded XPC
+client: it sends `KILL`, issues force deletion, retries once, and verifies
+absence without holding the global mutation lease. The next architecture pass
+will move lifecycle, inventory, volume, network, and reconciliation behavior
+out of `AppleContainerService` into focused protocol-backed services; the
+existing facade remains the composition root and UI boundary.
+
+Browser opening is intentionally outside the service mutation layer. The
+service re-fetches the same container creation identity, its running state, and
+the exact current TCP publication;
+SwiftUI then offers explicit HTTP and HTTPS choices through `openURL`. Wildcard
+listeners map to family-matched loopback and `URLComponents` handles IPv6.
+
 Registry credentials use Apple Containerization’s `KeychainHelper` with the
 runtime’s exact `com.apple.container.registry` security domain. The settings
 model lists host, user, and timestamps only; stored passwords never leave

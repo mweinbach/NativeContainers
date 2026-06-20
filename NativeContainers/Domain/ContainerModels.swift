@@ -59,7 +59,24 @@ struct VolumeRecord: Codable, Equatable, Sendable, Identifiable {
   let source: String
   let createdAt: Date
   let sizeBytes: UInt64?
+  let allocatedBytes: UInt64?
+  let labels: [String: String]
+  let options: [String: String]
   let isAnonymous: Bool
+  let usedByContainerIDs: [String]
+
+  var configurationIdentity: VolumeConfigurationIdentity {
+    VolumeConfigurationIdentity(
+      name: name,
+      driver: driver,
+      format: format,
+      source: source,
+      createdAt: createdAt,
+      labels: labels,
+      options: options,
+      sizeBytes: sizeBytes
+    )
+  }
 }
 
 struct LinuxMachineRecord: Codable, Equatable, Sendable, Identifiable {
@@ -81,6 +98,7 @@ struct ContainerInventory: Equatable, Sendable {
   let containers: [ContainerRecord]
   let images: [ImageRecord]
   let volumes: [VolumeRecord]
+  let networks: [NetworkRecord]
   let machines: [LinuxMachineRecord]
 }
 
