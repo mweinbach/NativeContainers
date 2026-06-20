@@ -5,14 +5,14 @@ must leave a usable, test-backed product slice.
 
 ## M0 — Verified native foundation
 
-- [ ] Native macOS app and unit-test targets build in Xcode.
+- [x] Native macOS app and unit-test targets build in Xcode.
 - [ ] Add the required Virtualization entitlement through Xcode.
-- [ ] Direct Apple client adapter reports container system health.
-- [ ] Live inventories for containers, images, volumes, and Linux machines.
-- [ ] Stable domain models and mockable service protocols.
-- [ ] Persistent VM bundle library with schema versioning and atomic writes.
-- [ ] SwiftUI management shell with useful empty/error/loading states.
-- [ ] Diagnostics screen records runtime and package versions.
+- [x] Direct Apple client adapter reports container system health.
+- [x] Live inventories for containers, images, volumes, and Linux machines.
+- [x] Stable domain models and mockable service protocols.
+- [x] Persistent VM bundle library with schema versioning and atomic writes.
+- [x] SwiftUI management shell with useful empty/error/loading states.
+- [x] Diagnostics screen records runtime and package versions.
 
 ## M1 — Daily container management
 
@@ -28,8 +28,7 @@ must leave a usable, test-backed product slice.
 ## M2 — Developer workflow and Docker compatibility
 
 - [ ] Dockerfile/Containerfile build workflow through Apple’s builder.
-- [ ] Docker CLI context/compatibility service where Apple exposes a supported
-      engine API; otherwise provide a clearly documented compatibility bridge.
+- [ ] Version-pinned Socktainer service and product-specific Docker context.
 - [ ] Compose parser and lifecycle coordinator, with conformance fixtures.
 - [ ] Automatic project detection and per-project status.
 - [ ] SSH agent forwarding and safe host-directory sharing.
@@ -71,10 +70,12 @@ must leave a usable, test-backed product slice.
 
 Potential parity gaps are tracked rather than hidden:
 
-- Apple’s container stack is OCI/Docker-image and Dockerfile compatible, but a
-  Docker Engine API/Compose compatibility claim must be verified separately.
+- Apple’s container stack is OCI/Docker-image and Dockerfile compatible but has
+  no Docker Engine API. Docker CLI/Compose requires a separate bridge.
 - Bridged networking and some low-level VM controls can require restricted
   entitlements; NAT is the safe public default.
 - GPU acceleration, host integration, snapshots, and dynamic device changes
   differ between Linux and macOS guests and across host OS versions.
-
+- Exact shared-loopback networking, arbitrary Linux GPU passthrough, portable
+  macOS saved-state files, and complete guest-memory reclamation are not
+  available through current public APIs.

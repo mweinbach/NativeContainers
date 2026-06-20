@@ -45,6 +45,18 @@ This keeps UI tests fast and isolates package source changes.
 The installed Apple services remain the authority for runtime state. The app
 does not create a second database of containers, images, networks, or volumes.
 
+During foundation development the GUI connects to a matching installed Apple
+`container` 1.0.0 service. A distributable product must embed a version-matched,
+namespaced build of Apple’s Apache-licensed services and helpers so it can
+coexist with the standalone CLI and cannot drift across an incompatible XPC
+protocol. The UI adapter stays the same across those deployment modes.
+
+Docker CLI and Compose compatibility are a separate service boundary. Apple’s
+core project intentionally exposes OCI/Dockerfile compatibility rather than the
+Docker Engine HTTP API. The first implementation candidate is the
+Apache-licensed [Socktainer](https://github.com/socktainer/socktainer) bridge,
+version-pinned and tested against an explicit compatibility suite.
+
 ### General VM lane
 
 VMs live as self-contained bundles in Application Support. Each bundle owns:
@@ -93,8 +105,8 @@ of truth for selection and lifecycle commands.
 - App deployment target: macOS 26.
 - Host architecture: Apple silicon.
 - `apple/container`: pin exact release 1.0.0 initially.
+- Client and server builds must match until Apple adds API negotiation.
 - Direct `containerization`: inherited from the pinned `container` release;
   avoid adding a second version to the dependency graph.
 - Virtualization API use is verified against the installed SDK with Xcode
   documentation search, the compiler, and runtime checks.
-

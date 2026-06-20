@@ -1,0 +1,63 @@
+name: NativeContainers
+
+options:
+  bundleIdPrefix: com.nativecontainers
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    CLANG_ENABLE_MODULES: YES
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  AppleContainer:
+    url: https://github.com/apple/container.git
+    exactVersion: 1.0.0
+
+targets:
+  NativeContainers:
+    type: application
+    platform: macOS
+    sources:
+      - path: NativeContainers
+    dependencies:
+      - package: AppleContainer
+        product: ContainerAPIClient
+      - package: AppleContainer
+        product: ContainerResource
+      - package: AppleContainer
+        product: MachineAPIClient
+      - sdk: Virtualization.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nativecontainers.app
+        PRODUCT_NAME: NativeContainers
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: NativeContainers
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSPrincipalClass: NSApplication
+        ENABLE_APP_SANDBOX: NO
+        DEAD_CODE_STRIPPING: YES
+    scheme:
+      testTargets:
+        - NativeContainersTests
+      gatherCoverageData: true
+
+  NativeContainersTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: NativeContainersTests
+    dependencies:
+      - target: NativeContainers
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nativecontainers.tests
+        GENERATE_INFOPLIST_FILE: YES
+

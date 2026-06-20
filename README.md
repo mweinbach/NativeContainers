@@ -24,8 +24,10 @@ Foundation work is underway. See:
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Feature matrix](docs/FEATURE_MATRIX.md)
 - [Research notes](docs/RESEARCH.md)
 - [Architecture decisions](docs/DECISIONS.md)
+- [Current status](docs/STATUS.md)
 
 ## Build
 
@@ -38,4 +40,3 @@ open NativeContainers.xcodeproj
 ```
 
 Build and test with the `NativeContainers` scheme on `My Mac`.
-

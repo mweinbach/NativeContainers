@@ -33,6 +33,9 @@ Verified architecture:
 - Release 1.0.0 publishes Swift library products including
   `ContainerAPIClient`, `ContainerResource`, `MachineAPIClient`, and related
   service clients. Those are preferable to scraping CLI table output.
+- Release 1.0.0 pins Containerization 0.33.3. Its XPC compatibility shim was
+  removed and protocol negotiation is not yet available, so client/server
+  versions must remain matched.
 - The runtime is supported on macOS 26+ and Apple silicon.
 
 The package remains an actively evolving open-source surface. Pinning an exact
@@ -71,3 +74,30 @@ The installed Apple documentation confirms:
 
 The UI and marketing must not collapse those four claims into one.
 
+Apple maintainers treat the Engine API as a separate service/plugin concern.
+[Socktainer](https://github.com/socktainer/socktainer) is an active Apache-2.0
+bridge for part of Docker API v1.51 and is the preferred starting point. A
+native `container compose` change is under review upstream but was not merged
+at kickoff, so the foundation does not depend on it.
+
+## Public-API boundaries
+
+- No public Linux GPU/Metal passthrough.
+- No exact bidirectional Docker-style host networking; proxying can only
+  approximate shared loopback semantics.
+- Virtualization memory ballooning is cooperative and does not guarantee that
+  all freed guest memory returns to the host.
+- macOS save-state files are encrypted to the originating Mac and user, so they
+  are suspend artifacts rather than portable snapshots.
+- macOS 27 adds DiskImageKit layers, guest provisioning, and public physical USB
+  passthrough. Those remain availability-gated and are not macOS 26 foundation
+  requirements.
+
+## Primary references added during the foundation pass
+
+- [`apple/container` technical overview](https://github.com/apple/container/blob/1.0.0/docs/technical-overview.md)
+- [`apple/container` 1.0.0 release](https://github.com/apple/container/releases/tag/1.0.0)
+- [Docker API discussion](https://github.com/apple/container/issues/66)
+- [Apple Virtualization documentation](https://developer.apple.com/documentation/virtualization)
+- [VirtualBuddy](https://github.com/insidegui/VirtualBuddy)
+- [OrbStack architecture](https://docs.orbstack.dev/architecture)

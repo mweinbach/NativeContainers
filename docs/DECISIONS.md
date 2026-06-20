@@ -44,3 +44,22 @@ NAT is the public, low-friction Virtualization.framework default. Bridged
 networking is deferred until entitlement availability, signing, and distribution
 constraints are proven. Apple container networking remains owned by its runtime.
 
+## ADR-006: Bundle a namespaced, version-matched runtime for distribution
+
+**Status:** Accepted — 2026-06-20
+
+The foundation talks to the installed Apple 1.0.0 services so API integration
+can be proven immediately. The shipping app will embed a namespaced build of
+the matching Apple services/helpers and use app-owned Mach service labels,
+sockets, and data roots. This avoids collisions with the standalone CLI and
+prevents unsupported client/server drift.
+
+## ADR-007: Treat Docker Engine compatibility as a plugin
+
+**Status:** Accepted — 2026-06-20
+
+Apple’s runtime does not implement the Docker Engine HTTP API. Docker CLI and
+Compose compatibility will live behind a separate adapter, initially based on
+Socktainer and backed by protocol conformance fixtures. The native app remains
+fully usable without that compatibility mode.
+
