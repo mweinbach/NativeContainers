@@ -21,6 +21,8 @@ final class AppModel {
   private let restoreImageDiscovery: any MacRestoreImageDiscovering
   private let restoreImageDownloader: any MacRestoreImageDownloading
   private var hasLoaded = false
+  private var refreshRequested = false
+  private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
 
   init(
     containerService: any ContainerManaging = AppleContainerService(),
@@ -53,10 +55,28 @@ final class AppModel {
   }
 
   func refresh() async {
-    guard !isRefreshing else { return }
+    guard !isRefreshing else {
+      refreshRequested = true
+      await withCheckedContinuation { continuation in
+        refreshWaiters.append(continuation)
+      }
+      return
+    }
     isRefreshing = true
-    defer { isRefreshing = false }
+    repeat {
+      refreshRequested = false
+      await performRefreshPass()
+    } while refreshRequested
+    isRefreshing = false
 
+    let waiters = refreshWaiters
+    refreshWaiters.removeAll(keepingCapacity: true)
+    for waiter in waiters {
+      waiter.resume()
+    }
+  }
+
+  private func performRefreshPass() async {
     var messages: [String] = []
 
     do {
@@ -68,6 +88,10 @@ final class AppModel {
       linuxMachines = inventory.machines
     } catch {
       systemInfo = nil
+      containers = []
+      images = []
+      volumes = []
+      linuxMachines = []
       messages.append("Apple container services: \(error.localizedDescription)")
     }
 
@@ -164,6 +188,16 @@ final class AppModel {
 
   func makeContainerProvisioningModel() -> ContainerProvisioningModel {
     ContainerProvisioningModel(service: containerService) { [weak self] in
+      await self?.refresh()
+    }
+  }
+
+  func makeImageInspector(reference: String) -> ImageInspectorModel {
+    ImageInspectorModel(reference: reference, service: containerService)
+  }
+
+  func makeImageOperations(reference: String? = nil) -> ImageOperationsModel {
+    ImageOperationsModel(sourceReference: reference, service: containerService) { [weak self] in
       await self?.refresh()
     }
   }

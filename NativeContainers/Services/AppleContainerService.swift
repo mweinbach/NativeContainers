@@ -1,6 +1,8 @@
 import ContainerAPIClient
 import ContainerPersistence
 import ContainerResource
+import ContainerizationExtras
+import ContainerizationOCI
 import Darwin
 import Foundation
 import MachineAPIClient
@@ -14,6 +16,7 @@ actor AppleContainerService: ContainerManaging {
 
   private let containerClient = ContainerClient()
   private let machineClient = MachineClient()
+  private let runtimeMutationGate = AsyncLock()
   private let terminalProcessLauncher: any ContainerTerminalProcessLaunching
 
   init(
@@ -29,14 +32,17 @@ actor AppleContainerService: ContainerManaging {
     async let imageRequest = ClientImage.list()
     async let volumeRequest = ClientVolume.list()
     async let machineRequest = machineClient.list()
+    async let systemConfigurationRequest = loadSystemConfiguration()
 
-    let (health, snapshots, clientImages, configurations, machineSnapshots) = try await (
-      healthRequest,
-      containerRequest,
-      imageRequest,
-      volumeRequest,
-      machineRequest
-    )
+    let (health, snapshots, clientImages, configurations, machineSnapshots, systemConfiguration) =
+      try await (
+        healthRequest,
+        containerRequest,
+        imageRequest,
+        volumeRequest,
+        machineRequest,
+        systemConfigurationRequest
+      )
 
     let system = ContainerSystemInfo(
       version: health.apiServerVersion,
@@ -68,13 +74,18 @@ actor AppleContainerService: ContainerManaging {
       )
     }
 
-    let images = clientImages.map { image in
+    let images = clientImages.filter { image in
+      !Utility.isInfraImage(
+        name: image.reference,
+        builderImage: systemConfiguration.build.image,
+        initImage: systemConfiguration.vminit.image
+      )
+    }.map { image in
       ImageRecord(
-        id: "\(image.reference)@\(image.digest)",
         reference: image.reference,
         digest: image.digest,
         mediaType: image.descriptor.mediaType,
-        compressedSizeBytes: image.descriptor.size
+        indexSizeBytes: image.descriptor.size
       )
     }
 
@@ -141,6 +152,15 @@ actor AppleContainerService: ContainerManaging {
     reference: String,
     progress: @escaping ContainerProgressHandler
   ) async throws {
+    try await withRuntimeMutation {
+      try await self.pullImageWhileLocked(reference: reference, progress: progress)
+    }
+  }
+
+  private func pullImageWhileLocked(
+    reference: String,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
     let reference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !reference.isEmpty else {
       throw ContainerCreationValidationError.missingImageReference
@@ -160,7 +180,296 @@ actor AppleContainerService: ContainerManaging {
     await relay.emit(phase: .completed, message: "Image ready")
   }
 
+  func inspectImage(reference: String) async throws -> ImageInspection {
+    let reference = try validatedImageReference(reference)
+    async let configurationRequest = loadSystemConfiguration()
+    async let allImagesRequest = ClientImage.list()
+    async let containersRequest = containerClient.list()
+
+    let configuration = try await configurationRequest
+    let image = try await ClientImage.get(
+      reference: reference,
+      containerSystemConfig: configuration
+    )
+    let index = try await image.index()
+    let allImages = try await allImagesRequest
+    let containers = try await containersRequest
+    var variants: [ImageVariantInspection] = []
+    var warnings: [String] = []
+
+    for descriptor in index.manifests {
+      if descriptor.annotations?["vnd.docker.reference.type"] == "attestation-manifest" {
+        continue
+      }
+      guard let platform = descriptor.platform else {
+        warnings.append("Manifest \(descriptor.digest) has no platform and was skipped.")
+        continue
+      }
+      do {
+        let manifest = try await image.manifest(for: platform)
+        let imageConfiguration = try await image.config(for: platform)
+        let processConfiguration = imageConfiguration.config
+        let size =
+          descriptor.size + manifest.config.size
+          + manifest.layers.reduce(0) { $0 + $1.size }
+        variants.append(
+          ImageVariantInspection(
+            platform: platform.description,
+            os: platform.os,
+            architecture: platform.architecture,
+            variant: platform.variant,
+            manifestDigest: descriptor.digest,
+            sizeBytes: size,
+            createdAt: Self.parseImageDate(imageConfiguration.created),
+            author: imageConfiguration.author,
+            user: processConfiguration?.user,
+            workingDirectory: processConfiguration?.workingDir,
+            entrypoint: processConfiguration?.entrypoint ?? [],
+            command: processConfiguration?.cmd ?? [],
+            environment: processConfiguration?.env ?? [],
+            labels: processConfiguration?.labels ?? [:],
+            layerCount: imageConfiguration.rootfs.diffIDs.count
+          )
+        )
+      } catch {
+        warnings.append(
+          "Could not inspect \(platform.description): \(error.localizedDescription)"
+        )
+      }
+    }
+
+    variants.sort { $0.platform.localizedStandardCompare($1.platform) == .orderedAscending }
+    let aliases = allImages.filter { $0.digest == image.digest && $0.reference != image.reference }
+      .map(\.reference)
+      .sorted()
+    let usedBy = containerIDs(
+      using: image.reference,
+      among: containers,
+      configuration: configuration
+    )
+
+    return ImageInspection(
+      reference: image.reference,
+      displayReference: try ClientImage.denormalizeReference(
+        image.reference,
+        containerSystemConfig: configuration
+      ),
+      digest: image.digest,
+      mediaType: image.descriptor.mediaType,
+      indexSizeBytes: image.descriptor.size,
+      createdAt: variants.compactMap(\.createdAt).min(),
+      variants: variants,
+      aliases: aliases,
+      usedByContainerIDs: usedBy,
+      warnings: warnings
+    )
+  }
+
+  func prepareImageTag(source: String, target: String) async throws -> ImageTagPlan {
+    let source = try validatedImageReference(source)
+    let target = target.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !target.isEmpty else { throw ImageManagementError.missingTargetReference }
+
+    let configuration = try await loadSystemConfiguration()
+    let sourceImage = try await ClientImage.get(
+      reference: source,
+      containerSystemConfig: configuration
+    )
+    try ensureUserManaged(sourceImage, configuration: configuration)
+    let targetReference = try ClientImage.normalizeReference(
+      target,
+      containerSystemConfig: configuration
+    )
+    try ensureUserManaged(reference: targetReference, configuration: configuration)
+    let existingTarget = try await ClientImage.list().first {
+      $0.reference == targetReference
+    }
+
+    return ImageTagPlan(
+      sourceReference: sourceImage.reference,
+      sourceDigest: sourceImage.digest,
+      targetReference: targetReference,
+      displayTargetReference: try ClientImage.denormalizeReference(
+        targetReference,
+        containerSystemConfig: configuration
+      ),
+      replacedDigest: existingTarget?.digest
+    )
+  }
+
+  func tagImage(_ plan: ImageTagPlan, replacingExisting: Bool) async throws {
+    try await withRuntimeMutation {
+      try await self.tagImageWhileLocked(plan, replacingExisting: replacingExisting)
+    }
+  }
+
+  private func tagImageWhileLocked(
+    _ plan: ImageTagPlan,
+    replacingExisting: Bool
+  ) async throws {
+    let configuration = try await loadSystemConfiguration()
+    let sourceImage = try await ClientImage.get(
+      reference: plan.sourceReference,
+      containerSystemConfig: configuration
+    )
+    guard sourceImage.digest == plan.sourceDigest else {
+      throw ImageManagementError.stalePlan("tag operation")
+    }
+    try ensureUserManaged(sourceImage, configuration: configuration)
+    try ensureUserManaged(reference: plan.targetReference, configuration: configuration)
+
+    let currentTarget = try await ClientImage.list().first {
+      $0.reference == plan.targetReference
+    }
+    if let currentTarget, currentTarget.digest != sourceImage.digest {
+      guard currentTarget.digest == plan.replacedDigest else {
+        throw ImageManagementError.stalePlan("tag operation")
+      }
+      guard replacingExisting else {
+        throw ImageManagementError.tagWouldReplace(reference: plan.displayTargetReference)
+      }
+    }
+    if currentTarget?.digest == sourceImage.digest { return }
+    _ = try await sourceImage.tag(new: plan.targetReference)
+  }
+
+  func prepareImageDeletion(reference: String) async throws -> ImageDeletionPlan {
+    let reference = try validatedImageReference(reference)
+    async let configurationRequest = loadSystemConfiguration()
+    async let allImagesRequest = ClientImage.list()
+    async let containersRequest = containerClient.list()
+    let configuration = try await configurationRequest
+    let image = try await ClientImage.get(
+      reference: reference,
+      containerSystemConfig: configuration
+    )
+    let allImages = try await allImagesRequest
+    let containers = try await containersRequest
+
+    return ImageDeletionPlan(
+      reference: image.reference,
+      digest: image.digest,
+      aliases: allImages.filter { $0.digest == image.digest && $0.reference != image.reference }
+        .map(\.reference)
+        .sorted(),
+      usedByContainerIDs: containerIDs(
+        using: image.reference,
+        among: containers,
+        configuration: configuration
+      ),
+      isInfrastructureImage: Utility.isInfraImage(
+        name: image.reference,
+        builderImage: configuration.build.image,
+        initImage: configuration.vminit.image
+      )
+    )
+  }
+
+  func deleteImage(_ plan: ImageDeletionPlan) async throws -> ImageCleanupResult {
+    try await withRuntimeMutation {
+      try await self.deleteImageWhileLocked(plan)
+    }
+  }
+
+  private func deleteImageWhileLocked(
+    _ plan: ImageDeletionPlan
+  ) async throws -> ImageCleanupResult {
+    let current = try await prepareImageDeletion(reference: plan.reference)
+    guard current.digest == plan.digest else {
+      throw ImageManagementError.stalePlan("deletion")
+    }
+    guard !current.isInfrastructureImage else {
+      throw ImageManagementError.infrastructureImage(current.reference)
+    }
+    guard current.usedByContainerIDs.isEmpty else {
+      throw ImageManagementError.imageInUse(
+        reference: current.reference,
+        containerIDs: current.usedByContainerIDs
+      )
+    }
+    let configuration = try await loadSystemConfiguration()
+    let image = try await ClientImage.get(
+      reference: current.reference,
+      containerSystemConfig: configuration
+    )
+    return try await removeImages([image])
+  }
+
+  func prepareImagePrune(mode: ImagePruneMode) async throws -> ImagePrunePlan {
+    let configuration = try await loadSystemConfiguration()
+    let selection = try await pruneCandidates(mode: mode, configuration: configuration)
+    let estimate: UInt64?
+    if mode == .allUnused {
+      estimate = try await ClientImage.calculateDiskUsage(
+        activeReferences: selection.activeReferences
+      ).reclaimableSize
+    } else {
+      estimate = nil
+    }
+
+    return ImagePrunePlan(
+      mode: mode,
+      generatedAt: Date(),
+      candidates: selection.images.map {
+        ImagePruneCandidate(
+          reference: $0.reference,
+          digest: $0.digest,
+          indexSizeBytes: $0.descriptor.size
+        )
+      }.sorted { $0.reference.localizedStandardCompare($1.reference) == .orderedAscending },
+      estimatedReclaimableBytes: estimate
+    )
+  }
+
+  func pruneImages(_ plan: ImagePrunePlan) async throws -> ImageCleanupResult {
+    try await withRuntimeMutation {
+      try await self.pruneImagesWhileLocked(plan)
+    }
+  }
+
+  private func pruneImagesWhileLocked(
+    _ plan: ImagePrunePlan
+  ) async throws -> ImageCleanupResult {
+    let configuration = try await loadSystemConfiguration()
+    let current = try await pruneCandidates(mode: plan.mode, configuration: configuration)
+    let currentByReference = Dictionary(
+      uniqueKeysWithValues: current.images.map { ($0.reference, $0) })
+    var images: [ClientImage] = []
+    var staleFailures: [ImageOperationFailure] = []
+
+    for candidate in plan.candidates {
+      guard let image = currentByReference[candidate.reference], image.digest == candidate.digest
+      else {
+        staleFailures.append(
+          ImageOperationFailure(
+            reference: candidate.reference,
+            message: "Changed or became active after review; skipped."
+          )
+        )
+        continue
+      }
+      images.append(image)
+    }
+
+    let result = try await removeImages(images)
+    return ImageCleanupResult(
+      removedReferences: result.removedReferences,
+      failedReferences: staleFailures + result.failedReferences,
+      removedBlobDigests: result.removedBlobDigests,
+      reclaimedBytes: result.reclaimedBytes
+    )
+  }
+
   func createContainer(
+    request: ContainerCreationRequest,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    try await withRuntimeMutation {
+      try await self.createContainerWhileLocked(request: request, progress: progress)
+    }
+  }
+
+  private func createContainerWhileLocked(
     request: ContainerCreationRequest,
     progress: @escaping ContainerProgressHandler
   ) async throws {
@@ -661,6 +970,176 @@ actor AppleContainerService: ContainerManaging {
       }
     }
     return (result, isTruncated)
+  }
+
+  private func validatedImageReference(_ reference: String) throws -> String {
+    let reference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !reference.isEmpty else { throw ImageManagementError.missingReference }
+    return reference
+  }
+
+  private func ensureUserManaged(
+    _ image: ClientImage,
+    configuration: ContainerSystemConfig
+  ) throws {
+    try ensureUserManaged(reference: image.reference, configuration: configuration)
+  }
+
+  private func ensureUserManaged(
+    reference: String,
+    configuration: ContainerSystemConfig
+  ) throws {
+    guard
+      !Utility.isInfraImage(
+        name: reference,
+        builderImage: configuration.build.image,
+        initImage: configuration.vminit.image
+      )
+    else {
+      throw ImageManagementError.infrastructureImage(reference)
+    }
+  }
+
+  private func containerIDs(
+    using imageReference: String,
+    among containers: [ContainerSnapshot],
+    configuration: ContainerSystemConfig
+  ) -> [String] {
+    let normalizedImageReference = try? ClientImage.normalizeReference(
+      imageReference,
+      containerSystemConfig: configuration
+    )
+    return containers.filter { container in
+      let containerReference = container.configuration.image.reference
+      if containerReference == imageReference { return true }
+      guard let normalizedImageReference else { return false }
+      return
+        (try? ClientImage.normalizeReference(
+          containerReference,
+          containerSystemConfig: configuration
+        )) == normalizedImageReference
+    }.map(\.id).sorted()
+  }
+
+  private func pruneCandidates(
+    mode: ImagePruneMode,
+    configuration: ContainerSystemConfig
+  ) async throws -> (images: [ClientImage], activeReferences: Set<String>) {
+    async let imagesRequest = ClientImage.list()
+    async let containersRequest = containerClient.list()
+    let (allImages, containers) = try await (imagesRequest, containersRequest)
+    var activeReferences = Set<String>()
+    for container in containers {
+      let reference = container.configuration.image.reference
+      activeReferences.insert(reference)
+      if let normalized = try? ClientImage.normalizeReference(
+        reference,
+        containerSystemConfig: configuration
+      ) {
+        activeReferences.insert(normalized)
+      }
+    }
+    for reference in [configuration.build.image, configuration.vminit.image] {
+      activeReferences.insert(reference)
+      if let normalized = try? ClientImage.normalizeReference(
+        reference,
+        containerSystemConfig: configuration
+      ) {
+        activeReferences.insert(normalized)
+      }
+    }
+
+    let userImages = allImages.filter {
+      !Utility.isInfraImage(
+        name: $0.reference,
+        builderImage: configuration.build.image,
+        initImage: configuration.vminit.image
+      )
+    }
+    let candidates = userImages.filter { image in
+      guard !activeReferences.contains(image.reference) else { return false }
+      switch mode {
+      case .dangling:
+        guard let reference = try? Reference.parse(image.reference) else { return true }
+        return reference.tag?.isEmpty != false
+      case .allUnused:
+        return true
+      }
+    }
+    return (candidates, activeReferences)
+  }
+
+  private func removeImages(_ images: [ClientImage]) async throws -> ImageCleanupResult {
+    var removedReferences: [String] = []
+    var failures: [ImageOperationFailure] = []
+
+    do {
+      for image in images {
+        try Task.checkCancellation()
+        do {
+          try await ClientImage.delete(reference: image.reference, garbageCollect: false)
+          removedReferences.append(image.reference)
+        } catch is CancellationError {
+          throw CancellationError()
+        } catch {
+          failures.append(
+            ImageOperationFailure(
+              reference: image.reference,
+              message: error.localizedDescription
+            )
+          )
+        }
+      }
+    } catch is CancellationError {
+      _ = try? await Task.detached {
+        try await ClientImage.cleanUpOrphanedBlobs()
+      }.value
+      throw CancellationError()
+    }
+
+    var removedBlobDigests: [String] = []
+    var reclaimedBytes: UInt64 = 0
+    do {
+      (removedBlobDigests, reclaimedBytes) = try await ClientImage.cleanUpOrphanedBlobs()
+    } catch is CancellationError {
+      _ = try? await Task.detached {
+        try await ClientImage.cleanUpOrphanedBlobs()
+      }.value
+      throw CancellationError()
+    } catch {
+      failures.append(
+        ImageOperationFailure(
+          reference: "Content store cleanup",
+          message: error.localizedDescription
+        )
+      )
+    }
+
+    return ImageCleanupResult(
+      removedReferences: removedReferences.sorted(),
+      failedReferences: failures,
+      removedBlobDigests: removedBlobDigests.sorted(),
+      reclaimedBytes: reclaimedBytes
+    )
+  }
+
+  private static func parseImageDate(_ value: String?) -> Date? {
+    guard let value else { return nil }
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = fractional.date(from: value) { return date }
+    let wholeSeconds = ISO8601DateFormatter()
+    wholeSeconds.formatOptions = [.withInternetDateTime]
+    return wholeSeconds.date(from: value)
+  }
+
+  private func withRuntimeMutation<T: Sendable>(
+    _ operation: @escaping @Sendable () async throws -> T
+  ) async throws -> T {
+    try await runtimeMutationGate.withLock { _ in
+      try Task.checkCancellation()
+      return try await operation()
+    }
   }
 
   private func loadSystemConfiguration() async throws -> ContainerSystemConfig {

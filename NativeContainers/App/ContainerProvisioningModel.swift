@@ -20,9 +20,9 @@ final class ContainerProvisioningModel {
   }
 
   func createContainer(_ request: ContainerCreationRequest) async -> Bool {
-    await perform {
-      try await self.service.createContainer(request: request) { [weak self] update in
-        await self?.receive(update)
+    await perform { [self] in
+      try await service.createContainer(request: request) { update in
+        await self.receive(update)
       }
     }
   }
@@ -33,9 +33,9 @@ final class ContainerProvisioningModel {
       errorMessage = ContainerCreationValidationError.missingImageReference.localizedDescription
       return false
     }
-    return await perform {
-      try await self.service.pullImage(reference: reference) { [weak self] update in
-        await self?.receive(update)
+    return await perform { [self] in
+      try await service.pullImage(reference: reference) { update in
+        await self.receive(update)
       }
     }
   }

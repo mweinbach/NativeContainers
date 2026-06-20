@@ -85,6 +85,38 @@ release and isolating it behind an adapter are both deliberate.
   screen. Shell-path discovery and fallback beyond the current `/bin/sh`
   default remain a separate workflow feature.
 
+## Native image management
+
+- `ContainerAPIClient.ClientImage` is the correct authority because it talks to
+  Apple container’s configured XPC image service and remote content store.
+  Creating a separate Containerization `ImageStore.default` would fork GUI state
+  away from the `container` CLI.
+- There is no separate inspect API. Apple’s CLI resolves a `ClientImage`, then
+  reads its OCI index, manifest, and config (or calls `toImageResource`). The
+  root descriptor’s `size` is only the index descriptor; each variant’s useful
+  size includes its manifest descriptor, config, and compressed layers.
+- `tag(new:)` overwrites an existing reference without prompting. A native GUI
+  must preflight the normalized target and explicitly confirm moving a mutable
+  tag to a different digest. Its XPC request carries references but no expected
+  digest, so Apple Containerization’s `AsyncLock` closes same-process actor
+  reentrancy races; it cannot make concurrent external CLI writes atomic.
+- Direct image deletion does not guard container use. The app compares exact
+  current container references, protects the configured builder and vminit
+  images, deletes references with `garbageCollect: false`, and calls
+  `cleanUpOrphanedBlobs()` once after a batch so shared layers remain intact.
+- Prune is orchestration, not one API call: list images and containers, classify
+  dangling or unused references, show a plan, then re-list and intersect that
+  exact reference/digest set before deletion. Apple 1.0.0’s own prune command
+  does not exclude infrastructure images, so the app adds that safety boundary.
+- Push uses the same Apple image service and Keychain-backed registry domain.
+  Registry credential UI and push are the next image slice; passwords must not
+  be mirrored into observable app state.
+- Apple’s public `ContainerBuild.Builder` remains the native build path, but it
+  owns NIO/gRPC resources without a public shutdown surface and relies on a
+  reserved `buildkit` container. Builds will run in a bundled per-build worker
+  process so cancellation closes the native vsock reliably. The 1.0.0
+  Dockerfile limit remains strictly below 16 KiB.
+
 ## Virtualization.framework
 
 The installed Apple documentation confirms:

@@ -5,7 +5,7 @@ called out rather than papered over.
 
 | Capability | Native implementation | Phase | Constraint |
 | --- | --- | --- | --- |
-| OCI pull/push/list/tag/prune | Apple image services | M1 | Foundation lists live images |
+| OCI pull/push/list/tag/prune | Apple image services | M1 | Pull, rich inspect, safe tag/delete, and reviewed prune are live; push remains |
 | Dockerfile/Containerfile builds | Apple BuildKit VM | M1 | 1.0.0 has a known 16 KiB Dockerfile limit |
 | Container lifecycle | `ContainerClient` | M1 | Foundation start/stop/delete is wired |
 | Exec, logs, copy, inspect, stats | `ContainerClient` + SwiftTerm | M1 | Non-interactive exec and native interactive PTY are live |

@@ -42,11 +42,13 @@ struct ContainerRecord: Codable, Equatable, Sendable, Identifiable {
 }
 
 struct ImageRecord: Codable, Equatable, Sendable, Identifiable {
-  let id: String
   let reference: String
   let digest: String
   let mediaType: String
-  let compressedSizeBytes: Int64
+  let indexSizeBytes: Int64
+
+  var id: String { reference }
+  var inspectionID: String { "\(reference)@\(digest)" }
 }
 
 struct VolumeRecord: Codable, Equatable, Sendable, Identifiable {

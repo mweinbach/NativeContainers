@@ -52,11 +52,10 @@ extension AppModel {
       ],
       images: [
         ImageRecord(
-          id: "api@sha256:1234",
           reference: "ghcr.io/example/api:latest",
           digest: "sha256:1234567890abcdef",
           mediaType: "application/vnd.oci.image.index.v1+json",
-          compressedSizeBytes: 182_000_000
+          indexSizeBytes: 1_024
         )
       ],
       volumes: [
@@ -140,6 +139,81 @@ private actor PreviewContainerService: ContainerManaging {
     progress: @escaping ContainerProgressHandler
   ) async throws {
     await progress(ContainerOperationProgress(phase: .completed, message: "Image ready"))
+  }
+  func inspectImage(reference: String) async throws -> ImageInspection {
+    ImageInspection(
+      reference: reference,
+      displayReference: "ghcr.io/example/api:latest",
+      digest: "sha256:1234567890abcdef",
+      mediaType: "application/vnd.oci.image.index.v1+json",
+      indexSizeBytes: 1_024,
+      createdAt: Date().addingTimeInterval(-7_200),
+      variants: [
+        ImageVariantInspection(
+          platform: "linux/arm64",
+          os: "linux",
+          architecture: "arm64",
+          variant: nil,
+          manifestDigest: "sha256:arm64manifest",
+          sizeBytes: 182_000_000,
+          createdAt: Date().addingTimeInterval(-7_200),
+          author: "Example Team",
+          user: "1000:1000",
+          workingDirectory: "/app",
+          entrypoint: ["/app/server"],
+          command: ["--port", "8080"],
+          environment: ["NODE_ENV=production", "PORT=8080"],
+          labels: ["org.opencontainers.image.source": "https://github.com/example/api"],
+          layerCount: 8
+        )
+      ],
+      aliases: ["ghcr.io/example/api:stable"],
+      usedByContainerIDs: ["api"],
+      warnings: []
+    )
+  }
+  func prepareImageTag(source: String, target: String) async throws -> ImageTagPlan {
+    ImageTagPlan(
+      sourceReference: source,
+      sourceDigest: "sha256:1234567890abcdef",
+      targetReference: target,
+      displayTargetReference: target,
+      replacedDigest: nil
+    )
+  }
+  func tagImage(_ plan: ImageTagPlan, replacingExisting: Bool) async throws {}
+  func prepareImageDeletion(reference: String) async throws -> ImageDeletionPlan {
+    ImageDeletionPlan(
+      reference: reference,
+      digest: "sha256:1234567890abcdef",
+      aliases: ["ghcr.io/example/api:stable"],
+      usedByContainerIDs: ["api"],
+      isInfrastructureImage: false
+    )
+  }
+  func deleteImage(_ plan: ImageDeletionPlan) async throws -> ImageCleanupResult {
+    ImageCleanupResult(
+      removedReferences: [plan.reference],
+      failedReferences: [],
+      removedBlobDigests: [],
+      reclaimedBytes: 182_000_000
+    )
+  }
+  func prepareImagePrune(mode: ImagePruneMode) async throws -> ImagePrunePlan {
+    ImagePrunePlan(
+      mode: mode,
+      generatedAt: Date(),
+      candidates: [],
+      estimatedReclaimableBytes: mode == .allUnused ? 0 : nil
+    )
+  }
+  func pruneImages(_ plan: ImagePrunePlan) async throws -> ImageCleanupResult {
+    ImageCleanupResult(
+      removedReferences: plan.candidates.map(\.reference),
+      failedReferences: [],
+      removedBlobDigests: [],
+      reclaimedBytes: 0
+    )
   }
   func createContainer(
     request: ContainerCreationRequest,

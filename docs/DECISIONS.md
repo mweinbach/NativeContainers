@@ -133,3 +133,34 @@ thread’s `SIGPIPE`; the app never changes process-wide signal disposition.
 Output reads and descriptor closure share a lifetime lock to prevent descriptor
 reuse races. A failed kill is retained as a visible, retryable failed session,
 and opening a replacement shell sends a full terminal reset before new output.
+
+## ADR-011: Plan destructive image mutations against Apple’s live store
+
+**Status:** Accepted — 2026-06-20
+
+Image state remains owned by Apple’s `ClientImage` XPC service. The global app
+inventory keeps only inexpensive reference/index metadata, while selection
+resolves OCI variants lazily behind a narrow `ImageManaging` protocol. Stable
+SwiftUI identity is the canonical reference, not `reference@digest`, so moving a
+mutable tag does not discard selection.
+
+Tag, delete, and prune are plan-based. A plan records the reviewed canonical
+reference and digest. Execution re-fetches current state, refuses digest changes
+observed before mutation, blocks builder/vminit images and in-use references,
+and never expands a prune batch with candidates that appeared after
+confirmation. Tag replacement requires an explicit second action when the
+target currently names a different digest.
+
+Batch deletion mirrors Apple’s safe content semantics: remove each reference
+with garbage collection disabled, then request one global orphan cleanup. The
+result distinguishes successfully removed references, skipped/failed entries,
+deleted blob digests, and actual reclaimed bytes. Shared layers and aliases are
+therefore preserved by the content store rather than guessed in the UI.
+
+Apple Containerization’s `AsyncLock` serializes every app-initiated pull,
+container creation, tag, delete, and prune across actor suspension points. This
+keeps a second app window from changing image state between revalidation and the
+XPC mutation. Apple 1.0.0’s tag and delete requests do not carry a digest
+precondition, so a concurrent external CLI or process can still race the final
+reference-only request; full cross-process compare-and-swap safety requires an
+upstream API addition.

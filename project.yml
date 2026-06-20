@@ -48,6 +48,10 @@ targets:
         product: MachineAPIClient
       - package: AppleContainerization
         product: ContainerizationOS
+      - package: AppleContainerization
+        product: ContainerizationOCI
+      - package: AppleContainerization
+        product: ContainerizationExtras
       - package: SwiftTerm
         product: SwiftTerm
       - package: SwiftSystem

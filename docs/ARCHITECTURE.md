@@ -45,6 +45,13 @@ This keeps UI tests fast and isolates package source changes.
 The installed Apple services remain the authority for runtime state. The app
 does not create a second database of containers, images, networks, or volumes.
 
+Image inventory remains cheap: the global refresh reads reference, digest,
+media type, and index-descriptor size only. Selecting an image resolves its OCI
+index, manifests, and configs lazily. Mutations cross a narrower `ImageManaging`
+adapter and use immutable review plans. Tag replacement, deletion, and prune
+therefore re-fetch current references, digests, container usage, and protected
+builder/vminit images immediately before acting.
+
 Interactive terminals remain in this lane. The app asks
 `ContainerClient.createProcess` for a terminal-mode child, passes pipe file
 descriptors through Apple’s XPC boundary, and streams the resulting bytes into

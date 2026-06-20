@@ -7,8 +7,8 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- Forty-seven deterministic Swift Testing cases pass. Two opt-in integration
-  tests cover live Apple-service provisioning and interactive PTY behavior.
+- Fifty-six deterministic Swift Testing cases pass. Three opt-in integration
+  tests cover live provisioning, interactive PTY, and image-reference behavior.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview and split container inspector render successfully in
   Xcode Preview in light mode.
@@ -32,8 +32,9 @@ Updated: 2026-06-20.
   boot logs. Log reads are bounded to the newest 512 KiB per stream.
 - Container start, stop, delete, selection, and refresh actions are wired into
   the native management UI.
-- Native sheets now pull OCI images and create containers with validated names,
-  native/Intel platform selection, CPU/memory, OCI arguments and environment,
+- Native sheets now pull OCI images for the current platform and create
+  containers with validated names, native/Intel platform selection, CPU/memory,
+  OCI arguments and environment,
   working directory, TCP/UDP port publishing, SSH-agent forwarding, init,
   read-only root, persistence, and create-only/create-and-start behavior.
 - Provisioning reports image, unpack, kernel, runtime-image, create, and start
@@ -80,6 +81,23 @@ Updated: 2026-06-20.
   container, opened a native PTY, verified the requested `33×91` geometry,
   round-tripped canonical stdin, delivered Control-C, observed a clean child
   exit, and removed the container.
+- The image screen now uses a stable-reference split inspector. OCI indexes are
+  resolved lazily into platform variants with real manifest/layer sizes,
+  execution configuration, environment, labels, aliases, usage, and partial
+  inspection warnings; the former descriptor-size label is no longer presented
+  as total compressed image size.
+- Tagging normalizes through Apple’s configured registry and requires explicit
+  confirmation before moving an existing tag to another digest. Deletion plans
+  show aliases and consuming containers, block in-use or Apple infrastructure
+  images, and revalidate the exact digest immediately before mutation.
+- Dangling and all-unused prune modes show the exact reviewed candidate set,
+  exclude active and Apple-managed images, revalidate every reference/digest,
+  perform one store-wide orphan cleanup, and report actual reclaimed bytes plus
+  partial failures. Cancellation refreshes inventory and triggers best-effort
+  cleanup after any partial batch.
+- A live Apple-service smoke pulled Alpine, created a unique local tag, resolved
+  its real OCI variant/configuration, deleted only that alias, verified removal,
+  and left no containers or temporary image references behind.
 
 ## Known configuration issue
 
@@ -94,8 +112,9 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add image build, tag, push, inspect, and prune workflows.
-2. Add volume/network lifecycle and open-in-browser helpers.
-3. Add the entitlement through a functioning Xcode capability surface, then
+1. Add native registry login/logout/list and image push workflows.
+2. Add an isolated native `ContainerBuild` worker and builder lifecycle.
+3. Add volume/network lifecycle and open-in-browser helpers.
+4. Add the entitlement through a functioning Xcode capability surface, then
    implement and live-verify macOS installation and VM lifecycle.
-4. Spike a pinned Socktainer process and a product-specific Docker context.
+5. Spike a pinned Socktainer process and a product-specific Docker context.

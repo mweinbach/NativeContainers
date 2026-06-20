@@ -25,8 +25,11 @@ must leave a usable, test-backed product slice.
 - [x] Two-second live statistics sampling and bounded in-memory history.
 - [x] Bounded non-interactive exec console and file copy in/out.
 - [x] Interactive PTY terminal with resize, input, and signal forwarding.
-- [x] Image pull with platform selection and byte/item progress.
-- [ ] Image build, tag, push, inspect, and prune.
+- [x] Image pull with byte/item progress.
+- [ ] Explicit platform selection for standalone image pulls.
+- [x] Lazy multi-platform image inspect and safe tag/delete flows.
+- [x] Reviewed dangling/all-unused prune with mutation-time revalidation.
+- [ ] Image push and registry credential management.
 - [ ] Volume and network create/inspect/delete flows.
 - [x] TCP/UDP host-port publishing on Apple’s built-in network and DNS.
 - [ ] Socket publishing, host-access helpers, and open-in-browser.

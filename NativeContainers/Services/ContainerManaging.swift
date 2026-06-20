@@ -1,6 +1,46 @@
 import Foundation
 
-protocol ContainerManaging: Sendable {
+protocol ImageManaging: Sendable {
+  func inspectImage(reference: String) async throws -> ImageInspection
+  func prepareImageTag(source: String, target: String) async throws -> ImageTagPlan
+  func tagImage(_ plan: ImageTagPlan, replacingExisting: Bool) async throws
+  func prepareImageDeletion(reference: String) async throws -> ImageDeletionPlan
+  func deleteImage(_ plan: ImageDeletionPlan) async throws -> ImageCleanupResult
+  func prepareImagePrune(mode: ImagePruneMode) async throws -> ImagePrunePlan
+  func pruneImages(_ plan: ImagePrunePlan) async throws -> ImageCleanupResult
+}
+
+extension ImageManaging {
+  func inspectImage(reference: String) async throws -> ImageInspection {
+    throw ImageManagementError.unsupported
+  }
+
+  func prepareImageTag(source: String, target: String) async throws -> ImageTagPlan {
+    throw ImageManagementError.unsupported
+  }
+
+  func tagImage(_ plan: ImageTagPlan, replacingExisting: Bool) async throws {
+    throw ImageManagementError.unsupported
+  }
+
+  func prepareImageDeletion(reference: String) async throws -> ImageDeletionPlan {
+    throw ImageManagementError.unsupported
+  }
+
+  func deleteImage(_ plan: ImageDeletionPlan) async throws -> ImageCleanupResult {
+    throw ImageManagementError.unsupported
+  }
+
+  func prepareImagePrune(mode: ImagePruneMode) async throws -> ImagePrunePlan {
+    throw ImageManagementError.unsupported
+  }
+
+  func pruneImages(_ plan: ImagePrunePlan) async throws -> ImageCleanupResult {
+    throw ImageManagementError.unsupported
+  }
+}
+
+protocol ContainerManaging: ImageManaging {
   func loadInventory() async throws -> ContainerInventory
   func pullImage(
     reference: String,

@@ -106,6 +106,67 @@ struct LiveAppleContainerSmokeTests {
     }
   }
 
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_TESTS"] == "1",
+      "Set NATIVECONTAINERS_LIVE_TESTS=1 with Apple container services running."
+    )
+  )
+  func tagInspectAndDeleteImageReference() async throws {
+    let service = AppleContainerService()
+    let source = "docker.io/library/alpine:3.21"
+    let target = "nativecontainers-smoke-\(UUID().uuidString.lowercased().prefix(8)):latest"
+    let containerID = "nativecontainers-image-use-\(UUID().uuidString.lowercased().prefix(8))"
+
+    do {
+      try await service.pullImage(reference: source) { _ in }
+      let tagPlan = try await service.prepareImageTag(source: source, target: target)
+      try await service.tagImage(tagPlan, replacingExisting: false)
+
+      let inspection = try await service.inspectImage(reference: tagPlan.targetReference)
+      #expect(inspection.digest == tagPlan.sourceDigest)
+      #expect(!inspection.variants.isEmpty)
+      #expect(inspection.usedByContainerIDs.isEmpty)
+
+      let containerRequest = try ContainerCreationRequest(
+        name: containerID,
+        imageReference: tagPlan.targetReference,
+        cpuCount: 1,
+        memoryBytes: 256 * ContainerCreationRequest.bytesPerMiB,
+        startAfterCreation: false
+      )
+      try await service.createContainer(request: containerRequest) { _ in }
+      let inUsePlan = try await service.prepareImageDeletion(
+        reference: tagPlan.targetReference
+      )
+      #expect(inUsePlan.usedByContainerIDs == [containerID])
+      await #expect(
+        throws: ImageManagementError.imageInUse(
+          reference: tagPlan.targetReference,
+          containerIDs: [containerID]
+        )
+      ) {
+        try await service.deleteImage(inUsePlan)
+      }
+      try await service.deleteContainer(id: containerID)
+
+      let deletionPlan = try await service.prepareImageDeletion(
+        reference: tagPlan.targetReference
+      )
+      let result = try await service.deleteImage(deletionPlan)
+      #expect(result.removedReferences == [tagPlan.targetReference])
+      #expect(result.failedReferences.isEmpty)
+      let remains = try await service.loadInventory().images.contains {
+        $0.reference == tagPlan.targetReference
+      }
+      #expect(!remains)
+    } catch {
+      await cleanUpRunningContainer(id: containerID, service: service)
+      await cleanUpImageReference(target, service: service)
+      throw error
+    }
+  }
+
   private func waitForTerminalOutput(
     _ session: any ContainerTerminalSession,
     stage: LiveTerminalSmokeStage,
@@ -139,6 +200,14 @@ struct LiveAppleContainerSmokeTests {
       try? await Task.sleep(for: .milliseconds(50))
     }
     try? await service.deleteContainer(id: id)
+  }
+
+  private func cleanUpImageReference(
+    _ reference: String,
+    service: AppleContainerService
+  ) async {
+    guard let plan = try? await service.prepareImageDeletion(reference: reference) else { return }
+    _ = try? await service.deleteImage(plan)
   }
 }
 

@@ -81,6 +81,32 @@ struct AppModelTests {
   }
 
   @Test
+  func refreshRequestedDuringActivePassRunsAndAwaitsFollowUpPass() async {
+    let stale = inventoryWithImage(digest: "sha256:stale")
+    let current = inventoryWithImage(digest: "sha256:current")
+    let service = MockContainerService(
+      inventory: stale,
+      subsequentInventories: [current]
+    )
+    let library = BlockingVirtualMachineLibrary()
+    let model = AppModel(containerService: service, virtualMachineLibrary: library)
+
+    let initialRefresh = Task { await model.refresh() }
+    await library.waitUntilFirstListStarts()
+    #expect(model.images == stale.images)
+
+    let overlappingRefresh = Task { await model.refresh() }
+    await Task.yield()
+    await library.resumeFirstList()
+    await initialRefresh.value
+    await overlappingRefresh.value
+
+    #expect(await service.loadCount == 2)
+    #expect(model.images == current.images)
+    #expect(!model.isRefreshing)
+  }
+
+  @Test
   func inspectorLoadsBoundedServiceSnapshot() async {
     let inspection = ContainerInspection(
       diskUsageBytes: 42,
@@ -243,6 +269,59 @@ struct AppModelTests {
   }
 
   @Test
+  func failedRuntimeRefreshClearsStaleInventories() async {
+    let initial = ContainerInventory(
+      system: ContainerSystemInfo(
+        version: "1.0.0",
+        build: "release",
+        commit: "abc123",
+        applicationRoot: URL(filePath: "/tmp/data"),
+        installRoot: URL(filePath: "/usr/local")
+      ),
+      containers: [
+        ContainerRecord(
+          id: "stale",
+          imageReference: "example/app:latest",
+          platform: "linux/arm64",
+          state: .stopped,
+          ipAddress: nil,
+          createdAt: Date(),
+          startedAt: nil,
+          cpuCount: 1,
+          memoryBytes: 512 * 1_024 * 1_024,
+          ports: []
+        )
+      ],
+      images: [
+        ImageRecord(
+          reference: "example/app:latest",
+          digest: "sha256:stale",
+          mediaType: "index",
+          indexSizeBytes: 512
+        )
+      ],
+      volumes: [],
+      machines: []
+    )
+    let service = MockContainerService(
+      inventory: initial,
+      loadError: AppModelTestError.runtimeUnavailable
+    )
+    let model = AppModel(
+      containerService: service,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: []),
+      initialInventory: initial
+    )
+
+    await model.refresh()
+
+    #expect(model.systemInfo == nil)
+    #expect(model.containers.isEmpty)
+    #expect(model.images.isEmpty)
+    #expect(model.errorMessage?.contains("offline") == true)
+  }
+
+  @Test
   func toolsModelExecutesCommandAndCopiesBothDirections() async throws {
     let service = MockContainerService(inventory: emptyInventory())
     let model = ContainerToolsModel(containerID: "web", service: service)
@@ -319,9 +398,28 @@ private func emptyInventory() -> ContainerInventory {
   )
 }
 
+private func inventoryWithImage(digest: String) -> ContainerInventory {
+  let empty = emptyInventory()
+  return ContainerInventory(
+    system: empty.system,
+    containers: [],
+    images: [
+      ImageRecord(
+        reference: "example/app:latest",
+        digest: digest,
+        mediaType: "index",
+        indexSizeBytes: 512
+      )
+    ],
+    volumes: [],
+    machines: []
+  )
+}
+
 private actor MockContainerService: ContainerManaging {
-  let inventory: ContainerInventory
+  private var inventories: [ContainerInventory]
   let inspection: ContainerInspection
+  let loadError: (any Error)?
   private(set) var startedContainerIDs: [String] = []
   private(set) var inspectedContainerIDs: [String] = []
   private(set) var createdRequests: [ContainerCreationRequest] = []
@@ -337,6 +435,8 @@ private actor MockContainerService: ContainerManaging {
 
   init(
     inventory: ContainerInventory,
+    subsequentInventories: [ContainerInventory] = [],
+    loadError: (any Error)? = nil,
     inspection: ContainerInspection = ContainerInspection(
       diskUsageBytes: 0,
       statistics: nil,
@@ -345,13 +445,18 @@ private actor MockContainerService: ContainerManaging {
       logsAreTruncated: false
     )
   ) {
-    self.inventory = inventory
+    inventories = [inventory] + subsequentInventories
+    self.loadError = loadError
     self.inspection = inspection
   }
 
   func loadInventory() async throws -> ContainerInventory {
     loadCount += 1
-    return inventory
+    if let loadError { throw loadError }
+    if inventories.count > 1 {
+      return inventories.removeFirst()
+    }
+    return inventories[0]
   }
 
   func pullImage(
@@ -420,6 +525,12 @@ private actor MockContainerService: ContainerManaging {
   func deleteMachine(id: String) async throws {}
 }
 
+private enum AppModelTestError: LocalizedError {
+  case runtimeUnavailable
+
+  var errorDescription: String? { "Apple container services are offline." }
+}
+
 private actor MockVirtualMachineLibrary: VirtualMachineLibraryProtocol {
   private var manifests: [VirtualMachineManifest]
 
@@ -437,5 +548,45 @@ private actor MockVirtualMachineLibrary: VirtualMachineLibraryProtocol {
     let manifest = try VirtualMachineManifest(name: name, guest: guest, resources: resources)
     manifests.append(manifest)
     return manifest
+  }
+}
+
+private actor BlockingVirtualMachineLibrary: VirtualMachineLibraryProtocol {
+  private var hasStartedFirstList = false
+  private var startWaiters: [CheckedContinuation<Void, Never>] = []
+  private var firstListContinuation: CheckedContinuation<Void, Never>?
+
+  func list() async -> [VirtualMachineManifest] {
+    guard !hasStartedFirstList else { return [] }
+    hasStartedFirstList = true
+    let waiters = startWaiters
+    startWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume()
+    }
+    await withCheckedContinuation { continuation in
+      firstListContinuation = continuation
+    }
+    return []
+  }
+
+  func waitUntilFirstListStarts() async {
+    guard !hasStartedFirstList else { return }
+    await withCheckedContinuation { continuation in
+      startWaiters.append(continuation)
+    }
+  }
+
+  func resumeFirstList() {
+    firstListContinuation?.resume()
+    firstListContinuation = nil
+  }
+
+  func createDraft(
+    name: String,
+    guest: VirtualMachineGuest,
+    resources: VirtualMachineResources
+  ) async throws -> VirtualMachineManifest {
+    try VirtualMachineManifest(name: name, guest: guest, resources: resources)
   }
 }
