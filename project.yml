@@ -28,6 +28,12 @@ packages:
   SwiftSystem:
     url: https://github.com/apple/swift-system.git
     from: 1.6.4
+  SwiftNIO:
+    url: https://github.com/apple/swift-nio.git
+    from: 2.80.0
+  SwiftLog:
+    url: https://github.com/apple/swift-log.git
+    from: 1.0.0
 
 targets:
   NativeContainers:
@@ -35,7 +41,16 @@ targets:
     platform: macOS
     sources:
       - path: NativeContainers
+      - path: NativeContainersShared
     dependencies:
+      - target: NativeContainersBuildWorker
+        embed: true
+        link: false
+        codeSign: true
+        removeHeaders: false
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
       - package: AppleContainer
         product: ContainerAPIClient
       - package: AppleContainer
@@ -83,3 +98,41 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nativecontainers.tests
         GENERATE_INFOPLIST_FILE: YES
+
+  NativeContainersBuildWorker:
+    type: tool
+    platform: macOS
+    sources:
+      - path: NativeContainersBuildWorker
+      - path: NativeContainersShared
+    dependencies:
+      - package: AppleContainer
+        product: ContainerAPIClient
+      - package: AppleContainer
+        product: ContainerBuild
+      - package: AppleContainer
+        product: ContainerImagesService
+      - package: AppleContainer
+        product: ContainerPersistence
+      - package: AppleContainer
+        product: ContainerResource
+      - package: AppleContainer
+        product: TerminalProgress
+      - package: AppleContainerization
+        product: Containerization
+      - package: AppleContainerization
+        product: ContainerizationOCI
+      - package: AppleContainerization
+        product: ContainerizationOS
+      - package: SwiftSystem
+        product: SystemPackage
+      - package: SwiftNIO
+        product: NIOPosix
+      - package: SwiftLog
+        product: Logging
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nativecontainers.build-worker
+        PRODUCT_NAME: NativeContainersBuildWorker
+        ENABLE_APP_SANDBOX: NO
+        DEAD_CODE_STRIPPING: YES

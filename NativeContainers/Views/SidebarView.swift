@@ -9,6 +9,7 @@ struct SidebarView: View {
         SidebarRow(destination: .overview)
         SidebarRow(destination: .containers)
         SidebarRow(destination: .images)
+        SidebarRow(destination: .builds)
         SidebarRow(destination: .volumes)
       }
 

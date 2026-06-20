@@ -53,6 +53,8 @@ struct DestinationView: View {
         ContainersView(model: model)
       case .images:
         ImagesView(model: model)
+      case .builds:
+        ImageBuildsView(appModel: model)
       case .volumes:
         VolumesView(volumes: model.volumes)
       case .linuxMachines:

@@ -1,0 +1,373 @@
+import SwiftUI
+import UniformTypeIdentifiers
+
+struct ImageBuildsView: View {
+  @State private var model: ImageBuildModel
+  @State private var contextDirectory: URL?
+  @State private var dockerfile: URL?
+  @State private var tag = ""
+  @State private var platform = ImageBuildPlatformSelection.current
+  @State private var buildArguments = ""
+  @State private var labels = ""
+  @State private var targetStage = ""
+  @State private var noCache = false
+  @State private var pullLatest = true
+  @State private var usesCustomBuilderResources = false
+  @State private var builderCPUCount = 2
+  @State private var builderMemoryMiB = 2_048
+  @State private var allowsTagReplacement = false
+  @State private var allowsRecreateStoppedBuilder = false
+  @State private var allowsStopRunningBuilder = false
+  @State private var isChoosingContext = false
+  @State private var isChoosingDockerfile = false
+  @State private var isConfirmingBuild = false
+  @State private var operationTask: Task<Void, Never>?
+
+  init(appModel: AppModel) {
+    _model = State(initialValue: appModel.makeImageBuildModel())
+  }
+
+  var body: some View {
+    Form {
+      sourceSection
+      outputSection
+      optionsSection
+      if let plan = model.plan {
+        reviewSection(plan)
+      }
+      if model.isWorking || model.progress != nil {
+        progressSection
+      }
+      if let result = model.result {
+        resultSection(result)
+      }
+      if let errorMessage = model.errorMessage {
+        Section {
+          Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+            .foregroundStyle(.red)
+            .textSelection(.enabled)
+        }
+      }
+    }
+    .formStyle(.grouped)
+    .navigationTitle("Builds")
+    .toolbar {
+      ToolbarItemGroup(placement: .primaryAction) {
+        if operationTask != nil {
+          Button("Cancel Build", systemImage: "xmark.circle", role: .destructive) {
+            operationTask?.cancel()
+          }
+        } else if model.plan != nil {
+          Button("Edit", systemImage: "pencil") {
+            startOperation { await model.discardPlan() }
+          }
+          Button("Build", systemImage: "hammer.fill") {
+            isConfirmingBuild = true
+          }
+          .buttonStyle(.borderedProminent)
+        } else {
+          Button("Review Build", systemImage: "checklist") {
+            allowsTagReplacement = false
+            allowsRecreateStoppedBuilder = false
+            allowsStopRunningBuilder = false
+            startOperation { _ = await model.prepare(makeRequest()) }
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(!canPrepare)
+        }
+      }
+    }
+    .fileImporter(
+      isPresented: $isChoosingContext,
+      allowedContentTypes: [.folder],
+      allowsMultipleSelection: false
+    ) { result in
+      if case .success(let urls) = result {
+        contextDirectory = urls.first
+        dockerfile = nil
+        model.clearResult()
+      }
+    }
+    .fileImporter(
+      isPresented: $isChoosingDockerfile,
+      allowedContentTypes: [.item],
+      allowsMultipleSelection: false
+    ) { result in
+      if case .success(let urls) = result {
+        dockerfile = urls.first
+        model.clearResult()
+      }
+    }
+    .confirmationDialog(
+      "Build reviewed image?",
+      isPresented: $isConfirmingBuild,
+      presenting: model.plan
+    ) { plan in
+      Button(
+        "Build \(plan.tags.first?.reference ?? "Image")",
+        role: plan.replacesExistingTags || allowsStopRunningBuilder ? .destructive : nil
+      ) {
+        startOperation {
+          _ = await model.execute(
+            plan,
+            authorization: ImageBuildAuthorization(
+              allowsTagReplacement: allowsTagReplacement,
+              allowsRecreateStoppedBuilder: allowsRecreateStoppedBuilder,
+              allowsStopRunningBuilder: allowsStopRunningBuilder
+            )
+          )
+        }
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: { plan in
+      Text(confirmationMessage(for: plan))
+    }
+    .onDisappear {
+      operationTask?.cancel()
+      if model.plan != nil, !model.isWorking {
+        Task { await model.discardPlan() }
+      }
+    }
+  }
+
+  private var sourceSection: some View {
+    Section("Build context") {
+      LabeledContent("Folder") {
+        HStack {
+          Text(contextDirectory?.path(percentEncoded: false) ?? "Not selected")
+            .foregroundStyle(contextDirectory == nil ? .secondary : .primary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+          Button("Choose…") { isChoosingContext = true }
+        }
+      }
+      LabeledContent("Dockerfile") {
+        HStack {
+          Text(dockerfile?.lastPathComponent ?? "Auto: Dockerfile or Containerfile")
+            .foregroundStyle(dockerfile == nil ? .secondary : .primary)
+          Button("Choose…") { isChoosingDockerfile = true }
+          if dockerfile != nil {
+            Button("Auto") { dockerfile = nil }
+          }
+        }
+      }
+      Text(
+        "Review copies regular files into a private app-owned directory. Symlinks, special files, custom syntax frontends, and Dockerfiles at or above 16 KiB are rejected."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    }
+    .disabled(inputsAreLocked)
+  }
+
+  private var outputSection: some View {
+    Section("Output image") {
+      TextField("Tag", text: $tag, prompt: Text("example/app:latest"))
+      Picker("Platform", selection: $platform) {
+        ForEach(ImageBuildPlatformSelection.allCases) { value in
+          Text(value.title).tag(value)
+        }
+      }
+      TextField("Target stage (optional)", text: $targetStage)
+      Text("The reviewed canonical tag is checked again immediately before import and tagging.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+    .disabled(inputsAreLocked)
+  }
+
+  private var optionsSection: some View {
+    Section("Build options") {
+      Toggle("Pull newer base images", isOn: $pullLatest)
+      Toggle("Ignore BuildKit cache", isOn: $noCache)
+      DisclosureGroup("Arguments, labels, and builder resources") {
+        LabeledContent("Build arguments") {
+          TextEditor(text: $buildArguments)
+            .font(.body.monospaced())
+            .frame(minHeight: 64)
+        }
+        Text("One KEY=value entry per line.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        LabeledContent("Image labels") {
+          TextEditor(text: $labels)
+            .font(.body.monospaced())
+            .frame(minHeight: 64)
+        }
+        Toggle("Override shared builder resources", isOn: $usesCustomBuilderResources)
+        if usesCustomBuilderResources {
+          Stepper("CPUs: \(builderCPUCount)", value: $builderCPUCount, in: 1...32)
+          Stepper(
+            "Memory: \(builderMemoryMiB) MiB",
+            value: $builderMemoryMiB,
+            in: 512...131_072,
+            step: 512
+          )
+        }
+      }
+    }
+    .disabled(inputsAreLocked)
+  }
+
+  private func reviewSection(_ plan: ImageBuildPlan) -> some View {
+    Section("Reviewed plan") {
+      LabeledContent("Context", value: plan.sourceContextDirectory.lastPathComponent)
+      LabeledContent("Fingerprint") {
+        Text(String(plan.contextFingerprint.prefix(20)))
+          .font(.caption.monospaced())
+          .textSelection(.enabled)
+      }
+      LabeledContent("Dockerfile", value: plan.stagedDockerfile.lastPathComponent)
+      ForEach(plan.tags) { tag in
+        VStack(alignment: .leading, spacing: 3) {
+          Text(tag.reference)
+          Text(tag.existingDigest ?? "New local tag")
+            .font(.caption.monospaced())
+            .foregroundStyle(tag.replacesExistingReference ? .orange : .secondary)
+        }
+      }
+      LabeledContent("Platform", value: plan.platforms.map(\.description).joined(separator: ", "))
+      if plan.replacesExistingTags {
+        Toggle("Allow replacing reviewed existing tags", isOn: $allowsTagReplacement)
+          .tint(.orange)
+      }
+      Toggle("Allow recreating a stopped builder and cache", isOn: $allowsRecreateStoppedBuilder)
+      Toggle("Allow stopping a running shared builder", isOn: $allowsStopRunningBuilder)
+        .tint(.red)
+      Text(
+        "A running-builder change may interrupt an external container CLI build. Identity conflicts and unknown states are never overridden by these confirmations."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    }
+  }
+
+  private var progressSection: some View {
+    Section("Progress") {
+      if model.isWorking {
+        ProgressView()
+          .controlSize(.small)
+      }
+      if let progress = model.progress {
+        Label(progress.message, systemImage: icon(for: progress.phase))
+        if !progress.logTail.isEmpty {
+          ScrollView {
+            Text(progress.logTail)
+              .font(.caption.monospaced())
+              .textSelection(.enabled)
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
+          .frame(minHeight: 100, maxHeight: 260)
+        }
+      }
+    }
+  }
+
+  private func resultSection(_ result: ImageBuildResult) -> some View {
+    Section("Last build") {
+      Label("Image ready", systemImage: "checkmark.circle.fill")
+        .foregroundStyle(.green)
+      LabeledContent("Digest") {
+        Text(result.imageDigest)
+          .font(.caption.monospaced())
+          .textSelection(.enabled)
+      }
+      LabeledContent("Tags", value: result.tags.joined(separator: ", "))
+      LabeledContent(
+        "Build time",
+        value: Duration.milliseconds(result.durationMilliseconds).formatted(.units())
+      )
+    }
+  }
+
+  private var canPrepare: Bool {
+    contextDirectory != nil && !tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && operationTask == nil
+  }
+
+  private var inputsAreLocked: Bool {
+    model.plan != nil || model.isWorking
+  }
+
+  private func makeRequest() -> ImageBuildRequest {
+    ImageBuildRequest(
+      contextDirectory: contextDirectory!,
+      dockerfile: dockerfile,
+      tags: splitLines(tag.replacingOccurrences(of: ",", with: "\n")),
+      platforms: [platform.value],
+      buildArguments: splitLines(buildArguments),
+      labels: splitLines(labels),
+      targetStage: targetStage.trimmingCharacters(in: .whitespacesAndNewlines),
+      noCache: noCache,
+      pullLatest: pullLatest,
+      builderCPUCount: usesCustomBuilderResources ? builderCPUCount : nil,
+      builderMemoryMiB: usesCustomBuilderResources ? builderMemoryMiB : nil
+    )
+  }
+
+  private func splitLines(_ value: String) -> [String] {
+    value.split(whereSeparator: \Character.isNewline).map {
+      $0.trimmingCharacters(in: .whitespacesAndNewlines)
+    }.filter { !$0.isEmpty }
+  }
+
+  private func confirmationMessage(for plan: ImageBuildPlan) -> String {
+    var warnings = [
+      "Build \(plan.platforms.map(\.description).joined(separator: ", ")) from the private reviewed context and apply \(plan.tags.map(\.reference).joined(separator: ", "))."
+    ]
+    if plan.replacesExistingTags {
+      warnings.append("Existing local tags will move only if their reviewed digests are unchanged.")
+    }
+    if allowsStopRunningBuilder {
+      warnings.append("A differently configured running shared builder may be stopped.")
+    } else if allowsRecreateStoppedBuilder {
+      warnings.append("A differently configured stopped builder and its cache may be recreated.")
+    }
+    return warnings.joined(separator: " ")
+  }
+
+  private func icon(for phase: ImageBuildProgress.Phase) -> String {
+    switch phase {
+    case .stagingContext: "doc.on.doc"
+    case .preparingBuilder: "shippingbox"
+    case .connectingBuilder: "cable.connector"
+    case .building: "hammer"
+    case .exportingArtifact: "archivebox"
+    case .importingImage: "square.and.arrow.down"
+    case .verifyingPlatforms: "checkmark.shield"
+    case .taggingImage: "tag"
+    case .completed: "checkmark.circle.fill"
+    }
+  }
+
+  private func startOperation(
+    _ operation: @escaping @MainActor () async -> Void
+  ) {
+    guard operationTask == nil else { return }
+    operationTask = Task { @MainActor in
+      defer { operationTask = nil }
+      await operation()
+    }
+  }
+}
+
+private enum ImageBuildPlatformSelection: String, CaseIterable, Identifiable {
+  case current
+  case amd64
+
+  var id: Self { self }
+
+  var title: String {
+    switch self {
+    case .current: "Linux arm64/v8 (this Mac)"
+    case .amd64: "Linux amd64"
+    }
+  }
+
+  var value: ContainerBuildPlatform {
+    switch self {
+    case .current: .current
+    case .amd64: .amd64
+    }
+  }
+}

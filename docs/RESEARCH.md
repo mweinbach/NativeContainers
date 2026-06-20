@@ -164,9 +164,82 @@ release and isolating it behind an adapter are both deliberate.
   atomically preserve the prior secret if the add fails.
 - Apple’s public `ContainerBuild.Builder` remains the native build path, but it
   owns NIO/gRPC resources without a public shutdown surface and relies on a
-  reserved `buildkit` container. Builds will run in a bundled per-build worker
+  reserved `buildkit` container. Builds run in a bundled per-build worker
   process so cancellation closes the native vsock reliably. The 1.0.0
   Dockerfile limit remains strictly below 16 KiB.
+
+## Native BuildKit integration at the 1.0.0 pin
+
+- [`ContainerBuild.Builder`](https://github.com/apple/container/blob/1.0.0/Sources/ContainerBuild/Builder.swift)
+  exposes `info()` and `build(_:)`. It does not start BuildKit, import an OCI
+  archive, unpack platforms, apply tags, return a digest, or publish a shutdown
+  method. Its gRPC task and caller-owned event-loop group make a one-shot
+  process the deterministic lifetime boundary.
+- Foundation `FileHandle.read(upToCount:)` can wait to fill a pipe request while
+  the writer stays open. Because stdin is also the parent-lifetime lease, the
+  worker must consume its framed request with one POSIX `read`; a regression
+  test keeps the writer open and proves the short frame returns immediately.
+- Apple’s CLI orchestration in
+  [`BuildCommand`](https://github.com/apple/container/blob/1.0.0/Sources/ContainerCommands/BuildCommand.swift)
+  dials the fixed `buildkit` container over vsock port 8088, starts or reuses
+  it, exports beneath `<appRoot>/builder/<buildID>`, loads `out.tar`, unpacks,
+  and tags. `BuilderStart.start` is internal, so the app reproduces the public
+  client sequence while adding immutable review and conflict checks.
+- The pinned builder image is Linux arm64/v8 and runs
+  `/usr/local/bin/container-builder-shim --debug --vsock`, adding
+  `--enable-qemu` when Rosetta is disabled. It mounts the app builder directory
+  at `/var/lib/container-builder-shim/exports`, uses Apple’s built-in network,
+  and is shared with the CLI. Reconfiguration can interrupt another build and
+  discard cache, so it is separately confirmed.
+- Builder identity includes the exact image descriptor digest and DNS
+  configuration, not only the visible tag and process arguments. The accepted
+  snapshot must survive until dial, be revalidated on both sides of the socket
+  connection, and close that socket on drift. If a create attempt fails while a
+  running or uncertain builder exists, cleanup must leave it intact because it
+  may belong to another `container` process.
+- OCI is the only initial output. The archive carries one unique internal
+  staging tag; the app applies one or more reviewed final tags after import.
+  Docker/registry exporters, arbitrary output backends, SSH forwarding, cache
+  import/export UI, structured progress, and supported cache pruning remain
+  later parity work.
+- [`BuildFSSync`](https://github.com/apple/container/blob/1.0.0/Sources/ContainerBuild/BuildFSSync.swift)
+  accepts paths requested by the builder and is not a host security sandbox.
+  The initial product stages only regular files, rejects links/special files
+  and custom Dockerfile frontends, and verifies a full tree fingerprint before
+  and after the solve. A malicious same-user process can still race filesystem
+  access; this is documented rather than disguised as isolation.
+- Dockerfile bytes travel in gRPC metadata and must be strictly less than
+  16,384 bytes. Local directory contexts are supported; Git/URL contexts are
+  not part of the pinned implementation. Large contexts consume host CPU and
+  temporary storage while being archived.
+- File URLs created with a directory hint can retain a trailing separator.
+  Reviewed Dockerfile and ignore files therefore require strict component-wise
+  containment; string-prefix checks can reject valid children or admit sibling
+  paths with a shared textual prefix.
+- `BuildFSSync.FileInfo` sends staged POSIX modes to BuildKit and forces uid/gid
+  to root. A private parent directory is sufficient for host confidentiality;
+  changing staged children to 0600/0700 breaks images that switch to a non-root
+  user after `COPY`, so child file and directory modes must be preserved.
+- The builder export directory is guest-visible. A final image is imported only
+  after the worker copies the descriptor-validated archive into a mode-0700
+  host-private directory as a mode-0400 file and binds it to inode metadata,
+  length, and SHA-256. Both locations are removed through
+  cancellation-independent cleanup.
+- Image-service XPC calls can commit before their reply fails. Import and tag
+  failures therefore require a fresh list-and-classify pass: observed committed
+  state is success or durable partial completion, never an assumed rollback.
+- Containerization 0.33.3 treats `linux/arm64` and `linux/arm64/v8`
+  inconsistently in `Hashable`; the fix landed after this pin. Builds are
+  serialized as the upstream workaround for multi-stage `COPY --from`
+  failures ([apple/container#1542](https://github.com/apple/container/issues/1542)).
+- Containerization 0.33.3 `AsyncLock` does not remove canceled waiters. Native
+  build serialization uses a local cancellation-aware FIFO so a queued review
+  context is discarded promptly instead of waiting behind a long solve.
+- Builder cache has no supported prune command in 1.0.0 and can become hard to
+  stop/delete ([#1159](https://github.com/apple/container/issues/1159),
+  [#932](https://github.com/apple/container/issues/932)). Builder lifecycle and
+  cache deletion therefore remain explicit management operations, never
+  automatic cleanup after each build.
 
 ## Virtualization.framework
 

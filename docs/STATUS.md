@@ -7,10 +7,14 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- Seventy-seven deterministic Swift Testing cases pass. Three opt-in integration
-  tests pass against Apple’s live runtime for provisioning, interactive PTY,
-  and image-reference behavior. A fourth push/pull round-trip test is hard-gated
-  to a disposable localhost registry and is not run against public services.
+- The suite currently contains 164 test declarations. The current full
+  app-hosted Xcode run passed all 158 deterministic tests, with six destructive
+  or external-service integrations skipped behind explicit live gates. That run
+  includes the short-pipe framing, builder mount normalization, and strict
+  path-component-containment regressions. Existing opt-in tests pass against
+  Apple’s live runtime for provisioning, interactive PTY, and image-reference
+  behavior. The push/pull round trip remains hard-gated to a disposable
+  localhost registry and is never run against public services.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview and split container inspector render successfully in
   Xcode Preview in light mode.
@@ -129,6 +133,31 @@ Updated: 2026-06-20.
   stale digests, exact platform absence, infrastructure references, partial
   pull publication, verified unpack outcomes, and serialization across actor
   suspension points.
+- The Builds destination reviews a private local context, canonical tag state,
+  exact target platforms, builder resources, build arguments, labels, target
+  stage, cache policy, and pull policy before execution.
+- A signed embedded one-shot worker owns Apple’s public
+  `ContainerBuild.Builder` lifetime. Exact builder descriptor, digest, DNS,
+  creation identity, and dial state are revalidated; running or uncertain
+  builders are never stopped as failed-create cleanup.
+- Build contexts reject links and special files, preserve Docker-visible POSIX
+  modes, and bind metadata plus content in a SHA-256 fingerprint checked before
+  and after solve. Canceled staging and queued builds remove partial private
+  contexts promptly.
+- OCI exports are copied out of the guest-visible builder directory into a
+  descriptor-validated mode-0400 host artifact with a bound byte count and
+  SHA-256. Import revalidates its identity, reconciles ambiguous XPC import/tag
+  replies, reports durable partial completion, and removes both artifact
+  locations independently of task cancellation.
+- A live Xcode probe exercised the app’s embedded signed worker against Apple’s
+  1.0.0 services: it staged a Dockerfile context, reused the shared BuildKit
+  container, exported and imported OCI, verified the arm64 snapshot, applied a
+  unique reviewed tag, started a container, read the built marker through native
+  exec, and removed the container, tag, private artifact, and shared export.
+- A separate live cancellation probe interrupted a 60-second BuildKit step five
+  seconds after launch. The worker surfaced `CancellationError`, no final tag or
+  build artifact remained, and the preexisting container/image counts were
+  unchanged.
 
 ## Known configuration issue
 
@@ -143,8 +172,9 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add an isolated native `ContainerBuild` worker and builder lifecycle.
-2. Add volume/network lifecycle and open-in-browser helpers.
+1. Add volume/network lifecycle and open-in-browser helpers.
+2. Add explicit builder-cache management plus build secrets, SSH forwarding,
+   cache import/export, history, and alternate outputs.
 3. Add the entitlement through a functioning Xcode capability surface, then
    implement and live-verify macOS installation and VM lifecycle.
 4. Spike a pinned Socktainer process and a product-specific Docker context.

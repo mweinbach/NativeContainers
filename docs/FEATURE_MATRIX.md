@@ -6,7 +6,7 @@ called out rather than papered over.
 | Capability | Native implementation | Phase | Constraint |
 | --- | --- | --- | --- |
 | OCI pull/push/list/tag/prune | Apple image services | M1 | Reviewed exact-platform pull/push, rich inspect, safe tag/delete, and prune are live; public push smoke is intentionally prohibited |
-| Dockerfile/Containerfile builds | Apple BuildKit VM | M1 | 1.0.0 has a known 16 KiB Dockerfile limit |
+| Dockerfile/Containerfile builds | Apple `ContainerBuild` + shared BuildKit VM | M2 | Reviewed exact-platform OCI builds are live through a signed worker; 1.0.0 requires Dockerfiles below 16 KiB and lacks structured progress/cache prune |
 | Container lifecycle | `ContainerClient` | M1 | Foundation start/stop/delete is wired |
 | Exec, logs, copy, inspect, stats | `ContainerClient` + SwiftTerm | M1 | Non-interactive exec and native interactive PTY are live |
 | Volumes and named networks | Apple services | M1 | Preserve sparse ext4/APFS clone optimizations |
@@ -15,7 +15,7 @@ called out rather than papered over.
 | Docker Compose | Docker CLI through compatibility service | M2 | Compatibility matrix required |
 | Registry credentials | Apple Keychain client | M1 | Login/list/logout live; stored secrets never leave Keychain |
 | Rosetta `linux/amd64` applications | Apple Containerization | M1 | ARM Linux guest; not an x86 VM |
-| Persistent Linux dev machines | `MachineClient` | M2 | Foundation inventory/lifecycle is wired |
+| Persistent Linux dev machines | `MachineClient` | M3 | Foundation inventory/lifecycle is wired |
 | Shared-kernel/project density | Experimental `LinuxPod` | M5 | Opt-in only after upstream stabilization |
 | Kubernetes | k3s in a dedicated Linux machine | M5 | Separate lifecycle and storage plan |
 | macOS restore/install | `VZMacOSRestoreImage` / `VZMacOSInstaller` | M4 | Download/preparation live; install awaits entitlement |

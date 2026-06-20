@@ -19,9 +19,15 @@
 flowchart LR
     UI["SwiftUI management app"] --> Model["@MainActor app model"]
     Model --> ContainerPort["ContainerManaging"]
+    Model --> BuildPort["ImageBuilding"]
     Model --> VMPort["VirtualMachineManaging"]
     ContainerPort --> AppleClient["apple/container Swift clients"]
     AppleClient --> XPC["Apple container XPC services"]
+    BuildPort --> Stage["Private reviewed context"]
+    Stage --> Worker["Signed one-shot build worker"]
+    Worker --> BuildKit["Apple ContainerBuild + shared BuildKit VM"]
+    BuildKit --> Artifact["Isolated OCI artifact"]
+    Artifact --> AppleClient
     XPC --> CZ["Containerization package"]
     CZ --> VZ1["Virtualization.framework micro-VM per container"]
     VMPort --> Library["VM bundle library"]
@@ -68,6 +74,41 @@ SwiftTerm. Transport and rendering are separate: the service owns process,
 descriptor, signal, resize, retention, and cancellation semantics; the AppKit
 surface owns VT parsing, drawing, keyboard input, selection, and terminal
 protocol replies.
+
+Native builds cross a narrower `ImageBuilding` boundary. Review first copies
+the local context beneath a mode-0700 app-owned boundary, preserves the source
+POSIX modes that BuildKit exposes to `COPY`, and records a metadata-and-content
+fingerprint, Dockerfile and ignore hashes, canonical target tags and current
+digests, exact platforms, builder resources, and build flags. A code-signed
+one-shot helper owns Apple’s `ContainerBuild.Builder` and its otherwise
+unclosable NIO/gRPC lifetime. Before and after dialing, it revalidates the exact
+reviewed builder descriptor, creation identity, image digest, DNS configuration,
+and socket. It produces an OCI archive under a unique staging reference but
+never mutates final tags.
+
+Canonical Dockerfile and ignore paths are checked as strict descendants by
+path component, not textual prefix. This accepts directory URLs normalized with
+or without a trailing separator while rejecting the context itself and sibling
+paths that merely share its name prefix.
+
+The guest-visible export is descriptor-validated, copied into a host-private
+mode-0400 artifact, and bound to its byte count and SHA-256. The app revalidates
+that identity immediately before import, reconciles ambiguous import/tag XPC
+failures by re-listing committed state, verifies snapshots, and tags under the
+same mutation coordinator as image CRUD. Build execution is cancellation-aware
+single-flight, while the long solve stays outside the global mutation lock.
+
+The worker protocol reserves stdout for capped length-prefixed control frames
+and stderr for a bounded plain BuildKit log. The parent keeps stdin open as a
+lifetime lease and escalates TERM to KILL on cancellation. Cleanup removes both
+guest-visible and private artifacts in a cancellation-independent task,
+including builds canceled while queued. Context and worker isolation prevent
+stale review data and leaked process resources; they do not claim to sandbox a
+compromised BuildKit implementation.
+
+The worker reads its short request frame with one POSIX `read`. Foundation’s
+counted pipe read can wait for the entire requested buffer while the input lease
+is intentionally open, which would deadlock every real build before dispatch.
 
 During foundation development the GUI connects to a matching installed Apple
 `container` 1.0.0 service. A distributable product must embed a version-matched,
@@ -127,6 +168,10 @@ selection and lifecycle commands.
 - Writes use temporary files plus atomic replacement.
 - VM creation is staged so cancellation cannot leave a valid-looking partial
   bundle.
+- Build contexts are staged without following links and re-fingerprinted before
+  and after the BuildKit solve; exported archives are copied into a private,
+  digest-bound host artifact; final tags are revalidated immediately before
+  mutation.
 - Credentials stay in Keychain through Apple’s registry client facilities.
 - No container or VM is deleted without a confirmation that names the affected
   disks and snapshots.

@@ -221,3 +221,70 @@ app validates an exact requested platform before push, retains and cancels UI
 tasks across sheet lifetime, and provides an opt-in round-trip smoke only for a
 disposable localhost registry. If push throws after the network call begins,
 remote state is reported as uncertain rather than safe to retry blindly.
+
+## ADR-014: Isolate native BuildKit sessions and finalize images in the app
+
+**Status:** Accepted — 2026-06-20
+
+Dockerfile and Containerfile builds use the exact pinned
+`ContainerBuild.Builder` API, not an installed CLI and not a second build
+engine. `Builder` owns an unstructured gRPC task, a vsock, and a caller-supplied
+NIO event-loop group without a public shutdown method in 1.0.0. Each builder
+preparation or build therefore runs in a bundled, code-signed, one-shot tool.
+The app launches its exact bundle URL without a shell, exchanges 1 MiB-capped
+length-prefixed Codable frames, drains raw BuildKit stderr concurrently, and
+uses stdin as a parent-lifetime lease. Cancellation sends TERM, then KILL after
+a grace period; an orphaned worker exits when the parent lease closes. The
+worker consumes its small request with one POSIX `read`, because Foundation’s
+counted pipe read can wait for a full buffer while that lease remains open.
+
+The worker never applies a requested mutable tag. BuildKit exports one OCI
+archive under a unique `nativecontainers.local` staging reference. The worker
+descriptor-validates that guest-visible export, copies it to an app-owned
+mode-0700 directory as a mode-0400 `out.tar`, records its byte count and SHA-256,
+removes the shared copy, and exits. The app validates the digest when accepting
+the artifact, then revalidates the exact inode metadata and length immediately
+before loading it. Under the app-wide image mutation lock,
+the GUI revalidates every reviewed target digest, imports the archive, verifies
+and materializes every exact platform snapshot, applies the reviewed tags, and
+removes the staging reference only if its digest is unchanged. Import and tag
+exceptions are reconciled by re-listing committed state; any durable work is
+reported as success or explicit partial completion rather than safe to retry.
+
+The shared `buildkit` container is Apple infrastructure. A pure policy checks
+its role/plugin labels, pinned executable and arguments, root non-TTY process,
+capabilities, exact export mounts, built-in network, image descriptor digest,
+DNS configuration, resources, Rosetta, and managed color environment. Identity
+conflicts, stopping state, and unknown state are never overridden.
+Configuration drift requires separate explicit permission to recreate a
+stopped builder or to stop a running builder; the latter warns that an external
+CLI build may be interrupted. A failed create never stops a running or
+uncertain builder that may belong to another process. The controller retains
+the reviewed snapshot and re-fetches the same creation timestamp and full
+identity immediately before each mutation and both before and after dialing.
+Post-dial drift closes the socket before `Builder` construction. Apple’s
+reference-only API still cannot provide a cross-process compare-and-swap for
+the final call.
+
+Build contexts are copied beneath a UUID-named mode-0700 app staging boundary
+through `lstat`, `O_NOFOLLOW`, and bounded descriptor reads. Symlinks and
+special files are rejected; regular-file and child-directory POSIX modes are
+preserved so Docker `COPY` semantics remain correct. Dockerfiles at or above
+16 KiB are rejected, and custom `# syntax=` frontends are not accepted. A
+sorted SHA-256 fingerprint covers entry kind, mode, ownership, size, mtime, and
+file bytes and is checked immediately before and after `Builder.build`.
+Detached staging propagates cancellation and removes partial trees. A changed
+context can produce a disposable archive but cannot be imported or tagged.
+Canonical Dockerfile and ignore paths must be strict component-wise descendants
+of the staged context; textual prefix checks are invalid because directory URLs
+may retain a trailing separator and sibling names may share the same prefix.
+This staging and process isolation is a lifecycle and consistency boundary,
+not an App Sandbox or a defense against a fully compromised same-user process.
+
+Only one build runs at a time. Containerization 0.33.3 has a platform-Hashable
+bug fixed after the pin that can break concurrent multi-stage builds. Its
+`AsyncLock` also cannot cancel queued waiters, so the app uses a local
+cancellation-aware FIFO lock and cleans a queued plan immediately on cancel.
+Builder preparation and final image-store mutation share the runtime mutation
+lock; the long BuildKit solve uses the separate single-flight lock so ordinary
+container lifecycle work is not blocked for the entire build.

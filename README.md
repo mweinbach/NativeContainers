@@ -32,19 +32,17 @@ Foundation work is underway. See:
 The current foundation includes native container lifecycle and inspection,
 exec/copy and interactive PTY workflows, safe OCI image management, Apple
 Keychain-backed registry login management, reviewed native pull/push transfers,
+reviewed Dockerfile/Containerfile builds through Apple’s public BuildKit APIs,
 and macOS restore-image preparation.
 
 ## Build
 
 The Xcode project is generated from `project.yml` so project configuration is
-reviewable:
-
-```sh
-xcodegen generate
-open NativeContainers.xcodeproj
-```
-
-Build and test with the `NativeContainers` scheme on `My Mac`.
+reviewable. Build and test with the `NativeContainers` scheme on `My Mac`.
+Agent-driven Xcode work uses Xcode MCP exclusively for project configuration,
+builds, tests, launches, logs, and debugging. `xcodebuild` and shell-launched app
+bundles are intentionally not part of this repository’s development workflow;
+see [AGENTS.md](AGENTS.md).
 
 The deterministic suite runs without mutating the local runtime. To run the
 reversible live provisioning, PTY, and image-reference smokes, set
@@ -56,3 +54,10 @@ Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when
 `NATIVECONTAINERS_LOCAL_REGISTRY_REPOSITORY` names a repository on a disposable
 `localhost`, `127.0.0.1`, or `[::1]` registry.
+
+Native build smokes are separately gated because first use can fetch and start
+Apple’s shared builder VM. Set `NATIVECONTAINERS_LIVE_BUILD_TESTS=1` to build a
+unique Alpine-derived image through the signed embedded worker, verify its
+snapshot and marker in a running container, and remove the test resources.
+The longer cancellation probe requires
+`NATIVECONTAINERS_LIVE_BUILD_CANCELLATION_TESTS=1`.

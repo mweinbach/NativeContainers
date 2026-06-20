@@ -37,7 +37,10 @@ must leave a usable, test-backed product slice.
 
 ## M2 — Developer workflow and Docker compatibility
 
-- [ ] Dockerfile/Containerfile build workflow through Apple’s builder.
+- [x] Reviewed Dockerfile/Containerfile build workflow through Apple’s public
+      builder API and an isolated signed worker.
+- [ ] Build secrets, SSH forwarding, cache import/export, alternate outputs,
+      history, and explicit builder-cache management.
 - [ ] Version-pinned Socktainer service and product-specific Docker context.
 - [ ] Compose parser and lifecycle coordinator, with conformance fixtures.
 - [ ] Automatic project detection and per-project status.

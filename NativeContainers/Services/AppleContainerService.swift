@@ -16,14 +16,16 @@ actor AppleContainerService: ContainerManaging {
 
   private let containerClient = ContainerClient()
   private let machineClient = MachineClient()
-  private let runtimeMutationCoordinator = RuntimeMutationCoordinator()
+  private let runtimeMutationCoordinator: RuntimeMutationCoordinator
   private let terminalProcessLauncher: any ContainerTerminalProcessLaunching
 
   init(
     terminalProcessLauncher: any ContainerTerminalProcessLaunching =
-      AppleContainerTerminalProcessLauncher()
+      AppleContainerTerminalProcessLauncher(),
+    runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared
   ) {
     self.terminalProcessLauncher = terminalProcessLauncher
+    self.runtimeMutationCoordinator = runtimeMutationCoordinator
   }
 
   func loadInventory() async throws -> ContainerInventory {
