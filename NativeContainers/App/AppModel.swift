@@ -154,6 +154,10 @@ final class AppModel {
     }
   }
 
+  func makeContainerToolsModel(containerID: String) -> ContainerToolsModel {
+    ContainerToolsModel(containerID: containerID, service: containerService)
+  }
+
   private func performMutation(
     _ operation: @escaping @Sendable () async throws -> Void
   ) async {

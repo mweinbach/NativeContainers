@@ -241,6 +241,66 @@ struct AppModelTests {
     #expect(await service.forceStoppedContainerIDs == ["worker"])
     #expect(await service.loadCount == 2)
   }
+
+  @Test
+  func toolsModelExecutesCommandAndCopiesBothDirections() async throws {
+    let service = MockContainerService(inventory: emptyInventory())
+    let model = ContainerToolsModel(containerID: "web", service: service)
+    let command = try ContainerCommandRequest(
+      executable: "/bin/echo",
+      arguments: ["hello"],
+      environment: [try ContainerEnvironmentVariable(key: "MODE", value: "test")],
+      timeoutSeconds: 5
+    )
+
+    await model.execute(command)
+
+    #expect(model.commandResult?.exitCode == 0)
+    #expect(model.commandResult?.standardOutput == "ok\n")
+    #expect(model.errorMessage == nil)
+    #expect(await service.commandRequests == [command])
+
+    let localSource = URL(filePath: "/tmp/source.txt")
+    let localDestination = URL(filePath: "/tmp/export")
+    let copyIn = try ContainerFileTransferRequest(
+      direction: .intoContainer,
+      localURL: localSource,
+      containerPath: "/tmp/source.txt"
+    )
+    let copyOut = try ContainerFileTransferRequest(
+      direction: .fromContainer,
+      localURL: localDestination,
+      containerPath: "/tmp/result.txt"
+    )
+
+    #expect(await model.transfer(copyIn))
+    #expect(await model.transfer(copyOut))
+    let copiedIn = await service.copiedIntoContainer
+    let copiedOut = await service.copiedFromContainer
+    #expect(copiedIn.count == 1)
+    #expect(copiedIn.first?.0 == "web")
+    #expect(copiedIn.first?.2 == "/tmp/source.txt")
+    #expect(copiedOut.count == 1)
+    #expect(copiedOut.first?.0 == "web")
+    #expect(copiedOut.first?.1 == "/tmp/result.txt")
+  }
+
+  @Test
+  func containerToolRequestsRejectUnsafeInputs() throws {
+    #expect(throws: ContainerToolValidationError.missingExecutable) {
+      try ContainerCommandRequest(executable: "")
+    }
+    #expect(throws: ContainerToolValidationError.invalidTimeout) {
+      try ContainerCommandRequest(executable: "/bin/true", timeoutSeconds: 0)
+    }
+    #expect(throws: ContainerToolValidationError.invalidContainerPath("relative")) {
+      try ContainerFileTransferRequest(
+        direction: .fromContainer,
+        localURL: URL(filePath: "/tmp"),
+        containerPath: "relative"
+      )
+    }
+  }
 }
 
 private func emptyInventory() -> ContainerInventory {
@@ -268,6 +328,9 @@ private actor MockContainerService: ContainerManaging {
   private(set) var pulledImageReferences: [String] = []
   private(set) var restartedContainerIDs: [String] = []
   private(set) var forceStoppedContainerIDs: [String] = []
+  private(set) var commandRequests: [ContainerCommandRequest] = []
+  private(set) var copiedIntoContainer: [(String, URL, String)] = []
+  private(set) var copiedFromContainer: [(String, String, URL)] = []
   private(set) var loadCount = 0
   private(set) var sampleCount = 0
   private(set) var logLoadCount = 0
@@ -333,6 +396,25 @@ private actor MockContainerService: ContainerManaging {
   func restartContainer(id: String) async throws { restartedContainerIDs.append(id) }
   func forceStopContainer(id: String) async throws { forceStoppedContainerIDs.append(id) }
   func deleteContainer(id: String) async throws {}
+  func executeCommand(
+    in id: String,
+    request: ContainerCommandRequest
+  ) async throws -> ContainerCommandResult {
+    commandRequests.append(request)
+    return ContainerCommandResult(
+      exitCode: 0,
+      standardOutput: "ok\n",
+      standardError: "",
+      outputWasTruncated: false,
+      duration: .milliseconds(10)
+    )
+  }
+  func copyIntoContainer(id: String, source: URL, destination: String) async throws {
+    copiedIntoContainer.append((id, source, destination))
+  }
+  func copyFromContainer(id: String, source: String, destination: URL) async throws {
+    copiedFromContainer.append((id, source, destination))
+  }
   func startMachine(id: String) async throws {}
   func stopMachine(id: String) async throws {}
   func deleteMachine(id: String) async throws {}

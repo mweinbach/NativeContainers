@@ -23,7 +23,8 @@ must leave a usable, test-backed product slice.
 - [x] Bounded log follow, search, and native file export.
 - [x] One-shot CPU, memory, disk, network, block-I/O, and process statistics.
 - [x] Two-second live statistics sampling and bounded in-memory history.
-- [ ] Exec terminal and file copy in/out.
+- [x] Bounded non-interactive exec console and file copy in/out.
+- [ ] Interactive PTY terminal with resize, input, and signal forwarding.
 - [x] Image pull with platform selection and byte/item progress.
 - [ ] Image build, tag, push, inspect, and prune.
 - [ ] Volume and network create/inspect/delete flows.

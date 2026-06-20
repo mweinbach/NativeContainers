@@ -7,7 +7,7 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- Thirteen deterministic Swift Testing cases pass. A fourteenth opt-in
+- Fifteen deterministic Swift Testing cases pass. A sixteenth opt-in
   integration test covers live Apple-service provisioning.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview and split container inspector render successfully in
@@ -40,6 +40,16 @@ Updated: 2026-06-20.
   selection, case-insensitive line filtering, match counts, and native text-file
   export. Lifecycle controls include five-second graceful stop, restart, and
   explicit force stop.
+- The native exec sheet runs non-interactive commands through
+  `ContainerClient.createProcess`, concurrently drains stdout/stderr into
+  independently bounded 1 MiB tails, enforces cancellation and timeouts by
+  killing the child process, and reports exit status and duration.
+- Bidirectional file transfer uses Apple’s `copyIn`/`copyOut` clients with native
+  file/folder pickers, absolute guest-path validation, parent creation, and
+  security-scoped URL handling.
+- A live Xcode snippet started a disposable Alpine container, captured exec
+  output, copied a file in, read it inside, copied it back out, verified the
+  round trip, and cleaned all container and host artifacts.
 
 ## Known configuration issue
 
@@ -54,7 +64,7 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add exec/terminal plus file copy and image-management depth.
+1. Add an interactive PTY terminal and image-management depth.
 2. Add volume/network lifecycle and open-in-browser helpers.
 3. Implement local/latest IPSW selection, resumable download, and transactional
    macOS VM preparation while the entitlement tooling issue remains isolated.

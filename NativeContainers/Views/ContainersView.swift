@@ -178,6 +178,8 @@ struct ContainerInspectorView: View {
   @State private var isLive = true
   @State private var followsLogs = true
   @State private var logQuery = ""
+  @State private var isShowingExec = false
+  @State private var isShowingFileTransfer = false
 
   init(container: ContainerRecord, appModel: AppModel) {
     self.container = container
@@ -197,7 +199,9 @@ struct ContainerInspectorView: View {
           onStart: { Task { await appModel.startContainer(id: container.id) } },
           onStop: { Task { await appModel.stopContainer(id: container.id) } },
           onRestart: { Task { await appModel.restartContainer(id: container.id) } },
-          onForceStop: { Task { await appModel.forceStopContainer(id: container.id) } }
+          onForceStop: { Task { await appModel.forceStopContainer(id: container.id) } },
+          onExec: { isShowingExec = true },
+          onCopyFiles: { isShowingFileTransfer = true }
         )
 
         if let errorMessage = model.errorMessage {
@@ -235,6 +239,12 @@ struct ContainerInspectorView: View {
       guard isLive, container.state.isRunning else { return }
       await model.monitor(followLogs: followsLogs)
     }
+    .sheet(isPresented: $isShowingExec) {
+      ContainerExecView(containerID: container.id, appModel: appModel)
+    }
+    .sheet(isPresented: $isShowingFileTransfer) {
+      ContainerFileTransferView(containerID: container.id, appModel: appModel)
+    }
   }
 }
 
@@ -253,6 +263,8 @@ struct ContainerInspectorHeader: View {
   let onStop: () -> Void
   let onRestart: () -> Void
   let onForceStop: () -> Void
+  let onExec: () -> Void
+  let onCopyFiles: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -283,6 +295,7 @@ struct ContainerInspectorHeader: View {
         }
         Spacer()
         if container.state.isRunning {
+          Button("Exec", systemImage: "terminal", action: onExec)
           Toggle("Live", systemImage: "waveform.path.ecg", isOn: $isLive)
             .toggleStyle(.button)
             .help("Sample runtime statistics every two seconds")
@@ -296,6 +309,7 @@ struct ContainerInspectorHeader: View {
             .help("Restart container")
           Button("Stop", systemImage: "stop.fill", action: onStop)
           Menu("More", systemImage: "ellipsis.circle") {
+            Button("Copy Files…", systemImage: "doc.on.doc", action: onCopyFiles)
             Button(
               "Force Stop",
               systemImage: "bolt.fill",
@@ -305,6 +319,7 @@ struct ContainerInspectorHeader: View {
           }
           .menuStyle(.borderlessButton)
         } else {
+          Button("Copy Files…", systemImage: "doc.on.doc", action: onCopyFiles)
           Button("Start", systemImage: "play.fill", action: onStart)
             .buttonStyle(.borderedProminent)
         }
