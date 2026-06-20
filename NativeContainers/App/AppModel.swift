@@ -18,16 +18,22 @@ final class AppModel {
 
   private let containerService: any ContainerManaging
   private let virtualMachineLibrary: any VirtualMachineLibraryProtocol
+  private let restoreImageDiscovery: any MacRestoreImageDiscovering
+  private let restoreImageDownloader: any MacRestoreImageDownloading
   private var hasLoaded = false
 
   init(
     containerService: any ContainerManaging = AppleContainerService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
+    restoreImageDiscovery: any MacRestoreImageDiscovering = MacRestoreImageService(),
+    restoreImageDownloader: any MacRestoreImageDownloading = RestoreImageDownloadService(),
     initialInventory: ContainerInventory? = nil,
     initialVirtualMachines: [VirtualMachineManifest] = []
   ) {
     self.containerService = containerService
     self.virtualMachineLibrary = virtualMachineLibrary
+    self.restoreImageDiscovery = restoreImageDiscovery
+    self.restoreImageDownloader = restoreImageDownloader
     if let initialInventory {
       systemInfo = initialInventory.system
       containers = initialInventory.containers
@@ -136,6 +142,14 @@ final class AppModel {
     virtualMachines = try await virtualMachineLibrary.list()
   }
 
+  func prepareMacVirtualMachine(id: UUID, restoreImageURL: URL) async throws {
+    _ = try await virtualMachineLibrary.prepareMacVM(
+      id: id,
+      restoreImageURL: restoreImageURL
+    )
+    virtualMachines = try await virtualMachineLibrary.list()
+  }
+
   func clearError() {
     errorMessage = nil
   }
@@ -156,6 +170,21 @@ final class AppModel {
 
   func makeContainerToolsModel(containerID: String) -> ContainerToolsModel {
     ContainerToolsModel(containerID: containerID, service: containerService)
+  }
+
+  func makeMacRestoreImagePreparationModel(
+    for machine: VirtualMachineManifest
+  ) -> MacRestoreImagePreparationModel {
+    MacRestoreImagePreparationModel(
+      machine: machine,
+      discovery: restoreImageDiscovery,
+      downloader: restoreImageDownloader
+    ) { [self] restoreImageURL in
+      try await prepareMacVirtualMachine(
+        id: machine.id,
+        restoreImageURL: restoreImageURL
+      )
+    }
   }
 
   private func performMutation(

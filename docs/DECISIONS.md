@@ -77,3 +77,23 @@ transaction, progress, and error boundaries.
 
 Parser helpers remain appropriate for OCI command/environment merging,
 resource syntax, and port descriptors. The app owns orchestration and rollback.
+
+## ADR-009: Separate restore-image cache from transactional VM identity
+
+**Status:** Accepted — 2026-06-20
+
+Downloaded IPSWs live in the app cache rather than inside every VM bundle. A
+persistent `.partial` file supports HTTP range continuation; a validated 206
+response appends at exactly the requested offset, a 200 response restarts the
+file, cancellation keeps resumable bytes, and a complete response is promoted
+atomically. Progress is coalesced so a multi-gigabyte transfer cannot build an
+unbounded UI backlog.
+
+The VM bundle stores only the artifacts that define that virtual Mac: disk,
+hardware model, machine identifier, auxiliary storage, and manifest. Those
+platform artifacts are prepared together in a staging directory. The directory
+is atomically renamed before the manifest is atomically updated; any failure
+removes staged or promoted artifacts and leaves the draft manifest unchanged.
+
+This avoids copying a large IPSW per VM while preserving a self-contained VM
+identity boundary for move, clone, backup, and delete operations.

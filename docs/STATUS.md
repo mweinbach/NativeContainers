@@ -7,7 +7,7 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- Fifteen deterministic Swift Testing cases pass. A sixteenth opt-in
+- Twenty-seven deterministic Swift Testing cases pass. A twenty-eighth opt-in
   integration test covers live Apple-service provisioning.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview and split container inspector render successfully in
@@ -17,6 +17,16 @@ Updated: 2026-06-20.
   image, volume, and machine counts.
 - VM draft creation uses a staging directory, atomic manifest write, sparse disk
   allocation, and final rename; tests verify reload and cleanup.
+- The macOS VM preparation sheet discovers Apple’s latest supported IPSW,
+  accepts a local IPSW, reports compatibility requirements, and drives a
+  resumable cache download with bounded progress. HTTP 206 ranges are validated,
+  HTTP 200 responses safely restart stale partials, cancellation preserves the
+  partial file, and completion atomically promotes it.
+- Local restore-image validation now uses `VZMacOSRestoreImage.image(from:)`.
+  Hardware model data, a fresh machine identifier, and matching auxiliary
+  storage are created in a staging directory, validated as a set, atomically
+  promoted into the VM bundle, and then committed to the manifest. Tests prove
+  both successful reload and rollback on partial failure.
 - Container detail inspection uses Apple’s direct API client for configuration,
   disk usage, one-shot CPU/memory/network/block/process statistics, stdout, and
   boot logs. Log reads are bounded to the newest 512 KiB per stream.
@@ -66,6 +76,6 @@ no developer-team or provisioning-profile change should be needed.
 
 1. Add an interactive PTY terminal and image-management depth.
 2. Add volume/network lifecycle and open-in-browser helpers.
-3. Implement local/latest IPSW selection, resumable download, and transactional
-   macOS VM preparation while the entitlement tooling issue remains isolated.
+3. Add the entitlement through a functioning Xcode capability surface, then
+   implement and live-verify macOS installation and VM lifecycle.
 4. Spike a pinned Socktainer process and a product-specific Docker context.

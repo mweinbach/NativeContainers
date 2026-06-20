@@ -78,6 +78,21 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.updatedAt = createdAt
     self.diskImagePath = diskImagePath
   }
+
+  mutating func markReadyToInstallMacOS(
+    restoreImageURL: URL,
+    auxiliaryStoragePath: String,
+    hardwareModelPath: String,
+    machineIdentifierPath: String,
+    updatedAt: Date = Date()
+  ) {
+    installState = .readyToInstall
+    self.restoreImageURL = restoreImageURL
+    self.auxiliaryStoragePath = auxiliaryStoragePath
+    self.hardwareModelPath = hardwareModelPath
+    self.machineIdentifierPath = machineIdentifierPath
+    self.updatedAt = updatedAt
+  }
 }
 
 struct MacRestoreImageInfo: Codable, Equatable, Sendable {
@@ -98,6 +113,11 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
   case insufficientDisk
   case unsupportedSchema(Int)
   case duplicateIdentifier(UUID)
+  case virtualMachineNotFound(UUID)
+  case requiresMacOSGuest(UUID)
+  case invalidInstallState(VirtualMachineInstallState)
+  case platformArtifactsAlreadyExist(UUID)
+  case macPlatformPreparationUnavailable
 
   var errorDescription: String? {
     switch self {
@@ -113,6 +133,16 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
       "This virtual machine uses unsupported manifest version \(version)."
     case .duplicateIdentifier(let identifier):
       "A virtual machine with identifier \(identifier.uuidString) already exists."
+    case .virtualMachineNotFound(let identifier):
+      "No virtual machine with identifier \(identifier.uuidString) exists."
+    case .requiresMacOSGuest(let identifier):
+      "Virtual machine \(identifier.uuidString) is not configured for macOS."
+    case .invalidInstallState(let state):
+      "A virtual machine in the \(state.rawValue) state cannot prepare macOS platform artifacts."
+    case .platformArtifactsAlreadyExist(let identifier):
+      "macOS platform artifacts already exist for virtual machine \(identifier.uuidString)."
+    case .macPlatformPreparationUnavailable:
+      "macOS platform preparation is unavailable for this virtual machine library."
     }
   }
 }

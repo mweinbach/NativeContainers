@@ -7,6 +7,13 @@ protocol VirtualMachineLibraryProtocol: Sendable {
     guest: VirtualMachineGuest,
     resources: VirtualMachineResources
   ) async throws -> VirtualMachineManifest
+  func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest
+}
+
+extension VirtualMachineLibraryProtocol {
+  func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest {
+    throw VirtualMachineModelError.macPlatformPreparationUnavailable
+  }
 }
 
 actor VirtualMachineLibrary: VirtualMachineLibraryProtocol {
@@ -15,10 +22,16 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol {
 
   private let rootURL: URL
   private let fileManager: FileManager
+  private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
 
-  init(rootURL: URL? = nil, fileManager: FileManager = .default) {
+  init(
+    rootURL: URL? = nil,
+    fileManager: FileManager = .default,
+    macPlatformArtifactPreparer: any MacPlatformArtifactPreparing = MacPlatformArtifactPreparer()
+  ) {
     self.fileManager = fileManager
     self.rootURL = rootURL ?? Self.defaultRootURL(fileManager: fileManager)
+    self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
   }
 
   func list() throws -> [VirtualMachineManifest] {
@@ -36,12 +49,7 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol {
       let values = try bundleURL.resourceValues(forKeys: resourceKeys)
       guard values.isDirectory == true, values.isHidden != true else { return nil }
 
-      let data = try Data(contentsOf: bundleURL.appending(path: Self.manifestFilename))
-      let manifest = try Self.decoder.decode(VirtualMachineManifest.self, from: data)
-      guard manifest.schemaVersion == VirtualMachineManifest.currentSchemaVersion else {
-        throw VirtualMachineModelError.unsupportedSchema(manifest.schemaVersion)
-      }
-      return manifest
+      return try readManifest(in: bundleURL)
     }
     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
@@ -78,6 +86,75 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol {
     }
   }
 
+  func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest {
+    try ensureRootExists()
+
+    let bundleURL = bundleURL(for: id)
+    guard fileManager.fileExists(atPath: bundleURL.path) else {
+      throw VirtualMachineModelError.virtualMachineNotFound(id)
+    }
+
+    var manifest = try readManifest(in: bundleURL)
+    guard manifest.guest == .macOS else {
+      throw VirtualMachineModelError.requiresMacOSGuest(id)
+    }
+    guard manifest.installState == .draft else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+
+    let finalArtifactDirectory = bundleURL.appending(
+      path: MacPlatformArtifactURLs.directoryName,
+      directoryHint: .isDirectory
+    )
+    let manifestContainsArtifacts =
+      manifest.auxiliaryStoragePath != nil
+      || manifest.hardwareModelPath != nil
+      || manifest.machineIdentifierPath != nil
+    guard !manifestContainsArtifacts,
+      !fileManager.fileExists(atPath: finalArtifactDirectory.path)
+    else {
+      throw VirtualMachineModelError.platformArtifactsAlreadyExist(id)
+    }
+
+    let stagingDirectory = bundleURL.appending(
+      path: ".\(MacPlatformArtifactURLs.directoryName).partial-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    let stagingArtifacts = MacPlatformArtifactURLs(directory: stagingDirectory)
+    var promotedArtifacts = false
+
+    do {
+      try fileManager.createDirectory(
+        at: stagingDirectory,
+        withIntermediateDirectories: false
+      )
+      try await macPlatformArtifactPreparer.prepare(
+        restoreImageURL: restoreImageURL,
+        resources: manifest.resources,
+        destination: stagingArtifacts
+      )
+      try validatePreparedArtifacts(stagingArtifacts)
+
+      try fileManager.moveItem(at: stagingDirectory, to: finalArtifactDirectory)
+      promotedArtifacts = true
+
+      manifest.markReadyToInstallMacOS(
+        restoreImageURL: restoreImageURL,
+        auxiliaryStoragePath: MacPlatformArtifactURLs.auxiliaryStorageManifestPath,
+        hardwareModelPath: MacPlatformArtifactURLs.hardwareModelManifestPath,
+        machineIdentifierPath: MacPlatformArtifactURLs.machineIdentifierManifestPath
+      )
+      try write(manifest, to: bundleURL.appending(path: Self.manifestFilename))
+      return manifest
+    } catch {
+      try? fileManager.removeItem(at: stagingDirectory)
+      if promotedArtifacts {
+        try? fileManager.removeItem(at: finalArtifactDirectory)
+      }
+      throw error
+    }
+  }
+
   private func ensureRootExists() throws {
     try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
   }
@@ -86,6 +163,26 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol {
     rootURL
       .appending(path: id.uuidString.lowercased(), directoryHint: .isDirectory)
       .appendingPathExtension(Self.bundleExtension)
+  }
+
+  private func readManifest(in bundleURL: URL) throws -> VirtualMachineManifest {
+    let data = try Data(contentsOf: bundleURL.appending(path: Self.manifestFilename))
+    let manifest = try Self.decoder.decode(VirtualMachineManifest.self, from: data)
+    guard manifest.schemaVersion == VirtualMachineManifest.currentSchemaVersion else {
+      throw VirtualMachineModelError.unsupportedSchema(manifest.schemaVersion)
+    }
+    return manifest
+  }
+
+  private func validatePreparedArtifacts(_ artifacts: MacPlatformArtifactURLs) throws {
+    for artifact in artifacts.all {
+      var isDirectory: ObjCBool = false
+      guard fileManager.fileExists(atPath: artifact.path, isDirectory: &isDirectory),
+        !isDirectory.boolValue
+      else {
+        throw MacPlatformArtifactError.missingArtifact(artifact.lastPathComponent)
+      }
+    }
   }
 
   private func createSparseDisk(at url: URL, size: UInt64) throws {

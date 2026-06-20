@@ -60,9 +60,17 @@ The installed Apple documentation confirms:
   it. The current blocker is Xcode MCP’s entitlement catalog rejecting the key,
   not the developer account or provisioning profile.
 - `VZMacOSRestoreImage.latestSupported` discovers the newest restore image the
-  current host supports; local images can be loaded explicitly.
+  current host supports; SDK 27 exposes local loading as
+  `VZMacOSRestoreImage.image(from:) async throws`.
 - The restore image’s most featureful supported configuration supplies the
   compatible hardware model and CPU/memory requirements.
+- Apple explicitly requires the network URL returned by latest-image discovery
+  to be downloaded to a local file before constructing `VZMacOSInstaller`.
+- New auxiliary storage is created with
+  `VZMacAuxiliaryStorage(creatingStorageAt:hardwareModel:options:)`. The exact
+  hardware model used there must also be set on the VM platform configuration.
+- Both `VZMacHardwareModel` and `VZMacMachineIdentifier` provide opaque
+  `dataRepresentation` values intended for persistent reconstruction.
 - A macOS VM must persist its hardware model, machine identifier, auxiliary
   storage, and main disk together.
 - `VZVirtualMachineConfiguration.validate()` is the preflight gate.

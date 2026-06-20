@@ -8,7 +8,7 @@ called out rather than papered over.
 | OCI pull/push/list/tag/prune | Apple image services | M1 | Foundation lists live images |
 | Dockerfile/Containerfile builds | Apple BuildKit VM | M1 | 1.0.0 has a known 16 KiB Dockerfile limit |
 | Container lifecycle | `ContainerClient` | M1 | Foundation start/stop/delete is wired |
-| Exec, logs, copy, inspect, stats | `ContainerClient` | M1 | UI remains to build |
+| Exec, logs, copy, inspect, stats | `ContainerClient` | M1 | Non-interactive exec is live; interactive PTY remains |
 | Volumes and named networks | Apple services | M1 | Preserve sparse ext4/APFS clone optimizations |
 | Direct container IP and published ports | Apple vmnet/socket forwarders | M1 | No exact shared host loopback |
 | Docker CLI and Engine API | Socktainer compatibility service | M2 | Partial API v1.51 today |
@@ -18,7 +18,7 @@ called out rather than papered over.
 | Persistent Linux dev machines | `MachineClient` | M2 | Foundation inventory/lifecycle is wired |
 | Shared-kernel/project density | Experimental `LinuxPod` | M5 | Opt-in only after upstream stabilization |
 | Kubernetes | k3s in a dedicated Linux machine | M5 | Separate lifecycle and storage plan |
-| macOS restore/install | `VZMacOSRestoreImage` / `VZMacOSInstaller` | M4 | Apple silicon only |
+| macOS restore/install | `VZMacOSRestoreImage` / `VZMacOSInstaller` | M4 | Download/preparation live; install awaits entitlement |
 | macOS display/input | `VZVirtualMachineView` | M4 | Native AppKit bridge already scaffolded |
 | VM pause/resume/stop/recovery | `VZVirtualMachine` | M4 | Validate state before each action |
 | VM shared folders | VirtioFS | M4 | Guest support and scoped host access |
@@ -46,4 +46,3 @@ Every implementation milestone should record:
 Optimizations belong behind measured regressions. The Apple runtime’s existing
 optimized kernel, sparse ext4 images, APFS clone-on-write roots, dedicated IPs,
 and launchd-managed helpers are the starting point, not code to replace.
-

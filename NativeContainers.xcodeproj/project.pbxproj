@@ -10,6 +10,7 @@
 		05B396E66464C298777F3A51 /* SystemPackage in Frameworks */ = {isa = PBXBuildFile; productRef = E31E37C1FC7D132EE584B7DA /* SystemPackage */; };
 		0CCB9B1572811399DAE295EE /* ContainerToolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC0AB3F17054924DA710733 /* ContainerToolsView.swift */; };
 		133138E6CF020F1C1ED96378 /* MachineAPIClient in Frameworks */ = {isa = PBXBuildFile; productRef = F846A45DDAF8A293AAFE7EB5 /* MachineAPIClient */; };
+		19E20564B7D56C32F75FE527 /* RestoreImageDownloadServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C0B3804B6A81EC6343C2BD /* RestoreImageDownloadServiceTests.swift */; };
 		1BBD6A591ECFFBA28911EA50 /* ContainerAPIClient in Frameworks */ = {isa = PBXBuildFile; productRef = FEDBA359A3DD0CDF024FA4CD /* ContainerAPIClient */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
 		267B8B7DEB728875D45C11CC /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 50A6FE055FE52A768F0F9C9A /* Localizable.xcstrings */; };
@@ -18,6 +19,7 @@
 		455E49DED3838B07FB756991 /* ImagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDA90501AD818258C2C4324C /* ImagesView.swift */; };
 		462AE2C76CA12DEDE32C9AF0 /* Virtualization.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D4337E1F793A693C6D5225FD /* Virtualization.framework */; };
 		472AD22A235AF25FAD33B256 /* TerminalProgress in Frameworks */ = {isa = PBXBuildFile; productRef = 8F4F48F51AEFA714D796B104 /* TerminalProgress */; };
+		4C866FE48A250D91907E0D23 /* RestoreImageDownloadModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 392CAC7B7617C3194AB4EC1E /* RestoreImageDownloadModels.swift */; };
 		4DBEA60A3A33B0528C68106A /* VirtualMachineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6494E2249097A4BB56E1115 /* VirtualMachineModels.swift */; };
 		4F656DDFC3706DF8D8B4E3C0 /* ContainerCreationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */; };
 		4FA86E4DFEA1057AB15C8955 /* ContainerPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = F4D556CC3FAA227FB9391CEA /* ContainerPersistence */; };
@@ -32,6 +34,7 @@
 		6EFDAA07140EDCC9B4FB8615 /* LinuxMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25B22569E6E84558346EB362 /* LinuxMachinesView.swift */; };
 		72D23C0E9992E41005DDACDC /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F24FF99A077D017F8ABA497 /* RootView.swift */; };
 		73762F62AD06A7F38EA6E1E3 /* ContainerToolsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AEBD1F64838AA435C30CD0A /* ContainerToolsModel.swift */; };
+		78D8757B9A4FE8F19E8883AF /* MacPlatformArtifactPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 742BD26E898320625825152A /* MacPlatformArtifactPreparer.swift */; };
 		8753FE26B39E232AECFF3010 /* MacRestoreImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C559BC791E8C3A91155CE7D2 /* MacRestoreImageService.swift */; };
 		9797C01E4560B0E89E706FBF /* AppleContainerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7E5028209B0DFC80B8A2C8 /* AppleContainerService.swift */; };
 		97A0664149C8957C65DD1674 /* ContainerToolModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0A17DF6DFEB39965C7E7C58 /* ContainerToolModels.swift */; };
@@ -39,8 +42,11 @@
 		9D0A93C7B104FECF0AC7E446 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092D4DA1EB30193AC095265A /* SettingsView.swift */; };
 		A0AE31A3A8A12AAEE077BBC1 /* ContainersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 594129E25C393F840817F89F /* ContainersView.swift */; };
 		A0DD72D3DC5A2BDF51E4E131 /* ContainerResource in Frameworks */ = {isa = PBXBuildFile; productRef = 8056B0FD3F6799321F7D7A25 /* ContainerResource */; };
+		A84C9E71E18B6F05297928CC /* MacRestoreImagePreparationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0BB5F9D6F70F66374A5AE0C /* MacRestoreImagePreparationModelTests.swift */; };
+		ABEE87307ABFB2C102B3C269 /* MacRestoreImagePreparationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774B63F952CE86F525B7A805 /* MacRestoreImagePreparationModel.swift */; };
 		B10B22FAA12D249A147360B3 /* VolumesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEED10D5DDE4C2769E97A932 /* VolumesView.swift */; };
 		B1148E3495B9B990BDE15006 /* AppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64FCAE44305E93880025D275 /* AppModelTests.swift */; };
+		BEF88012C7F13A21B4B2C57E /* RestoreImageDownloadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2DE73C2235A83091C7DFBC /* RestoreImageDownloadService.swift */; };
 		C2C2661B8E02F3B836209B2A /* VirtualMachineModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75005055A132B627A00B3FA2 /* VirtualMachineModelsTests.swift */; };
 		C97458AB7FAA1014800D8EB3 /* ResourceComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A0681391CAB1853E5FE397 /* ResourceComponents.swift */; };
 		CF01A590ABF08323E6B93DC7 /* ContainerInspectorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5106D84EA701494900018CC2 /* ContainerInspectorModel.swift */; };
@@ -67,6 +73,7 @@
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
 		2F24FF99A077D017F8ABA497 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		357DD8753B23B96AFD013E55 /* NativeContainersTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NativeContainersTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		392CAC7B7617C3194AB4EC1E /* RestoreImageDownloadModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageDownloadModels.swift; sourceTree = "<group>"; };
 		3B6C635AC318F3EB740EBE02 /* ContainerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerModels.swift; sourceTree = "<group>"; };
 		467A7DAF55C068899D8C9B81 /* PreviewSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewSupport.swift; sourceTree = "<group>"; };
 		47B62BFC2522EEAA0D77920A /* NativeContainers.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NativeContainers.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -77,7 +84,9 @@
 		64D4E58C6D55A831045BD8B8 /* ContainerProvisioningModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerProvisioningModel.swift; sourceTree = "<group>"; };
 		64FCAE44305E93880025D275 /* AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelTests.swift; sourceTree = "<group>"; };
 		6D1302799610B115E7F71236 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		742BD26E898320625825152A /* MacPlatformArtifactPreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPlatformArtifactPreparer.swift; sourceTree = "<group>"; };
 		75005055A132B627A00B3FA2 /* VirtualMachineModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineModelsTests.swift; sourceTree = "<group>"; };
+		774B63F952CE86F525B7A805 /* MacRestoreImagePreparationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRestoreImagePreparationModel.swift; sourceTree = "<group>"; };
 		8425A4E68B15EEC200CBDA07 /* VirtualMachineLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineLibrary.swift; sourceTree = "<group>"; };
 		8AEBD1F64838AA435C30CD0A /* ContainerToolsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerToolsModel.swift; sourceTree = "<group>"; };
 		8C1F9CEF3FD52963FD22CEEF /* VirtualMachineLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineLibraryTests.swift; sourceTree = "<group>"; };
@@ -85,6 +94,8 @@
 		95490ED77FEE23FBBF921592 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		9A434CEEAF32D9C8EBB3CE7F /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
 		9C7E5028209B0DFC80B8A2C8 /* AppleContainerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleContainerService.swift; sourceTree = "<group>"; };
+		A6C0B3804B6A81EC6343C2BD /* RestoreImageDownloadServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageDownloadServiceTests.swift; sourceTree = "<group>"; };
+		AF2DE73C2235A83091C7DFBC /* RestoreImageDownloadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageDownloadService.swift; sourceTree = "<group>"; };
 		C4A0681391CAB1853E5FE397 /* ResourceComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceComponents.swift; sourceTree = "<group>"; };
 		C559BC791E8C3A91155CE7D2 /* MacRestoreImageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRestoreImageService.swift; sourceTree = "<group>"; };
 		C6494E2249097A4BB56E1115 /* VirtualMachineModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineModels.swift; sourceTree = "<group>"; };
@@ -92,6 +103,7 @@
 		D872832B249A2CC9F3C873EF /* LiveAppleContainerSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAppleContainerSmokeTests.swift; sourceTree = "<group>"; };
 		DFC0AB3F17054924DA710733 /* ContainerToolsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerToolsView.swift; sourceTree = "<group>"; };
 		E0A17DF6DFEB39965C7E7C58 /* ContainerToolModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerToolModels.swift; sourceTree = "<group>"; };
+		E0BB5F9D6F70F66374A5AE0C /* MacRestoreImagePreparationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRestoreImagePreparationModelTests.swift; sourceTree = "<group>"; };
 		EDA90501AD818258C2C4324C /* ImagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagesView.swift; sourceTree = "<group>"; };
 		F023DF90411E232804D84D7E /* NativeContainersApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContainersApp.swift; sourceTree = "<group>"; };
 		FEED10D5DDE4C2769E97A932 /* VolumesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumesView.swift; sourceTree = "<group>"; };
@@ -142,6 +154,7 @@
 				93EFBB6FB16910BCF71ACF44 /* ContainerCreationModels.swift */,
 				3B6C635AC318F3EB740EBE02 /* ContainerModels.swift */,
 				E0A17DF6DFEB39965C7E7C58 /* ContainerToolModels.swift */,
+				392CAC7B7617C3194AB4EC1E /* RestoreImageDownloadModels.swift */,
 				C6494E2249097A4BB56E1115 /* VirtualMachineModels.swift */,
 			);
 			path = Domain;
@@ -152,6 +165,8 @@
 			children = (
 				64FCAE44305E93880025D275 /* AppModelTests.swift */,
 				D872832B249A2CC9F3C873EF /* LiveAppleContainerSmokeTests.swift */,
+				E0BB5F9D6F70F66374A5AE0C /* MacRestoreImagePreparationModelTests.swift */,
+				A6C0B3804B6A81EC6343C2BD /* RestoreImageDownloadServiceTests.swift */,
 				8C1F9CEF3FD52963FD22CEEF /* VirtualMachineLibraryTests.swift */,
 				75005055A132B627A00B3FA2 /* VirtualMachineModelsTests.swift */,
 			);
@@ -163,7 +178,9 @@
 			children = (
 				9C7E5028209B0DFC80B8A2C8 /* AppleContainerService.swift */,
 				18FEBB337510AA54210882BB /* ContainerManaging.swift */,
+				742BD26E898320625825152A /* MacPlatformArtifactPreparer.swift */,
 				C559BC791E8C3A91155CE7D2 /* MacRestoreImageService.swift */,
+				AF2DE73C2235A83091C7DFBC /* RestoreImageDownloadService.swift */,
 				FF7D72F56C28FAC26CFCC861 /* VirtualMachineConsoleView.swift */,
 				8425A4E68B15EEC200CBDA07 /* VirtualMachineLibrary.swift */,
 			);
@@ -193,6 +210,7 @@
 				5106D84EA701494900018CC2 /* ContainerInspectorModel.swift */,
 				64D4E58C6D55A831045BD8B8 /* ContainerProvisioningModel.swift */,
 				8AEBD1F64838AA435C30CD0A /* ContainerToolsModel.swift */,
+				774B63F952CE86F525B7A805 /* MacRestoreImagePreparationModel.swift */,
 				F023DF90411E232804D84D7E /* NativeContainersApp.swift */,
 			);
 			path = App;
@@ -343,6 +361,8 @@
 			files = (
 				B1148E3495B9B990BDE15006 /* AppModelTests.swift in Sources */,
 				D8DF94C1E183B21524D3E70F /* LiveAppleContainerSmokeTests.swift in Sources */,
+				A84C9E71E18B6F05297928CC /* MacRestoreImagePreparationModelTests.swift in Sources */,
+				19E20564B7D56C32F75FE527 /* RestoreImageDownloadServiceTests.swift in Sources */,
 				28033CCAC546F43031537AAF /* VirtualMachineLibraryTests.swift in Sources */,
 				C2C2661B8E02F3B836209B2A /* VirtualMachineModelsTests.swift in Sources */,
 			);
@@ -366,11 +386,15 @@
 				A0AE31A3A8A12AAEE077BBC1 /* ContainersView.swift in Sources */,
 				455E49DED3838B07FB756991 /* ImagesView.swift in Sources */,
 				6EFDAA07140EDCC9B4FB8615 /* LinuxMachinesView.swift in Sources */,
+				78D8757B9A4FE8F19E8883AF /* MacPlatformArtifactPreparer.swift in Sources */,
+				ABEE87307ABFB2C102B3C269 /* MacRestoreImagePreparationModel.swift in Sources */,
 				8753FE26B39E232AECFF3010 /* MacRestoreImageService.swift in Sources */,
 				6D997CBC0773804955C7F048 /* NativeContainersApp.swift in Sources */,
 				3520842AEB27B251F26E94E5 /* OverviewView.swift in Sources */,
 				515EDFD55BB4EFF79D4B9003 /* PreviewSupport.swift in Sources */,
 				C97458AB7FAA1014800D8EB3 /* ResourceComponents.swift in Sources */,
+				4C866FE48A250D91907E0D23 /* RestoreImageDownloadModels.swift in Sources */,
+				BEF88012C7F13A21B4B2C57E /* RestoreImageDownloadService.swift in Sources */,
 				72D23C0E9992E41005DDACDC /* RootView.swift in Sources */,
 				9D0A93C7B104FECF0AC7E446 /* SettingsView.swift in Sources */,
 				DE0FF5308EB763EEE31EE921 /* SidebarDestination.swift in Sources */,

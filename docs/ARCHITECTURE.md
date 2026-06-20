@@ -72,6 +72,12 @@ The manifest records relative paths only, allowing a bundle to be moved or
 backed up as one unit. Runtime-only objects such as `VZVirtualMachine` never go
 into the manifest.
 
+Downloaded macOS IPSWs are intentionally outside this boundary in the app cache
+so multiple VMs can reuse one multi-gigabyte installer. The manifest records its
+selected local URL, while the hardware model, machine identifier, and auxiliary
+storage derived from that image remain bundle-owned and are promoted
+transactionally.
+
 ### UI lane
 
 The SwiftUI shell uses a `NavigationSplitView` with separate screens for:

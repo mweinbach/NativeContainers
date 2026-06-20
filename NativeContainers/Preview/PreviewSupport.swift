@@ -1,6 +1,12 @@
 import Foundation
 
 extension AppModel {
+  static var previewVirtualMachines: AppModel {
+    let model = preview
+    model.selection = .macOSVirtualMachines
+    return model
+  }
+
   static var previewContainers: AppModel {
     let model = preview
     model.selection = .containers
