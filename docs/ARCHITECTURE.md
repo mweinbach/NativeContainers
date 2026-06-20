@@ -45,6 +45,14 @@ This keeps UI tests fast and isolates package source changes.
 The installed Apple services remain the authority for runtime state. The app
 does not create a second database of containers, images, networks, or volumes.
 
+Interactive terminals remain in this lane. The app asks
+`ContainerClient.createProcess` for a terminal-mode child, passes pipe file
+descriptors through Apple’s XPC boundary, and streams the resulting bytes into
+SwiftTerm. Transport and rendering are separate: the service owns process,
+descriptor, signal, resize, retention, and cancellation semantics; the AppKit
+surface owns VT parsing, drawing, keyboard input, selection, and terminal
+protocol replies.
+
 During foundation development the GUI connects to a matching installed Apple
 `container` 1.0.0 service. A distributable product must embed a version-matched,
 namespaced build of Apple’s Apache-licensed services and helpers so it can
@@ -91,9 +99,10 @@ The SwiftUI shell uses a `NavigationSplitView` with separate screens for:
 - Settings and diagnostics
 
 An `@MainActor @Observable` app model owns prepared, stable-identity view data.
-Feature views take narrow values. The sole AppKit bridge is an
-`NSViewRepresentable` around `VZVirtualMachineView`; SwiftUI remains the source
-of truth for selection and lifecycle commands.
+Feature views take narrow values. AppKit bridges are intentionally narrow:
+`NSViewRepresentable` wraps SwiftTerm’s `TerminalView` for container shells and
+`VZVirtualMachineView` for VM display. SwiftUI remains the source of truth for
+selection and lifecycle commands.
 
 ## Persistence and safety
 

@@ -42,6 +42,7 @@ open NativeContainers.xcodeproj
 Build and test with the `NativeContainers` scheme on `My Mac`.
 
 The deterministic suite runs without mutating the local runtime. To run the
-reversible live provisioning smoke, set `NATIVECONTAINERS_LIVE_TESTS=1` for the
-test action; it creates, verifies, and deletes a uniquely named stopped Alpine
-container.
+reversible live provisioning and PTY smokes, set
+`NATIVECONTAINERS_LIVE_TESTS=1` for the test action. They create uniquely named
+Alpine containers, verify native lifecycle and interactive-terminal behavior,
+and delete every test resource.

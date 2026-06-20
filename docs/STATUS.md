@@ -7,8 +7,8 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- Twenty-seven deterministic Swift Testing cases pass. A twenty-eighth opt-in
-  integration test covers live Apple-service provisioning.
+- Forty-seven deterministic Swift Testing cases pass. Two opt-in integration
+  tests cover live Apple-service provisioning and interactive PTY behavior.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview and split container inspector render successfully in
   Xcode Preview in light mode.
@@ -60,6 +60,26 @@ Updated: 2026-06-20.
 - A live Xcode snippet started a disposable Alpine container, captured exec
   output, copied a file in, read it inside, copied it back out, verified the
   round trip, and cleaned all container and host artifacts.
+- Running containers now expose an interactive terminal backed directly by
+  `ContainerClient.createProcess` with terminal mode enabled. Raw bytes flow
+  through bounded, lossless backpressure into a pinned SwiftTerm 1.13.0 AppKit
+  surface; input, resize, Control-C/Control-D, explicit signals, title, working
+  directory, scrollback, copy, and paste are wired without a CLI subprocess.
+- Terminal shutdown closes stdin, sends hangup, allows a short graceful exit,
+  and escalates to kill. Output recovery retains only the newest configured
+  bytes, while the live stream preserves every byte. The pipe reader uses
+  `poll` plus one POSIX `read` so short interactive bursts are delivered before
+  EOF rather than waiting to fill a large Foundation read request.
+- Input writes are ordered on a dedicated queue, nonblocking, cancellation-aware,
+  and protected from `SIGPIPE` without changing process-wide signal handling.
+  Descriptor reads and closure share one lifetime lock, resize bursts are
+  coalesced, a replacement shell performs a full emulator reset, and an
+  unconfirmed kill remains visible and retryable instead of dismissing the
+  terminal as though shutdown succeeded.
+- A live Xcode test-host smoke created and started a disposable Alpine
+  container, opened a native PTY, verified the requested `33×91` geometry,
+  round-tripped canonical stdin, delivered Control-C, observed a clean child
+  exit, and removed the container.
 
 ## Known configuration issue
 
@@ -74,7 +94,7 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add an interactive PTY terminal and image-management depth.
+1. Add image build, tag, push, inspect, and prune workflows.
 2. Add volume/network lifecycle and open-in-browser helpers.
 3. Add the entitlement through a functioning Xcode capability surface, then
    implement and live-verify macOS installation and VM lifecycle.

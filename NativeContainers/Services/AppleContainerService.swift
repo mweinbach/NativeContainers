@@ -14,6 +14,14 @@ actor AppleContainerService: ContainerManaging {
 
   private let containerClient = ContainerClient()
   private let machineClient = MachineClient()
+  private let terminalProcessLauncher: any ContainerTerminalProcessLaunching
+
+  init(
+    terminalProcessLauncher: any ContainerTerminalProcessLaunching =
+      AppleContainerTerminalProcessLauncher()
+  ) {
+    self.terminalProcessLauncher = terminalProcessLauncher
+  }
 
   func loadInventory() async throws -> ContainerInventory {
     async let healthRequest = ClientHealthCheck.ping()
@@ -497,6 +505,37 @@ actor AppleContainerService: ContainerManaging {
       try? standardErrorPipe.fileHandleForReading.close()
       standardOutputTask.cancel()
       standardErrorTask.cancel()
+      throw error
+    }
+  }
+
+  func openTerminal(
+    in id: String,
+    request: ContainerTerminalRequest
+  ) async throws -> any ContainerTerminalSession {
+    let id = id.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !id.isEmpty else {
+      throw ContainerTerminalError.invalidContainerIdentifier
+    }
+
+    let transport = PipeContainerTerminalTransport()
+    do {
+      let process = try await terminalProcessLauncher.makeProcess(
+        containerID: id,
+        request: request,
+        standardInput: transport.childStandardInput,
+        standardOutput: transport.childStandardOutput
+      )
+
+      let session = AppleContainerTerminalSession(
+        process: process,
+        transport: transport,
+        maximumRetainedOutputBytes: request.maximumRetainedOutputBytes
+      )
+      try await session.start(initialSize: request.initialSize)
+      return session
+    } catch {
+      transport.closeAll()
       throw error
     }
   }

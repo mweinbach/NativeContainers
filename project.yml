@@ -19,6 +19,12 @@ packages:
   AppleContainer:
     url: https://github.com/apple/container.git
     exactVersion: 1.0.0
+  AppleContainerization:
+    url: https://github.com/apple/containerization.git
+    exactVersion: 0.33.3
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm.git
+    exactVersion: 1.13.0
   SwiftSystem:
     url: https://github.com/apple/swift-system.git
     from: 1.6.4
@@ -40,6 +46,10 @@ targets:
         product: TerminalProgress
       - package: AppleContainer
         product: MachineAPIClient
+      - package: AppleContainerization
+        product: ContainerizationOS
+      - package: SwiftTerm
+        product: SwiftTerm
       - package: SwiftSystem
         product: SystemPackage
       - sdk: Virtualization.framework

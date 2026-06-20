@@ -97,3 +97,39 @@ removes staged or promoted artifacts and leaves the draft manifest unchanged.
 
 This avoids copying a large IPSW per VM while preserving a self-contained VM
 identity boundary for move, clone, backup, and delete operations.
+
+## ADR-010: Keep terminal transport native and terminal rendering replaceable
+
+**Status:** Accepted — 2026-06-20
+
+Interactive shells use Apple’s `ContainerClient.createProcess` directly with
+`ProcessConfiguration.terminal` enabled. The app passes stdin and stdout file
+descriptors across the same XPC boundary as Apple’s CLI, starts and resizes the
+returned `ClientProcess`, forwards raw input and signals, and owns deterministic
+hangup-to-kill shutdown. It does not launch `container exec`, allocate a second
+PTY in the GUI, or decode output into lines before rendering.
+
+SwiftTerm 1.13.0 is pinned as the replaceable VT renderer. It supplies the
+AppKit terminal view, input method integration, selection, scrollback, escape
+sequence handling, and terminal protocol replies. The app-specific adapter
+blocks guest-originated OSC 52 clipboard writes and only opens HTTP(S) links.
+Transport types do not import SwiftTerm.
+
+The Apple package graph is also pinned directly to Containerization 0.33.3 for
+the public terminal-size type, exactly matching `apple/container` 1.0.0. This
+avoids dependency skew while keeping terminal process ownership inside Apple’s
+service client.
+
+Pipe output uses `poll` followed by one POSIX `read`. Foundation’s bounded file
+read can wait for the requested byte count or EOF on a blocking descriptor,
+which is incorrect for small interactive bursts. The output stream applies
+bounded backpressure without dropping bytes, while a separate bounded tail
+exists only for reconnect/error recovery.
+
+Input uses a serialized, nonblocking `poll`/`write` pump so SwiftTerm callback
+ordering is preserved and a full guest pipe cannot pin an actor executor.
+Writes set `F_SETNOSIGPIPE` and temporarily block and drain only the calling
+thread’s `SIGPIPE`; the app never changes process-wide signal disposition.
+Output reads and descriptor closure share a lifetime lock to prevent descriptor
+reuse races. A failed kill is retained as a visible, retryable failed session,
+and opening a replacement shell sends a full terminal reset before new output.

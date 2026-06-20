@@ -178,6 +178,7 @@ struct ContainerInspectorView: View {
   @State private var isLive = true
   @State private var followsLogs = true
   @State private var logQuery = ""
+  @State private var isShowingTerminal = false
   @State private var isShowingExec = false
   @State private var isShowingFileTransfer = false
 
@@ -200,6 +201,7 @@ struct ContainerInspectorView: View {
           onStop: { Task { await appModel.stopContainer(id: container.id) } },
           onRestart: { Task { await appModel.restartContainer(id: container.id) } },
           onForceStop: { Task { await appModel.forceStopContainer(id: container.id) } },
+          onTerminal: { isShowingTerminal = true },
           onExec: { isShowingExec = true },
           onCopyFiles: { isShowingFileTransfer = true }
         )
@@ -242,6 +244,9 @@ struct ContainerInspectorView: View {
     .sheet(isPresented: $isShowingExec) {
       ContainerExecView(containerID: container.id, appModel: appModel)
     }
+    .sheet(isPresented: $isShowingTerminal) {
+      ContainerTerminalView(containerID: container.id, appModel: appModel)
+    }
     .sheet(isPresented: $isShowingFileTransfer) {
       ContainerFileTransferView(containerID: container.id, appModel: appModel)
     }
@@ -263,6 +268,7 @@ struct ContainerInspectorHeader: View {
   let onStop: () -> Void
   let onRestart: () -> Void
   let onForceStop: () -> Void
+  let onTerminal: () -> Void
   let onExec: () -> Void
   let onCopyFiles: () -> Void
 
@@ -295,7 +301,9 @@ struct ContainerInspectorHeader: View {
         }
         Spacer()
         if container.state.isRunning {
-          Button("Exec", systemImage: "terminal", action: onExec)
+          Button("Terminal", systemImage: "terminal.fill", action: onTerminal)
+            .buttonStyle(.borderedProminent)
+          Button("Exec", systemImage: "chevron.left.forwardslash.chevron.right", action: onExec)
           Toggle("Live", systemImage: "waveform.path.ecg", isOn: $isLive)
             .toggleStyle(.button)
             .help("Sample runtime statistics every two seconds")

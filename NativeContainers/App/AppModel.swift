@@ -172,6 +172,10 @@ final class AppModel {
     ContainerToolsModel(containerID: containerID, service: containerService)
   }
 
+  func makeContainerTerminalModel(containerID: String) -> ContainerTerminalModel {
+    ContainerTerminalModel(containerID: containerID, service: containerService)
+  }
+
   func makeMacRestoreImagePreparationModel(
     for machine: VirtualMachineManifest
   ) -> MacRestoreImagePreparationModel {

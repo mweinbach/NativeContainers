@@ -193,11 +193,63 @@ private actor PreviewContainerService: ContainerManaging {
       duration: .milliseconds(42)
     )
   }
+  func openTerminal(
+    in id: String,
+    request: ContainerTerminalRequest
+  ) async throws -> any ContainerTerminalSession {
+    PreviewContainerTerminalSession(containerID: id)
+  }
   func copyIntoContainer(id: String, source: URL, destination: String) async throws {}
   func copyFromContainer(id: String, source: String, destination: URL) async throws {}
   func startMachine(id: String) async throws {}
   func stopMachine(id: String) async throws {}
   func deleteMachine(id: String) async throws {}
+}
+
+private actor PreviewContainerTerminalSession: ContainerTerminalSession {
+  nonisolated let output: AsyncStream<Data>
+
+  private let continuation: AsyncStream<Data>.Continuation
+  private var lifecycle = ContainerTerminalLifecycle.running
+  private var retainedOutput: Data
+
+  init(containerID: String) {
+    let pair = AsyncStream.makeStream(of: Data.self)
+    output = pair.stream
+    continuation = pair.continuation
+    retainedOutput = Data(
+      "\u{1B}[1;34mNativeContainers\u{1B}[0m · \(containerID)\r\n\u{1B}[32m/ #\u{1B}[0m ".utf8
+    )
+    continuation.yield(retainedOutput)
+  }
+
+  func sendInput(_ data: Data) {
+    continuation.yield(data)
+  }
+
+  func resize(to size: ContainerTerminalSize) {}
+
+  func sendSignal(_ signal: ContainerTerminalSignal) {}
+
+  func snapshot() -> ContainerTerminalSnapshot {
+    ContainerTerminalSnapshot(
+      lifecycle: lifecycle,
+      retainedOutput: retainedOutput,
+      outputWasTruncated: false
+    )
+  }
+
+  func wait() async throws -> Int32 {
+    while lifecycle == .running {
+      try await Task.sleep(for: .seconds(1))
+    }
+    return 0
+  }
+
+  func close() {
+    lifecycle = .closed
+    continuation.finish()
+  }
 }
 
 private actor PreviewVirtualMachineLibrary: VirtualMachineLibraryProtocol {

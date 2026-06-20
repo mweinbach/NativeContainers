@@ -8,7 +8,7 @@ called out rather than papered over.
 | OCI pull/push/list/tag/prune | Apple image services | M1 | Foundation lists live images |
 | Dockerfile/Containerfile builds | Apple BuildKit VM | M1 | 1.0.0 has a known 16 KiB Dockerfile limit |
 | Container lifecycle | `ContainerClient` | M1 | Foundation start/stop/delete is wired |
-| Exec, logs, copy, inspect, stats | `ContainerClient` | M1 | Non-interactive exec is live; interactive PTY remains |
+| Exec, logs, copy, inspect, stats | `ContainerClient` + SwiftTerm | M1 | Non-interactive exec and native interactive PTY are live |
 | Volumes and named networks | Apple services | M1 | Preserve sparse ext4/APFS clone optimizations |
 | Direct container IP and published ports | Apple vmnet/socket forwarders | M1 | No exact shared host loopback |
 | Docker CLI and Engine API | Socktainer compatibility service | M2 | Partial API v1.51 today |

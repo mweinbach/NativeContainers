@@ -49,6 +49,42 @@ Verified architecture:
 The package remains an actively evolving open-source surface. Pinning an exact
 release and isolating it behind an adapter are both deliberate.
 
+## Interactive terminal
+
+- Apple’s own `container exec` creates a `ProcessIO`, passes stdin/stdout pipe
+  handles to `ContainerClient.createProcess`, enables terminal mode, starts the
+  process, closes the app’s child-side descriptor copies, applies the current
+  terminal size, and forwards signals. The app follows that public-client
+  lifecycle instead of wrapping the CLI.
+- A terminal transport must preserve arbitrary bytes; UTF-8 decoding, ANSI/VT
+  parsing, and terminal replies belong in the emulator. A bounded-one async
+  stream therefore retries backpressured chunks rather than accepting
+  `.dropped` as success.
+- On a blocking pipe, Foundation’s `read(upToCount:)` can hold a short terminal
+  burst until the requested buffer fills or the writer closes. `poll` plus a
+  single POSIX `read` delivered the available bytes immediately and is covered
+  by both an open-writer regression and a live Apple-service smoke.
+- Guest stdin has the inverse risk: a blocking write can suspend the session
+  actor indefinitely, while a closed pipe can terminate the host with
+  `SIGPIPE`. A serial nonblocking writer, `poll(POLLOUT)`, `F_SETNOSIGPIPE`, and
+  thread-scoped signal masking keep ordering, cancellation, and host survival
+  explicit. A shared descriptor-lifetime lock prevents close/read reuse races.
+- [SwiftTerm 1.13.0](https://github.com/migueldeicaza/SwiftTerm/tree/1.13.0)
+  is the pinned renderer. It is an MIT-licensed native Swift terminal engine
+  with AppKit `TerminalView`, selection, copy/paste, scrollback, input-method
+  handling, links, title/current-directory callbacks, and terminal response
+  forwarding. OrbStack also publishes a SwiftTerm fork, which is useful prior
+  art but not an API dependency.
+- Upstream SwiftTerm’s macOS accessibility service is currently minimal, and
+  its README notes limits around some complex IME behavior. The wrapper exposes
+  an accessibility group, label, and help now; full VoiceOver transcript
+  semantics and broader IME conformance remain explicit polish work rather than
+  hidden parity claims.
+- SwiftTerm can retain private terminal modes across process boundaries, so a
+  newly opened shell must receive a full RIS reset (`ESC c`), not only a clear
+  screen. Shell-path discovery and fallback beyond the current `/bin/sh`
+  default remain a separate workflow feature.
+
 ## Virtualization.framework
 
 The installed Apple documentation confirms:

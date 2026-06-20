@@ -22,9 +22,22 @@ protocol ContainerManaging: Sendable {
     in id: String,
     request: ContainerCommandRequest
   ) async throws -> ContainerCommandResult
+  func openTerminal(
+    in id: String,
+    request: ContainerTerminalRequest
+  ) async throws -> any ContainerTerminalSession
   func copyIntoContainer(id: String, source: URL, destination: String) async throws
   func copyFromContainer(id: String, source: String, destination: URL) async throws
   func startMachine(id: String) async throws
   func stopMachine(id: String) async throws
   func deleteMachine(id: String) async throws
+}
+
+extension ContainerManaging {
+  func openTerminal(
+    in id: String,
+    request: ContainerTerminalRequest
+  ) async throws -> any ContainerTerminalSession {
+    throw ContainerTerminalError.unsupported
+  }
 }
