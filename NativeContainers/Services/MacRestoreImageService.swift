@@ -7,28 +7,38 @@ protocol MacRestoreImageDiscovering: Sendable {
 
 struct MacRestoreImageService: MacRestoreImageDiscovering {
   func latestSupported() async throws -> MacRestoreImageInfo {
-    let image = try await VZMacOSRestoreImage.latestSupported
-    guard let requirements = image.mostFeaturefulSupportedConfiguration else {
-      throw MacRestoreImageError.noSupportedConfiguration
-    }
+    #if arch(arm64)
+      let image = try await VZMacOSRestoreImage.latestSupported
+      guard let requirements = image.mostFeaturefulSupportedConfiguration else {
+        throw MacRestoreImageError.noSupportedConfiguration
+      }
 
-    return MacRestoreImageInfo(
-      url: image.url,
-      buildVersion: image.buildVersion,
-      majorVersion: image.operatingSystemVersion.majorVersion,
-      minorVersion: image.operatingSystemVersion.minorVersion,
-      patchVersion: image.operatingSystemVersion.patchVersion,
-      minimumCPUCount: requirements.minimumSupportedCPUCount,
-      minimumMemoryBytes: requirements.minimumSupportedMemorySize,
-      isSupported: image.isSupported
-    )
+      return MacRestoreImageInfo(
+        url: image.url,
+        buildVersion: image.buildVersion,
+        majorVersion: image.operatingSystemVersion.majorVersion,
+        minorVersion: image.operatingSystemVersion.minorVersion,
+        patchVersion: image.operatingSystemVersion.patchVersion,
+        minimumCPUCount: requirements.minimumSupportedCPUCount,
+        minimumMemoryBytes: requirements.minimumSupportedMemorySize,
+        isSupported: image.isSupported
+      )
+    #else
+      throw MacRestoreImageError.requiresAppleSilicon
+    #endif
   }
 }
 
 enum MacRestoreImageError: LocalizedError {
   case noSupportedConfiguration
+  case requiresAppleSilicon
 
   var errorDescription: String? {
-    "The latest macOS restore image has no configuration supported by this Mac."
+    switch self {
+    case .noSupportedConfiguration:
+      "The latest macOS restore image has no configuration supported by this Mac."
+    case .requiresAppleSilicon:
+      "macOS virtual machines require a Mac with Apple silicon."
+    }
   }
 }

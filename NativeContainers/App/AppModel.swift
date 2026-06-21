@@ -62,8 +62,11 @@ final class AppModel {
     imageBuildService: any ImageBuilding = AppleContainerBuildService(),
     registryService: any RegistryManaging = AppleRegistryService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
+    virtualMachineInstaller: any MacVirtualMachineInstalling =
+      UnavailableMacVirtualMachineInstaller(),
     restoreImageDiscovery: any MacRestoreImageDiscovering = MacRestoreImageService(),
     restoreImageDownloader: any MacRestoreImageDownloading = RestoreImageDownloadService(),
+    restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService(),
     initialInventory: ContainerInventory? = nil,
     initialVirtualMachines: [VirtualMachineManifest] = []
   ) {
@@ -74,8 +77,10 @@ final class AppModel {
         imageBuild: imageBuildService,
         registry: registryService,
         virtualMachineLibrary: virtualMachineLibrary,
+        virtualMachineInstaller: virtualMachineInstaller,
         restoreImageDiscovery: restoreImageDiscovery,
-        restoreImageDownloader: restoreImageDownloader
+        restoreImageDownloader: restoreImageDownloader,
+        restoreImageImporter: restoreImageImporter
       ),
       initialInventory: initialInventory,
       initialVirtualMachines: initialVirtualMachines
@@ -85,6 +90,7 @@ final class AppModel {
   func loadIfNeeded() async {
     guard !hasLoaded else { return }
     hasLoaded = true
+    try? await services.virtualMachineInstaller.recoverInterruptedInstallations()
     await refresh()
   }
 
@@ -322,12 +328,24 @@ final class AppModel {
     MacRestoreImagePreparationModel(
       machine: machine,
       discovery: services.restoreImageDiscovery,
-      downloader: services.restoreImageDownloader
+      downloader: services.restoreImageDownloader,
+      importer: services.restoreImageImporter
     ) { [self] restoreImageURL in
       try await prepareMacVirtualMachine(
         id: machine.id,
         restoreImageURL: restoreImageURL
       )
+    }
+  }
+
+  func makeMacVirtualMachineInstallationModel(
+    for machine: VirtualMachineManifest
+  ) -> MacVirtualMachineInstallationModel {
+    MacVirtualMachineInstallationModel(
+      machine: machine,
+      installer: services.virtualMachineInstaller
+    ) { [weak self] in
+      await self?.refresh()
     }
   }
 

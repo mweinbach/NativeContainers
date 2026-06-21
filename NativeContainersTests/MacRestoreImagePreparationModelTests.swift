@@ -73,6 +73,41 @@ struct MacRestoreImagePreparationModelTests {
     #expect(await downloader.requestedURLs.isEmpty)
   }
 
+  @Test
+  func localImageIsImportedBeforePlatformPreparation() async throws {
+    let machine = try makeMachine()
+    let selectedURL = URL(filePath: "/tmp/Selected.ipsw")
+    let importedURL = URL(filePath: "/private/cache/Imported.ipsw")
+    let importer = TestRestoreImageImporter(importedURL: importedURL)
+    let recorder = PreparedURLRecorder()
+    let model = MacRestoreImagePreparationModel(
+      machine: machine,
+      discovery: TestRestoreImageDiscovery(
+        info: MacRestoreImageInfo(
+          url: URL(string: "https://example.test/macOS.ipsw")!,
+          buildVersion: "26A123",
+          majorVersion: 26,
+          minorVersion: 0,
+          patchVersion: 0,
+          minimumCPUCount: 4,
+          minimumMemoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+          isSupported: true
+        )
+      ),
+      downloader: TestRestoreImageDownloader(localURL: importedURL),
+      importer: importer
+    ) { url in
+      await recorder.record(url)
+    }
+
+    let succeeded = await model.prepareLocalImage(at: selectedURL)
+
+    #expect(succeeded)
+    #expect(model.stage == .finished)
+    #expect(await importer.requestedURLs == [selectedURL])
+    #expect(await recorder.urls == [importedURL])
+  }
+
   private func makeMachine(cpuCount: Int = 4) throws -> VirtualMachineManifest {
     try VirtualMachineManifest(
       name: "Development Mac",
@@ -114,6 +149,24 @@ private actor TestRestoreImageDownloader: MacRestoreImageDownloading {
       )
     )
     return localURL
+  }
+}
+
+private actor TestRestoreImageImporter: MacRestoreImageImporting {
+  let importedURL: URL
+  private(set) var requestedURLs: [URL] = []
+
+  init(importedURL: URL) {
+    self.importedURL = importedURL
+  }
+
+  func importImage(
+    at sourceURL: URL,
+    progress: @escaping RestoreImageDownloadProgressHandler
+  ) async throws -> URL {
+    requestedURLs.append(sourceURL)
+    await progress(RestoreImageDownloadProgress(receivedBytes: 8, totalBytes: 8))
+    return importedURL
   }
 }
 

@@ -27,7 +27,7 @@ actor RestoreImageDownloadService: MacRestoreImageDownloading {
     fileManager: FileManager = .default
   ) {
     self.downloadDirectoryURL =
-      downloadDirectoryURL ?? Self.defaultDownloadDirectory(fileManager: fileManager)
+      downloadDirectoryURL ?? RestoreImageCacheDirectory.defaultURL(fileManager: fileManager)
     self.sessionConfiguration = sessionConfiguration.copy() as! URLSessionConfiguration
     self.fileManager = fileManager
   }
@@ -158,12 +158,6 @@ actor RestoreImageDownloadService: MacRestoreImageDownloading {
       return "RestoreImage.ipsw"
     }
     return filename
-  }
-
-  private static func defaultDownloadDirectory(fileManager: FileManager) -> URL {
-    fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-      .appending(path: "NativeContainers", directoryHint: .isDirectory)
-      .appending(path: "Restore Images", directoryHint: .isDirectory)
   }
 }
 

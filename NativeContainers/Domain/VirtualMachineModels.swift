@@ -53,6 +53,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var hardwareModelPath: String?
   var machineIdentifierPath: String?
   var restoreImageURL: URL?
+  var installationOperationID: UUID? = nil
+  var installationFailure: VirtualMachineInstallationFailure? = nil
 
   init(
     id: UUID = UUID(),
@@ -79,6 +81,38 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.diskImagePath = diskImagePath
   }
 
+  mutating func markInstallationStarted(
+    operationID: UUID,
+    updatedAt: Date = Date()
+  ) {
+    installState = .installing
+    installationOperationID = operationID
+    installationFailure = nil
+    self.updatedAt = updatedAt
+  }
+
+  mutating func markInstallationCompleted(updatedAt: Date = Date()) {
+    installState = .stopped
+    installationOperationID = nil
+    installationFailure = nil
+    self.updatedAt = updatedAt
+  }
+
+  mutating func markInstallationFailed(
+    kind: VirtualMachineInstallationFailureKind,
+    message: String,
+    updatedAt: Date = Date()
+  ) {
+    installState = .failed
+    installationOperationID = nil
+    installationFailure = VirtualMachineInstallationFailure(
+      kind: kind,
+      message: message,
+      occurredAt: updatedAt
+    )
+    self.updatedAt = updatedAt
+  }
+
   mutating func markReadyToInstallMacOS(
     restoreImageURL: URL,
     auxiliaryStoragePath: String,
@@ -91,6 +125,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.auxiliaryStoragePath = auxiliaryStoragePath
     self.hardwareModelPath = hardwareModelPath
     self.machineIdentifierPath = machineIdentifierPath
+    installationOperationID = nil
+    installationFailure = nil
     self.updatedAt = updatedAt
   }
 }
@@ -138,7 +174,7 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
     case .requiresMacOSGuest(let identifier):
       "Virtual machine \(identifier.uuidString) is not configured for macOS."
     case .invalidInstallState(let state):
-      "A virtual machine in the \(state.rawValue) state cannot prepare macOS platform artifacts."
+      "A virtual machine in the \(state.rawValue) state cannot perform this operation."
     case .platformArtifactsAlreadyExist(let identifier):
       "macOS platform artifacts already exist for virtual machine \(identifier.uuidString)."
     case .macPlatformPreparationUnavailable:

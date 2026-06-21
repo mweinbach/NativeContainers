@@ -2,6 +2,7 @@ import Testing
 
 @testable import NativeContainers
 
+@MainActor
 @Suite("App composition root")
 struct AppCompositionRootTests {
   @Test
@@ -26,5 +27,8 @@ struct AppCompositionRootTests {
     #expect(services.imageBuild is RecordingImageBuildService)
     #expect(services.imageBuildHistory is ImageBuildHistoryStore)
     #expect(services.builder is AppleContainerBuilderManagementService)
+    #expect(services.virtualMachineLibrary is VirtualMachineLibrary)
+    #expect(services.virtualMachineInstaller is MacVirtualMachineInstallationService)
+    #expect(services.restoreImageImporter is RestoreImageImportService)
   }
 }

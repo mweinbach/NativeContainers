@@ -5,6 +5,7 @@ enum MacRestoreImagePreparationStage: Equatable, Sendable {
   case idle
   case discovering
   case downloading
+  case importing
   case preparing
   case finished
 }
@@ -21,23 +22,26 @@ final class MacRestoreImagePreparationModel {
 
   private let discovery: any MacRestoreImageDiscovering
   private let downloader: any MacRestoreImageDownloading
+  private let importer: any MacRestoreImageImporting
   private let prepare: @MainActor @Sendable (URL) async throws -> Void
 
   init(
     machine: VirtualMachineManifest,
     discovery: any MacRestoreImageDiscovering,
     downloader: any MacRestoreImageDownloading,
+    importer: any MacRestoreImageImporting = RestoreImageImportService(),
     prepare: @escaping @MainActor @Sendable (URL) async throws -> Void
   ) {
     self.machine = machine
     self.discovery = discovery
     self.downloader = downloader
+    self.importer = importer
     self.prepare = prepare
   }
 
   var isWorking: Bool {
     switch stage {
-    case .discovering, .downloading, .preparing:
+    case .discovering, .downloading, .importing, .preparing:
       true
     case .idle, .finished:
       false
@@ -114,7 +118,7 @@ final class MacRestoreImagePreparationModel {
 
   func prepareLocalImage(at url: URL) async -> Bool {
     guard !isWorking else { return false }
-    stage = .preparing
+    stage = .importing
     downloadProgress = nil
     errorMessage = nil
 
@@ -127,12 +131,17 @@ final class MacRestoreImagePreparationModel {
 
     do {
       try Task.checkCancellation()
-      try await prepare(url)
+      let importedURL = try await importer.importImage(at: url) { [weak self] update in
+        await self?.receive(update)
+      }
+      try Task.checkCancellation()
+      stage = .preparing
+      try await prepare(importedURL)
       stage = .finished
       return true
     } catch is CancellationError {
       stage = .idle
-      errorMessage = "Restore-image preparation was cancelled."
+      errorMessage = "Restore-image import or preparation was cancelled. No partial copy was kept."
       return false
     } catch {
       stage = .idle

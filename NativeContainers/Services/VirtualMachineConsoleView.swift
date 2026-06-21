@@ -1,28 +1,46 @@
 import SwiftUI
 @preconcurrency import Virtualization
 
-struct VirtualMachineConsoleView: NSViewRepresentable {
-  let virtualMachine: VZVirtualMachine
-  let capturesSystemKeys: Bool
-  let automaticallyReconfiguresDisplay: Bool
+#if arch(arm64)
+  struct VirtualMachineConsoleView: NSViewRepresentable {
+    let virtualMachine: VZVirtualMachine
+    let capturesSystemKeys: Bool
+    let automaticallyReconfiguresDisplay: Bool
 
-  func makeNSView(context: Context) -> VZVirtualMachineView {
-    let view = VZVirtualMachineView()
-    configure(view)
-    return view
-  }
-
-  func updateNSView(_ view: VZVirtualMachineView, context: Context) {
-    configure(view)
-  }
-
-  private func configure(_ view: VZVirtualMachineView) {
-    if #available(macOS 27.0, *) {
-      view.adaptor = VZVirtualMachineViewAdaptor(virtualMachine: virtualMachine)
-    } else {
-      view.virtualMachine = virtualMachine
+    func makeCoordinator() -> Coordinator {
+      Coordinator()
     }
-    view.capturesSystemKeys = capturesSystemKeys
-    view.automaticallyReconfiguresDisplay = automaticallyReconfiguresDisplay
+
+    func makeNSView(context: Context) -> VZVirtualMachineView {
+      let view = VZVirtualMachineView()
+      configure(view, coordinator: context.coordinator)
+      return view
+    }
+
+    func updateNSView(_ view: VZVirtualMachineView, context: Context) {
+      configure(view, coordinator: context.coordinator)
+    }
+
+    private func configure(_ view: VZVirtualMachineView, coordinator: Coordinator) {
+      if #available(macOS 27.0, *) {
+        let adaptor: VZVirtualMachineViewAdaptor
+        if let existing = coordinator.adaptorStorage as? VZVirtualMachineViewAdaptor {
+          adaptor = existing
+        } else {
+          adaptor = VZVirtualMachineViewAdaptor(virtualMachine: virtualMachine)
+          coordinator.adaptorStorage = adaptor
+        }
+        view.adaptor = adaptor
+      } else {
+        view.virtualMachine = virtualMachine
+      }
+      view.capturesSystemKeys = capturesSystemKeys
+      view.automaticallyReconfiguresDisplay = automaticallyReconfiguresDisplay
+    }
+
+    @MainActor
+    final class Coordinator {
+      var adaptorStorage: Any?
+    }
   }
-}
+#endif

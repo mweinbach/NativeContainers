@@ -52,39 +52,46 @@ struct MacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
     resources: VirtualMachineResources,
     destination: MacPlatformArtifactURLs
   ) async throws {
-    let restoreImage = try await VZMacOSRestoreImage.image(from: restoreImageURL)
-    guard restoreImage.isSupported else {
-      throw MacPlatformArtifactError.unsupportedRestoreImage
-    }
-    guard let requirements = restoreImage.mostFeaturefulSupportedConfiguration else {
-      throw MacPlatformArtifactError.noSupportedConfiguration
-    }
-    guard resources.cpuCount >= requirements.minimumSupportedCPUCount else {
-      throw MacPlatformArtifactError.insufficientCPUCount(
-        requested: resources.cpuCount,
-        minimum: requirements.minimumSupportedCPUCount
-      )
-    }
-    guard resources.memoryBytes >= requirements.minimumSupportedMemorySize else {
-      throw MacPlatformArtifactError.insufficientMemory(
-        requested: resources.memoryBytes,
-        minimum: requirements.minimumSupportedMemorySize
-      )
-    }
+    #if arch(arm64)
+      let restoreImage = try await VZMacOSRestoreImage.image(from: restoreImageURL)
+      guard restoreImage.isSupported else {
+        throw MacPlatformArtifactError.unsupportedRestoreImage
+      }
+      guard let requirements = restoreImage.mostFeaturefulSupportedConfiguration else {
+        throw MacPlatformArtifactError.noSupportedConfiguration
+      }
+      guard resources.cpuCount >= requirements.minimumSupportedCPUCount else {
+        throw MacPlatformArtifactError.insufficientCPUCount(
+          requested: resources.cpuCount,
+          minimum: requirements.minimumSupportedCPUCount
+        )
+      }
+      guard resources.memoryBytes >= requirements.minimumSupportedMemorySize else {
+        throw MacPlatformArtifactError.insufficientMemory(
+          requested: resources.memoryBytes,
+          minimum: requirements.minimumSupportedMemorySize
+        )
+      }
 
-    let hardwareModel = requirements.hardwareModel
-    let machineIdentifier = VZMacMachineIdentifier()
+      let hardwareModel = requirements.hardwareModel
+      let machineIdentifier = VZMacMachineIdentifier()
 
-    try hardwareModel.dataRepresentation.write(to: destination.hardwareModel, options: [.atomic])
-    try machineIdentifier.dataRepresentation.write(
-      to: destination.machineIdentifier,
-      options: [.atomic]
-    )
-    _ = try VZMacAuxiliaryStorage(
-      creatingStorageAt: destination.auxiliaryStorage,
-      hardwareModel: hardwareModel,
-      options: []
-    )
+      try hardwareModel.dataRepresentation.write(
+        to: destination.hardwareModel,
+        options: [.atomic]
+      )
+      try machineIdentifier.dataRepresentation.write(
+        to: destination.machineIdentifier,
+        options: [.atomic]
+      )
+      _ = try VZMacAuxiliaryStorage(
+        creatingStorageAt: destination.auxiliaryStorage,
+        hardwareModel: hardwareModel,
+        options: []
+      )
+    #else
+      throw MacPlatformArtifactError.requiresAppleSilicon
+    #endif
   }
 }
 
@@ -94,6 +101,7 @@ enum MacPlatformArtifactError: LocalizedError, Equatable {
   case insufficientCPUCount(requested: Int, minimum: Int)
   case insufficientMemory(requested: UInt64, minimum: UInt64)
   case missingArtifact(String)
+  case requiresAppleSilicon
 
   var errorDescription: String? {
     switch self {
@@ -107,6 +115,8 @@ enum MacPlatformArtifactError: LocalizedError, Equatable {
       "The restore image requires at least \(minimum) bytes of memory; this virtual machine requests \(requested)."
     case .missingArtifact(let filename):
       "Platform preparation did not create \(filename)."
+    case .requiresAppleSilicon:
+      "macOS virtual machines require a Mac with Apple silicon."
     }
   }
 }

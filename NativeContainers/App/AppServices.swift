@@ -22,8 +22,10 @@ struct AppServices: Sendable {
   let builder: any ContainerBuilderManaging
   let registry: any RegistryManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
+  let virtualMachineInstaller: any MacVirtualMachineInstalling
   let restoreImageDiscovery: any MacRestoreImageDiscovering
   let restoreImageDownloader: any MacRestoreImageDownloading
+  let restoreImageImporter: any MacRestoreImageImporting
 
   init(
     inventory: any ContainerInventoryLoading,
@@ -46,8 +48,11 @@ struct AppServices: Sendable {
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
     registry: any RegistryManaging,
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
+    virtualMachineInstaller: any MacVirtualMachineInstalling =
+      UnavailableMacVirtualMachineInstaller(),
     restoreImageDiscovery: any MacRestoreImageDiscovering,
-    restoreImageDownloader: any MacRestoreImageDownloading
+    restoreImageDownloader: any MacRestoreImageDownloading,
+    restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService()
   ) {
     self.inventory = inventory
     self.containerLifecycle = containerLifecycle
@@ -69,8 +74,10 @@ struct AppServices: Sendable {
     self.builder = builder
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
+    self.virtualMachineInstaller = virtualMachineInstaller
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageDownloader = restoreImageDownloader
+    self.restoreImageImporter = restoreImageImporter
   }
 
   init(
@@ -83,8 +90,11 @@ struct AppServices: Sendable {
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
     registry: any RegistryManaging,
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
+    virtualMachineInstaller: any MacVirtualMachineInstalling =
+      UnavailableMacVirtualMachineInstaller(),
     restoreImageDiscovery: any MacRestoreImageDiscovering,
-    restoreImageDownloader: any MacRestoreImageDownloading
+    restoreImageDownloader: any MacRestoreImageDownloading,
+    restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService()
   ) {
     inventory = containerService
     containerLifecycle = containerService
@@ -106,12 +116,15 @@ struct AppServices: Sendable {
     self.builder = builder
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
+    self.virtualMachineInstaller = virtualMachineInstaller
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageDownloader = restoreImageDownloader
+    self.restoreImageImporter = restoreImageImporter
   }
 }
 
 enum AppCompositionRoot {
+  @MainActor
   static func live() -> AppServices {
     let mutationCoordinator = RuntimeMutationCoordinator.shared
     let buildExecutionCoordinator = RuntimeMutationCoordinator.imageBuilds
@@ -190,6 +203,11 @@ enum AppCompositionRoot {
     )
     let launchID = UUID()
     let imageBuildHistory = ImageBuildHistoryStore(launchID: launchID)
+    let virtualMachineLibrary = VirtualMachineLibrary()
+    let virtualMachineInstaller = MacVirtualMachineInstallationService(
+      store: virtualMachineLibrary,
+      engine: AppleMacVirtualMachineInstallationEngine()
+    )
     let imageBuildService = RecordingImageBuildService(
       base: AppleContainerBuildService(
         runtimeMutationCoordinator: mutationCoordinator,
@@ -218,9 +236,11 @@ enum AppCompositionRoot {
       imageBuildHistory: imageBuildHistory,
       builder: builderManagementService,
       registry: AppleRegistryService(),
-      virtualMachineLibrary: VirtualMachineLibrary(),
+      virtualMachineLibrary: virtualMachineLibrary,
+      virtualMachineInstaller: virtualMachineInstaller,
       restoreImageDiscovery: MacRestoreImageService(),
-      restoreImageDownloader: RestoreImageDownloadService()
+      restoreImageDownloader: RestoreImageDownloadService(),
+      restoreImageImporter: RestoreImageImportService()
     )
   }
 }

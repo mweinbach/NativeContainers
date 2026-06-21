@@ -1,28 +1,54 @@
 import Foundation
 
-protocol VirtualMachineLibraryProtocol: Sendable {
+protocol VirtualMachineInventoryLoading: Sendable {
   func list() async throws -> [VirtualMachineManifest]
+}
+
+protocol VirtualMachineDraftCreating: Sendable {
   func createDraft(
     name: String,
     guest: VirtualMachineGuest,
     resources: VirtualMachineResources
   ) async throws -> VirtualMachineManifest
+}
+
+protocol MacVirtualMachinePreparing: Sendable {
   func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest
 }
 
-extension VirtualMachineLibraryProtocol {
+protocol VirtualMachineLibraryProtocol:
+  VirtualMachineInventoryLoading,
+  VirtualMachineDraftCreating,
+  MacVirtualMachinePreparing
+{}
+
+extension MacVirtualMachinePreparing {
   func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest {
     throw VirtualMachineModelError.macPlatformPreparationUnavailable
   }
 }
 
-actor VirtualMachineLibrary: VirtualMachineLibraryProtocol {
+protocol MacVirtualMachineInstallationStoring: Sendable {
+  func resolvePreparedMacVM(id: UUID) async throws -> PreparedMacVirtualMachine
+  func beginMacOSInstallation(id: UUID, operationID: UUID) async throws
+  func completeMacOSInstallation(id: UUID, operationID: UUID) async throws
+  func failMacOSInstallation(
+    id: UUID,
+    operationID: UUID,
+    kind: VirtualMachineInstallationFailureKind,
+    message: String
+  ) async throws
+  func recoverInterruptedMacOSInstallations() async throws
+}
+
+actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineInstallationStoring {
   static let bundleExtension = "nativevm"
   static let manifestFilename = "manifest.json"
 
   private let rootURL: URL
   private let fileManager: FileManager
   private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
+  private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
 
   init(
     rootURL: URL? = nil,
@@ -32,6 +58,10 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol {
     self.fileManager = fileManager
     self.rootURL = rootURL ?? Self.defaultRootURL(fileManager: fileManager)
     self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
+    self.macVirtualMachineBundleResolver = MacVirtualMachineBundleResolver(
+      rootURL: self.rootURL,
+      fileManager: fileManager
+    )
   }
 
   func list() throws -> [VirtualMachineManifest] {
@@ -153,6 +183,86 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol {
       }
       throw error
     }
+  }
+
+  func resolvePreparedMacVM(id: UUID) throws -> PreparedMacVirtualMachine {
+    try ensureRootExists()
+    let bundleURL = bundleURL(for: id)
+    guard fileManager.fileExists(atPath: bundleURL.path) else {
+      throw VirtualMachineModelError.virtualMachineNotFound(id)
+    }
+    let manifest = try readManifest(in: bundleURL)
+    guard manifest.installState == .readyToInstall else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+    return try macVirtualMachineBundleResolver.resolve(manifest)
+  }
+
+  func beginMacOSInstallation(id: UUID, operationID: UUID) throws {
+    var manifest = try installationManifest(id: id)
+    guard manifest.installState == .readyToInstall, manifest.installationOperationID == nil else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+    manifest.markInstallationStarted(operationID: operationID)
+    try write(manifest, to: manifestURL(for: id))
+  }
+
+  func completeMacOSInstallation(id: UUID, operationID: UUID) throws {
+    var manifest = try installationManifest(id: id)
+    guard manifest.installState == .installing,
+      manifest.installationOperationID == operationID
+    else {
+      throw MacVirtualMachineInstallationError.staleOperation(id)
+    }
+    manifest.markInstallationCompleted()
+    try write(manifest, to: manifestURL(for: id))
+  }
+
+  func failMacOSInstallation(
+    id: UUID,
+    operationID: UUID,
+    kind: VirtualMachineInstallationFailureKind,
+    message: String
+  ) throws {
+    var manifest = try installationManifest(id: id)
+    guard manifest.installState == .installing,
+      manifest.installationOperationID == operationID
+    else {
+      throw MacVirtualMachineInstallationError.staleOperation(id)
+    }
+    let normalizedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+    manifest.markInstallationFailed(
+      kind: kind,
+      message: normalizedMessage.isEmpty
+        ? "macOS installation did not complete." : normalizedMessage
+    )
+    try write(manifest, to: manifestURL(for: id))
+  }
+
+  func recoverInterruptedMacOSInstallations() throws {
+    for var manifest in try list() where manifest.installState == .installing {
+      manifest.markInstallationFailed(
+        kind: .interrupted,
+        message: "The app exited before macOS installation completed."
+      )
+      try write(manifest, to: manifestURL(for: manifest.id))
+    }
+  }
+
+  private func installationManifest(id: UUID) throws -> VirtualMachineManifest {
+    let bundleURL = bundleURL(for: id)
+    guard fileManager.fileExists(atPath: bundleURL.path) else {
+      throw VirtualMachineModelError.virtualMachineNotFound(id)
+    }
+    let manifest = try readManifest(in: bundleURL)
+    guard manifest.guest == .macOS else {
+      throw VirtualMachineModelError.requiresMacOSGuest(id)
+    }
+    return manifest
+  }
+
+  private func manifestURL(for id: UUID) -> URL {
+    bundleURL(for: id).appending(path: Self.manifestFilename)
   }
 
   private func ensureRootExists() throws {
