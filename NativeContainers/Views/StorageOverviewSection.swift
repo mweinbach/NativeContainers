@@ -3,8 +3,11 @@ import SwiftUI
 struct StorageOverviewSection: View {
   @Bindable var model: StorageOverviewModel
   @Bindable var reclamationModel: StorageReclamationModel
-  let inventoryRevision: UInt64
+  @Bindable var virtualMachineReclamationModel: VirtualMachineStorageReclamationModel
+  let containerInventoryRevision: UInt64
+  let virtualMachineInventoryRevision: UInt64
   @State private var isShowingReclamation = false
+  @State private var isShowingVirtualMachineReclamation = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -29,6 +32,7 @@ struct StorageOverviewSection: View {
         } else {
           Button(model.hasAttempted ? "Measure Again" : "Measure Storage") {
             reclamationModel.invalidateReview()
+            virtualMachineReclamationModel.invalidateReview()
             model.startRefresh()
           }
           .buttonStyle(.borderedProminent)
@@ -48,7 +52,18 @@ struct StorageOverviewSection: View {
             model.startAppleRuntimeRefresh()
           }
         )
-        VirtualMachineStorageCard(model: model)
+        VirtualMachineStorageCard(
+          model: model,
+          onReviewReclamation: {
+            virtualMachineReclamationModel.invalidateReview()
+            isShowingVirtualMachineReclamation = true
+            virtualMachineReclamationModel.startPreparing()
+          },
+          onRetry: {
+            virtualMachineReclamationModel.invalidateReview()
+            model.startVirtualMachineRefresh()
+          }
+        )
       } else {
         ContentUnavailableView(
           "Storage is not measured yet",
@@ -64,18 +79,33 @@ struct StorageOverviewSection: View {
     .onDisappear {
       model.cancelCurrentOperation()
       reclamationModel.discardReview()
+      virtualMachineReclamationModel.discardReview()
     }
     .onChange(of: model.appleRuntimeRevision) {
       reclamationModel.invalidateReview()
     }
-    .onChange(of: inventoryRevision) {
+    .onChange(of: containerInventoryRevision) {
       reclamationModel.invalidateReview()
+    }
+    .onChange(of: model.virtualMachineRevision) {
+      virtualMachineReclamationModel.invalidateReview()
+    }
+    .onChange(of: virtualMachineInventoryRevision) {
+      virtualMachineReclamationModel.invalidateReview()
     }
     .sheet(
       isPresented: $isShowingReclamation,
       onDismiss: { reclamationModel.discardReview() }
     ) {
       StorageReclamationReviewSheet(model: reclamationModel)
+    }
+    .sheet(
+      isPresented: $isShowingVirtualMachineReclamation,
+      onDismiss: { virtualMachineReclamationModel.discardReview() }
+    ) {
+      VirtualMachineStorageReclamationReviewSheet(
+        model: virtualMachineReclamationModel
+      )
     }
   }
 }
@@ -166,10 +196,28 @@ private struct AppleRuntimeStorageRow: View {
 
 private struct VirtualMachineStorageCard: View {
   @Bindable var model: StorageOverviewModel
+  let onReviewReclamation: () -> Void
+  let onRetry: () -> Void
 
   var body: some View {
     StorageCard(title: "macOS VM library", systemImage: "macwindow.on.rectangle") {
       if let usage = model.virtualMachineUsage {
+        HStack {
+          if model.isVirtualMachineSnapshotStale {
+            Label(
+              "Remeasure after recent changes",
+              systemImage: "arrow.clockwise.circle"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
+          }
+          Spacer()
+          Button("Review VM Reclamation…", action: onReviewReclamation)
+            .disabled(
+              model.isLoading || model.isVirtualMachineSnapshotStale
+            )
+        }
+
         HStack(spacing: 22) {
           StorageMetric(
             title: "Allocated",
@@ -267,10 +315,8 @@ private struct VirtualMachineStorageCard: View {
       }
 
       if let message = model.virtualMachineErrorMessage {
-        StorageLaneErrorView(message: message) {
-          model.startVirtualMachineRefresh()
-        }
-        .disabled(model.isLoading)
+        StorageLaneErrorView(message: message, retry: onRetry)
+          .disabled(model.isLoading)
       }
 
       Text(
@@ -388,16 +434,6 @@ private struct StorageLaneErrorView: View {
   }
 }
 
-private enum StorageByteFormatter {
-  static func string(from bytes: UInt64) -> String {
-    let bounded = min(bytes, UInt64(Int64.max))
-    return ByteCountFormatter.string(
-      fromByteCount: Int64(bounded),
-      countStyle: .file
-    )
-  }
-}
-
 private struct PreviewStorageUsageService: StorageUsageLoading {
   static var appleRuntimeUsage: AppleRuntimeStorageUsage {
     AppleRuntimeStorageUsage(
@@ -485,13 +521,31 @@ private struct StorageOverviewLoadedPreview: View {
       )
     }
   )
+  @State private var virtualMachineReclamationModel =
+    VirtualMachineStorageReclamationModel(
+      service: UnavailableVirtualMachineStorageReclamationService(),
+      currentSource: {
+        VirtualMachineStorageReclamationSource(
+          capturedAt: PreviewStorageUsageService.virtualMachineUsage.capturedAt,
+          measurementRevision: 1,
+          libraryRevision: 1,
+          measuredSavedStateMachineIDs: Set(
+            PreviewStorageUsageService.virtualMachineUsage.machines
+              .filter { $0.savedStateAllocatedBytes > 0 }
+              .map(\.machineID)
+          )
+        )
+      }
+    )
 
   var body: some View {
     ScrollView {
       StorageOverviewSection(
         model: model,
         reclamationModel: reclamationModel,
-        inventoryRevision: 1
+        virtualMachineReclamationModel: virtualMachineReclamationModel,
+        containerInventoryRevision: 1,
+        virtualMachineInventoryRevision: 1
       )
       .padding(28)
     }

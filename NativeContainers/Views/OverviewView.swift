@@ -4,12 +4,16 @@ struct OverviewView: View {
   let model: AppModel
   @State private var storageModel: StorageOverviewModel
   @State private var storageReclamationModel: StorageReclamationModel
+  @State private var virtualMachineStorageReclamationModel: VirtualMachineStorageReclamationModel
 
   init(model: AppModel) {
     self.model = model
     _storageModel = State(initialValue: model.makeStorageOverviewModel())
     _storageReclamationModel = State(
       initialValue: model.makeStorageReclamationModel()
+    )
+    _virtualMachineStorageReclamationModel = State(
+      initialValue: model.makeVirtualMachineStorageReclamationModel()
     )
   }
 
@@ -35,7 +39,11 @@ struct OverviewView: View {
         StorageOverviewSection(
           model: storageModel,
           reclamationModel: storageReclamationModel,
-          inventoryRevision: model.containerInventoryRevision
+          virtualMachineReclamationModel:
+            virtualMachineStorageReclamationModel,
+          containerInventoryRevision: model.containerInventoryRevision,
+          virtualMachineInventoryRevision:
+            model.virtualMachineInventoryRevision
         )
         if !model.composeProjects.isEmpty {
           ComposeProjectsOverviewSection(

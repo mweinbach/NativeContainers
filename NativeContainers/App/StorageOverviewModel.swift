@@ -13,7 +13,9 @@ final class StorageOverviewModel {
   private(set) var hasAttemptedAppleRuntime = false
   private(set) var hasAttemptedVirtualMachines = false
   private(set) var appleRuntimeRevision: UInt64 = 0
+  private(set) var virtualMachineRevision: UInt64 = 0
   private(set) var isAppleRuntimeSnapshotStale = false
+  private(set) var isVirtualMachineSnapshotStale = false
 
   private let service: any StorageUsageLoading
 
@@ -37,6 +39,7 @@ final class StorageOverviewModel {
     hasAttemptedVirtualMachines =
       virtualMachineUsage != nil || virtualMachineErrorMessage != nil
     appleRuntimeRevision = appleRuntimeUsage == nil ? 0 : 1
+    virtualMachineRevision = virtualMachineUsage == nil ? 0 : 1
   }
 
   var isLoading: Bool {
@@ -79,6 +82,20 @@ final class StorageOverviewModel {
     operationTask = nil
   }
 
+  func refreshVirtualMachinesAfterMutation() async {
+    markVirtualMachineSnapshotStale()
+    guard operationTask == nil else {
+      return
+    }
+    let task = Task { [weak self] in
+      guard let self else { return }
+      await self.refreshVirtualMachines()
+    }
+    operationTask = task
+    await task.value
+    operationTask = nil
+  }
+
   func cancelCurrentOperation() {
     operationTask?.cancel()
   }
@@ -97,9 +114,32 @@ final class StorageOverviewModel {
     )
   }
 
+  func virtualMachineReclamationSource(
+    libraryRevision: UInt64
+  ) -> VirtualMachineStorageReclamationSource? {
+    guard let virtualMachineUsage, !isVirtualMachineSnapshotStale else {
+      return nil
+    }
+    return VirtualMachineStorageReclamationSource(
+      capturedAt: virtualMachineUsage.capturedAt,
+      measurementRevision: virtualMachineRevision,
+      libraryRevision: libraryRevision,
+      measuredSavedStateMachineIDs: Set(
+        virtualMachineUsage.machines
+          .filter { $0.savedStateAllocatedBytes > 0 }
+          .map(\.machineID)
+      )
+    )
+  }
+
   func markAppleRuntimeSnapshotStale() {
     guard appleRuntimeUsage != nil else { return }
     isAppleRuntimeSnapshotStale = true
+  }
+
+  func markVirtualMachineSnapshotStale() {
+    guard virtualMachineUsage != nil else { return }
+    isVirtualMachineSnapshotStale = true
   }
 
   func refresh() async {
@@ -147,6 +187,8 @@ final class StorageOverviewModel {
     switch result {
     case .success(let usage):
       virtualMachineUsage = usage
+      virtualMachineRevision &+= 1
+      isVirtualMachineSnapshotStale = false
       virtualMachineErrorMessage = nil
     case .failure(let message):
       virtualMachineErrorMessage = message

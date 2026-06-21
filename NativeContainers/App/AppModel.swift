@@ -25,6 +25,7 @@ final class AppModel {
   private(set) var lastRefresh: Date?
   private(set) var errorMessage: String?
   private(set) var containerInventoryRevision: UInt64 = 0
+  private(set) var virtualMachineInventoryRevision: UInt64 = 0
 
   private let services: AppServices
 
@@ -68,6 +69,20 @@ final class AppModel {
     await self.refresh()
     await self.storageOverviewModel.refreshAppleRuntimeAfterMutation()
   }
+
+  @ObservationIgnored
+  private lazy var virtualMachineStorageReclamationModel =
+    VirtualMachineStorageReclamationModel(
+      service: services.virtualMachineStorageReclamation,
+      currentSource: { [weak self] in
+        guard let self else { return nil }
+        return self.storageOverviewModel.virtualMachineReclamationSource(
+          libraryRevision: self.virtualMachineInventoryRevision
+        )
+      }
+    ) { [weak self] in
+      await self?.refreshVirtualMachineStorageAfterMutation()
+    }
 
   @ObservationIgnored
   private lazy var dockerCompatibilitySettingsModel = DockerCompatibilityModel(
@@ -114,6 +129,7 @@ final class AppModel {
       virtualMachines = initialVirtualMachines
       hasLoaded = true
       containerInventoryRevision = 1
+      virtualMachineInventoryRevision = initialVirtualMachines.isEmpty ? 0 : 1
       lastRefresh = Date()
     }
     updateWorkspaceNavigation()
@@ -125,6 +141,9 @@ final class AppModel {
     storageUsageService: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamationService: any StorageReclamationManaging =
       UnavailableStorageReclamationService(),
+    virtualMachineStorageReclamationService:
+      any VirtualMachineStorageReclamationManaging =
+      UnavailableVirtualMachineStorageReclamationService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
     imageBuildService: any ImageBuilding = AppleContainerBuildService(),
     registryService: any RegistryManaging = AppleRegistryService(),
@@ -159,6 +178,8 @@ final class AppModel {
         composeTopology: composeTopologyService,
         storageUsage: storageUsageService,
         storageReclamation: storageReclamationService,
+        virtualMachineStorageReclamation:
+          virtualMachineStorageReclamationService,
         machineService: machineService,
         imageBuild: imageBuildService,
         registry: registryService,
@@ -268,6 +289,7 @@ final class AppModel {
     do {
       virtualMachines = try await services.virtualMachineLibrary.list()
       didLoadVirtualMachineLibrary = true
+      virtualMachineInventoryRevision &+= 1
       removeStaleMacVirtualMachineRuntimeModels()
     } catch {
       messages.append("Virtual machine library: \(error.localizedDescription)")
@@ -282,6 +304,19 @@ final class AppModel {
 
     errorMessage = messages.isEmpty ? nil : messages.joined(separator: "\n")
     lastRefresh = Date()
+  }
+
+  private func refreshVirtualMachineStorageAfterMutation() async {
+    storageOverviewModel.markVirtualMachineSnapshotStale()
+    do {
+      virtualMachines = try await services.virtualMachineLibrary.list()
+      virtualMachineInventoryRevision &+= 1
+      removeStaleMacVirtualMachineRuntimeModels()
+      updateWorkspaceNavigation()
+    } catch {
+      errorMessage = "Virtual machine library: \(error.localizedDescription)"
+    }
+    await storageOverviewModel.refreshVirtualMachinesAfterMutation()
   }
 
   func startContainer(id: String) async {
@@ -525,6 +560,12 @@ final class AppModel {
 
   func makeStorageReclamationModel() -> StorageReclamationModel {
     storageReclamationModel
+  }
+
+  func makeVirtualMachineStorageReclamationModel()
+    -> VirtualMachineStorageReclamationModel
+  {
+    virtualMachineStorageReclamationModel
   }
 
   func makeRegistrySettingsModel() -> RegistrySettingsModel {

@@ -267,6 +267,10 @@
 		1F9D2CAC2FE805AA0076F5B9 /* VirtualMachineStorageReclamationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CAB2FE805AA0076F5B9 /* VirtualMachineStorageReclamationService.swift */; };
 		1F9D2CAE2FE805D90076F5B9 /* VirtualMachineStorageReclamationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CAD2FE805D90076F5B9 /* VirtualMachineStorageReclamationServiceTests.swift */; };
 		1F9D2CB02FE805E90076F5B9 /* VirtualMachineResidueReclamationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CAF2FE805E90076F5B9 /* VirtualMachineResidueReclamationServiceTests.swift */; };
+		1F9D2CB22FE8065A0076F5B9 /* VirtualMachineStorageReclamationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CB12FE8065A0076F5B9 /* VirtualMachineStorageReclamationModel.swift */; };
+		1F9D2CB42FE806960076F5B9 /* StorageFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CB32FE806960076F5B9 /* StorageFormatting.swift */; };
+		1F9D2CB62FE806B60076F5B9 /* VirtualMachineStorageReclamationReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CB52FE806B60076F5B9 /* VirtualMachineStorageReclamationReviewSheet.swift */; };
+		1F9D2CB82FE806E20076F5B9 /* VirtualMachineStorageReclamationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CB72FE806E20076F5B9 /* VirtualMachineStorageReclamationModelTests.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -645,6 +649,10 @@
 		1F9D2CAB2FE805AA0076F5B9 /* VirtualMachineStorageReclamationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineStorageReclamationService.swift; sourceTree = "<group>"; };
 		1F9D2CAD2FE805D90076F5B9 /* VirtualMachineStorageReclamationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineStorageReclamationServiceTests.swift; sourceTree = "<group>"; };
 		1F9D2CAF2FE805E90076F5B9 /* VirtualMachineResidueReclamationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineResidueReclamationServiceTests.swift; sourceTree = "<group>"; };
+		1F9D2CB12FE8065A0076F5B9 /* VirtualMachineStorageReclamationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineStorageReclamationModel.swift; sourceTree = "<group>"; };
+		1F9D2CB32FE806960076F5B9 /* StorageFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageFormatting.swift; sourceTree = "<group>"; };
+		1F9D2CB52FE806B60076F5B9 /* VirtualMachineStorageReclamationReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineStorageReclamationReviewSheet.swift; sourceTree = "<group>"; };
+		1F9D2CB72FE806E20076F5B9 /* VirtualMachineStorageReclamationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineStorageReclamationModelTests.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -820,6 +828,8 @@
 				1F9D2C7D2FE7FAD00076F5B9 /* VirtualMachineTransferViews.swift */,
 				1F9D2C892FE7FE0C0076F5B9 /* StorageOverviewSection.swift */,
 				1F9D2C952FE800EC0076F5B9 /* StorageReclamationReviewSheet.swift */,
+				1F9D2CB32FE806960076F5B9 /* StorageFormatting.swift */,
+				1F9D2CB52FE806B60076F5B9 /* VirtualMachineStorageReclamationReviewSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -955,6 +965,7 @@
 				1F9D2CA12FE803130076F5B9 /* StorageReclamationClientTests.swift */,
 				1F9D2CAD2FE805D90076F5B9 /* VirtualMachineStorageReclamationServiceTests.swift */,
 				1F9D2CAF2FE805E90076F5B9 /* VirtualMachineResidueReclamationServiceTests.swift */,
+				1F9D2CB72FE806E20076F5B9 /* VirtualMachineStorageReclamationModelTests.swift */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -1146,6 +1157,7 @@
 				1F9D2C442FE7E81D0076F5B9 /* ComposeProjectWorkspaceModel.swift */,
 				1F9D2C872FE7FDE40076F5B9 /* StorageOverviewModel.swift */,
 				1F9D2C932FE800BE0076F5B9 /* StorageReclamationModel.swift */,
+				1F9D2CB12FE8065A0076F5B9 /* VirtualMachineStorageReclamationModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1385,6 +1397,7 @@
 				1F9D2B172FE76B2E0076F5B9 /* ContainerCreationDraftTests.swift in Sources */,
 				1F9D2BF02FE7C4B40076F5B9 /* DockerCompatibilityServiceTests.swift in Sources */,
 				1F9D2B9A2FE7A1CD0076F5B9 /* MacVirtualMachineInstallationModelTests.swift in Sources */,
+				1F9D2CB82FE806E20076F5B9 /* VirtualMachineStorageReclamationModelTests.swift in Sources */,
 				666353AB8186EF6776208579 /* ImageManagementModelTests.swift in Sources */,
 				1F9D2C8C2FE7FE750076F5B9 /* StorageUsageServiceTests.swift in Sources */,
 				1F9D2B6E2FE799410076F5B9 /* AppleMachineRuntimeClientTests.swift in Sources */,
@@ -1490,6 +1503,7 @@
 				5EF45D5EC2FC881A0CADCA99 /* ContainerModels.swift in Sources */,
 				1F9D2C692FE7F5AD0076F5B9 /* CloneVirtualMachineView.swift in Sources */,
 				1F9D2B582FE7923F0076F5B9 /* LinuxMachineCreationDraft.swift in Sources */,
+				1F9D2CB42FE806960076F5B9 /* StorageFormatting.swift in Sources */,
 				1F9D2B882FE7A1440076F5B9 /* MacVirtualMachineInstallationModel.swift in Sources */,
 				EDB26DFD01272D05145851C1 /* ContainerProvisioningModel.swift in Sources */,
 				1F9D2BD62FE7BE380076F5B9 /* MacVirtualMachineSharedDirectoriesView.swift in Sources */,
@@ -1521,6 +1535,7 @@
 				73762F62AD06A7F38EA6E1E3 /* ContainerToolsModel.swift in Sources */,
 				1F9D2AF32FE764B50076F5B9 /* AppleContainerToolService.swift in Sources */,
 				1F9D2B392FE77A9A0076F5B9 /* ImageBuildHistoryStore.swift in Sources */,
+				1F9D2CB22FE8065A0076F5B9 /* VirtualMachineStorageReclamationModel.swift in Sources */,
 				1F9D2B372FE77A850076F5B9 /* ImageBuildHistoryModels.swift in Sources */,
 				1F9D2B192FE770060076F5B9 /* ContainerBuilderManagementModels.swift in Sources */,
 				0CCB9B1572811399DAE295EE /* ContainerToolsView.swift in Sources */,
@@ -1593,6 +1608,7 @@
 				1F9D2B822FE7A0E70076F5B9 /* RestoreImageImportService.swift in Sources */,
 				2CEB095A2F3E92AB8DD58DF8 /* RegistryManaging.swift in Sources */,
 				1F9D2BB42FE7AE290076F5B9 /* MacVirtualMachineSavedStateModels.swift in Sources */,
+				1F9D2CB62FE806B60076F5B9 /* VirtualMachineStorageReclamationReviewSheet.swift in Sources */,
 				1F9D2B032FE768C60076F5B9 /* ContainerAttachmentModels.swift in Sources */,
 				1F9D2B802FE7A0C20076F5B9 /* MacVirtualMachineBundleResolver.swift in Sources */,
 				1F9D2BAA2FE7AAAA0076F5B9 /* AppleMacVirtualMachineRuntimeEngine.swift in Sources */,

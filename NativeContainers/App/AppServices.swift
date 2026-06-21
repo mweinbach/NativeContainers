@@ -6,6 +6,7 @@ struct AppServices: Sendable {
   let composeTopology: any ComposeTopologyDeriving
   let storageUsage: any StorageUsageLoading
   let storageReclamation: any StorageReclamationManaging
+  let virtualMachineStorageReclamation: any VirtualMachineStorageReclamationManaging
   let containerLifecycle: any ContainerLifecycleManaging
   let containerCreator: any ContainerCreating
   let containerInspector: any ContainerInspecting
@@ -46,6 +47,9 @@ struct AppServices: Sendable {
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
       UnavailableStorageReclamationService(),
+    virtualMachineStorageReclamation:
+      any VirtualMachineStorageReclamationManaging =
+      UnavailableVirtualMachineStorageReclamationService(),
     containerLifecycle: any ContainerLifecycleManaging,
     containerCreator: any ContainerCreating,
     containerInspector: any ContainerInspecting,
@@ -94,6 +98,7 @@ struct AppServices: Sendable {
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
+    self.virtualMachineStorageReclamation = virtualMachineStorageReclamation
     self.containerLifecycle = containerLifecycle
     self.containerCreator = containerCreator
     self.containerInspector = containerInspector
@@ -135,6 +140,9 @@ struct AppServices: Sendable {
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
       UnavailableStorageReclamationService(),
+    virtualMachineStorageReclamation:
+      any VirtualMachineStorageReclamationManaging =
+      UnavailableVirtualMachineStorageReclamationService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
     machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
     machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
@@ -172,6 +180,7 @@ struct AppServices: Sendable {
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
+    self.virtualMachineStorageReclamation = virtualMachineStorageReclamation
     containerLifecycle = containerService
     containerCreator = containerService
     containerInspector = containerService
@@ -322,9 +331,20 @@ enum AppCompositionRoot {
       store: virtualMachineLibrary,
       engine: AppleMacVirtualMachineInstallationEngine()
     )
+    let virtualMachineSavedStateStore = MacVirtualMachineSavedStateStore()
     let virtualMachineSavedState = MacVirtualMachineSavedStateService(
-      store: MacVirtualMachineSavedStateStore()
+      store: virtualMachineSavedStateStore
     )
+    let virtualMachineStorageReclamation =
+      VirtualMachineStorageReclamationService(
+        savedStates: MacVirtualMachineSavedStateReclamationService(
+          leasingStore: virtualMachineLibrary,
+          store: virtualMachineSavedStateStore
+        ),
+        residue: VirtualMachineResidueReclamationService(
+          inventory: virtualMachineLibrary
+        )
+      )
     let virtualMachineRuntime = MacVirtualMachineRuntimeService(
       leasingStore: virtualMachineLibrary,
       engine: AppleMacVirtualMachineRuntimeEngine(),
@@ -382,6 +402,7 @@ enum AppCompositionRoot {
       composeTopology: ComposeTopologyService(),
       storageUsage: storageUsage,
       storageReclamation: storageReclamation,
+      virtualMachineStorageReclamation: virtualMachineStorageReclamation,
       containerLifecycle: lifecycleService,
       containerCreator: creationService,
       containerInspector: inspectionService,
