@@ -628,6 +628,9 @@ Updated: 2026-06-21.
   commit-time source/inventory revalidation, and a crash-safe operation journal
   are required before the policy blocker can be lifted; the live fixture's
   automatic native cleanup remains fixture-only.
+- The full Xcode plan passes all 545 outcomes: 527 deterministic tests passed
+  and 18 explicitly gated live tests skipped, with no failures. The build adds
+  no warnings from this slice.
 
 ## Known configuration issue
 
