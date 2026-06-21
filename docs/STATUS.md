@@ -583,6 +583,52 @@ Updated: 2026-06-21.
   and 18 explicitly gated live tests skipped, with no failures. The build emits
   only nine pre-existing warnings in macOS saved-state tests.
 
+## Compose desired-state review checkpoint
+
+- Compose project work is now split across focused source-access, canonical
+  rendering, desired-state decoding, lifecycle planning, and facade services.
+  `AppModel` owns only an app-scoped workspace model; topology remains a
+  separate read-only inventory projection and is never treated as mutation
+  authority.
+- Source review holds security-scoped access to one selected project directory,
+  accepts exactly one conventional Compose filename, and pins an owner-only,
+  non-symlink, single-link regular file by descriptor metadata and SHA-256. It
+  revalidates both the descriptor and directory-relative path before, between,
+  and after canonical renders.
+- The verified private Docker Compose 5.1.4 client renders the full declaration
+  with `--profile '*'` and the selected active-profile model separately. The
+  facade requires two byte-stable normalized render pairs under a controlled
+  environment. Truncated output, source drift, renderer drift, or a project-name
+  mismatch fails closed.
+- The decoder retains service/image/replica/profile, named-volume, network, and
+  published-port intent but never persists service environment values. Builds,
+  health checks, restart policies, configs, secrets, bind/anonymous mounts,
+  custom aliases, and unsupported isolation/resource settings become typed
+  blockers.
+- The deterministic planner keeps the full declaration boundary distinct from
+  active services, so inactive-profile containers are not orphans. External
+  resources are always lookup-only, deletion intent is explicit, cross-project
+  consumers and foreign resource identities block, and the review freezes exact
+  observed container/volume/network identities. Generic network prune now
+  mirrors volume prune by preserving every Compose-labeled resource.
+- The Compose workspace exposes a source-backed review sheet with explicit Up or
+  Down intent, profiles, pull policy, orphan/volume choices, hashes, affected
+  resources, and findings. Review cancellation and sheet dismissal are explicit
+  kill points.
+- Host command cancellation now completes an uncancelled TERM, grace period,
+  KILL, and confirmed-exit sequence. Failure to confirm SIGKILL is surfaced
+  instead of being mistaken for cancellation or timeout completion.
+- A production-path Xcode probe used the installed private Compose 5.1.4 client
+  to render the same source twice. It reported full services `web,worker`, active
+  service `web`, normalized managed volume/network names, and zero parser
+  blockers. The complete facade then reviewed a fresh project against current
+  Apple inventory, found no observed containers or parser blockers, and retained
+  the expected execution-policy lock.
+- User-project execution remains intentionally locked. Exact-ID mutation,
+  commit-time source/inventory revalidation, and a crash-safe operation journal
+  are required before the policy blocker can be lifted; the live fixture's
+  automatic native cleanup remains fixture-only.
+
 ## Known configuration issue
 
 Apple documentation and SDK headers require
@@ -605,6 +651,6 @@ entitlement; no developer-team or provisioning-profile change should be needed.
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, and transactional same-host save/restore against a local
    IPSW.
-4. Design a reviewed Compose desired-state parser before any user-project
-   lifecycle; do not infer replicas, health, orphan removal, or volume intent
-   from observed labels.
+4. Add an exact-ID Compose mutation session and crash-safe operation journal,
+   then re-render and revalidate source, binary, inventory, consumers, and every
+   frozen target at commit time before lifting the user-project lifecycle block.

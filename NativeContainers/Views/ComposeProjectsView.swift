@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ComposeProjectsView: View {
   let model: AppModel
+  @State private var isPresentingProjectReview = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -60,6 +61,20 @@ struct ComposeProjectsView: View {
       }
     }
     .navigationTitle("Compose Projects")
+    .toolbar {
+      ToolbarItem {
+        Button {
+          presentProjectReview()
+        } label: {
+          Label("Review Project…", systemImage: "doc.text.magnifyingglass")
+        }
+      }
+    }
+    .sheet(isPresented: $isPresentingProjectReview) {
+      ComposeProjectManagementView(
+        model: model.makeComposeProjectWorkspaceModel()
+      )
+    }
   }
 
   private var selectedProjectName: String? {
@@ -77,6 +92,13 @@ struct ComposeProjectsView: View {
     if let name = model.composeProjects.first?.name {
       model.navigate(to: .composeProject(name))
     }
+  }
+
+  private func presentProjectReview() {
+    model.makeComposeProjectWorkspaceModel().begin(
+      projectName: selectedProjectName
+    )
+    isPresentingProjectReview = true
   }
 }
 
@@ -191,7 +213,7 @@ private struct ComposeProjectProvenanceBanner: View {
   var body: some View {
     Label {
       Text(
-        "Read-only topology derived from canonical Compose labels in one Apple runtime inventory refresh. Manage lifecycle on each underlying resource."
+        "Observed topology comes from canonical Compose labels in one Apple inventory refresh. Review a source-backed desired state before considering project lifecycle changes."
       )
     } icon: {
       Image(systemName: "info.circle.fill")

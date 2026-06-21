@@ -56,6 +56,11 @@ final class AppModel {
   )
 
   @ObservationIgnored
+  private lazy var composeProjectWorkspaceModel = ComposeProjectWorkspaceModel(
+    service: services.composeProjectLifecycle
+  )
+
+  @ObservationIgnored
   private var macVirtualMachineRuntimeModels: [UUID: MacVirtualMachineRuntimeModel] = [:]
 
   @ObservationIgnored
@@ -443,6 +448,10 @@ final class AppModel {
 
   func makeDockerCompatibilityModel() -> DockerCompatibilityModel {
     dockerCompatibilitySettingsModel
+  }
+
+  func makeComposeProjectWorkspaceModel() -> ComposeProjectWorkspaceModel {
+    composeProjectWorkspaceModel
   }
 
   func makeContainerToolsModel(containerID: String) -> ContainerToolsModel {

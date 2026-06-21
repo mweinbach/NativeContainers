@@ -377,7 +377,11 @@ struct AppleInfrastructureService: InfrastructureManaging, BuiltinNetworkProvidi
     let networks = try await loadCurrentNetworkRecords()
     let candidates =
       networks
-      .filter { !$0.isBuiltin && $0.usedByContainerIDs.isEmpty }
+      .filter {
+        !$0.isBuiltin
+          && $0.usedByContainerIDs.isEmpty
+          && !$0.labels.keys.contains(where: { $0.hasPrefix(ComposeLabelKey.prefix) })
+      }
       .map {
         NetworkDeletionPlan(
           network: $0,

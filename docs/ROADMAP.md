@@ -80,8 +80,11 @@ must leave a usable, test-backed product slice.
       bounded clients, noncancellable teardown, and Apple-native force cleanup.
 - [x] Pin, provenance-verify, and privately install the official Docker Compose
       5.1.4 Darwin arm64 client without modifying Docker CLI plugin paths.
-- [ ] Implement a reviewed Compose desired-state parser and lifecycle
-      coordinator.
+- [x] Implement a reviewed Compose desired-state parser and review coordinator
+      with private source pinning, stable full/active canonical renders,
+      redacted typed planning, and explicit lifecycle intent.
+- [ ] Implement the exact-ID Compose mutation coordinator and crash-safe
+      operation journal required to unlock reviewed execution.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [ ] SSH agent forwarding and safe host-directory sharing.

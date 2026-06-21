@@ -26,6 +26,7 @@ struct AppServices: Sendable {
   let dockerCompatibility: any DockerCompatibilityManaging
   let composeBridgeConformance: any ComposeBridgeConformanceReporting
   let dockerComposeClient: any DockerComposeClientInstalling
+  let composeProjectLifecycle: any ComposeProjectLifecycleManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
@@ -63,6 +64,8 @@ struct AppServices: Sendable {
       SocktainerComposeConformanceService(),
     dockerComposeClient: any DockerComposeClientInstalling =
       UnavailableDockerComposeClientService(),
+    composeProjectLifecycle: any ComposeProjectLifecycleManaging =
+      UnavailableComposeProjectLifecycleService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
@@ -101,6 +104,7 @@ struct AppServices: Sendable {
     self.dockerCompatibility = dockerCompatibility
     self.composeBridgeConformance = composeBridgeConformance
     self.dockerComposeClient = dockerComposeClient
+    self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
@@ -128,6 +132,8 @@ struct AppServices: Sendable {
       SocktainerComposeConformanceService(),
     dockerComposeClient: any DockerComposeClientInstalling =
       UnavailableDockerComposeClientService(),
+    composeProjectLifecycle: any ComposeProjectLifecycleManaging =
+      UnavailableComposeProjectLifecycleService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
@@ -166,6 +172,7 @@ struct AppServices: Sendable {
     self.dockerCompatibility = dockerCompatibility
     self.composeBridgeConformance = composeBridgeConformance
     self.dockerComposeClient = dockerComposeClient
+    self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
@@ -285,6 +292,11 @@ enum AppCompositionRoot {
       process: socktainerProcess,
       dockerContext: DockerContextService(socketURL: socktainerProcess.socketURL)
     )
+    let dockerComposeClient = DockerComposeClientInstallService()
+    let composeProjectLifecycle = ComposeProjectLifecycleService(
+      configRenderer: DockerComposeConfigService(composeClient: dockerComposeClient),
+      inventory: inventoryService
+    )
     let imageBuildService = RecordingImageBuildService(
       base: AppleContainerBuildService(
         runtimeMutationCoordinator: mutationCoordinator,
@@ -317,7 +329,8 @@ enum AppCompositionRoot {
       registry: AppleRegistryService(),
       dockerCompatibility: dockerCompatibility,
       composeBridgeConformance: SocktainerComposeConformanceService(),
-      dockerComposeClient: DockerComposeClientInstallService(),
+      dockerComposeClient: dockerComposeClient,
+      composeProjectLifecycle: composeProjectLifecycle,
       virtualMachineLibrary: virtualMachineLibrary,
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,

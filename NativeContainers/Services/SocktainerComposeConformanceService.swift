@@ -143,9 +143,9 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
         title: "Project lifecycle",
         requiredOperations: [],
         evidence:
-          "NativeContainers requires a reviewed Compose model and frozen resource identities before mutation.",
+          "NativeContainers now renders a stable full/active Compose model, decodes a redacted desired state, and freezes observed resource identities for review.",
         policyBlockReason:
-          "Project start, stop, and down remain disabled until desired replicas, orphan handling, and volume intent come from a reviewed Compose model."
+          "Project start, stop, and down remain disabled until exact-ID mutation, source revalidation at commit time, and crash-safe operation journaling are available."
       ),
     ]
   )

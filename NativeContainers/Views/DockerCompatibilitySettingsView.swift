@@ -76,7 +76,7 @@ struct DockerCompatibilitySettingsSection: View {
           .textSelection(.enabled)
 
         Text(
-          "Compatibility is optional and partial: Socktainer exposes part of Docker Engine API v1.51. Compose execution remains experimental; NativeContainers derives only read-only project topology from canonical labels surfaced by Apple inventory."
+          "Compatibility is optional and partial: Socktainer exposes part of Docker Engine API v1.51. NativeContainers can now review a stable, redacted Compose desired state, while execution remains locked behind exact-ID mutation and crash-safe journaling."
         )
         .font(.caption)
         .foregroundStyle(.secondary)

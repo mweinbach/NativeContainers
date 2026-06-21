@@ -1,4 +1,5 @@
 import ContainerResource
+import ContainerizationExtras
 import Foundation
 import Testing
 
@@ -133,6 +134,31 @@ struct AppleInfrastructureServiceTests {
   }
 
   @Test
+  func networkPrunePreservesComposeLabeledNetworks() async throws {
+    let composeNetwork = try makeNetwork(
+      name: "demo_default",
+      labels: [
+        ComposeLabelKey.project: "demo",
+        ComposeLabelKey.network: "default",
+      ]
+    )
+    let scratchNetwork = try makeNetwork(name: "scratch", labels: [:])
+    let transport = InfrastructureTransportDouble(
+      createOutcome: .success,
+      initialNetworks: [composeNetwork, scratchNetwork]
+    )
+    let service = AppleInfrastructureService(
+      infrastructureClient: transport,
+      containerReader: EmptyContainerSnapshotReader(),
+      runtimeMutationCoordinator: RuntimeMutationCoordinator()
+    )
+
+    let plan = try await service.prepareNetworkPrune()
+
+    #expect(plan.candidates.map(\.network.name) == ["scratch"])
+  }
+
+  @Test
   func timeoutAfterCommittedVolumeCreateReconcilesAsSuccess() async throws {
     let transport = InfrastructureTransportDouble(createOutcome: .timeoutAfterCommit)
     let service = AppleInfrastructureService(
@@ -153,6 +179,26 @@ struct AppleInfrastructureServiceTests {
     #expect(await transport.volumeNames == ["reconciled-volume"])
     #expect(await transport.deletedVolumeNames.isEmpty)
   }
+
+  private func makeNetwork(
+    name: String,
+    labels: [String: String]
+  ) throws -> NetworkResource {
+    let configuration = try NetworkConfiguration(
+      name: name,
+      mode: .nat,
+      labels: ResourceLabels(labels),
+      plugin: "container-network-vmnet"
+    )
+    return NetworkResource(
+      configuration: configuration,
+      status: NetworkStatus(
+        ipv4Subnet: try CIDRv4("192.168.64.0/24"),
+        ipv4Gateway: try ContainerizationExtras.IPv4Address("192.168.64.1"),
+        ipv6Subnet: nil
+      )
+    )
+  }
 }
 
 private enum InfrastructureCreateOutcome: Sendable {
@@ -166,6 +212,7 @@ private actor InfrastructureTransportDouble: AppleInfrastructureTransport {
   private let createOutcome: InfrastructureCreateOutcome
   private let blockDiskUsageUntilCancellation: Bool
   private var volumes: [VolumeConfiguration]
+  private var networks: [NetworkResource]
   private(set) var deletedVolumeNames: [String] = []
   private(set) var hasStartedCreate = false
   private(set) var hasStartedDiskUsage = false
@@ -173,10 +220,12 @@ private actor InfrastructureTransportDouble: AppleInfrastructureTransport {
   init(
     createOutcome: InfrastructureCreateOutcome,
     initialVolumes: [VolumeConfiguration] = [],
+    initialNetworks: [NetworkResource] = [],
     blockDiskUsageUntilCancellation: Bool = false
   ) {
     self.createOutcome = createOutcome
     self.volumes = initialVolumes
+    networks = initialNetworks
     self.blockDiskUsageUntilCancellation = blockDiskUsageUntilCancellation
   }
 
@@ -241,7 +290,7 @@ private actor InfrastructureTransportDouble: AppleInfrastructureTransport {
   }
 
   func listNetworks() async throws -> [NetworkResource] {
-    []
+    networks
   }
 
   private static func parseByteCount(_ value: String) -> UInt64? {
