@@ -94,7 +94,9 @@ must leave a usable, test-backed product slice.
 - [x] Start, pause, resume, request stop, and explicit force stop through an
       app-scoped, generation-safe runtime service. Live verification remains
       gated by the Virtualization entitlement.
-- [ ] Transactional same-host save/restore with configuration fingerprints.
+- [x] Transactional same-host save/restore with configuration fingerprints,
+      single-use restore consumption, and queued Force Stop. Live verification
+      remains gated by the Virtualization entitlement and an installed guest.
 - [x] Native console with automatic display reconfiguration and system-key
       capture controls.
 - [ ] Shared directories, clipboard, audio, networking, and USB configuration

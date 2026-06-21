@@ -388,6 +388,20 @@ The installed Apple documentation confirms:
   failed stop attempt.
 - Save/restore support has its own configuration validation and is not assumed
   for every configuration.
+- `saveMachineStateTo(url:completionHandler:)` requires a paused VM and leaves
+  it paused on success or failure. `restoreMachineStateFrom` requires a stopped
+  VM, leaves it stopped on failure, and produces a paused VM on success. Neither
+  API exposes cancellation, so an accepted callback must quiesce before runtime
+  ownership is released.
+- Apple's macOS VM sample validates save/restore support separately from normal
+  configuration validation and treats the save file as single-use after a
+  restore attempt. NativeContainers additionally renames the active checkpoint
+  to a consuming tombstone before the attempt, so a process crash cannot make
+  partially restored memory replayable.
+- `VZNetworkDeviceConfiguration.macAddress` defaults to a random locally
+  administered unicast address. A restorable configuration therefore must set a
+  stable address explicitly; NativeContainers derives one from the VM UUID and
+  includes it in the shared topology descriptor and saved-state fingerprint.
 - `VZVirtualMachineView` is the native interactive display. It supports
   automatic display reconfiguration and optional capture of system keys. SDK
   27's `VZVirtualMachineViewAdaptor` retains its VM, so a console must detach the

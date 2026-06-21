@@ -369,6 +369,26 @@ selection and lifecycle commands.
   Force Stop action. Force Stop wraps Apple's destructive stop API, never runs
   automatically because a caller task was cancelled, and does not claim the VM
   stopped when the framework reports an error.
+- macOS VM suspension is split across three focused layers: the runtime service
+  owns the generation-safe lifecycle state machine, the saved-state service
+  sequences Virtualization.framework callbacks, and the saved-state store owns
+  filesystem transactions. Save transactions hold a borrow on the runtime lease,
+  write into a hidden partial directory, fully synchronize the state and metadata,
+  then atomically publish `SavedState`. Restore atomically renames that directory
+  to a single-use tombstone before invoking Virtualization.framework; every
+  attempted restore consumes it, and crash recovery deletes restore tombstones
+  instead of replaying them.
+- Saved-state metadata binds the checkpoint to a shared configuration descriptor,
+  opaque platform artifact digests, and writable disk/auxiliary-storage identity.
+  The descriptor also supplies the deterministic locally administered MAC used by
+  the live VZ configuration, avoiding Apple's random default. Starting fresh and
+  resuming a live paused session explicitly discard an older checkpoint before
+  writable storage can advance.
+- Force Stop remains available during start, save, and restore. A generation-pinned
+  monitor issues destructive stop as soon as Virtualization.framework reports that
+  stop is available, even if the original callback is still pending. The UI reports
+  that the VM is stopped but cleanup is pending, and the runtime lease is never
+  released until the save/restore callback and persistence cleanup quiesce.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before

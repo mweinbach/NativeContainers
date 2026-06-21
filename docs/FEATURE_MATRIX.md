@@ -29,7 +29,7 @@ called out rather than papered over.
 | VM pause/resume/stop/recovery | App-scoped runtime coordinator + per-VM advisory lease + `VZVirtualMachine` delegate | M4 | Start/pause/resume/graceful stop/destructive stop are state-validated; terminal events release ownership exactly once, caller cancellation never abandons an accepted start, and destructive stop requires the current generation |
 | VM shared folders | VirtioFS | M4 | Guest support and scoped host access |
 | VM audio | Virtio sound | M4 | Microphone privacy configuration needed |
-| Same-host suspend/resume | VZ save/restore | M4 | Not yet implemented; saved state must be transactional, configuration-bound, and is not portable |
+| Same-host suspend/resume | Modular runtime/saved-state services + VZ save/restore | M4 | Transactional, configuration-bound, lease-pinned, single-use restore and explicit Start Fresh/Discard are implemented with deterministic tests; saved state is not portable and live verification awaits the Virtualization entitlement |
 | Efficient disk snapshots/clones | DiskImageKit overlays | M5 | macOS 27; shallow layer stacks |
 | Physical USB passthrough | AccessoryAccess + VZ USB | M5 | macOS 27 and user-granted entitlement |
 | Linux GPU/Metal passthrough | None | Unavailable | No public Apple API |

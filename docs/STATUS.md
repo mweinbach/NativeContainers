@@ -88,6 +88,17 @@ Updated: 2026-06-21.
   reconfiguration, opt-in Mac-shortcut capture, SDK 27's adaptor, and detaches
   stale views. Deterministic ownership/service/model tests pass, while real VM
   launch remains entitlement-gated.
+- Same-host suspend/resume is implemented behind focused runtime, saved-state
+  callback, and transactional filesystem services. The live configuration uses
+  a deterministic per-VM MAC and records save/restore capability independently
+  from cold-boot support. Checkpoints are configuration-fingerprinted,
+  lease-borrowed, crash-recovered, and single-use on restore; Start Fresh and
+  live Resume atomically invalidate them before storage advances. The UI exposes
+  Suspend, Resume, confirmed Start Fresh/Discard Saved State, incompatible-state
+  diagnostics, and a generation-pinned Force Stop that queues while save/restore
+  callbacks are outstanding. Deterministic store/service/runtime/model tests are
+  implemented; a real save/restore remains gated by the Virtualization
+  entitlement and installed macOS guest.
 - Container detail inspection uses Apple’s direct API client for configuration,
   disk usage, one-shot CPU/memory/network/block/process statistics, stdout, and
   boot logs. Log reads are bounded to the newest 512 KiB per stream.
@@ -392,6 +403,6 @@ entitlement; no developer-team or provisioning-profile change should be needed.
    mutation is still desired after the explicit command handoff is exercised.
 3. Add the entitlement through a functioning Xcode capability surface, then
    live-verify the implemented macOS installer, lifecycle service, force-stop
-   recovery, and console against a local IPSW. Add transactional save/restore
-   only after that gate passes.
+   recovery, console, and transactional same-host save/restore against a local
+   IPSW.
 4. Spike a pinned Socktainer process and a product-specific Docker context.

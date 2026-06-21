@@ -581,3 +581,44 @@ control a replacement VM.
 Save/restore remains a separate transaction: save only from paused, write and
 atomically promote a partial, bind it to a configuration fingerprint, and treat
 the same-host state as non-portable.
+
+## ADR-025: Make macOS saved state single-use and service-owned
+
+**Status:** Accepted — 2026-06-21
+
+macOS suspension is composed from three services instead of adding filesystem
+work to the UI-facing runtime coordinator. `MacVirtualMachineRuntimeService`
+owns generation-pinned transitions and deferred terminal events.
+`MacVirtualMachineSavedStateService` sequences pause/save/restore callbacks.
+The actor-isolated `MacVirtualMachineSavedStateStore` owns metadata, durability,
+atomic promotion, invalidation, and crash recovery.
+
+A save starts only while the runtime lease is active. The store borrows that
+lease so a delegate callback can request release without dropping the advisory
+file lock before commit or abort. Only one checkpoint may exist. The partial
+state and metadata are synchronized before the directory is atomically renamed
+to `SavedState`; replacement is rejected rather than retaining a backup that
+could later resurrect stale memory.
+
+Restore is a consuming transaction. `SavedState` is atomically renamed to a
+hidden restoring tombstone before Virtualization.framework reads it. The
+tombstone is deleted after success or failure, and launch recovery always
+deletes an interrupted restore instead of making it available again. This is a
+deliberate fail-safe against replaying memory after the writable disk may have
+advanced. Starting fresh, discarding, and live resume use the same atomic
+invalidation path.
+
+The fingerprint is built from the same Codable topology descriptor used by the
+Apple configuration factory, plus opaque hardware/machine-identifier digests
+and writable storage seals. The descriptor fixes a deterministic, locally
+administered per-VM MAC instead of accepting `VZNetworkDeviceConfiguration`'s
+random default. `validateSaveRestoreSupport()` records a capability result; an
+unsupported configuration may still cold boot but cannot suspend or restore.
+
+Force Stop stays visible during long operations. Because save and restore do not
+provide cancellation, a generation-pinned monitor waits for `canStop`, then
+issues destructive stop even while the original callback is pending. Stop
+completion is reported separately from callback cleanup: the VM may be stopped,
+but ownership remains pinned until that callback quiesces. Terminal delegate
+events are deferred across the operation, and ownership is released exactly
+once after persistence cleanup.
