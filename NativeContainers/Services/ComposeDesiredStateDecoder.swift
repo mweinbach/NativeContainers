@@ -30,12 +30,37 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
 
     var issues: [ComposeProjectReviewIssue] = []
     let declaredServiceNames = fullServices.keys.sorted(by: composeStringOrder)
+    guard Set(rendered.serviceConfigurationHashes.keys) == Set(declaredServiceNames) else {
+      throw ComposeProjectLifecycleError.configOutputInvalid(
+        "The service configuration hashes did not match the full service model."
+      )
+    }
+    let fullServiceNames = Set(declaredServiceNames)
+    let serviceDependencies = declaredServiceNames.reduce(
+      into: [String: [String]]()
+    ) { result, serviceName in
+      guard let service = fullServices[serviceName] as? JSONObject else {
+        result[serviceName] = []
+        return
+      }
+      result[serviceName] = dependencyNames(
+        service["depends_on"],
+        serviceName: serviceName,
+        fullServiceNames: fullServiceNames,
+        issues: &issues
+      )
+    }
+    detectDependencyCycles(
+      serviceDependencies,
+      issues: &issues
+    )
     let desiredServices = activeServices.keys.sorted(by: composeStringOrder).compactMap {
       serviceName in
       parseService(
         name: serviceName,
         value: activeServices[serviceName],
-        fullServiceNames: Set(declaredServiceNames),
+        dependencies: serviceDependencies[serviceName] ?? [],
+        configurationHash: rendered.serviceConfigurationHashes[serviceName],
         issues: &issues
       )
     }
@@ -63,6 +88,7 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
     let state = ComposeDesiredState(
       projectName: expectedProjectName,
       declaredServiceNames: declaredServiceNames,
+      serviceDependencies: serviceDependencies,
       activeServices: desiredServices,
       volumes: volumes,
       networks: networks
@@ -76,7 +102,8 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
   private func parseService(
     name: String,
     value: Any?,
-    fullServiceNames: Set<String>,
+    dependencies: [String],
+    configurationHash: String?,
     issues: inout [ComposeProjectReviewIssue]
   ) -> ComposeDesiredService? {
     guard isValidLogicalName(name), let service = value as? JSONObject else {
@@ -102,13 +129,6 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
     }
 
     detectUnsupportedFeatures(in: service, serviceName: name, issues: &issues)
-    inspectDependencies(
-      service["depends_on"],
-      serviceName: name,
-      fullServiceNames: fullServiceNames,
-      issues: &issues
-    )
-
     let replicaCount = replicas(in: service, serviceName: name, issues: &issues)
     if replicaCount > 1, service["container_name"] is String {
       issues.append(
@@ -212,6 +232,8 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
       imageReference: imageReference,
       replicaCount: replicaCount,
       profiles: profiles.sorted(by: composeStringOrder),
+      dependencyNames: dependencies,
+      configurationHash: configurationHash,
       volumeNames: Array(Set(volumeNames)).sorted(by: composeStringOrder),
       networkNames: networkNames,
       publishedPortCount: publishedPortCount
@@ -234,6 +256,7 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
       "volumes_from",
       "links",
       "external_links",
+      "env_file",
     ]
     for key in unsupportedPresence where hasMeaningfulValue(service[key]) {
       issues.append(
@@ -289,13 +312,13 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
     }
   }
 
-  private func inspectDependencies(
+  private func dependencyNames(
     _ value: Any?,
     serviceName: String,
     fullServiceNames: Set<String>,
     issues: inout [ComposeProjectReviewIssue]
-  ) {
-    guard let value else { return }
+  ) -> [String] {
+    guard let value else { return [] }
     guard let dependencies = value as? JSONObject else {
       issues.append(
         blocker(
@@ -304,9 +327,10 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
           message: "The dependency model is invalid."
         )
       )
-      return
+      return []
     }
 
+    var names: [String] = []
     for dependencyName in dependencies.keys.sorted(by: composeStringOrder) {
       guard fullServiceNames.contains(dependencyName) else {
         issues.append(
@@ -318,20 +342,70 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
         )
         continue
       }
+      names.append(dependencyName)
       guard let dependency = dependencies[dependencyName] as? JSONObject else {
+        issues.append(
+          blocker(
+            .invalidModel,
+            subject: serviceName,
+            message: "The canonical dependency configuration is invalid."
+          )
+        )
         continue
       }
       let condition = dependency["condition"] as? String ?? "service_started"
       let restart = dependency["restart"] as? Bool ?? false
-      if condition != "service_started" || restart {
+      let required = dependency["required"] as? Bool ?? true
+      if condition != "service_started" || restart || !required {
         issues.append(
           blocker(
             .unsupportedFeature,
             subject: serviceName,
-            message: "Only service_started dependencies without restart propagation are supported."
+            message:
+              "Only required service_started dependencies without restart propagation are supported."
           )
         )
       }
+    }
+    return names
+  }
+
+  private func detectDependencyCycles(
+    _ dependencies: [String: [String]],
+    issues: inout [ComposeProjectReviewIssue]
+  ) {
+    enum VisitState {
+      case visiting
+      case visited
+    }
+    var states: [String: VisitState] = [:]
+    var cycleMembers: Set<String> = []
+
+    func visit(_ service: String, stack: [String]) {
+      if states[service] == .visiting {
+        cycleMembers.formUnion(stack.drop(while: { $0 != service }))
+        cycleMembers.insert(service)
+        return
+      }
+      guard states[service] == nil else { return }
+      states[service] = .visiting
+      for dependency in dependencies[service] ?? [] {
+        visit(dependency, stack: stack + [service])
+      }
+      states[service] = .visited
+    }
+
+    for service in dependencies.keys.sorted(by: composeStringOrder) {
+      visit(service, stack: [])
+    }
+    for service in cycleMembers.sorted(by: composeStringOrder) {
+      issues.append(
+        blocker(
+          .invalidModel,
+          subject: service,
+          message: "The service dependency graph contains a cycle."
+        )
+      )
     }
   }
 

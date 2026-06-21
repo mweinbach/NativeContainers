@@ -8,6 +8,7 @@ enum ComposeLabelKey {
   static let network = "com.docker.compose.network"
   static let containerNumber = "com.docker.compose.container-number"
   static let oneOff = "com.docker.compose.oneoff"
+  static let configHash = "com.docker.compose.config-hash"
   static let version = "com.docker.compose.version"
   static let workingDirectory = "com.docker.compose.project.working_dir"
   static let configFiles = "com.docker.compose.project.config_files"

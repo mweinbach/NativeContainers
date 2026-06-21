@@ -12,12 +12,15 @@ struct ComposeLifecyclePlannerTests {
     let desired = ComposeDesiredState(
       projectName: "demo",
       declaredServiceNames: ["web", "worker"],
+      serviceDependencies: [:],
       activeServices: [
         ComposeDesiredService(
           name: "web",
           imageReference: "nginx:1.27",
           replicaCount: 1,
           profiles: [],
+          dependencyNames: [],
+          configurationHash: String(repeating: "a", count: 64),
           volumeNames: [],
           networkNames: [],
           publishedPortCount: 0
@@ -37,7 +40,7 @@ struct ComposeLifecyclePlannerTests {
       source: sourceSummary,
       rendered: rendered,
       review: ComposeDesiredStateReview(desiredState: desired, issues: []),
-      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      options: ComposeProjectReviewOptions(action: .start, projectName: "demo"),
       inventory: inventory
     )
 
@@ -52,12 +55,15 @@ struct ComposeLifecyclePlannerTests {
     let desired = ComposeDesiredState(
       projectName: "demo",
       declaredServiceNames: ["web"],
+      serviceDependencies: [:],
       activeServices: [
         ComposeDesiredService(
           name: "web",
           imageReference: "nginx:1.27",
           replicaCount: 1,
           profiles: [],
+          dependencyNames: [],
+          configurationHash: String(repeating: "a", count: 64),
           volumeNames: ["shared"],
           networkNames: ["edge"],
           publishedPortCount: 0
@@ -104,6 +110,7 @@ struct ComposeLifecyclePlannerTests {
     let desired = ComposeDesiredState(
       projectName: "demo",
       declaredServiceNames: ["web"],
+      serviceDependencies: [:],
       activeServices: [],
       volumes: [
         ComposeDesiredResource(
@@ -189,14 +196,19 @@ struct ComposeLifecyclePlannerTests {
       activeConfiguration: Data("{}".utf8),
       fullConfigurationSHA256: String(repeating: "a", count: 64),
       activeConfigurationSHA256: String(repeating: "b", count: 64),
-      composeReleaseVersion: "5.1.4"
+      composeReleaseVersion: "5.1.4",
+      composeBinarySHA256: String(repeating: "c", count: 64),
+      composeSourceRevision: "source-revision",
+      environmentSHA256: String(repeating: "d", count: 64),
+      serviceConfigurationHashes: ["web": String(repeating: "a", count: 64)]
     )
   }
 
   private func makeInventory(
     containers: [ContainerRecord] = [],
     volumes: [VolumeRecord] = [],
-    networks: [NetworkRecord] = []
+    networks: [NetworkRecord] = [],
+    images: [ImageRecord] = []
   ) -> ContainerInventory {
     ContainerInventory(
       system: ContainerSystemInfo(
@@ -207,7 +219,7 @@ struct ComposeLifecyclePlannerTests {
         installRoot: URL(filePath: "/tmp/install")
       ),
       containers: containers,
-      images: [],
+      images: images,
       volumes: volumes,
       networks: networks,
       machines: []
@@ -235,6 +247,7 @@ struct ComposeLifecyclePlannerTests {
         ComposeLabelKey.service: service,
         ComposeLabelKey.containerNumber: "1",
         ComposeLabelKey.oneOff: oneOff ? "True" : "False",
+        ComposeLabelKey.configHash: String(repeating: "a", count: 64),
       ]
     )
   }

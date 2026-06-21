@@ -10,6 +10,9 @@ struct DockerComposeConfigServiceTests {
     let executor = ComposeCommandExecutorDouble(results: [
       commandResult(fullJSON),
       commandResult(activeJSON),
+      commandResult(
+        "web \(String(repeating: "a", count: 64))\nworker \(String(repeating: "b", count: 64))\n"
+      ),
     ])
     let service = DockerComposeConfigService(
       composeClient: ReadyComposeClientDouble(),
@@ -33,16 +36,18 @@ struct DockerComposeConfigServiceTests {
     #expect(rendered.composeReleaseVersion == DockerComposeRelease.pinned.version)
     #expect(rendered.fullConfigurationSHA256.count == 64)
     #expect(rendered.activeConfigurationSHA256.count == 64)
+    #expect(rendered.serviceConfigurationHashes.keys.sorted() == ["web", "worker"])
 
     let arguments = await executor.arguments
-    #expect(arguments.count == 2)
+    #expect(arguments.count == 3)
     #expect(arguments[0].containsSubsequence(["--profile", "*"]))
     #expect(arguments[1].containsSubsequence(["--profile", "jobs"]))
     #expect(arguments.allSatisfy { $0.containsSubsequence(["--project-name", "demo"]) })
     #expect(
-      arguments.allSatisfy {
+      arguments.prefix(2).allSatisfy {
         $0.suffix(4) == ["config", "--format", "json", "--no-env-resolution"]
       })
+    #expect(arguments[2].suffix(3) == ["config", "--hash", "*"])
 
     let environments = await executor.environments
     #expect(environments.allSatisfy { $0?["HOME"] == "/Users/test" })
@@ -68,6 +73,75 @@ struct DockerComposeConfigServiceTests {
     )
 
     await #expect(throws: ComposeProjectLifecycleError.configOutputTruncated) {
+      _ = try await service.render(
+        source: sourceLease,
+        options: ComposeProjectReviewOptions(action: .up, projectName: "demo")
+      )
+    }
+  }
+
+  @Test
+  func rejectsDuplicatedOrMalformedServiceConfigurationHashes() async {
+    let hash = String(repeating: "a", count: 64)
+    let executor = ComposeCommandExecutorDouble(results: [
+      commandResult(fullJSON),
+      commandResult(activeJSON),
+      commandResult("web \(hash)\nweb \(hash)\n"),
+    ])
+    let service = DockerComposeConfigService(
+      composeClient: ReadyComposeClientDouble(),
+      commandExecutor: executor
+    )
+
+    await #expect(throws: ComposeProjectLifecycleError.self) {
+      _ = try await service.render(
+        source: sourceLease,
+        options: ComposeProjectReviewOptions(action: .up, projectName: "demo")
+      )
+    }
+  }
+
+  @Test
+  func rejectsTruncatedServiceConfigurationHashOutput() async {
+    let executor = ComposeCommandExecutorDouble(results: [
+      commandResult(fullJSON),
+      commandResult(activeJSON),
+      HostCommandResult(
+        exitCode: 0,
+        standardOutput: "web \(String(repeating: "a", count: 64))\n",
+        standardError: "",
+        outputWasTruncated: true
+      ),
+    ])
+    let service = DockerComposeConfigService(
+      composeClient: ReadyComposeClientDouble(),
+      commandExecutor: executor
+    )
+
+    await #expect(throws: ComposeProjectLifecycleError.configOutputTruncated) {
+      _ = try await service.render(
+        source: sourceLease,
+        options: ComposeProjectReviewOptions(action: .up, projectName: "demo")
+      )
+    }
+  }
+
+  @Test
+  func rejectsInterpolationWarningsWithoutRetainingTheirValues() async {
+    let executor = ComposeCommandExecutorDouble(results: [
+      HostCommandResult(
+        exitCode: 0,
+        standardOutput: fullJSON,
+        standardError: "The PRIVATE_TOKEN variable is not set.",
+        outputWasTruncated: false
+      )
+    ])
+    let service = DockerComposeConfigService(
+      composeClient: ReadyComposeClientDouble(),
+      commandExecutor: executor
+    )
+
+    await #expect(throws: ComposeProjectLifecycleError.self) {
       _ = try await service.render(
         source: sourceLease,
         options: ComposeProjectReviewOptions(action: .up, projectName: "demo")
@@ -258,16 +332,79 @@ struct ComposeDesiredStateDecoderTests {
     #expect(review.issues.contains { $0.code == .invalidModel })
   }
 
+  @Test
+  func retainsSupportedDependencyOrderAndBlocksCycles() throws {
+    let acyclic = renderedConfiguration(
+      full: """
+        {
+          "name":"demo",
+          "services":{
+            "database":{"image":"postgres:17"},
+            "web":{"image":"example/web","depends_on":{"database":{"condition":"service_started","required":true,"restart":false}}}
+          }
+        }
+        """,
+      active: """
+        {
+          "name":"demo",
+          "services":{
+            "database":{"image":"postgres:17"},
+            "web":{"image":"example/web","depends_on":{"database":{"condition":"service_started","required":true,"restart":false}}}
+          }
+        }
+        """
+    )
+    let acyclicReview = try decoder.decode(rendered: acyclic, expectedProjectName: "demo")
+    #expect(acyclicReview.desiredState.serviceDependencies["web"] == ["database"])
+    #expect(
+      acyclicReview.desiredState.activeServices.first(where: { $0.name == "web" })?
+        .dependencyNames == ["database"]
+    )
+    #expect(acyclicReview.issues.isEmpty)
+
+    let cyclic = renderedConfiguration(
+      full: """
+        {"name":"demo","services":{
+          "database":{"image":"postgres:17","depends_on":{"web":{"condition":"service_started"}}},
+          "web":{"image":"example/web","depends_on":{"database":{"condition":"service_started"}}}
+        }}
+        """,
+      active: """
+        {"name":"demo","services":{
+          "database":{"image":"postgres:17","depends_on":{"web":{"condition":"service_started"}}},
+          "web":{"image":"example/web","depends_on":{"database":{"condition":"service_started"}}}
+        }}
+        """
+    )
+    let cyclicReview = try decoder.decode(rendered: cyclic, expectedProjectName: "demo")
+    #expect(
+      cyclicReview.issues.count(where: {
+        $0.code == .invalidModel && $0.message.contains("cycle")
+      }) == 2
+    )
+  }
+
   private func renderedConfiguration(
     full: String,
     active: String
   ) -> ComposeRenderedConfiguration {
-    ComposeRenderedConfiguration(
+    let object = try! JSONSerialization.jsonObject(with: Data(full.utf8)) as! [String: Any]
+    let services = object["services"] as! [String: Any]
+    let hashes = Dictionary(
+      uniqueKeysWithValues: services.keys.map {
+        ($0, String(repeating: $0 == "web" ? "a" : "b", count: 64))
+      }
+    )
+    return ComposeRenderedConfiguration(
       fullConfiguration: Data(full.utf8),
       activeConfiguration: Data(active.utf8),
       fullConfigurationSHA256: String(repeating: "a", count: 64),
       activeConfigurationSHA256: String(repeating: "b", count: 64),
-      composeReleaseVersion: DockerComposeRelease.pinned.version
+      composeReleaseVersion: DockerComposeRelease.pinned.version,
+      composeBinarySHA256: DockerComposeRelease.pinned.binarySHA256,
+      composeSourceRevision: DockerComposeRelease.pinned.sourceRevision,
+      environmentSHA256: String(repeating: "c", count: 64),
+      serviceConfigurationHashes: hashes
     )
   }
 }

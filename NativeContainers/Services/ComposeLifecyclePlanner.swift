@@ -80,14 +80,23 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
       }
 
       if declaredServices.contains(serviceName) {
-        if options.action == .down || activeServices.contains(serviceName) {
+        let isAffected =
+          switch options.action {
+          case .up:
+            false
+          case .start, .stop:
+            activeServices.contains(serviceName)
+          case .down:
+            true
+          }
+        if isAffected {
           affectedContainerIDs.append(container.id)
         } else {
           preservedResourceNames.append(container.id)
         }
       } else {
         orphanContainerIDs.append(container.id)
-        if options.removeOrphans {
+        if options.action == .down, options.removeOrphans {
           affectedContainerIDs.append(container.id)
         } else {
           preservedResourceNames.append(container.id)
@@ -128,21 +137,27 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
       issues: &issues
     )
 
-    issues.append(
-      blocker(
-        .executionPolicy,
-        subject: desired.projectName,
-        message:
-          "Execution remains disabled until exact-ID mutation, source revalidation, and crash-safe operation journaling are available."
-      )
+    appendExecutionPolicyIssues(
+      options: options,
+      desired: desired,
+      projectContainers: projectContainers,
+      inventory: inventory,
+      issues: &issues
     )
 
     let relevantVolumeNames = Set(desired.volumes.map(\.runtimeName))
     let relevantNetworkNames = Set(desired.networks.map(\.runtimeName))
+    let imageDigestsByReference = Dictionary(
+      inventory.images.map { ($0.reference, $0.digest) },
+      uniquingKeysWith: { first, _ in first }
+    )
     let observedIdentity = ComposeProjectInventoryIdentity(
-      containers: projectContainers.sorted(by: containerOrder).map(
-        ComposeProjectContainerIdentity.init
-      ),
+      containers: projectContainers.sorted(by: containerOrder).map {
+        ComposeProjectContainerIdentity(
+          $0,
+          imageDigest: imageDigestsByReference[$0.imageReference]
+        )
+      },
       volumes: inventory.volumes.filter {
         relevantVolumeNames.contains($0.name)
           || $0.labels[ComposeLabelKey.project] == desired.projectName
@@ -162,6 +177,10 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
       fullConfigurationSHA256: rendered.fullConfigurationSHA256,
       activeConfigurationSHA256: rendered.activeConfigurationSHA256,
       composeReleaseVersion: rendered.composeReleaseVersion,
+      composeBinarySHA256: rendered.composeBinarySHA256,
+      composeSourceRevision: rendered.composeSourceRevision,
+      environmentSHA256: rendered.environmentSHA256,
+      serviceConfigurationHashes: rendered.serviceConfigurationHashes,
       observedIdentity: observedIdentity,
       issues: issues.sorted(by: issueOrder),
       affectedContainerIDs: Array(Set(affectedContainerIDs)).sorted(by: composeStringOrder),
@@ -243,6 +262,8 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
         switch options.action {
         case .up:
           resource.isActive
+        case .start, .stop:
+          false
         case .down:
           resource.kind == .network || options.removeVolumes
         }
@@ -267,6 +288,166 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
           )
         }
       }
+    }
+  }
+
+  private func appendExecutionPolicyIssues(
+    options: ComposeProjectReviewOptions,
+    desired: ComposeDesiredState,
+    projectContainers: [ContainerRecord],
+    inventory: ContainerInventory,
+    issues: inout [ComposeProjectReviewIssue]
+  ) {
+    if options.action != .down, options.removeVolumes {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: desired.projectName,
+          message: "Managed volume removal is only available for Down."
+        )
+      )
+    }
+    if options.action != .down, options.removeOrphans {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: desired.projectName,
+          message: "Orphan removal is only available for Down."
+        )
+      )
+    }
+    if options.action == .down, options.removeVolumes {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: desired.projectName,
+          message:
+            "Named-volume deletion remains review-only until every volume action has an independently typed exact-identity contract."
+        )
+      )
+    }
+    if options.action == .down, options.removeOrphans {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: desired.projectName,
+          message:
+            "Orphan deletion remains review-only until orphan actions are represented separately from declared services."
+        )
+      )
+    }
+
+    switch options.action {
+    case .up:
+      guard !desired.activeServices.isEmpty else {
+        issues.append(
+          blocker(
+            .executionPolicy,
+            subject: desired.projectName,
+            message: "Fresh Up requires at least one active service."
+          )
+        )
+        return
+      }
+      let hasManagedProjectResources =
+        !projectContainers.isEmpty
+        || inventory.volumes.contains {
+          $0.labels[ComposeLabelKey.project] == desired.projectName
+        }
+        || inventory.networks.contains {
+          $0.labels[ComposeLabelKey.project] == desired.projectName
+        }
+      if hasManagedProjectResources {
+        issues.append(
+          blocker(
+            .executionPolicy,
+            subject: desired.projectName,
+            message:
+              "Up currently supports fresh projects only; existing project resources require reviewed convergence and recreation support."
+          )
+        )
+      }
+      if options.pullPolicy == .never {
+        let localReferences = Set(inventory.images.map(\.reference))
+        for service in desired.activeServices
+        where !localReferences.contains(service.imageReference) {
+          issues.append(
+            blocker(
+              .executionPolicy,
+              subject: service.name,
+              message:
+                "Pull policy Never requires the reviewed image reference to exist in the local Apple image store."
+            )
+          )
+        }
+      }
+
+    case .start:
+      let regularContainers = projectContainers.filter {
+        parseBooleanLabel($0.labels[ComposeLabelKey.oneOff]) != true
+      }
+      let localImageReferences = Set(inventory.images.map(\.reference))
+      for service in desired.activeServices {
+        let instances = regularContainers.filter {
+          $0.labels[ComposeLabelKey.service] == service.name
+        }
+        if instances.count != service.replicaCount {
+          issues.append(
+            blocker(
+              .executionPolicy,
+              subject: service.name,
+              message:
+                "Start requires exactly \(service.replicaCount) reviewed existing replica(s); use fresh Up or a later convergence workflow to create missing replicas."
+            )
+          )
+        }
+        for container in instances {
+          if container.imageReference != service.imageReference {
+            issues.append(
+              blocker(
+                .executionPolicy,
+                subject: container.id,
+                message: "The existing container image does not match the reviewed service image."
+              )
+            )
+          }
+          if !localImageReferences.contains(container.imageReference) {
+            issues.append(
+              blocker(
+                .executionPolicy,
+                subject: container.id,
+                message:
+                  "Native exact-ID Start requires pinned local image digest evidence for the existing container."
+              )
+            )
+          }
+          if !container.ports.isEmpty {
+            issues.append(
+              blocker(
+                .executionPolicy,
+                subject: container.id,
+                message:
+                  "Native exact-ID Start is not enabled for containers with published ports until their socket workspace has verifiable ownership."
+              )
+            )
+          }
+          if let expectedHash = service.configurationHash,
+            container.labels[ComposeLabelKey.configHash] != expectedHash
+          {
+            issues.append(
+              blocker(
+                .executionPolicy,
+                subject: container.id,
+                message:
+                  "The stopped container does not match the reviewed service configuration hash."
+              )
+            )
+          }
+        }
+      }
+
+    case .stop, .down:
+      break
     }
   }
 

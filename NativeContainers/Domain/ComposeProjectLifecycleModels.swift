@@ -2,6 +2,8 @@ import Foundation
 
 enum ComposeProjectLifecycleAction: String, CaseIterable, Equatable, Identifiable, Sendable {
   case up
+  case start
+  case stop
   case down
 
   var id: String { rawValue }
@@ -21,6 +23,7 @@ struct ComposeProjectReviewOptions: Equatable, Sendable {
   let pullPolicy: ComposeProjectPullPolicy
   let removeOrphans: Bool
   let removeVolumes: Bool
+  let killStuckContainers: Bool
 
   init(
     action: ComposeProjectLifecycleAction,
@@ -28,7 +31,8 @@ struct ComposeProjectReviewOptions: Equatable, Sendable {
     profiles: [String] = [],
     pullPolicy: ComposeProjectPullPolicy = .never,
     removeOrphans: Bool = false,
-    removeVolumes: Bool = false
+    removeVolumes: Bool = false,
+    killStuckContainers: Bool = true
   ) {
     self.action = action
     self.projectName = projectName
@@ -36,6 +40,7 @@ struct ComposeProjectReviewOptions: Equatable, Sendable {
     self.pullPolicy = pullPolicy
     self.removeOrphans = removeOrphans
     self.removeVolumes = removeVolumes
+    self.killStuckContainers = killStuckContainers
   }
 }
 
@@ -71,6 +76,10 @@ struct ComposeRenderedConfiguration: Equatable, Sendable {
   let fullConfigurationSHA256: String
   let activeConfigurationSHA256: String
   let composeReleaseVersion: String
+  let composeBinarySHA256: String
+  let composeSourceRevision: String
+  let environmentSHA256: String
+  let serviceConfigurationHashes: [String: String]
 }
 
 enum ComposeDesiredResourceKind: String, Equatable, Sendable {
@@ -83,6 +92,8 @@ struct ComposeDesiredService: Equatable, Identifiable, Sendable {
   let imageReference: String
   let replicaCount: Int
   let profiles: [String]
+  let dependencyNames: [String]
+  let configurationHash: String?
   let volumeNames: [String]
   let networkNames: [String]
   let publishedPortCount: Int
@@ -103,6 +114,7 @@ struct ComposeDesiredResource: Equatable, Identifiable, Sendable {
 struct ComposeDesiredState: Equatable, Sendable {
   let projectName: String
   let declaredServiceNames: [String]
+  let serviceDependencies: [String: [String]]
   let activeServices: [ComposeDesiredService]
   let volumes: [ComposeDesiredResource]
   let networks: [ComposeDesiredResource]
@@ -149,18 +161,23 @@ struct ComposeProjectReviewIssue: Equatable, Identifiable, Sendable {
 struct ComposeProjectContainerIdentity: Equatable, Sendable {
   let id: String
   let imageReference: String
+  let imageDigest: String?
   let createdAt: Date
   let labels: [String: String]
 
-  init(_ container: ContainerRecord) {
+  init(_ container: ContainerRecord, imageDigest: String? = nil) {
     id = container.id
     imageReference = container.imageReference
+    self.imageDigest = imageDigest
     createdAt = container.createdAt
     labels = container.labels
   }
 
   func matches(_ container: ContainerRecord) -> Bool {
-    self == Self(container)
+    id == container.id
+      && imageReference == container.imageReference
+      && createdAt == container.createdAt
+      && labels == container.labels
   }
 }
 
@@ -213,6 +230,10 @@ struct ComposeProjectPlan: Equatable, Identifiable, Sendable {
   let fullConfigurationSHA256: String
   let activeConfigurationSHA256: String
   let composeReleaseVersion: String
+  let composeBinarySHA256: String
+  let composeSourceRevision: String
+  let environmentSHA256: String
+  let serviceConfigurationHashes: [String: String]
   let observedIdentity: ComposeProjectInventoryIdentity
   let issues: [ComposeProjectReviewIssue]
   let affectedContainerIDs: [String]
@@ -261,6 +282,8 @@ enum ComposeProjectLifecycleError: LocalizedError, Equatable, Sendable {
   case commandFailed(action: ComposeProjectLifecycleAction, exitCode: Int32, output: String)
   case postconditionNotMet(String)
   case workspaceUnsafe(String)
+  case journalRecoveryRequired(UUID)
+  case partialCompletion(String)
   case unavailable(String)
 
   var errorDescription: String? {
@@ -303,6 +326,10 @@ enum ComposeProjectLifecycleError: LocalizedError, Equatable, Sendable {
       "Compose finished, but Apple inventory did not confirm the reviewed result. \(reason)"
     case .workspaceUnsafe(let reason):
       "The private Compose execution workspace is unsafe: \(reason)"
+    case .journalRecoveryRequired(let operationID):
+      "Compose operation \(operationID.uuidString) requires reconciliation before another project mutation."
+    case .partialCompletion(let reason):
+      "The Compose operation may be partially complete. \(reason)"
     case .unavailable(let reason):
       "Compose project lifecycle is unavailable: \(reason)"
     }
