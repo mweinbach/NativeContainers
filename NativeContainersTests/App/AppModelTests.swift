@@ -59,6 +59,26 @@ struct AppModelTests {
   }
 
   @Test
+  func linuxVirtualMachineRuntimeUsesAStableAppScopedModel() throws {
+    let model = AppModel.previewEmpty
+    let machine = try VirtualMachineManifest(
+      name: "Linux",
+      guest: .linux,
+      installState: .readyToInstall,
+      resources: VirtualMachineResources(
+        cpuCount: 4,
+        memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+        diskBytes: 32 * VirtualMachineResources.bytesPerGiB
+      )
+    )
+
+    #expect(
+      model.makeLinuxVirtualMachineRuntimeModel(for: machine)
+        === model.makeLinuxVirtualMachineRuntimeModel(for: machine)
+    )
+  }
+
+  @Test
   func macVirtualMachineAudioUsesAStableAppScopedModel() throws {
     let model = AppModel.previewVirtualMachines
     let machine = try #require(model.virtualMachines.first)

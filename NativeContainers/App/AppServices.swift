@@ -50,10 +50,12 @@ struct AppServices: Sendable {
   let dockerComposeClient: any DockerComposeClientInstalling
   let composeProjectLifecycle: any ComposeProjectLifecycleManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
+  let linuxVirtualMachineCreator: any LinuxVirtualMachineCreating
   let virtualMachineCloner: any VirtualMachineCloning
   let virtualMachineTransfer: any VirtualMachinePackageTransferring
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
+  let linuxVirtualMachineRuntime: any LinuxVirtualMachineRuntimeManaging
   let virtualMachineAudio: any MacVirtualMachineAudioManaging
   let virtualMachineNetwork: any MacVirtualMachineNetworkManaging
   let virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging
@@ -105,6 +107,8 @@ struct AppServices: Sendable {
     composeProjectLifecycle: any ComposeProjectLifecycleManaging =
       UnavailableComposeProjectLifecycleService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
+    linuxVirtualMachineCreator: any LinuxVirtualMachineCreating =
+      UnavailableLinuxVirtualMachineCreationService(),
     virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
     virtualMachineTransfer: any VirtualMachinePackageTransferring =
       UnavailableVirtualMachineTransferService(),
@@ -112,6 +116,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    linuxVirtualMachineRuntime: any LinuxVirtualMachineRuntimeManaging =
+      UnavailableLinuxVirtualMachineRuntimeService(),
     virtualMachineAudio: any MacVirtualMachineAudioManaging =
       UnavailableMacVirtualMachineAudioService(),
     virtualMachineNetwork: any MacVirtualMachineNetworkManaging =
@@ -161,10 +167,12 @@ struct AppServices: Sendable {
     self.dockerComposeClient = dockerComposeClient
     self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
+    self.linuxVirtualMachineCreator = linuxVirtualMachineCreator
     self.virtualMachineCloner = virtualMachineCloner
     self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
+    self.linuxVirtualMachineRuntime = linuxVirtualMachineRuntime
     self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineNetwork = virtualMachineNetwork
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
@@ -206,6 +214,8 @@ struct AppServices: Sendable {
     composeProjectLifecycle: any ComposeProjectLifecycleManaging =
       UnavailableComposeProjectLifecycleService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
+    linuxVirtualMachineCreator: any LinuxVirtualMachineCreating =
+      UnavailableLinuxVirtualMachineCreationService(),
     virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
     virtualMachineTransfer: any VirtualMachinePackageTransferring =
       UnavailableVirtualMachineTransferService(),
@@ -213,6 +223,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    linuxVirtualMachineRuntime: any LinuxVirtualMachineRuntimeManaging =
+      UnavailableLinuxVirtualMachineRuntimeService(),
     virtualMachineAudio: any MacVirtualMachineAudioManaging =
       UnavailableMacVirtualMachineAudioService(),
     virtualMachineNetwork: any MacVirtualMachineNetworkManaging =
@@ -262,10 +274,12 @@ struct AppServices: Sendable {
     self.dockerComposeClient = dockerComposeClient
     self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
+    self.linuxVirtualMachineCreator = linuxVirtualMachineCreator
     self.virtualMachineCloner = virtualMachineCloner
     self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
+    self.linuxVirtualMachineRuntime = linuxVirtualMachineRuntime
     self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineNetwork = virtualMachineNetwork
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
@@ -422,6 +436,9 @@ enum AppCompositionRoot {
       volumes: infrastructureService
     )
     let virtualMachineBundlePreparer = VirtualMachineBundlePreparationService()
+    let linuxVirtualMachineCreator = LinuxVirtualMachineCreationService(
+      library: virtualMachineLibrary
+    )
     let virtualMachineCloner = VirtualMachineCloneService(
       store: virtualMachineLibrary,
       copier: FileVirtualMachineBundleCopier(preparer: virtualMachineBundlePreparer)
@@ -484,6 +501,11 @@ enum AppCompositionRoot {
         configurationFactory: virtualMachineConfigurationFactory
       ),
       savedStateService: virtualMachineSavedState
+    )
+    let linuxVirtualMachineRuntime = LinuxVirtualMachineRuntimeService(
+      leasingStore: virtualMachineLibrary,
+      installationStore: virtualMachineLibrary,
+      engine: AppleLinuxVirtualMachineRuntimeEngine()
     )
     let virtualMachineAudio = MacVirtualMachineAudioService(
       leasingStore: virtualMachineLibrary,
@@ -581,10 +603,12 @@ enum AppCompositionRoot {
       dockerComposeClient: dockerComposeClient,
       composeProjectLifecycle: composeProjectLifecycle,
       virtualMachineLibrary: virtualMachineLibrary,
+      linuxVirtualMachineCreator: linuxVirtualMachineCreator,
       virtualMachineCloner: virtualMachineCloner,
       virtualMachineTransfer: virtualMachineTransfer,
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,
+      linuxVirtualMachineRuntime: linuxVirtualMachineRuntime,
       virtualMachineAudio: virtualMachineAudio,
       virtualMachineNetwork: virtualMachineNetwork,
       virtualMachineSharedDirectories: virtualMachineSharedDirectories,

@@ -98,6 +98,9 @@
 		1F5E64232FE88A3500A430FF /* LinuxVirtualMachineRuntimeObservations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64222FE88A3500A430FF /* LinuxVirtualMachineRuntimeObservations.swift */; };
 		1F5E64252FE88A7900A430FF /* LinuxVirtualMachineRuntimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64242FE88A7900A430FF /* LinuxVirtualMachineRuntimeService.swift */; };
 		1F5E64272FE88AAF00A430FF /* LinuxVirtualMachineRuntimeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64262FE88AAF00A430FF /* LinuxVirtualMachineRuntimeServiceTests.swift */; };
+		1F5E64292FE88AE600A430FF /* LinuxVirtualMachineRuntimeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64282FE88AE600A430FF /* LinuxVirtualMachineRuntimeModel.swift */; };
+		1F5E642B2FE88AEB00A430FF /* LinuxVirtualMachineCreationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E642A2FE88AEB00A430FF /* LinuxVirtualMachineCreationService.swift */; };
+		1F5E642D2FE88B2800A430FF /* LinuxVirtualMachineCreationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E642C2FE88B2800A430FF /* LinuxVirtualMachineCreationServiceTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -625,6 +628,9 @@
 		1F5E64222FE88A3500A430FF /* LinuxVirtualMachineRuntimeObservations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineRuntimeObservations.swift; sourceTree = "<group>"; };
 		1F5E64242FE88A7900A430FF /* LinuxVirtualMachineRuntimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineRuntimeService.swift; sourceTree = "<group>"; };
 		1F5E64262FE88AAF00A430FF /* LinuxVirtualMachineRuntimeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineRuntimeServiceTests.swift; sourceTree = "<group>"; };
+		1F5E64282FE88AE600A430FF /* LinuxVirtualMachineRuntimeModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineRuntimeModel.swift; sourceTree = "<group>"; };
+		1F5E642A2FE88AEB00A430FF /* LinuxVirtualMachineCreationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineCreationService.swift; sourceTree = "<group>"; };
+		1F5E642C2FE88B2800A430FF /* LinuxVirtualMachineCreationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineCreationServiceTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1416,6 +1422,7 @@
 				1F5E64202FE88A3500A430FF /* VirtualMachineRuntimeObservationStore.swift */,
 				1F5E64222FE88A3500A430FF /* LinuxVirtualMachineRuntimeObservations.swift */,
 				1F5E64242FE88A7900A430FF /* LinuxVirtualMachineRuntimeService.swift */,
+				1F5E642A2FE88AEB00A430FF /* LinuxVirtualMachineCreationService.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -1703,6 +1710,7 @@
 				1F5E64122FE8877600A430FF /* LinuxVirtualMachineModelsTests.swift */,
 				1F5E641A2FE889D200A430FF /* LinuxVirtualMachineRuntimeOwnershipStoreTests.swift */,
 				1F5E64262FE88AAF00A430FF /* LinuxVirtualMachineRuntimeServiceTests.swift */,
+				1F5E642C2FE88B2800A430FF /* LinuxVirtualMachineCreationServiceTests.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -1875,6 +1883,7 @@
 				1F5E63AE2FE86EC800A430FF /* TerminalWorkspaceModel.swift */,
 				1F5E63DE2FE87C0F00A430FF /* MacVirtualMachineAudioModel.swift */,
 				1F5E63F42FE8821100A430FF /* MacVirtualMachineNetworkModel.swift */,
+				1F5E64282FE88AE600A430FF /* LinuxVirtualMachineRuntimeModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2146,6 +2155,7 @@
 				1F5E63E32FE87CAF00A430FF /* MacVirtualMachineAudioModelTests.swift in Sources */,
 				1F5E63D52FE87A1C00A430FF /* AppleMacVirtualMachineAudioDeviceFactoryTests.swift in Sources */,
 				1F9D2BB82FE7AE5C0076F5B9 /* MacVirtualMachineSavedStateStoreTests.swift in Sources */,
+				1F5E642D2FE88B2800A430FF /* LinuxVirtualMachineCreationServiceTests.swift in Sources */,
 				721DCA1DC3DB4606B99080FB /* LiveAppleContainerBuildSmokeTests.swift in Sources */,
 				1F5E64132FE8877600A430FF /* LinuxVirtualMachineModelsTests.swift in Sources */,
 				1F9D2B962FE7A1B60076F5B9 /* MacVirtualMachineInstallationServiceTests.swift in Sources */,
@@ -2370,6 +2380,7 @@
 				AEF8A0C79D65EBF3BC79F55A /* ImageInspectorView.swift in Sources */,
 				09827E0EC05BF4BA13CA3F8B /* ImageManagementModels.swift in Sources */,
 				1F5E63A52FE860BF00A430FF /* AppleContainerShellService.swift in Sources */,
+				1F5E64292FE88AE600A430FF /* LinuxVirtualMachineRuntimeModel.swift in Sources */,
 				1F9D2C732FE7F9710076F5B9 /* VirtualMachineTransferModels.swift in Sources */,
 				1F5E63BB2FE870A800A430FF /* TerminalWorkspaceSessionView.swift in Sources */,
 				1F9D2C392FE7E7670076F5B9 /* ComposeLifecyclePlanner.swift in Sources */,
@@ -2476,6 +2487,7 @@
 				1F5E63D32FE87A0B00A430FF /* AppleMacVirtualMachineAudioDeviceFactory.swift in Sources */,
 				1F9D2C922FE800AA0076F5B9 /* StorageReclamationService.swift in Sources */,
 				9D0A93C7B104FECF0AC7E446 /* SettingsView.swift in Sources */,
+				1F5E642B2FE88AEB00A430FF /* LinuxVirtualMachineCreationService.swift in Sources */,
 				1F5E63C92FE8756A00A430FF /* AppleContainerSSHAgentService.swift in Sources */,
 				1F9D2B7E2FE7A0B20076F5B9 /* VirtualMachineInstallationModels.swift in Sources */,
 				1FEC47522FE842C800DC60B2 /* ComposeContainerAttachmentVerifier.swift in Sources */,

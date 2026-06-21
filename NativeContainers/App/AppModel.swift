@@ -117,6 +117,10 @@ final class AppModel {
   private var macVirtualMachineRuntimeModels: [UUID: MacVirtualMachineRuntimeModel] = [:]
 
   @ObservationIgnored
+  private var linuxVirtualMachineRuntimeModels:
+    [UUID: LinuxVirtualMachineRuntimeModel] = [:]
+
+  @ObservationIgnored
   private var macVirtualMachineAudioModels: [UUID: MacVirtualMachineAudioModel] = [:]
 
   @ObservationIgnored
@@ -365,7 +369,7 @@ final class AppModel {
       virtualMachines = loadedVirtualMachines
       didLoadVirtualMachineLibrary = true
       virtualMachineInventoryRevision &+= 1
-      removeStaleMacVirtualMachineRuntimeModels()
+      removeStaleVirtualMachineModels()
     } catch is CancellationError {
       return
     } catch {
@@ -388,7 +392,7 @@ final class AppModel {
     do {
       virtualMachines = try await services.virtualMachineLibrary.list()
       virtualMachineInventoryRevision &+= 1
-      removeStaleMacVirtualMachineRuntimeModels()
+      removeStaleVirtualMachineModels()
       updateWorkspaceNavigation()
     } catch {
       errorMessage = "Virtual machine library: \(error.localizedDescription)"
@@ -444,6 +448,23 @@ final class AppModel {
     updateWorkspaceNavigation()
   }
 
+  @discardableResult
+  func createLinuxVirtualMachine(
+    name: String,
+    resources: VirtualMachineResources,
+    installationMediaURL: URL
+  ) async throws -> VirtualMachineManifest {
+    let machine = try await services.linuxVirtualMachineCreator
+      .createLinuxVirtualMachine(
+        name: name,
+        resources: resources,
+        installationMediaURL: installationMediaURL
+      )
+    publishVirtualMachineManifest(machine)
+    navigate(to: .macOSVirtualMachine(machine.id))
+    return machine
+  }
+
   func discardVirtualMachine(id: UUID) async {
     await performMutation {
       try await self.services.virtualMachineLibrary.discardVirtualMachine(id: id)
@@ -479,15 +500,7 @@ final class AppModel {
       from: sourceURL,
       mode: mode
     )
-    if let index = virtualMachines.firstIndex(where: { $0.id == imported.id }) {
-      virtualMachines[index] = imported
-    } else {
-      virtualMachines.append(imported)
-    }
-    virtualMachines.sort {
-      $0.name.localizedStandardCompare($1.name) == .orderedAscending
-    }
-    updateWorkspaceNavigation()
+    publishVirtualMachineManifest(imported)
     navigate(to: .macOSVirtualMachine(imported.id))
     return imported
   }
@@ -497,13 +510,7 @@ final class AppModel {
       id: id,
       restoreImageURL: restoreImageURL
     )
-    if let index = virtualMachines.firstIndex(where: { $0.id == prepared.id }) {
-      virtualMachines[index] = prepared
-    } else {
-      virtualMachines.append(prepared)
-    }
-    virtualMachines.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-    updateWorkspaceNavigation()
+    publishVirtualMachineManifest(prepared)
   }
 
   func clearError() {
@@ -748,6 +755,22 @@ final class AppModel {
     return model
   }
 
+  func makeLinuxVirtualMachineRuntimeModel(
+    for machine: VirtualMachineManifest
+  ) -> LinuxVirtualMachineRuntimeModel {
+    if let model = linuxVirtualMachineRuntimeModels[machine.id] {
+      return model
+    }
+    let model = LinuxVirtualMachineRuntimeModel(
+      machineID: machine.id,
+      service: services.linuxVirtualMachineRuntime
+    ) { [weak self] manifest in
+      self?.publishVirtualMachineManifest(manifest)
+    }
+    linuxVirtualMachineRuntimeModels[machine.id] = model
+    return model
+  }
+
   func makeVirtualMachineDiskImageMaintenanceModel(
     for machine: VirtualMachineManifest
   ) -> VirtualMachineDiskImageMaintenanceModel {
@@ -812,11 +835,29 @@ final class AppModel {
     return model
   }
 
-  private func removeStaleMacVirtualMachineRuntimeModels() {
+  private func publishVirtualMachineManifest(
+    _ manifest: VirtualMachineManifest
+  ) {
+    if let index = virtualMachines.firstIndex(where: { $0.id == manifest.id }) {
+      virtualMachines[index] = manifest
+    } else {
+      virtualMachines.append(manifest)
+    }
+    virtualMachines.sort {
+      $0.name.localizedStandardCompare($1.name) == .orderedAscending
+    }
+    updateWorkspaceNavigation()
+  }
+
+  private func removeStaleVirtualMachineModels() {
     let currentIdentifiers = Set(virtualMachines.map(\.id))
     for identifier in Array(macVirtualMachineRuntimeModels.keys)
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineRuntimeModels.removeValue(forKey: identifier)?.stopObserving()
+    }
+    for identifier in Array(linuxVirtualMachineRuntimeModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      linuxVirtualMachineRuntimeModels.removeValue(forKey: identifier)?.stopObserving()
     }
     for identifier in Array(macVirtualMachineAudioModels.keys)
     where !currentIdentifiers.contains(identifier) {
