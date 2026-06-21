@@ -146,7 +146,12 @@ must leave a usable, test-backed product slice.
       sparse fallback, write-level cancellation, cold-boot saved-state
       scrubbing, atomic publication, cancellation cleanup, hard-exit recovery,
       and a native review sheet.
-- [ ] Export/import, portable backup, and safe disk-space reclamation.
+- [x] Portable `.nativevm` export/import with a shared bundle-preparation
+      service, identity-preserving restore, explicit import-as-copy identity
+      regeneration, stopped/runtime leases, host-state scrubbing, collision
+      rejection, write-level cancellation, atomic publication, and partial
+      recovery.
+- [ ] Safe disk-space reclamation.
 
 ## M5 — Optimization and polish
 

@@ -904,3 +904,42 @@ manifest-derived network MAC consequently changes as well. Runtime owner files,
 operation partials, and same-host saved memory are deliberately removed so the
 copy cold boots. The commit boundary independently rejects a copied or malformed
 machine identifier even when a custom copier violates the service contract.
+
+## ADR-035: Treat portable VM packages as explicit identity transactions
+
+**Status:** Accepted — 2026-06-21
+
+Clone, export, and import use one `VirtualMachineBundlePreparing` service with
+typed identity and portability policies. The service validates a regular
+directory tree without symbolic links, hard links, or special files; copies
+through the cancellable sparse/clone transfer; proves the source metadata
+remained stable; removes transient state; applies the identity policy; and
+writes the destination manifest. Same-host clone keeps shared-folder
+capabilities and regenerates identity. Portable operations remove saved state,
+runtime/install partials, the cache-local restore image URL, and
+`SharedDirectories.json` bookmark capabilities.
+
+Export is read-only with respect to the library. It briefly holds the global
+operation lock while acquiring a stopped-source runtime lease, then releases
+unrelated VM mutations while retaining exclusive access to that writable
+bundle. The destination parent remains security-scoped throughout the transfer.
+The service copies into a hidden sibling and publishes with a same-directory
+rename only when the final `.nativevm` path is absent. Existing exports are
+never replaced, and cancellation does not dismiss the sheet until the partial
+is removed and the source lease releases.
+
+Import is a library-owned begin/commit/abort transaction with its staging
+package under the private library. Restore mode preserves the manifest UUID and
+round-trip-valid `VZMacMachineIdentifier`; it rejects either identifier when
+already present. Import-as-copy creates a fresh manifest UUID and Apple platform
+identity. Commit repeats artifact, portability, destination, and platform
+identity checks immediately before atomic publication. Abort removes only the
+operation's staging package, and launch recovery removes orphaned
+`.Import-*.partial` directories.
+
+SwiftUI `fileImporter` owns selection of an existing package; a narrow
+`NSSavePanel` service owns only export destination selection. The transfer
+service, not either picker callback, owns security-scope lifetime, leases,
+copying, cancellation, and cleanup. System-owned `FileDocument` /
+`Transferable` export is not used for multi-gigabyte packages because macOS 26
+does not expose its final copy lifetime to these transaction boundaries.

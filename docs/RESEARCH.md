@@ -566,6 +566,30 @@ at kickoff, so the foundation does not depend on it.
   clone transaction's abort boundary and provides a real kill point for a large
   fallback copy.
 
+## Portable macOS VM package findings
+
+- SwiftUI's `fileImporter` returns a security-scoped URL and requires balanced
+  `startAccessingSecurityScopedResource()` /
+  `stopAccessingSecurityScopedResource()` calls. NativeContainers holds that
+  scope in the transfer service through validation, copy, and abort cleanup
+  rather than ending access in the picker callback.
+- `NSSavePanel` is the macOS 26 export boundary because it returns the exact
+  destination while the app retains control of a multi-gigabyte asynchronous
+  copy, source lease, cancellation callback, and hidden sibling staging
+  package. `FileDocument` and `Transferable` exporters hand the final copy
+  lifetime to the system. macOS 27's async `WritableDocument` /
+  `DocumentWriter` APIs are not a deployment-target baseline.
+- The exported `com.nativecontainers.virtual-machine` type conforms to
+  `com.apple.package` and uses the `.nativevm` extension, so Finder and the
+  import panel treat the bundle as one document without enumerating its
+  contents.
+- Portable packages cannot include a same-host saved session: Apple documents
+  macOS VM saved state as bound to the originating Mac and user. Runtime owner
+  files, installation/save partials, the cached restore-image URL, and
+  `SharedDirectories.json` security-scoped bookmarks are also host-local and
+  are removed. The disk, auxiliary storage, hardware model, manifest UUID, and
+  `VZMacMachineIdentifier` remain the restore identity.
+
 ## Public-API boundaries
 
 - No public Linux GPU/Metal passthrough.

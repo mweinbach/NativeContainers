@@ -43,7 +43,9 @@ cache with token-bound promotion and separate status/reset controls, private
 persistent build history, and macOS restore-image preparation, installation,
 generation-safe runtime/console controls, same-host suspend, persistent
 VirtioFS shares, and stopped-only VM cloning with fresh platform identity and
-cancellable APFS/sparse transfer. Persistent Linux machines now have native
+cancellable APFS/sparse transfer. Portable VM package export/import now supports
+identity-preserving restore or an explicit fresh-identity copy, with cancellable
+transaction cleanup and no destination replacement. Persistent Linux machines now have native
 create/start/stop/Force Stop/delete controls, cancellable first-boot user
 provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
 memory, and reviewed home-directory configuration. The same machines now expose
@@ -60,8 +62,9 @@ resolution, machine commands/terminals, canonical Compose topology derivation,
 source-pinned and isolated live Compose conformance, reviewed Compose planning,
 container/resource action execution, command execution, postcondition proof,
 owned-resource recovery, VM bundle transactions, cancellable bundle transfer,
-platform-identity generation, installation, runtime, saved state, shared
-directories, and cloning are independent services. A
+portable package preparation/import/export, platform-identity generation,
+installation, runtime, saved state, shared directories, and cloning are
+independent services. A
 dedicated machine-management service owns machine creation and lifecycle rather
 than routing those operations through the container compatibility facade.
 

@@ -7,8 +7,8 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 599 test declarations. The current full
-  app-hosted Xcode run passed all 580 deterministic tests, with 19 destructive
+- The suite currently contains 612 test declarations. The current full
+  app-hosted Xcode run passed all 593 deterministic tests, with 19 destructive
   or external-service integrations skipped behind explicit live gates and no
   failures. Existing opt-in tests cover Apple runtime provisioning, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
@@ -17,8 +17,9 @@ Updated: 2026-06-21.
   with a bounded TERM/KILL cleanup, and no residual app process remained.
 - The SwiftUI overview, split container inspector, Linux-machine list,
   Linux-machine creation form, machine command runner, macOS VM list,
-  restore-image preparation sheet, macOS installation sheet, VM clone sheet, and
-  generation-keyed macOS runtime console render successfully in Xcode Preview
+  restore-image preparation sheet, macOS installation sheet, VM clone sheet,
+  portable VM export/import sheets, and generation-keyed macOS runtime console
+  render successfully in Xcode Preview
   in light mode. The app-wide Quick Open sheet, actionable Overview, and
   initial-selection paths for Volumes and Networks also render successfully.
 - A typed workspace navigator now unifies sidebar state, exact resource
@@ -128,6 +129,19 @@ Updated: 2026-06-21.
   successful cloning, cancellation, copy failure, ownership contention,
   malicious links, duplicate platform identity, and hard-exit recovery. Live
   guest boot remains entitlement-gated.
+- Stopped macOS VMs now export to a portable `.nativevm` package through a
+  source/runtime lease, balanced destination security scope, shared
+  policy-driven bundle preparer, hidden sibling staging directory, and
+  cancellable copyfile transfer. Export preserves the manifest and Apple
+  platform identities, removes saved/runtime/install/cache/shared-folder
+  capability state, refuses replacement, and leaves the source unchanged.
+  Import offers explicit identity-preserving restore or import-as-copy; the
+  latter creates fresh manifest and `VZMacMachineIdentifier` values. A
+  library-owned transaction rechecks UUID/platform collisions and artifacts
+  before atomic publication, aborts partials on failure/cancellation, and
+  recovers `.Import-*.partial` packages after a hard exit. Deterministic tests
+  cover round trips, both identity modes, collisions, runtime ownership,
+  cancellation cleanup/retry, and symbolic/hard/special-file rejection.
 - Container detail inspection uses Apple’s direct API client for configuration,
   disk usage, one-shot CPU/memory/network/block/process statistics, stdout, and
   boot logs. Log reads are bounded to the newest 512 KiB per stream.

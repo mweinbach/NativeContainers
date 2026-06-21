@@ -579,6 +579,27 @@ than sharing presentation state across an implied multi-window group.
   the clone. Cancellation returns `COPYFILE_QUIT`, keeps the review sheet in a
   cancelling state until transaction cleanup completes, and always aborts the
   partial. Startup recovery removes hidden clone partials left by a hard exit.
+- Clone, export, and import share one policy-driven bundle-preparation service
+  instead of maintaining three filesystem implementations. A focused inspector
+  rejects symbolic links, hard links, mount-crossing copies, and special files;
+  the sanitizer removes runtime/install/save transactions; the identity policy
+  either preserves a round-trip-valid `VZMacMachineIdentifier` or replaces it
+  through the generator; and a portability policy removes the cached restore
+  URL plus host-local shared-folder bookmark capabilities.
+- Portable export briefly takes the library mutation lock only to resolve and
+  pin a stopped source, then retains the per-VM runtime lease while a
+  security-scoped destination-parent lease spans the cancellable copy. It stages
+  a hidden sibling package, rechecks that the source metadata did not change,
+  refuses replacement, and publishes with one same-directory rename. The
+  SwiftUI sheet cannot be dismissed while cancellation is waiting for copyfile
+  and partial cleanup.
+- Portable import holds a library-owned begin/commit/abort transaction while it
+  copies into a hidden `.Import-*.partial` package. Restore mode preserves both
+  the manifest UUID and Apple platform identity and rejects either collision;
+  copy mode generates both identities anew. Commit revalidates every
+  manifest-relative artifact, portable-state absence, and platform-identity
+  uniqueness immediately before the UUID-named bundle is atomically published.
+  Launch recovery removes import partials left by a hard exit.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before
