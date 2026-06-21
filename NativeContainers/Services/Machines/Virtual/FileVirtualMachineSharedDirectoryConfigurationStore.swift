@@ -1,8 +1,8 @@
 import Darwin
 import Foundation
 
-struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
-  MacVirtualMachineSharedDirectoryConfigurationStoring,
+struct FileVirtualMachineSharedDirectoryConfigurationStore:
+  VirtualMachineSharedDirectoryConfigurationStoring,
   @unchecked Sendable
 {
   static let filename = "SharedDirectories.json"
@@ -18,7 +18,7 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
 
   func load(
     from bundleURL: URL
-  ) throws -> MacVirtualMachineSharedDirectoryConfiguration {
+  ) throws -> VirtualMachineSharedDirectoryConfiguration {
     let url = bundleURL.appending(path: Self.filename)
     let descriptor = Darwin.open(
       url.path(percentEncoded: false),
@@ -28,7 +28,7 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
       if errno == ENOENT {
         return .empty
       }
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "the configuration file cannot be opened safely"
       )
     }
@@ -43,7 +43,7 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
       metadata.st_size >= 0,
       metadata.st_size <= Self.maximumFileSize
     else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "the configuration file is not a private bounded regular file"
       )
     }
@@ -51,18 +51,18 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
     let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
     let data = try handle.read(upToCount: Self.maximumFileSize + 1) ?? Data()
     guard data.count <= Self.maximumFileSize else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "the configuration file is too large"
       )
     }
-    let configuration: MacVirtualMachineSharedDirectoryConfiguration
+    let configuration: VirtualMachineSharedDirectoryConfiguration
     do {
       configuration = try JSONDecoder().decode(
-        MacVirtualMachineSharedDirectoryConfiguration.self,
+        VirtualMachineSharedDirectoryConfiguration.self,
         from: data
       )
     } catch {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "the configuration file is not valid JSON"
       )
     }
@@ -71,7 +71,7 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
   }
 
   func save(
-    _ configuration: MacVirtualMachineSharedDirectoryConfiguration,
+    _ configuration: VirtualMachineSharedDirectoryConfiguration,
     to bundleURL: URL
   ) throws {
     try validate(configuration)
@@ -79,7 +79,7 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     let data = try encoder.encode(configuration)
     guard data.count <= Self.maximumFileSize else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "the configuration file is too large"
       )
     }
@@ -95,7 +95,7 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
       S_IRUSR | S_IWUSR
     )
     guard descriptor >= 0 else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "a private staging file cannot be created"
       )
     }
@@ -118,7 +118,7 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
           rawBuffer.count - offset
         )
         guard written > 0 else {
-          throw MacVirtualMachineSharedDirectoryError.invalidStore(
+          throw VirtualMachineSharedDirectoryError.invalidStore(
             "the private staging file cannot be written"
           )
         }
@@ -126,7 +126,7 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
       }
     }
     guard Darwin.fsync(descriptor) == 0 else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "the private staging file cannot be synchronized"
       )
     }
@@ -136,7 +136,7 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
         finalURL.path(percentEncoded: false)
       ) == 0
     else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "the shared-folder configuration cannot be committed"
       )
     }
@@ -145,24 +145,24 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
   }
 
   private func validate(
-    _ configuration: MacVirtualMachineSharedDirectoryConfiguration
+    _ configuration: VirtualMachineSharedDirectoryConfiguration
   ) throws {
     guard
       configuration.schemaVersion
-        == MacVirtualMachineSharedDirectoryConfiguration.currentSchemaVersion
+        == VirtualMachineSharedDirectoryConfiguration.currentSchemaVersion
     else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "schema version \(configuration.schemaVersion) is unsupported"
       )
     }
     guard configuration.directories.count <= Self.maximumDirectoryCount else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "too many shared folders are configured"
       )
     }
     guard Set(configuration.directories.map(\.id)).count == configuration.directories.count
     else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "shared-folder identifiers are not unique"
       )
     }
@@ -174,15 +174,15 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
         !directory.bookmarkData.isEmpty,
         directory.bookmarkData.count <= Self.maximumBookmarkSize
       else {
-        throw MacVirtualMachineSharedDirectoryError.invalidStore(
+        throw VirtualMachineSharedDirectoryError.invalidStore(
           "a shared-folder record is incomplete or too large"
         )
       }
-      let name = MacVirtualMachineSharedDirectoryNameNormalizer.normalized(
+      let name = VirtualMachineSharedDirectoryNameNormalizer.normalized(
         directory.guestName
       )
       guard names.insert(name).inserted else {
-        throw MacVirtualMachineSharedDirectoryError.invalidStore(
+        throw VirtualMachineSharedDirectoryError.invalidStore(
           "shared-folder names are not unique"
         )
       }
@@ -195,15 +195,20 @@ struct FileMacVirtualMachineSharedDirectoryConfigurationStore:
       O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
     )
     guard descriptor >= 0 else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "the virtual-machine bundle cannot be opened safely"
       )
     }
     defer { Darwin.close(descriptor) }
     guard Darwin.fsync(descriptor) == 0 else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
+      throw VirtualMachineSharedDirectoryError.invalidStore(
         "the virtual-machine bundle cannot be synchronized"
       )
     }
   }
 }
+
+typealias FileMacVirtualMachineSharedDirectoryConfigurationStore =
+  FileVirtualMachineSharedDirectoryConfigurationStore
+typealias FileLinuxVirtualMachineSharedDirectoryConfigurationStore =
+  FileVirtualMachineSharedDirectoryConfigurationStore

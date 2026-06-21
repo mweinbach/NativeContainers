@@ -1,38 +1,60 @@
 import Foundation
 
-protocol MacVirtualMachineSharedDirectoryNameValidating: Sendable {
+protocol VirtualMachineSharedDirectoryNameValidating: Sendable {
   func canonicalName(from proposedName: String) throws -> String
   func validatePersistedName(_ name: String) throws
 }
 
-protocol MacVirtualMachineSharedDirectoryBookmarkCreating: Sendable {
+protocol VirtualMachineSharedDirectoryBookmarkCreating: Sendable {
   func makeRecord(
-    request: MacVirtualMachineSharedDirectoryRequest,
+    request: VirtualMachineSharedDirectoryRequest,
     canonicalGuestName: String
-  ) throws -> MacVirtualMachineSharedDirectory
+  ) throws -> VirtualMachineSharedDirectory
 }
 
-protocol MacVirtualMachineSharedDirectoryBookmarkResolving: Sendable {
+protocol VirtualMachineSharedDirectoryBookmarkResolving: Sendable {
   func resolve(
-    _ directories: [MacVirtualMachineSharedDirectory]
-  ) throws -> MacVirtualMachineSharedDirectoryAccess
+    _ directories: [VirtualMachineSharedDirectory]
+  ) throws -> VirtualMachineSharedDirectoryAccess
 }
 
-protocol MacVirtualMachineSharedDirectoryBookmarking:
-  MacVirtualMachineSharedDirectoryBookmarkCreating,
-  MacVirtualMachineSharedDirectoryBookmarkResolving
+protocol VirtualMachineSharedDirectoryBookmarking:
+  VirtualMachineSharedDirectoryBookmarkCreating,
+  VirtualMachineSharedDirectoryBookmarkResolving
 {}
 
-protocol MacVirtualMachineSharedDirectoryConfigurationStoring: Sendable {
+protocol VirtualMachineSharedDirectoryConfigurationStoring: Sendable {
   func load(
     from bundleURL: URL
-  ) throws -> MacVirtualMachineSharedDirectoryConfiguration
+  ) throws -> VirtualMachineSharedDirectoryConfiguration
 
   func save(
-    _ configuration: MacVirtualMachineSharedDirectoryConfiguration,
+    _ configuration: VirtualMachineSharedDirectoryConfiguration,
     to bundleURL: URL
   ) throws
 }
+
+typealias MacVirtualMachineSharedDirectoryNameValidating =
+  VirtualMachineSharedDirectoryNameValidating
+typealias MacVirtualMachineSharedDirectoryBookmarkCreating =
+  VirtualMachineSharedDirectoryBookmarkCreating
+typealias MacVirtualMachineSharedDirectoryBookmarkResolving =
+  VirtualMachineSharedDirectoryBookmarkResolving
+typealias MacVirtualMachineSharedDirectoryBookmarking =
+  VirtualMachineSharedDirectoryBookmarking
+typealias MacVirtualMachineSharedDirectoryConfigurationStoring =
+  VirtualMachineSharedDirectoryConfigurationStoring
+
+typealias LinuxVirtualMachineSharedDirectoryNameValidating =
+  VirtualMachineSharedDirectoryNameValidating
+typealias LinuxVirtualMachineSharedDirectoryBookmarkCreating =
+  VirtualMachineSharedDirectoryBookmarkCreating
+typealias LinuxVirtualMachineSharedDirectoryBookmarkResolving =
+  VirtualMachineSharedDirectoryBookmarkResolving
+typealias LinuxVirtualMachineSharedDirectoryBookmarking =
+  VirtualMachineSharedDirectoryBookmarking
+typealias LinuxVirtualMachineSharedDirectoryConfigurationStoring =
+  VirtualMachineSharedDirectoryConfigurationStoring
 
 protocol MacVirtualMachineSharedDirectoryPersisting: Sendable {
   func macOSSharedDirectoryConfiguration(
@@ -96,16 +118,16 @@ actor MacVirtualMachineSharedDirectoryService:
   private let leasingStore: any MacVirtualMachineRuntimeLeasing
   private let persistence: any MacVirtualMachineSharedDirectoryPersisting
   private let savedStateService: any MacVirtualMachineSavedStateInspecting
-  private let bookmarkService: any MacVirtualMachineSharedDirectoryBookmarkCreating
-  private let nameValidator: any MacVirtualMachineSharedDirectoryNameValidating
+  private let bookmarkService: any VirtualMachineSharedDirectoryBookmarkCreating
+  private let nameValidator: any VirtualMachineSharedDirectoryNameValidating
 
   init(
     leasingStore: any MacVirtualMachineRuntimeLeasing,
     persistence: any MacVirtualMachineSharedDirectoryPersisting,
     savedStateService: any MacVirtualMachineSavedStateInspecting,
-    bookmarkService: any MacVirtualMachineSharedDirectoryBookmarkCreating =
+    bookmarkService: any VirtualMachineSharedDirectoryBookmarkCreating =
       MacVirtualMachineSharedDirectoryBookmarkService(),
-    nameValidator: any MacVirtualMachineSharedDirectoryNameValidating =
+    nameValidator: any VirtualMachineSharedDirectoryNameValidating =
       AppleMacVirtualMachineSharedDirectoryNameValidator()
   ) {
     self.leasingStore = leasingStore

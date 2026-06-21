@@ -1,14 +1,14 @@
 import Darwin
 import Foundation
 
-final class MacVirtualMachineSharedDirectoryAccess: @unchecked Sendable {
-  let directories: [ResolvedMacVirtualMachineSharedDirectory]
+final class VirtualMachineSharedDirectoryAccess: @unchecked Sendable {
+  let directories: [ResolvedVirtualMachineSharedDirectory]
 
   private let stateLock = NSLock()
   private var accessedURLs: [URL]
 
   init(
-    directories: [ResolvedMacVirtualMachineSharedDirectory],
+    directories: [ResolvedVirtualMachineSharedDirectory],
     accessedURLs: [URL]
   ) {
     self.directories = directories
@@ -31,13 +31,13 @@ final class MacVirtualMachineSharedDirectoryAccess: @unchecked Sendable {
   }
 }
 
-struct MacVirtualMachineSharedDirectoryBookmarkService:
-  MacVirtualMachineSharedDirectoryBookmarking
+struct VirtualMachineSharedDirectoryBookmarkService:
+  VirtualMachineSharedDirectoryBookmarking
 {
   func makeRecord(
-    request: MacVirtualMachineSharedDirectoryRequest,
+    request: VirtualMachineSharedDirectoryRequest,
     canonicalGuestName: String
-  ) throws -> MacVirtualMachineSharedDirectory {
+  ) throws -> VirtualMachineSharedDirectory {
     let sourceURL = request.sourceURL.standardizedFileURL
     let didStartAccess = sourceURL.startAccessingSecurityScopedResource()
     defer {
@@ -63,12 +63,12 @@ struct MacVirtualMachineSharedDirectoryBookmarkService:
         relativeTo: nil
       )
     } catch {
-      throw MacVirtualMachineSharedDirectoryError.accessDenied(
+      throw VirtualMachineSharedDirectoryError.accessDenied(
         sourceURL.path(percentEncoded: false)
       )
     }
 
-    return MacVirtualMachineSharedDirectory(
+    return VirtualMachineSharedDirectory(
       id: UUID(),
       guestName: canonicalGuestName,
       bookmarkData: bookmarkData,
@@ -79,9 +79,9 @@ struct MacVirtualMachineSharedDirectoryBookmarkService:
   }
 
   func resolve(
-    _ directories: [MacVirtualMachineSharedDirectory]
-  ) throws -> MacVirtualMachineSharedDirectoryAccess {
-    var resolved: [ResolvedMacVirtualMachineSharedDirectory] = []
+    _ directories: [VirtualMachineSharedDirectory]
+  ) throws -> VirtualMachineSharedDirectoryAccess {
+    var resolved: [ResolvedVirtualMachineSharedDirectory] = []
     var accessedURLs: [URL] = []
 
     do {
@@ -96,17 +96,17 @@ struct MacVirtualMachineSharedDirectoryBookmarkService:
             bookmarkDataIsStale: &isStale
           )
         } catch {
-          throw MacVirtualMachineSharedDirectoryError.staleBookmark(
+          throw VirtualMachineSharedDirectoryError.staleBookmark(
             directory.guestName
           )
         }
         guard !isStale else {
-          throw MacVirtualMachineSharedDirectoryError.staleBookmark(
+          throw VirtualMachineSharedDirectoryError.staleBookmark(
             directory.guestName
           )
         }
         guard sourceURL.startAccessingSecurityScopedResource() else {
-          throw MacVirtualMachineSharedDirectoryError.accessDenied(
+          throw VirtualMachineSharedDirectoryError.accessDenied(
             directory.lastKnownPath
           )
         }
@@ -118,12 +118,12 @@ struct MacVirtualMachineSharedDirectoryBookmarkService:
           displayPath: directory.lastKnownPath
         )
         guard identity == directory.sourceIdentity else {
-          throw MacVirtualMachineSharedDirectoryError.sourceIdentityChanged(
+          throw VirtualMachineSharedDirectoryError.sourceIdentityChanged(
             directory.guestName
           )
         }
         resolved.append(
-          ResolvedMacVirtualMachineSharedDirectory(
+          ResolvedVirtualMachineSharedDirectory(
             id: directory.id,
             guestName: directory.guestName,
             sourceURL: sourceURL,
@@ -132,7 +132,7 @@ struct MacVirtualMachineSharedDirectoryBookmarkService:
           )
         )
       }
-      return MacVirtualMachineSharedDirectoryAccess(
+      return VirtualMachineSharedDirectoryAccess(
         directories: resolved,
         accessedURLs: accessedURLs
       )
@@ -148,9 +148,9 @@ struct MacVirtualMachineSharedDirectoryBookmarkService:
     _ url: URL,
     readOnly: Bool,
     displayPath: String
-  ) throws -> MacVirtualMachineSharedDirectorySourceIdentity {
+  ) throws -> VirtualMachineSharedDirectorySourceIdentity {
     guard url.isFileURL else {
-      throw MacVirtualMachineSharedDirectoryError.invalidDirectory(displayPath)
+      throw VirtualMachineSharedDirectoryError.invalidDirectory(displayPath)
     }
     let values: URLResourceValues
     do {
@@ -163,24 +163,31 @@ struct MacVirtualMachineSharedDirectoryBookmarkService:
         ]
       )
     } catch {
-      throw MacVirtualMachineSharedDirectoryError.accessDenied(displayPath)
+      throw VirtualMachineSharedDirectoryError.accessDenied(displayPath)
     }
     guard values.isDirectory == true, values.isSymbolicLink != true else {
-      throw MacVirtualMachineSharedDirectoryError.invalidDirectory(displayPath)
+      throw VirtualMachineSharedDirectoryError.invalidDirectory(displayPath)
     }
     guard values.isReadable == true, readOnly || values.isWritable == true else {
-      throw MacVirtualMachineSharedDirectoryError.accessDenied(displayPath)
+      throw VirtualMachineSharedDirectoryError.accessDenied(displayPath)
     }
 
     var metadata = stat()
     guard Darwin.lstat(url.path(percentEncoded: false), &metadata) == 0,
       metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR)
     else {
-      throw MacVirtualMachineSharedDirectoryError.invalidDirectory(displayPath)
+      throw VirtualMachineSharedDirectoryError.invalidDirectory(displayPath)
     }
-    return MacVirtualMachineSharedDirectorySourceIdentity(
+    return VirtualMachineSharedDirectorySourceIdentity(
       device: UInt64(metadata.st_dev),
       inode: UInt64(metadata.st_ino)
     )
   }
 }
+
+typealias MacVirtualMachineSharedDirectoryAccess = VirtualMachineSharedDirectoryAccess
+typealias MacVirtualMachineSharedDirectoryBookmarkService =
+  VirtualMachineSharedDirectoryBookmarkService
+typealias LinuxVirtualMachineSharedDirectoryAccess = VirtualMachineSharedDirectoryAccess
+typealias LinuxVirtualMachineSharedDirectoryBookmarkService =
+  VirtualMachineSharedDirectoryBookmarkService

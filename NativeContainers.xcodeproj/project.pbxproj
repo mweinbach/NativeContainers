@@ -232,12 +232,12 @@
 		1F9D2BC42FE7B7100076F5B9 /* WorkspaceNavigationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC32FE7B7100076F5B9 /* WorkspaceNavigationModel.swift */; };
 		1F9D2BC62FE7B73E0076F5B9 /* ResourceQuickOpenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC52FE7B73E0076F5B9 /* ResourceQuickOpenView.swift */; };
 		1F9D2BC82FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC72FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift */; };
-		1F9D2BCA2FE7BD260076F5B9 /* MacVirtualMachineSharedDirectoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC92FE7BD260076F5B9 /* MacVirtualMachineSharedDirectoryModels.swift */; };
+		1F9D2BCA2FE7BD260076F5B9 /* VirtualMachineSharedDirectoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC92FE7BD260076F5B9 /* VirtualMachineSharedDirectoryModels.swift */; };
 		1F9D2BCC2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BCB2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift */; };
-		1F9D2BCE2FE7BD530076F5B9 /* AppleMacVirtualMachineSharedDirectoryDeviceFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BCD2FE7BD530076F5B9 /* AppleMacVirtualMachineSharedDirectoryDeviceFactory.swift */; };
+		1F9D2BCE2FE7BD530076F5B9 /* AppleVirtualMachineSharedDirectoryDeviceFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BCD2FE7BD530076F5B9 /* AppleVirtualMachineSharedDirectoryDeviceFactory.swift */; };
 		1F9D2BD02FE7BD880076F5B9 /* MacVirtualMachineSharedDirectoriesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BCF2FE7BD880076F5B9 /* MacVirtualMachineSharedDirectoriesModel.swift */; };
-		1F9D2BD22FE7BDF90076F5B9 /* MacVirtualMachineSharedDirectoryBookmarkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD12FE7BDF90076F5B9 /* MacVirtualMachineSharedDirectoryBookmarkService.swift */; };
-		1F9D2BD42FE7BE010076F5B9 /* FileMacVirtualMachineSharedDirectoryConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD32FE7BE010076F5B9 /* FileMacVirtualMachineSharedDirectoryConfigurationStore.swift */; };
+		1F9D2BD22FE7BDF90076F5B9 /* VirtualMachineSharedDirectoryBookmarkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD12FE7BDF90076F5B9 /* VirtualMachineSharedDirectoryBookmarkService.swift */; };
+		1F9D2BD42FE7BE010076F5B9 /* FileVirtualMachineSharedDirectoryConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD32FE7BE010076F5B9 /* FileVirtualMachineSharedDirectoryConfigurationStore.swift */; };
 		1F9D2BD62FE7BE380076F5B9 /* MacVirtualMachineSharedDirectoriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD52FE7BE380076F5B9 /* MacVirtualMachineSharedDirectoriesView.swift */; };
 		1F9D2BD82FE7BE750076F5B9 /* VirtualMachineShutdownScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD72FE7BE750076F5B9 /* VirtualMachineShutdownScheduler.swift */; };
 		1F9D2BDA2FE7BEDE0076F5B9 /* MacVirtualMachineSharedDirectoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD92FE7BEDE0076F5B9 /* MacVirtualMachineSharedDirectoryServiceTests.swift */; };
@@ -761,12 +761,12 @@
 		1F9D2BC32FE7B7100076F5B9 /* WorkspaceNavigationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceNavigationModel.swift; sourceTree = "<group>"; };
 		1F9D2BC52FE7B73E0076F5B9 /* ResourceQuickOpenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceQuickOpenView.swift; sourceTree = "<group>"; };
 		1F9D2BC72FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceNavigationTests.swift; sourceTree = "<group>"; };
-		1F9D2BC92FE7BD260076F5B9 /* MacVirtualMachineSharedDirectoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSharedDirectoryModels.swift; sourceTree = "<group>"; };
+		1F9D2BC92FE7BD260076F5B9 /* VirtualMachineSharedDirectoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineSharedDirectoryModels.swift; sourceTree = "<group>"; };
 		1F9D2BCB2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSharedDirectoryService.swift; sourceTree = "<group>"; };
-		1F9D2BCD2FE7BD530076F5B9 /* AppleMacVirtualMachineSharedDirectoryDeviceFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMacVirtualMachineSharedDirectoryDeviceFactory.swift; sourceTree = "<group>"; };
+		1F9D2BCD2FE7BD530076F5B9 /* AppleVirtualMachineSharedDirectoryDeviceFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineSharedDirectoryDeviceFactory.swift; sourceTree = "<group>"; };
 		1F9D2BCF2FE7BD880076F5B9 /* MacVirtualMachineSharedDirectoriesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSharedDirectoriesModel.swift; sourceTree = "<group>"; };
-		1F9D2BD12FE7BDF90076F5B9 /* MacVirtualMachineSharedDirectoryBookmarkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSharedDirectoryBookmarkService.swift; sourceTree = "<group>"; };
-		1F9D2BD32FE7BE010076F5B9 /* FileMacVirtualMachineSharedDirectoryConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileMacVirtualMachineSharedDirectoryConfigurationStore.swift; sourceTree = "<group>"; };
+		1F9D2BD12FE7BDF90076F5B9 /* VirtualMachineSharedDirectoryBookmarkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineSharedDirectoryBookmarkService.swift; sourceTree = "<group>"; };
+		1F9D2BD32FE7BE010076F5B9 /* FileVirtualMachineSharedDirectoryConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileVirtualMachineSharedDirectoryConfigurationStore.swift; sourceTree = "<group>"; };
 		1F9D2BD52FE7BE380076F5B9 /* MacVirtualMachineSharedDirectoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSharedDirectoriesView.swift; sourceTree = "<group>"; };
 		1F9D2BD72FE7BE750076F5B9 /* VirtualMachineShutdownScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineShutdownScheduler.swift; sourceTree = "<group>"; };
 		1F9D2BD92FE7BEDE0076F5B9 /* MacVirtualMachineSharedDirectoryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSharedDirectoryServiceTests.swift; sourceTree = "<group>"; };
@@ -1161,7 +1161,7 @@
 				1F9D2BB32FE7AE290076F5B9 /* MacVirtualMachineSavedStateModels.swift */,
 				1F9D2BB92FE7AF040076F5B9 /* MacVirtualMachineConfigurationDescriptor.swift */,
 				1F9D2BBF2FE7B6FC0076F5B9 /* WorkspaceRoute.swift */,
-				1F9D2BC92FE7BD260076F5B9 /* MacVirtualMachineSharedDirectoryModels.swift */,
+				1F9D2BC92FE7BD260076F5B9 /* VirtualMachineSharedDirectoryModels.swift */,
 				1F9D2BDB2FE7C30F0076F5B9 /* DockerCompatibilityModels.swift */,
 				1F9D2BFB2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift */,
 				1F9D2C032FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift */,
@@ -1381,11 +1381,11 @@
 				1F9D2BA32FE7AA240076F5B9 /* AppleMacVirtualMachineConfigurationFactory.swift */,
 				1F9D2B852FE7A1170076F5B9 /* AppleMacVirtualMachineInstallationEngine.swift */,
 				1F9D2BA92FE7AAAA0076F5B9 /* AppleMacVirtualMachineRuntimeEngine.swift */,
-				1F9D2BCD2FE7BD530076F5B9 /* AppleMacVirtualMachineSharedDirectoryDeviceFactory.swift */,
+				1F9D2BCD2FE7BD530076F5B9 /* AppleVirtualMachineSharedDirectoryDeviceFactory.swift */,
 				1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */,
 				1F9D2C6E2FE7F73C0076F5B9 /* CopyfileVirtualMachineBundleTransfer.swift */,
 				1FEC46D22FE8233300DC60B2 /* DiskutilVirtualMachineDiskImageConverter.swift */,
-				1F9D2BD32FE7BE010076F5B9 /* FileMacVirtualMachineSharedDirectoryConfigurationStore.swift */,
+				1F9D2BD32FE7BE010076F5B9 /* FileVirtualMachineSharedDirectoryConfigurationStore.swift */,
 				742BD26E898320625825152A /* MacPlatformArtifactPreparer.swift */,
 				1F9D2B9B2FE7A3190076F5B9 /* MacVirtualMachineAvailabilityChecker.swift */,
 				1F9D2B7F2FE7A0C20076F5B9 /* MacVirtualMachineBundleResolver.swift */,
@@ -1397,7 +1397,7 @@
 				1F9D2BA72FE7AAAA0076F5B9 /* MacVirtualMachineRuntimeService.swift */,
 				1F9D2BBB2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift */,
 				1F9D2BB52FE7AE2A0076F5B9 /* MacVirtualMachineSavedStateStore.swift */,
-				1F9D2BD12FE7BDF90076F5B9 /* MacVirtualMachineSharedDirectoryBookmarkService.swift */,
+				1F9D2BD12FE7BDF90076F5B9 /* VirtualMachineSharedDirectoryBookmarkService.swift */,
 				1F9D2BCB2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift */,
 				1FEC47112FE8330F00DC60B2 /* VirtualMachineShutdownFallbackRegistry.swift */,
 				1F9D2BD72FE7BE750076F5B9 /* VirtualMachineShutdownScheduler.swift */,
@@ -2265,7 +2265,7 @@
 				1F5E64072FE8870000A430FF /* LinuxPlatformArtifactPreparer.swift in Sources */,
 				1F9D2B742FE79C170076F5B9 /* LinuxMachineToolModels.swift in Sources */,
 				1F9D2BE22FE7C3530076F5B9 /* SocktainerProcessService.swift in Sources */,
-				1F9D2BCE2FE7BD530076F5B9 /* AppleMacVirtualMachineSharedDirectoryDeviceFactory.swift in Sources */,
+				1F9D2BCE2FE7BD530076F5B9 /* AppleVirtualMachineSharedDirectoryDeviceFactory.swift in Sources */,
 				1F9D2C062FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift in Sources */,
 				3D89601DBF2980814902C293 /* BuildWorkerProtocol.swift in Sources */,
 				1FEC47402FE838F700DC60B2 /* VirtualMachineDiskImageRewriteService.swift in Sources */,
@@ -2291,7 +2291,7 @@
 				4F656DDFC3706DF8D8B4E3C0 /* ContainerCreationView.swift in Sources */,
 				CF01A590ABF08323E6B93DC7 /* ContainerInspectorModel.swift in Sources */,
 				1F9D2ADB2FE75FF80076F5B9 /* AppleContainerSnapshotReader.swift in Sources */,
-				1F9D2BCA2FE7BD260076F5B9 /* MacVirtualMachineSharedDirectoryModels.swift in Sources */,
+				1F9D2BCA2FE7BD260076F5B9 /* VirtualMachineSharedDirectoryModels.swift in Sources */,
 				1F5E63E72FE87FEA00A430FF /* MacVirtualMachineConfigurationEditLockBanner.swift in Sources */,
 				1FEC46EB2FE82E9F00DC60B2 /* ComposeLifecyclePolicyValidator.swift in Sources */,
 				1F9D2BBA2FE7AF040076F5B9 /* MacVirtualMachineConfigurationDescriptor.swift in Sources */,
@@ -2362,7 +2362,7 @@
 				1FEC46F72FE830DF00DC60B2 /* AppleImagePolicy.swift in Sources */,
 				1F9D2BB02FE7AB450076F5B9 /* MacVirtualMachineRuntimeView.swift in Sources */,
 				1F9D2C942FE800BE0076F5B9 /* StorageReclamationModel.swift in Sources */,
-				1F9D2BD42FE7BE010076F5B9 /* FileMacVirtualMachineSharedDirectoryConfigurationStore.swift in Sources */,
+				1F9D2BD42FE7BE010076F5B9 /* FileVirtualMachineSharedDirectoryConfigurationStore.swift in Sources */,
 				1FEC46CF2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift in Sources */,
 				1F9D2C272FE7DB610076F5B9 /* AppOwnedBuildCacheStore.swift in Sources */,
 				A0AE31A3A8A12AAEE077BBC1 /* ContainersView.swift in Sources */,
@@ -2491,7 +2491,7 @@
 				1FEC46E52FE8265200DC60B2 /* VirtualMachineDiskImageReplacementFileOperations.swift in Sources */,
 				72D23C0E9992E41005DDACDC /* RootView.swift in Sources */,
 				1F5E63F72FE8823C00A430FF /* MacVirtualMachineNetworkSection.swift in Sources */,
-				1F9D2BD22FE7BDF90076F5B9 /* MacVirtualMachineSharedDirectoryBookmarkService.swift in Sources */,
+				1F9D2BD22FE7BDF90076F5B9 /* VirtualMachineSharedDirectoryBookmarkService.swift in Sources */,
 				1F9D2C552FE7EC660076F5B9 /* AppleComposeProjectMutationExecutor.swift in Sources */,
 				1F9D2B9E2FE7A7660076F5B9 /* AdvisoryFileLock.swift in Sources */,
 				2607934497FE5507A6C92B7E /* RuntimeMutationCoordinator.swift in Sources */,

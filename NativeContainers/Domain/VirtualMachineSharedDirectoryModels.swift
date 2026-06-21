@@ -1,6 +1,6 @@
 import Foundation
 
-enum MacVirtualMachineSharedDirectoryNameNormalizer {
+enum VirtualMachineSharedDirectoryNameNormalizer {
   static func normalized(_ value: String) -> String {
     value.folding(
       options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
@@ -9,30 +9,30 @@ enum MacVirtualMachineSharedDirectoryNameNormalizer {
   }
 }
 
-struct MacVirtualMachineSharedDirectorySourceIdentity: Codable, Equatable, Sendable {
+struct VirtualMachineSharedDirectorySourceIdentity: Codable, Equatable, Sendable {
   let device: UInt64
   let inode: UInt64
 }
 
-struct MacVirtualMachineSharedDirectory: Codable, Equatable, Identifiable, Sendable {
+struct VirtualMachineSharedDirectory: Codable, Equatable, Identifiable, Sendable {
   let id: UUID
   let guestName: String
   let bookmarkData: Data
   let lastKnownPath: String
-  let sourceIdentity: MacVirtualMachineSharedDirectorySourceIdentity
+  let sourceIdentity: VirtualMachineSharedDirectorySourceIdentity
   let readOnly: Bool
 }
 
-struct MacVirtualMachineSharedDirectorySummary: Equatable, Identifiable, Sendable {
+struct VirtualMachineSharedDirectorySummary: Equatable, Identifiable, Sendable {
   let id: UUID
   let guestName: String
   let lastKnownPath: String
   let readOnly: Bool
 }
 
-extension MacVirtualMachineSharedDirectory {
-  var summary: MacVirtualMachineSharedDirectorySummary {
-    MacVirtualMachineSharedDirectorySummary(
+extension VirtualMachineSharedDirectory {
+  var summary: VirtualMachineSharedDirectorySummary {
+    VirtualMachineSharedDirectorySummary(
       id: id,
       guestName: guestName,
       lastKnownPath: lastKnownPath,
@@ -41,41 +41,41 @@ extension MacVirtualMachineSharedDirectory {
   }
 }
 
-struct MacVirtualMachineSharedDirectoryConfiguration: Codable, Equatable, Sendable {
+struct VirtualMachineSharedDirectoryConfiguration: Codable, Equatable, Sendable {
   static let currentSchemaVersion = 1
 
   let schemaVersion: Int
   let revision: UInt64
-  let directories: [MacVirtualMachineSharedDirectory]
+  let directories: [VirtualMachineSharedDirectory]
 
   init(
     schemaVersion: Int = Self.currentSchemaVersion,
     revision: UInt64 = 0,
-    directories: [MacVirtualMachineSharedDirectory] = []
+    directories: [VirtualMachineSharedDirectory] = []
   ) {
     self.schemaVersion = schemaVersion
     self.revision = revision
     self.directories = directories.sorted { $0.id.uuidString < $1.id.uuidString }
   }
 
-  static let empty = MacVirtualMachineSharedDirectoryConfiguration()
+  static let empty = VirtualMachineSharedDirectoryConfiguration()
 }
 
-struct ResolvedMacVirtualMachineSharedDirectory: Equatable, Sendable {
+struct ResolvedVirtualMachineSharedDirectory: Equatable, Sendable {
   let id: UUID
   let guestName: String
   let sourceURL: URL
-  let sourceIdentity: MacVirtualMachineSharedDirectorySourceIdentity
+  let sourceIdentity: VirtualMachineSharedDirectorySourceIdentity
   let readOnly: Bool
 }
 
-struct MacVirtualMachineSharedDirectoryRequest: Equatable, Sendable {
+struct VirtualMachineSharedDirectoryRequest: Equatable, Sendable {
   let sourceURL: URL
   let guestName: String
   let readOnly: Bool
 }
 
-enum MacVirtualMachineSharedDirectoryError: LocalizedError, Equatable, Sendable {
+enum VirtualMachineSharedDirectoryError: LocalizedError, Equatable, Sendable {
   case unavailable
   case invalidName(String, String)
   case duplicateName(String)
@@ -115,3 +115,27 @@ enum MacVirtualMachineSharedDirectoryError: LocalizedError, Equatable, Sendable 
     }
   }
 }
+
+typealias MacVirtualMachineSharedDirectoryNameNormalizer =
+  VirtualMachineSharedDirectoryNameNormalizer
+typealias MacVirtualMachineSharedDirectorySourceIdentity =
+  VirtualMachineSharedDirectorySourceIdentity
+typealias MacVirtualMachineSharedDirectory = VirtualMachineSharedDirectory
+typealias MacVirtualMachineSharedDirectorySummary = VirtualMachineSharedDirectorySummary
+typealias MacVirtualMachineSharedDirectoryConfiguration =
+  VirtualMachineSharedDirectoryConfiguration
+typealias ResolvedMacVirtualMachineSharedDirectory = ResolvedVirtualMachineSharedDirectory
+typealias MacVirtualMachineSharedDirectoryRequest = VirtualMachineSharedDirectoryRequest
+typealias MacVirtualMachineSharedDirectoryError = VirtualMachineSharedDirectoryError
+
+typealias LinuxVirtualMachineSharedDirectoryNameNormalizer =
+  VirtualMachineSharedDirectoryNameNormalizer
+typealias LinuxVirtualMachineSharedDirectorySourceIdentity =
+  VirtualMachineSharedDirectorySourceIdentity
+typealias LinuxVirtualMachineSharedDirectory = VirtualMachineSharedDirectory
+typealias LinuxVirtualMachineSharedDirectorySummary = VirtualMachineSharedDirectorySummary
+typealias LinuxVirtualMachineSharedDirectoryConfiguration =
+  VirtualMachineSharedDirectoryConfiguration
+typealias ResolvedLinuxVirtualMachineSharedDirectory = ResolvedVirtualMachineSharedDirectory
+typealias LinuxVirtualMachineSharedDirectoryRequest = VirtualMachineSharedDirectoryRequest
+typealias LinuxVirtualMachineSharedDirectoryError = VirtualMachineSharedDirectoryError
