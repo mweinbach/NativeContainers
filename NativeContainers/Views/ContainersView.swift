@@ -212,6 +212,14 @@ struct ContainerInspectorView: View {
           onCopyFiles: { isShowingFileTransfer = true }
         )
 
+        if let projectName = appModel.composeTopology.projectNameByContainerID[container.id] {
+          ComposeMembershipBanner(
+            projectName: projectName,
+            serviceName: appModel.composeTopology.serviceNameByContainerID[container.id],
+            onOpen: { appModel.navigate(to: .composeProject(projectName)) }
+          )
+        }
+
         if let errorMessage = model.errorMessage {
           Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(.red)

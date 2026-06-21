@@ -7,9 +7,20 @@ protocol ComposeTopologyDeriving: Sendable {
 struct ComposeTopologyService: ComposeTopologyDeriving {
   func derive(from inventory: ContainerInventory) -> ComposeTopologySnapshot {
     var accumulators: [String: ProjectAccumulator] = [:]
+    var notices: [ComposeTopologyNotice] = []
 
     for container in inventory.containers {
       guard let projectName = labelValue(ComposeLabelKey.project, in: container.labels) else {
+        continue
+      }
+      guard isValidProjectName(projectName) else {
+        notices.append(
+          invalidProjectNotice(
+            resourceKind: .container,
+            resourceID: container.id,
+            projectLabel: projectName
+          )
+        )
         continue
       }
 
@@ -19,12 +30,33 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
         isOneOff: oneOffValue(in: container.labels)
       )
       var project = accumulators[projectName, default: ProjectAccumulator()]
-      project.collectMetadata(from: container.labels)
 
-      if let serviceName = labelValue(ComposeLabelKey.service, in: container.labels) {
+      if let serviceName = labelValue(ComposeLabelKey.service, in: container.labels),
+        isValidLogicalName(serviceName)
+      {
+        project.collectContainerMetadata(from: container.labels)
         project.instancesByService[serviceName, default: []].append(instance)
       } else {
-        project.ungroupedContainers.append(instance)
+        if let serviceName = labelValue(ComposeLabelKey.service, in: container.labels) {
+          notices.append(
+            invalidLogicalNameNotice(
+              resourceKind: .container,
+              resourceID: container.id,
+              projectLabel: projectName,
+              expectedLabelKey: ComposeLabelKey.service
+            )
+          )
+        } else {
+          notices.append(
+            missingResourceLabelNotice(
+              resourceKind: .container,
+              resourceID: container.id,
+              projectLabel: projectName,
+              expectedLabelKey: ComposeLabelKey.service
+            )
+          )
+        }
+        project.unclassifiedContainers.append(instance)
       }
       accumulators[projectName] = project
     }
@@ -33,9 +65,41 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
       guard let projectName = labelValue(ComposeLabelKey.project, in: volume.labels) else {
         continue
       }
+      guard isValidProjectName(projectName) else {
+        notices.append(
+          invalidProjectNotice(
+            resourceKind: .volume,
+            resourceID: volume.id,
+            projectLabel: projectName
+          )
+        )
+        continue
+      }
+      guard let logicalName = labelValue(ComposeLabelKey.volume, in: volume.labels) else {
+        notices.append(
+          missingResourceLabelNotice(
+            resourceKind: .volume,
+            resourceID: volume.id,
+            projectLabel: projectName,
+            expectedLabelKey: ComposeLabelKey.volume
+          )
+        )
+        continue
+      }
+      guard isValidLogicalName(logicalName) else {
+        notices.append(
+          invalidLogicalNameNotice(
+            resourceKind: .volume,
+            resourceID: volume.id,
+            projectLabel: projectName,
+            expectedLabelKey: ComposeLabelKey.volume
+          )
+        )
+        continue
+      }
       var project = accumulators[projectName, default: ProjectAccumulator()]
       project.volumes.append(volume)
-      project.collectMetadata(from: volume.labels)
+      project.collectVersion(from: volume.labels)
       accumulators[projectName] = project
     }
 
@@ -43,18 +107,67 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
       guard let projectName = labelValue(ComposeLabelKey.project, in: network.labels) else {
         continue
       }
+      guard isValidProjectName(projectName) else {
+        notices.append(
+          invalidProjectNotice(
+            resourceKind: .network,
+            resourceID: network.id,
+            projectLabel: projectName
+          )
+        )
+        continue
+      }
+      guard let logicalName = labelValue(ComposeLabelKey.network, in: network.labels) else {
+        notices.append(
+          missingResourceLabelNotice(
+            resourceKind: .network,
+            resourceID: network.id,
+            projectLabel: projectName,
+            expectedLabelKey: ComposeLabelKey.network
+          )
+        )
+        continue
+      }
+      guard isValidLogicalName(logicalName) else {
+        notices.append(
+          invalidLogicalNameNotice(
+            resourceKind: .network,
+            resourceID: network.id,
+            projectLabel: projectName,
+            expectedLabelKey: ComposeLabelKey.network
+          )
+        )
+        continue
+      }
+      guard !network.isBuiltin else {
+        notices.append(
+          ComposeTopologyNotice(
+            kind: .builtinNetwork,
+            resourceKind: .network,
+            resourceID: network.id,
+            projectLabel: projectName,
+            expectedLabelKey: nil
+          )
+        )
+        continue
+      }
       var project = accumulators[projectName, default: ProjectAccumulator()]
       project.networks.append(network)
-      project.collectMetadata(from: network.labels)
+      project.collectVersion(from: network.labels)
       accumulators[projectName] = project
     }
 
-    let projects = accumulators.map { name, accumulator in
-      project(name: name, from: accumulator)
+    let projects: [ComposeProjectRecord] = accumulators.compactMap { element in
+      let (name, accumulator) = element
+      guard accumulator.hasCanonicalResources else { return nil }
+      return project(name: name, from: accumulator)
     }
     .sorted { composeStringOrder($0.name, $1.name) }
 
-    return snapshot(from: projects)
+    return snapshot(
+      from: projects,
+      notices: notices.sorted(by: noticeOrder)
+    )
   }
 
   private func project(
@@ -72,7 +185,7 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
     return ComposeProjectRecord(
       name: name,
       services: services,
-      ungroupedContainers: accumulator.ungroupedContainers.sorted(by: instanceOrder),
+      unclassifiedContainers: accumulator.unclassifiedContainers.sorted(by: instanceOrder),
       volumes: accumulator.volumes.sorted(by: volumeOrder),
       networks: accumulator.networks.sorted(by: networkOrder),
       metadata: ComposeProjectMetadata(
@@ -83,7 +196,10 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
     )
   }
 
-  private func snapshot(from projects: [ComposeProjectRecord]) -> ComposeTopologySnapshot {
+  private func snapshot(
+    from projects: [ComposeProjectRecord],
+    notices: [ComposeTopologyNotice]
+  ) -> ComposeTopologySnapshot {
     var projectNameByContainerID: [String: String] = [:]
     var serviceNameByContainerID: [String: String] = [:]
     var projectNameByVolumeID: [String: String] = [:]
@@ -96,9 +212,6 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
           serviceNameByContainerID[instance.id] = service.name
         }
       }
-      for instance in project.ungroupedContainers {
-        projectNameByContainerID[instance.id] = project.name
-      }
       for volume in project.volumes {
         projectNameByVolumeID[volume.id] = project.name
       }
@@ -109,6 +222,7 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
 
     return ComposeTopologySnapshot(
       projects: projects,
+      notices: notices,
       projectNameByContainerID: projectNameByContainerID,
       serviceNameByContainerID: serviceNameByContainerID,
       projectNameByVolumeID: projectNameByVolumeID,
@@ -119,6 +233,82 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
   private func labelValue(_ key: String, in labels: [String: String]) -> String? {
     guard let value = labels[key], !value.isEmpty else { return nil }
     return value
+  }
+
+  private func isValidProjectName(_ value: String) -> Bool {
+    guard let first = value.utf8.first, isLowercaseASCIILetter(first) || isASCIIDigit(first) else {
+      return false
+    }
+    return value.utf8.allSatisfy { character in
+      isLowercaseASCIILetter(character)
+        || isASCIIDigit(character)
+        || character == 45
+        || character == 95
+    }
+  }
+
+  private func isValidLogicalName(_ value: String) -> Bool {
+    !value.isEmpty
+      && value.utf8.allSatisfy { character in
+        isLowercaseASCIILetter(character)
+          || (character >= 65 && character <= 90)
+          || isASCIIDigit(character)
+          || character == 45
+          || character == 46
+          || character == 95
+      }
+  }
+
+  private func isLowercaseASCIILetter(_ character: UInt8) -> Bool {
+    character >= 97 && character <= 122
+  }
+
+  private func isASCIIDigit(_ character: UInt8) -> Bool {
+    character >= 48 && character <= 57
+  }
+
+  private func invalidProjectNotice(
+    resourceKind: ComposeTopologyResourceKind,
+    resourceID: String,
+    projectLabel: String
+  ) -> ComposeTopologyNotice {
+    ComposeTopologyNotice(
+      kind: .invalidProjectName,
+      resourceKind: resourceKind,
+      resourceID: resourceID,
+      projectLabel: projectLabel,
+      expectedLabelKey: nil
+    )
+  }
+
+  private func missingResourceLabelNotice(
+    resourceKind: ComposeTopologyResourceKind,
+    resourceID: String,
+    projectLabel: String,
+    expectedLabelKey: String
+  ) -> ComposeTopologyNotice {
+    ComposeTopologyNotice(
+      kind: .missingResourceLabel,
+      resourceKind: resourceKind,
+      resourceID: resourceID,
+      projectLabel: projectLabel,
+      expectedLabelKey: expectedLabelKey
+    )
+  }
+
+  private func invalidLogicalNameNotice(
+    resourceKind: ComposeTopologyResourceKind,
+    resourceID: String,
+    projectLabel: String,
+    expectedLabelKey: String
+  ) -> ComposeTopologyNotice {
+    ComposeTopologyNotice(
+      kind: .invalidLogicalName,
+      resourceKind: resourceKind,
+      resourceID: resourceID,
+      projectLabel: projectLabel,
+      expectedLabelKey: expectedLabelKey
+    )
   }
 
   private func replicaNumber(in labels: [String: String]) -> Int? {
@@ -166,20 +356,38 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
     }
     return composeStringOrder(lhs.id, rhs.id)
   }
+
+  private func noticeOrder(_ lhs: ComposeTopologyNotice, _ rhs: ComposeTopologyNotice) -> Bool {
+    if lhs.resourceKind != rhs.resourceKind {
+      return lhs.resourceKind.rawValue < rhs.resourceKind.rawValue
+    }
+    if lhs.resourceID != rhs.resourceID {
+      return composeStringOrder(lhs.resourceID, rhs.resourceID)
+    }
+    return composeStringOrder(lhs.id, rhs.id)
+  }
 }
 
 private struct ProjectAccumulator {
   var instancesByService: [String: [ComposeContainerInstance]] = [:]
-  var ungroupedContainers: [ComposeContainerInstance] = []
+  var unclassifiedContainers: [ComposeContainerInstance] = []
   var volumes: [VolumeRecord] = []
   var networks: [NetworkRecord] = []
   var workingDirectories: Set<String> = []
   var configFileValues: Set<String> = []
   var composeVersions: Set<String> = []
 
-  mutating func collectMetadata(from labels: [String: String]) {
+  var hasCanonicalResources: Bool {
+    !instancesByService.isEmpty || !volumes.isEmpty || !networks.isEmpty
+  }
+
+  mutating func collectContainerMetadata(from labels: [String: String]) {
     insertLabel(ComposeLabelKey.workingDirectory, from: labels, into: &workingDirectories)
     insertLabel(ComposeLabelKey.configFiles, from: labels, into: &configFileValues)
+    collectVersion(from: labels)
+  }
+
+  mutating func collectVersion(from labels: [String: String]) {
     insertLabel(ComposeLabelKey.version, from: labels, into: &composeVersions)
   }
 

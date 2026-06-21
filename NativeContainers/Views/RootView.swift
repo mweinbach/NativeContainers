@@ -72,6 +72,8 @@ struct DestinationView: View {
         OverviewView(model: model)
       case .containers:
         ContainersView(model: model)
+      case .composeProjects:
+        ComposeProjectsView(model: model)
       case .images:
         ImagesView(model: model)
       case .builds:

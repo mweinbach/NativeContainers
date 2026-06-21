@@ -4,6 +4,8 @@ enum WorkspaceRoute: Hashable, Sendable {
   case overview
   case containers
   case container(String)
+  case composeProjects
+  case composeProject(String)
   case images
   case image(String)
   case builds
@@ -23,6 +25,8 @@ enum WorkspaceRoute: Hashable, Sendable {
       .overview
     case .containers, .container:
       .containers
+    case .composeProjects, .composeProject:
+      .composeProjects
     case .images, .image:
       .images
     case .builds:
@@ -42,9 +46,10 @@ enum WorkspaceRoute: Hashable, Sendable {
 
   var isResourceRoute: Bool {
     switch self {
-    case .container, .image, .volume, .network, .linuxMachine, .macOSVirtualMachine:
+    case .container, .composeProject, .image, .volume, .network, .linuxMachine,
+      .macOSVirtualMachine:
       true
-    case .overview, .containers, .images, .builds, .volumes, .networks,
+    case .overview, .containers, .composeProjects, .images, .builds, .volumes, .networks,
       .linuxMachines, .macOSVirtualMachines, .settings:
       false
     }
@@ -58,6 +63,10 @@ enum WorkspaceRoute: Hashable, Sendable {
       "containers"
     case .container(let id):
       "container:\(id)"
+    case .composeProjects:
+      "compose-projects"
+    case .composeProject(let name):
+      "compose-project:\(name)"
     case .images:
       "images"
     case .image(let reference):
@@ -88,6 +97,7 @@ enum WorkspaceRoute: Hashable, Sendable {
 
 enum WorkspaceResourceKind: Int, CaseIterable, Sendable {
   case container
+  case composeProject
   case image
   case volume
   case network
@@ -98,6 +108,8 @@ enum WorkspaceResourceKind: Int, CaseIterable, Sendable {
     switch self {
     case .container:
       "Container"
+    case .composeProject:
+      "Compose Project"
     case .image:
       "Image"
     case .volume:
@@ -115,6 +127,8 @@ enum WorkspaceResourceKind: Int, CaseIterable, Sendable {
     switch self {
     case .container:
       "shippingbox"
+    case .composeProject:
+      "square.stack.3d.down.right"
     case .image:
       "square.stack.3d.up"
     case .volume:
@@ -132,6 +146,8 @@ enum WorkspaceResourceKind: Int, CaseIterable, Sendable {
     switch self {
     case .container:
       ["container"]
+    case .composeProject:
+      ["compose", "project", "stack", "service"]
     case .image:
       ["image", "oci"]
     case .volume:
@@ -157,6 +173,7 @@ struct WorkspaceResourceEntry: Identifiable, Equatable, Sendable {
 }
 
 struct WorkspaceResourceSnapshot: Equatable, Sendable {
+  let composeProjects: [ComposeProjectRecord]
   let containers: [ContainerRecord]
   let images: [ImageRecord]
   let volumes: [VolumeRecord]
@@ -165,6 +182,7 @@ struct WorkspaceResourceSnapshot: Equatable, Sendable {
   let macOSVirtualMachines: [VirtualMachineManifest]
 
   init(
+    composeProjects: [ComposeProjectRecord] = [],
     containers: [ContainerRecord] = [],
     images: [ImageRecord] = [],
     volumes: [VolumeRecord] = [],
@@ -172,6 +190,7 @@ struct WorkspaceResourceSnapshot: Equatable, Sendable {
     linuxMachines: [LinuxMachineRecord] = [],
     macOSVirtualMachines: [VirtualMachineManifest] = []
   ) {
+    self.composeProjects = composeProjects
     self.containers = containers
     self.images = images
     self.volumes = volumes

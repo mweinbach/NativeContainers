@@ -3,6 +3,7 @@ import SwiftUI
 enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
   case overview
   case containers
+  case composeProjects
   case images
   case builds
   case volumes
@@ -17,6 +18,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
     switch self {
     case .overview: .overview
     case .containers: .containers
+    case .composeProjects: .composeProjects
     case .images: .images
     case .builds: .builds
     case .volumes: .volumes
@@ -33,6 +35,8 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
       self = .overview
     case .containers:
       self = .containers
+    case .composeProjects:
+      self = .composeProjects
     case .images:
       self = .images
     case .builds:
@@ -47,7 +51,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
       self = .macOSVirtualMachines
     case .settings:
       self = .settings
-    case .container, .image, .volume, .network, .linuxMachine,
+    case .container, .composeProject, .image, .volume, .network, .linuxMachine,
       .macOSVirtualMachine:
       preconditionFailure("A base workspace route cannot be a resource route.")
     }
@@ -57,6 +61,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
     switch self {
     case .overview: "Overview"
     case .containers: "Containers"
+    case .composeProjects: "Compose"
     case .images: "Images"
     case .builds: "Builds"
     case .volumes: "Volumes"
@@ -71,6 +76,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
     switch self {
     case .overview: "square.grid.2x2"
     case .containers: "shippingbox"
+    case .composeProjects: "square.stack.3d.down.right"
     case .images: "square.stack.3d.up"
     case .builds: "hammer"
     case .volumes: "externaldrive"

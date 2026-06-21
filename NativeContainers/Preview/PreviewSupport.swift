@@ -35,7 +35,15 @@ extension AppModel {
           startedAt: now.addingTimeInterval(-3_600),
           cpuCount: 4,
           memoryBytes: 2 * VirtualMachineResources.bytesPerGiB,
-          ports: []
+          ports: [],
+          labels: [
+            ComposeLabelKey.project: "sample-stack",
+            ComposeLabelKey.service: "api",
+            ComposeLabelKey.containerNumber: "1",
+            ComposeLabelKey.workingDirectory: "/Users/example/Projects/sample-stack",
+            ComposeLabelKey.configFiles: "/Users/example/Projects/sample-stack/compose.yaml",
+            ComposeLabelKey.version: "2.38.1",
+          ]
         ),
         ContainerRecord(
           id: "postgres",
@@ -47,7 +55,12 @@ extension AppModel {
           startedAt: nil,
           cpuCount: 2,
           memoryBytes: VirtualMachineResources.bytesPerGiB,
-          ports: []
+          ports: [],
+          labels: [
+            ComposeLabelKey.project: "sample-stack",
+            ComposeLabelKey.service: "database",
+            ComposeLabelKey.containerNumber: "1",
+          ]
         ),
       ],
       images: [
@@ -68,7 +81,11 @@ extension AppModel {
           createdAt: now.addingTimeInterval(-86_400),
           sizeBytes: 536_870_912,
           allocatedBytes: 48_234_496,
-          labels: ["com.example.purpose": "database"],
+          labels: [
+            "com.example.purpose": "database",
+            ComposeLabelKey.project: "sample-stack",
+            ComposeLabelKey.volume: "postgres-data",
+          ],
           options: ["size": "536870912B", "journal": "ordered"],
           isAnonymous: false,
           usedByContainerIDs: ["postgres"]
@@ -115,7 +132,11 @@ extension AppModel {
           assignedIPv4Subnet: "192.168.100.0/24",
           ipv4Gateway: "192.168.100.1",
           assignedIPv6Subnet: nil,
-          labels: ["com.example.purpose": "internal"],
+          labels: [
+            "com.example.purpose": "internal",
+            ComposeLabelKey.project: "sample-stack",
+            ComposeLabelKey.network: "backend",
+          ],
           plugin: "container-network-vmnet",
           options: [:],
           isBuiltin: false,

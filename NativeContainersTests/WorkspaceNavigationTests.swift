@@ -11,6 +11,9 @@ struct WorkspaceNavigationTests {
     let machineID = UUID(uuidString: "01234567-89AB-CDEF-0123-456789ABCDEF")!
 
     #expect(WorkspaceRoute.container("api").baseRoute == .containers)
+    #expect(
+      WorkspaceRoute.composeProject("sample-stack").baseRoute == .composeProjects
+    )
     #expect(WorkspaceRoute.image("example/api:latest").baseRoute == .images)
     #expect(WorkspaceRoute.volume("data").baseRoute == .volumes)
     #expect(WorkspaceRoute.network("backend").baseRoute == .networks)
@@ -21,6 +24,10 @@ struct WorkspaceNavigationTests {
     #expect(
       WorkspaceRoute.macOSVirtualMachine(machineID).stableIdentifier
         == "macos-virtual-machine:01234567-89ab-cdef-0123-456789abcdef"
+    )
+    #expect(
+      WorkspaceRoute.composeProject("sample-stack").stableIdentifier
+        == "compose-project:sample-stack"
     )
   }
 
@@ -101,6 +108,21 @@ struct WorkspaceNavigationTests {
   }
 
   @Test
+  func catalogIndexesComposeProjectsAndCanonicalContainerLabels() throws {
+    let fixture = try makeFixture()
+    let catalog = WorkspaceResourceCatalog()
+    let entries = catalog.entries(from: fixture.snapshot)
+
+    let projectResults = catalog.search("sample-stack", in: entries, limit: 10)
+    let serviceResults = catalog.search("api-service", in: entries, limit: 10)
+
+    #expect(projectResults.first?.route == .composeProject("sample-stack"))
+    #expect(projectResults.contains(where: { $0.route == .container("api") }))
+    #expect(serviceResults.contains(where: { $0.route == .composeProject("sample-stack") }))
+    #expect(serviceResults.contains(where: { $0.route == .container("api") }))
+  }
+
+  @Test
   func catalogDedupeIsStableAcrossInputOrdering() {
     let catalog = WorkspaceResourceCatalog()
     let alphabeticWinner = makeVolume(id: "shared", name: "Alpha")
@@ -153,6 +175,17 @@ struct WorkspaceNavigationTests {
   }
 
   @Test
+  func navigationReconcilesAStaleComposeProjectToTheComposeWorkspace() throws {
+    let fixture = try makeFixture()
+    let navigation = WorkspaceNavigationModel(snapshot: fixture.snapshot)
+    #expect(navigation.navigate(to: .composeProject("sample-stack")))
+
+    navigation.update(WorkspaceResourceSnapshot())
+
+    #expect(navigation.route == .composeProjects)
+  }
+
+  @Test
   func navigationRetainsAnExactRouteWhenRefreshIsNotAuthoritative() {
     let route = WorkspaceRoute.container("api")
     let navigation = WorkspaceNavigationModel(
@@ -180,6 +213,10 @@ struct WorkspaceNavigationTests {
     #expect(model.navigate(to: .container("api")))
     #expect(model.workspaceRoute == .container("api"))
     #expect(model.selection == .containers)
+
+    #expect(model.navigate(to: .composeProject("sample-stack")))
+    #expect(model.workspaceRoute == .composeProject("sample-stack"))
+    #expect(model.selection == .composeProjects)
 
     #expect(model.navigate(to: .macOSVirtualMachine(fixture.macVirtualMachine.id)))
     #expect(
@@ -226,6 +263,7 @@ private struct WorkspaceNavigationFixture {
 
   var snapshot: WorkspaceResourceSnapshot {
     WorkspaceResourceSnapshot(
+      composeProjects: ComposeTopologyService().derive(from: inventory).projects,
       containers: inventory.containers,
       images: inventory.images,
       volumes: inventory.volumes,
@@ -238,6 +276,7 @@ private struct WorkspaceNavigationFixture {
   var resourceRoutes: [WorkspaceRoute] {
     [
       .container("api"),
+      .composeProject("sample-stack"),
       .image("ghcr.io/example/api:latest"),
       .volume("data"),
       .network("backend"),
@@ -263,7 +302,15 @@ private func makeFixture() throws -> WorkspaceNavigationFixture {
     createdAt: Date(timeIntervalSince1970: 10)
   )
   let inventory = makeInventory(
-    containers: [makeContainer(id: "api")],
+    containers: [
+      makeContainer(
+        id: "api",
+        labels: [
+          ComposeLabelKey.project: "sample-stack",
+          ComposeLabelKey.service: "api-service",
+        ]
+      )
+    ],
     images: [
       ImageRecord(
         reference: "ghcr.io/example/api:latest",
@@ -272,8 +319,8 @@ private func makeFixture() throws -> WorkspaceNavigationFixture {
         indexSizeBytes: 1_024
       )
     ],
-    volumes: [makeVolume(id: "data", name: "data")],
-    networks: [makeNetwork(id: "backend")],
+    volumes: [makeVolume(id: "data", name: "data", project: "sample-stack")],
+    networks: [makeNetwork(id: "backend", project: "sample-stack")],
     machines: [makeLinuxMachine(id: "dev")]
   )
   return WorkspaceNavigationFixture(
@@ -308,7 +355,8 @@ private func makeInventory(
 private func makeContainer(
   id: String,
   imageReference: String = "ghcr.io/example/api:latest",
-  platform: String = "linux/arm64"
+  platform: String = "linux/arm64",
+  labels: [String: String] = [:]
 ) -> ContainerRecord {
   ContainerRecord(
     id: id,
@@ -320,12 +368,18 @@ private func makeContainer(
     startedAt: Date(timeIntervalSince1970: 2),
     cpuCount: 2,
     memoryBytes: VirtualMachineResources.bytesPerGiB,
-    ports: []
+    ports: [],
+    labels: labels
   )
 }
 
-private func makeVolume(id: String, name: String) -> VolumeRecord {
-  VolumeRecord(
+private func makeVolume(id: String, name: String, project: String? = nil) -> VolumeRecord {
+  var labels: [String: String] = [:]
+  if let project {
+    labels[ComposeLabelKey.project] = project
+    labels[ComposeLabelKey.volume] = name
+  }
+  return VolumeRecord(
     id: id,
     name: name,
     driver: "local",
@@ -334,15 +388,20 @@ private func makeVolume(id: String, name: String) -> VolumeRecord {
     createdAt: Date(timeIntervalSince1970: 1),
     sizeBytes: 8 * VirtualMachineResources.bytesPerGiB,
     allocatedBytes: 1_024,
-    labels: [:],
+    labels: labels,
     options: [:],
     isAnonymous: false,
     usedByContainerIDs: []
   )
 }
 
-private func makeNetwork(id: String) -> NetworkRecord {
-  NetworkRecord(
+private func makeNetwork(id: String, project: String? = nil) -> NetworkRecord {
+  var labels: [String: String] = [:]
+  if let project {
+    labels[ComposeLabelKey.project] = project
+    labels[ComposeLabelKey.network] = id
+  }
+  return NetworkRecord(
     id: id,
     name: id,
     mode: .nat,
@@ -352,7 +411,7 @@ private func makeNetwork(id: String) -> NetworkRecord {
     assignedIPv4Subnet: "192.168.100.0/24",
     ipv4Gateway: "192.168.100.1",
     assignedIPv6Subnet: nil,
-    labels: [:],
+    labels: labels,
     plugin: "container-network-vmnet",
     options: [:],
     isBuiltin: false,

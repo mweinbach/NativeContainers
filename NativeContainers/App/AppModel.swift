@@ -85,6 +85,7 @@ final class AppModel {
 
   convenience init(
     containerService: any ContainerManaging = AppleContainerService(),
+    composeTopologyService: any ComposeTopologyDeriving = ComposeTopologyService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
     imageBuildService: any ImageBuilding = AppleContainerBuildService(),
     registryService: any RegistryManaging = AppleRegistryService(),
@@ -109,6 +110,7 @@ final class AppModel {
     self.init(
       services: AppServices(
         containerService: containerService,
+        composeTopology: composeTopologyService,
         machineService: machineService,
         imageBuild: imageBuildService,
         registry: registryService,
@@ -504,6 +506,7 @@ final class AppModel {
   private func updateWorkspaceNavigation(reconcileMissingRoute: Bool = true) {
     workspaceNavigation.update(
       WorkspaceResourceSnapshot(
+        composeProjects: composeProjects,
         containers: containers,
         images: images,
         volumes: volumes,
@@ -520,11 +523,11 @@ final class AppModel {
     didLoadVirtualMachineLibrary: Bool
   ) -> Bool {
     switch workspaceRoute {
-    case .container, .image, .volume, .network, .linuxMachine:
+    case .container, .composeProject, .image, .volume, .network, .linuxMachine:
       didLoadContainerInventory
     case .macOSVirtualMachine:
       didLoadVirtualMachineLibrary
-    case .overview, .containers, .images, .builds, .volumes, .networks,
+    case .overview, .containers, .composeProjects, .images, .builds, .volumes, .networks,
       .linuxMachines, .macOSVirtualMachines, .settings:
       true
     }

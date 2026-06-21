@@ -9,6 +9,7 @@ struct SidebarView: View {
       Section("Workspace") {
         row(.overview)
         row(.containers)
+        row(.composeProjects)
         row(.images)
         row(.builds)
         row(.volumes)

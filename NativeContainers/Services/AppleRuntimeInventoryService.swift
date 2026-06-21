@@ -53,30 +53,7 @@ struct AppleRuntimeInventoryService: ContainerInventoryLoading {
       installRoot: health.installRoot
     )
 
-    let containers = snapshots.map { snapshot in
-      ContainerRecord(
-        id: snapshot.id,
-        imageReference: snapshot.configuration.image.reference,
-        platform: String(describing: snapshot.platform),
-        state: RuntimeState(rawValue: snapshot.status.rawValue) ?? .unknown,
-        ipAddress: snapshot.networks.first.map { String(describing: $0.ipv4Address) },
-        createdAt: snapshot.configuration.creationDate,
-        startedAt: snapshot.startedDate,
-        cpuCount: snapshot.configuration.resources.cpus,
-        memoryBytes: snapshot.configuration.resources.memoryInBytes,
-        ports: snapshot.configuration.publishedPorts.flatMap { port in
-          (0..<port.count).map { offset in
-            ContainerPort(
-              hostAddress: String(describing: port.hostAddress),
-              hostPort: port.hostPort + offset,
-              containerPort: port.containerPort + offset,
-              protocolName: port.proto.rawValue
-            )
-          }
-        },
-        labels: snapshot.configuration.labels
-      )
-    }
+    let containers = snapshots.map(Self.containerRecord(from:))
 
     let images = clientImages.filter { image in
       !Utility.isInfraImage(
@@ -152,6 +129,31 @@ struct AppleRuntimeInventoryService: ContainerInventoryLoading {
       volumes: volumes.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
       networks: networks.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
       machines: machines
+    )
+  }
+
+  static func containerRecord(from snapshot: ContainerSnapshot) -> ContainerRecord {
+    ContainerRecord(
+      id: snapshot.id,
+      imageReference: snapshot.configuration.image.reference,
+      platform: String(describing: snapshot.platform),
+      state: RuntimeState(rawValue: snapshot.status.rawValue) ?? .unknown,
+      ipAddress: snapshot.networks.first.map { String(describing: $0.ipv4Address) },
+      createdAt: snapshot.configuration.creationDate,
+      startedAt: snapshot.startedDate,
+      cpuCount: snapshot.configuration.resources.cpus,
+      memoryBytes: snapshot.configuration.resources.memoryInBytes,
+      ports: snapshot.configuration.publishedPorts.flatMap { port in
+        (0..<port.count).map { offset in
+          ContainerPort(
+            hostAddress: String(describing: port.hostAddress),
+            hostPort: port.hostPort + offset,
+            containerPort: port.containerPort + offset,
+            protocolName: port.proto.rawValue
+          )
+        }
+      },
+      labels: snapshot.configuration.labels
     )
   }
 

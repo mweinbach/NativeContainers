@@ -68,6 +68,10 @@ struct VolumesView: View {
             VolumeInspector(
               volume: volume,
               isOperationActive: operations.isWorking || operationTask != nil,
+              composeProjectName: appModel.composeTopology.projectNameByVolumeID[volume.id],
+              onOpenComposeProject: { projectName in
+                appModel.navigate(to: .composeProject(projectName))
+              },
               onDelete: { prepareDeletion(volume.name) }
             )
             .frame(minWidth: 430)
@@ -257,6 +261,8 @@ struct VolumeRow: View {
 struct VolumeInspector: View {
   let volume: VolumeRecord
   let isOperationActive: Bool
+  let composeProjectName: String?
+  let onOpenComposeProject: (String) -> Void
   let onDelete: () -> Void
 
   var body: some View {
@@ -268,6 +274,13 @@ struct VolumeInspector: View {
           canDelete: !isOperationActive && volume.usedByContainerIDs.isEmpty,
           onDelete: onDelete
         )
+        if let composeProjectName {
+          ComposeMembershipBanner(
+            projectName: composeProjectName,
+            serviceName: nil,
+            onOpen: { onOpenComposeProject(composeProjectName) }
+          )
+        }
         VolumeStorageSection(
           capacityBytes: volume.sizeBytes,
           allocatedBytes: volume.allocatedBytes,

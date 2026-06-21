@@ -26,6 +26,24 @@ struct WorkspaceResourceCatalog: WorkspaceResourceCataloging {
     var entries: [WorkspaceResourceEntry] = []
 
     entries.append(
+      contentsOf: snapshot.composeProjects.map { project in
+        entry(
+          route: .composeProject(project.name),
+          kind: .composeProject,
+          title: project.name,
+          subtitle:
+            "\(project.runningContainerCount)/\(project.containerCount) containers running",
+          terms: [
+            project.services.map(\.name).joined(separator: " "),
+            project.containers.map(\.id).joined(separator: " "),
+            project.containers.map(\.container.imageReference).joined(separator: " "),
+            project.volumes.flatMap { [$0.id, $0.name] }.joined(separator: " "),
+            project.networks.flatMap { [$0.id, $0.name] }.joined(separator: " "),
+          ]
+        )
+      }
+    )
+    entries.append(
       contentsOf: snapshot.containers.map { container in
         entry(
           route: .container(container.id),
@@ -37,6 +55,7 @@ struct WorkspaceResourceCatalog: WorkspaceResourceCataloging {
             container.platform,
             container.ipAddress,
             container.state.rawValue,
+            flattenedMetadata(container.labels),
           ]
         )
       }

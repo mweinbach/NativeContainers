@@ -3,6 +3,8 @@ import Foundation
 enum ComposeLabelKey {
   static let project = "com.docker.compose.project"
   static let service = "com.docker.compose.service"
+  static let volume = "com.docker.compose.volume"
+  static let network = "com.docker.compose.network"
   static let containerNumber = "com.docker.compose.container-number"
   static let oneOff = "com.docker.compose.oneoff"
   static let version = "com.docker.compose.version"
@@ -42,6 +44,10 @@ struct ComposeProjectMetadata: Equatable, Sendable {
     configFileValues: [],
     composeVersions: []
   )
+
+  var hasConflictingSourceMetadata: Bool {
+    workingDirectories.count > 1 || configFileValues.count > 1
+  }
 }
 
 enum ComposeObservedState: String, Equatable, Sendable {
@@ -53,10 +59,35 @@ enum ComposeObservedState: String, Equatable, Sendable {
   case unknown
 }
 
+enum ComposeTopologyResourceKind: Int, Equatable, Sendable {
+  case container
+  case volume
+  case network
+}
+
+enum ComposeTopologyNoticeKind: String, Equatable, Sendable {
+  case invalidProjectName
+  case invalidLogicalName
+  case missingResourceLabel
+  case builtinNetwork
+}
+
+struct ComposeTopologyNotice: Equatable, Sendable, Identifiable {
+  let kind: ComposeTopologyNoticeKind
+  let resourceKind: ComposeTopologyResourceKind
+  let resourceID: String
+  let projectLabel: String
+  let expectedLabelKey: String?
+
+  var id: String {
+    "\(resourceKind.rawValue):\(resourceID):\(kind.rawValue):\(expectedLabelKey ?? "")"
+  }
+}
+
 struct ComposeProjectRecord: Equatable, Sendable, Identifiable {
   let name: String
   let services: [ComposeServiceRecord]
-  let ungroupedContainers: [ComposeContainerInstance]
+  let unclassifiedContainers: [ComposeContainerInstance]
   let volumes: [VolumeRecord]
   let networks: [NetworkRecord]
   let metadata: ComposeProjectMetadata
@@ -64,7 +95,7 @@ struct ComposeProjectRecord: Equatable, Sendable, Identifiable {
   var id: String { name }
 
   var containers: [ComposeContainerInstance] {
-    services.flatMap(\.instances) + ungroupedContainers
+    services.flatMap(\.instances)
   }
 
   var containerCount: Int { containers.count }
@@ -91,6 +122,7 @@ struct ComposeProjectRecord: Equatable, Sendable, Identifiable {
 
 struct ComposeTopologySnapshot: Equatable, Sendable {
   let projects: [ComposeProjectRecord]
+  let notices: [ComposeTopologyNotice]
   let projectNameByContainerID: [String: String]
   let serviceNameByContainerID: [String: String]
   let projectNameByVolumeID: [String: String]
@@ -98,6 +130,7 @@ struct ComposeTopologySnapshot: Equatable, Sendable {
 
   static let empty = ComposeTopologySnapshot(
     projects: [],
+    notices: [],
     projectNameByContainerID: [:],
     serviceNameByContainerID: [:],
     projectNameByVolumeID: [:],

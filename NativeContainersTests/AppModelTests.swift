@@ -82,10 +82,11 @@ struct AppModelTests {
           labels: [
             "com.apple.container.resource.role": "builtin",
             ComposeLabelKey.project: "store",
+            ComposeLabelKey.network: "default",
           ],
           plugin: "container-network-vmnet",
           options: [:],
-          isBuiltin: true,
+          isBuiltin: false,
           usedByContainerIDs: ["web"]
         )
       ],
@@ -113,6 +114,43 @@ struct AppModelTests {
     #expect(model.errorMessage == nil)
     #expect(model.lastRefresh != nil)
     #expect(!model.isRefreshing)
+  }
+
+  @Test
+  func composeTopologyDerivationIsReplaceableAtTheApplicationBoundary() {
+    let inventory = ContainerInventory(
+      system: emptyInventory().system,
+      containers: [
+        ContainerRecord(
+          id: "web",
+          imageReference: "example/web:latest",
+          platform: "linux/arm64",
+          state: .running,
+          ipAddress: nil,
+          createdAt: Date(timeIntervalSince1970: 1),
+          startedAt: Date(timeIntervalSince1970: 2),
+          cpuCount: 2,
+          memoryBytes: VirtualMachineResources.bytesPerGiB,
+          ports: [],
+          labels: [
+            ComposeLabelKey.project: "replaceable",
+            ComposeLabelKey.service: "web",
+          ]
+        )
+      ],
+      images: [],
+      volumes: [],
+      networks: [],
+      machines: []
+    )
+    let model = AppModel(
+      containerService: MockContainerService(inventory: inventory),
+      composeTopologyService: EmptyComposeTopologyService(),
+      initialInventory: inventory
+    )
+
+    #expect(model.composeTopology == .empty)
+    #expect(model.composeProjects.isEmpty)
   }
 
   @Test
@@ -1143,5 +1181,11 @@ private final class RetryableRecoveryInstaller: MacVirtualMachineInstalling {
       throw AppModelTestError.runtimeUnavailable
     }
     return .recovered
+  }
+}
+
+private struct EmptyComposeTopologyService: ComposeTopologyDeriving {
+  func derive(from inventory: ContainerInventory) -> ComposeTopologySnapshot {
+    .empty
   }
 }

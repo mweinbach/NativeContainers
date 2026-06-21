@@ -14,6 +14,7 @@ struct OverviewView: View {
         ResourceSummaryGrid(
           runningContainers: model.containers.count(where: { $0.state.isRunning }),
           containerCount: model.containers.count,
+          composeProjectCount: model.composeProjects.count,
           imageCount: model.images.count,
           volumeCount: model.volumes.count,
           networkCount: model.networks.count,
@@ -21,6 +22,12 @@ struct OverviewView: View {
           virtualMachineCount: model.virtualMachines.count,
           onNavigate: { route in model.navigate(to: route) }
         )
+        if !model.composeProjects.isEmpty {
+          ComposeProjectsOverviewSection(
+            projects: model.composeProjects,
+            onOpen: { route in model.navigate(to: route) }
+          )
+        }
         ActiveResourcesSection(
           containers: model.containers.filter { $0.state.isRunning },
           machines: model.linuxMachines.filter { $0.state.isRunning },
@@ -75,6 +82,7 @@ struct OverviewHeader: View {
 struct ResourceSummaryGrid: View {
   let runningContainers: Int
   let containerCount: Int
+  let composeProjectCount: Int
   let imageCount: Int
   let volumeCount: Int
   let networkCount: Int
@@ -95,6 +103,14 @@ struct ResourceSummaryGrid: View {
         systemImage: "shippingbox",
         tint: .blue,
         action: { onNavigate(.containers) }
+      )
+      SummaryCard(
+        title: "Compose",
+        value: composeProjectCount.formatted(),
+        detail: "observed projects",
+        systemImage: "square.stack.3d.down.right",
+        tint: .indigo,
+        action: { onNavigate(.composeProjects) }
       )
       SummaryCard(
         title: "Images",
@@ -264,4 +280,11 @@ struct ActiveResourceRow: View {
     .buttonStyle(.plain)
     .accessibilityHint("Opens this resource")
   }
+}
+
+#Preview("Overview") {
+  NavigationStack {
+    OverviewView(model: .preview)
+  }
+  .frame(width: 1_080, height: 760)
 }

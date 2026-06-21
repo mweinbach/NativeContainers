@@ -69,6 +69,10 @@ struct NetworksView: View {
             NetworkInspector(
               network: network,
               isOperationActive: operations.isWorking || operationTask != nil,
+              composeProjectName: appModel.composeTopology.projectNameByNetworkID[network.id],
+              onOpenComposeProject: { projectName in
+                appModel.navigate(to: .composeProject(projectName))
+              },
               onDelete: { prepareDeletion(network.id) }
             )
             .frame(minWidth: 430)
@@ -260,6 +264,8 @@ struct NetworkRow: View {
 struct NetworkInspector: View {
   let network: NetworkRecord
   let isOperationActive: Bool
+  let composeProjectName: String?
+  let onOpenComposeProject: (String) -> Void
   let onDelete: () -> Void
 
   var body: some View {
@@ -273,6 +279,13 @@ struct NetworkInspector: View {
             !isOperationActive && !network.isBuiltin && network.usedByContainerIDs.isEmpty,
           onDelete: onDelete
         )
+        if let composeProjectName {
+          ComposeMembershipBanner(
+            projectName: composeProjectName,
+            serviceName: nil,
+            onOpen: { onOpenComposeProject(composeProjectName) }
+          )
+        }
         NetworkAddressSection(
           configuredIPv4Subnet: network.configuredIPv4Subnet,
           configuredIPv6Subnet: network.configuredIPv6Subnet,
