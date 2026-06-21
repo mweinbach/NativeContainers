@@ -481,6 +481,33 @@ Updated: 2026-06-21.
 - The full Xcode plan passes all 479 outcomes: 468 deterministic tests passed
   and 11 explicitly gated live tests skipped, with no failures.
 
+## Compose live-wire checkpoint
+
+- A modular `SocktainerComposeLiveConformanceService` now owns one fixed,
+  uniquely named Alpine service/volume/network fixture. Private workspace,
+  exact-label cleanup planning, Apple-native cleanup, and orchestration are
+  separate injectable facets.
+- Config, up, and down commands are deadline-bounded by the existing host
+  executor, which escalates TERM to KILL. Cleanup does not inherit caller
+  cancellation: it runs the reviewed Compose model first, verifies Apple
+  inventory absence, and only then rethrows cancellation or the original error.
+- Failed Compose teardown falls back only after exact names and canonical labels
+  match. It freezes and revalidates Apple identities, force-stops/deletes the
+  container through `AppleContainerLifecycleService`, and deletes native
+  network/volume plans through `AppleInfrastructureService`. Foreign or
+  recreated resources fail closed.
+- Two production-path Xcode runs passed. The normal run observed project
+  `ncwire-217fee99` in `allRunning` state with service `probe`, logical volume
+  `data`, and logical network `default`, then removed every resource. A second
+  run forced Compose down to exit 17; Apple-native fallback completed, reported
+  `FALLBACK=true`, and again left no resource, bridge process, or socket.
+- The isolated Docker configuration correctly found no Compose plugin. The
+  proof used the host’s standalone Compose 5.1.2 client, which currently resolves
+  to OrbStack. Product packaging remains blocked from using that path; the next
+  client slice must pin and verify Docker’s own Darwin arm64 release artifact.
+- The full Xcode plan passes all 486 outcomes: 473 deterministic tests passed
+  and 13 explicitly gated live tests skipped, with no failures.
+
 ## Known configuration issue
 
 Apple documentation and SDK headers require
@@ -505,7 +532,8 @@ entitlement; no developer-team or provisioning-profile change should be needed.
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, and transactional same-host save/restore against a local
    IPSW.
-4. Run an isolated live-wire Compose fixture against Socktainer 1.0.0 for the
-   source-pinned supported subset, with unique resources and bounded cleanup.
-   Then design a reviewed desired-state parser before considering project
-   lifecycle; do not infer replicas, health, or removal intent from labels.
+4. Install Docker’s Darwin arm64 Compose client into private app support from a
+   version/checksum/provenance-pinned release, without changing the user’s CLI
+   plugin directories. Then design a reviewed desired-state parser before any
+   user-project lifecycle; do not infer replicas, health, or removal intent from
+   labels.

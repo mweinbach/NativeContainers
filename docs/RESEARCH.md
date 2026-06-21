@@ -475,8 +475,26 @@ The UI and marketing must not collapse those four claims into one.
   manifest explicitly requires the reviewed container, volume, and network
   route surface; known alias, health, restart, config, and secret gaps override
   route presence. Settings labels the result as source-pinned rather than live,
-  and the project-lifecycle fixture remains policy-blocked. A future isolated
-  wire fixture must still prove the supported subset against the real socket.
+  and the project-lifecycle fixture remains policy-blocked.
+- The isolated live-wire fixture now proves the supported subset against the
+  real socket. A standard Compose 5.1.2 client created one running Alpine
+  service plus labeled named volume/network; Apple inventory derived the exact
+  canonical project, logical names, and `allRunning` state. Normal down removed
+  all resources. A second run intentionally made down exit 17 and proved the
+  identity-revalidated Apple-native force-stop/delete fallback, again leaving
+  no resources, process, or socket.
+- The live environment exposed an important packaging gap: setting an isolated
+  `DOCKER_CONFIG` correctly hides the user’s Compose plugin, while
+  `/usr/local/bin/docker-compose` currently resolves to OrbStack. That binary is
+  acceptable as an external conformance client but cannot become a product
+  dependency. Docker’s official
+  [v5.1.4 release](https://github.com/docker/compose/releases/tag/v5.1.4)
+  publishes a 29.7 MB `docker-compose-darwin-aarch64` asset, SHA-256
+  `4cad7fc67dd089a598a15598ad38d04e6f23bf299846d26b2c572f1f96a7c49f`,
+  plus checksum, provenance, SBOM, and Sigstore artifacts. Docker’s install docs
+  otherwise steer macOS users to Docker Desktop, so NativeContainers needs a
+  private, version-pinned installer and license/signature review rather than
+  modifying global CLI plugin directories.
 
 Apple maintainers treat the Engine API as a separate service/plugin concern.
 [Socktainer](https://github.com/socktainer/socktainer) is an active Apache-2.0

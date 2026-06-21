@@ -755,3 +755,31 @@ and blocked results, but must not present it as a live Compose run. The service
 does not touch the socket or Apple runtime and remains independently injectable
 for previews and tests. Adding a future Engine operation does not update the
 pinned manifest automatically; support must be reviewed and added explicitly.
+
+## ADR-030: Prove Compose compatibility with isolated execution and Apple cleanup
+
+**Status:** Accepted — 2026-06-21
+
+Static route evidence is necessary but cannot prove that a real Compose client,
+Socktainer, Apple inventory, and the app’s canonical topology agree. An opt-in
+`SocktainerComposeLiveConformanceService` therefore runs one fixed, uniquely
+named Alpine service with one named volume and one named network. It never pulls
+or builds: the fixture requires an already reviewed local image so a failed
+probe cannot leave unowned image-store mutation.
+
+The service is decomposed into workspace, cleanup-planning, native-cleanup, and
+execution facets. Commands are bounded by the existing exact-process host
+executor. Caller cancellation is recorded, but cleanup runs in a detached task
+that does not inherit cancellation; cancellation is rethrown only after absence
+is confirmed. Normal cleanup uses the reviewed Compose file and explicit volume
+intent. If Compose teardown fails, exact names alone are insufficient: canonical
+labels must also match, Apple configuration identities are frozen and
+revalidated, the container is force-stopped/deleted through Apple APIs, and
+network/volume deletion reuses the native reviewed-plan services. A changed or
+foreign resource is left untouched and reported.
+
+This is conformance evidence, not a general project lifecycle coordinator. The
+fixture cannot authorize operations on user projects, and the UI does not expose
+it until a Docker-independent, version-pinned Compose client installation path
+is reviewed. The local proof may use an externally installed standard client;
+shipping must not depend on an OrbStack-owned symlink.

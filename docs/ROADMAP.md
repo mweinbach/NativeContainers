@@ -69,8 +69,10 @@ must leave a usable, test-backed product slice.
       the active context implicitly.
 - [x] Source-pinned Socktainer 1.0.0 Compose conformance manifest with explicit
       route requirements, semantic gaps, and a visible policy block.
-- [ ] Compose parser and lifecycle coordinator after an isolated live-wire
-      fixture and reviewed desired-state/resource-identity model.
+- [x] Isolated live-wire Compose fixture with canonical Apple-inventory proof,
+      bounded clients, noncancellable teardown, and Apple-native force cleanup.
+- [ ] Pin and verify a product-owned Docker Compose client, then implement a
+      reviewed desired-state parser and lifecycle coordinator.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [ ] SSH agent forwarding and safe host-directory sharing.

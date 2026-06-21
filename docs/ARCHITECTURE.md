@@ -304,6 +304,25 @@ report is visible in Settings but is explicitly source-pinned evidence rather
 than a live Compose execution result. It does not start the bridge, inspect
 Apple inventory, or authorize project mutation.
 
+`SocktainerComposeLiveConformanceService` is a separate opt-in execution
+boundary. A private workspace facet writes one fixed Alpine fixture with unique,
+grammar-validated container, volume, and network names. The runner validates the
+Compose model, starts it through the isolated `nativecontainers` context, and
+accepts success only after canonical service/volume/network associations appear
+through `AppleRuntimeInventoryService` and `ComposeTopologyService`. Every host
+command has a deadline; `FoundationHostCommandExecutor` escalates TERM to KILL
+and confirms exit when the client hangs.
+
+Cleanup runs in a detached, non-cancellation-inheriting task. It first executes
+the reviewed model’s `down --volumes --remove-orphans --timeout 3`. If that
+fails, a pure planner accepts only the fixture’s exact names plus canonical
+labels, freezes Apple configuration identities, and revalidates each identity
+before an Apple-native cleanup facet force-stops/deletes the container and
+deletes reviewed network and volume plans. Absence is polled through Apple
+inventory before cancellation or the original error is returned. The runner is
+not exposed as a product action until NativeContainers owns a reviewed Compose
+client instead of borrowing an unrelated application’s installation.
+
 Compose observability is a separate pure service boundary, not a second runtime
 and not part of Socktainer process ownership. `AppleRuntimeInventoryService`
 preserves container labels verbatim alongside the existing volume and network
