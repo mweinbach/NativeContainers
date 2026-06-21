@@ -61,6 +61,7 @@ actor VirtualMachineLibrary:
   VirtualMachineCloneStoring,
   VirtualMachineExportSourceLeasing,
   VirtualMachineImportStoring,
+  VirtualMachineStorageInventoryLoading,
   MacVirtualMachineInstallationStoring,
   MacVirtualMachineRuntimeLeasing,
   MacVirtualMachineSharedDirectoryPersisting
@@ -156,6 +157,21 @@ actor VirtualMachineLibrary:
       return manifest
     }
     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+  }
+
+  func loadVirtualMachineStorageInventory() throws
+    -> VirtualMachineStorageInventory
+  {
+    try ensureRootExists()
+    return VirtualMachineStorageInventory(
+      rootURL: rootURL,
+      targets: try list().map {
+        VirtualMachineStorageTarget(
+          manifest: $0,
+          bundleURL: bundleURL(for: $0.id)
+        )
+      }
+    )
   }
 
   func macOSSharedDirectoryConfiguration(

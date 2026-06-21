@@ -4,6 +4,7 @@ import Foundation
 struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
   let composeTopology: any ComposeTopologyDeriving
+  let storageUsage: any StorageUsageLoading
   let containerLifecycle: any ContainerLifecycleManaging
   let containerCreator: any ContainerCreating
   let containerInspector: any ContainerInspecting
@@ -41,6 +42,7 @@ struct AppServices: Sendable {
   init(
     inventory: any ContainerInventoryLoading,
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
+    storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     containerLifecycle: any ContainerLifecycleManaging,
     containerCreator: any ContainerCreating,
     containerInspector: any ContainerInspecting,
@@ -87,6 +89,7 @@ struct AppServices: Sendable {
   ) {
     self.inventory = inventory
     self.composeTopology = composeTopology
+    self.storageUsage = storageUsage
     self.containerLifecycle = containerLifecycle
     self.containerCreator = containerCreator
     self.containerInspector = containerInspector
@@ -125,6 +128,7 @@ struct AppServices: Sendable {
   init(
     containerService: any ContainerManaging,
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
+    storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
     machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
     machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
@@ -160,6 +164,7 @@ struct AppServices: Sendable {
   ) {
     inventory = containerService
     self.composeTopology = composeTopology
+    self.storageUsage = storageUsage
     containerLifecycle = containerService
     containerCreator = containerService
     containerInspector = containerService
@@ -280,6 +285,12 @@ enum AppCompositionRoot {
     let launchID = UUID()
     let imageBuildHistory = ImageBuildHistoryStore(launchID: launchID)
     let virtualMachineLibrary = VirtualMachineLibrary()
+    let storageUsage = StorageUsageService(
+      appleRuntime: AppleRuntimeStorageUsageService(),
+      virtualMachines: VirtualMachineStorageUsageService(
+        inventory: virtualMachineLibrary
+      )
+    )
     let virtualMachineBundlePreparer = VirtualMachineBundlePreparationService()
     let virtualMachineCloner = VirtualMachineCloneService(
       store: virtualMachineLibrary,
@@ -352,6 +363,7 @@ enum AppCompositionRoot {
     return AppServices(
       inventory: inventoryService,
       composeTopology: ComposeTopologyService(),
+      storageUsage: storageUsage,
       containerLifecycle: lifecycleService,
       containerCreator: creationService,
       containerInspector: inspectionService,

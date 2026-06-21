@@ -2,6 +2,12 @@ import SwiftUI
 
 struct OverviewView: View {
   let model: AppModel
+  @State private var storageModel: StorageOverviewModel
+
+  init(model: AppModel) {
+    self.model = model
+    _storageModel = State(initialValue: model.makeStorageOverviewModel())
+  }
 
   var body: some View {
     ScrollView {
@@ -22,6 +28,7 @@ struct OverviewView: View {
           virtualMachineCount: model.virtualMachines.count,
           onNavigate: { route in model.navigate(to: route) }
         )
+        StorageOverviewSection(model: storageModel)
         if !model.composeProjects.isEmpty {
           ComposeProjectsOverviewSection(
             projects: model.composeProjects,

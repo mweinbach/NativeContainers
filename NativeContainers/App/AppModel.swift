@@ -49,6 +49,11 @@ final class AppModel {
   )
 
   @ObservationIgnored
+  private lazy var storageOverviewModel = StorageOverviewModel(
+    service: services.storageUsage
+  )
+
+  @ObservationIgnored
   private lazy var dockerCompatibilitySettingsModel = DockerCompatibilityModel(
     service: services.dockerCompatibility,
     composeConformance: services.composeBridgeConformance,
@@ -100,6 +105,7 @@ final class AppModel {
   convenience init(
     containerService: any ContainerManaging = AppleContainerService(),
     composeTopologyService: any ComposeTopologyDeriving = ComposeTopologyService(),
+    storageUsageService: any StorageUsageLoading = UnavailableStorageUsageService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
     imageBuildService: any ImageBuilding = AppleContainerBuildService(),
     registryService: any RegistryManaging = AppleRegistryService(),
@@ -132,6 +138,7 @@ final class AppModel {
       services: AppServices(
         containerService: containerService,
         composeTopology: composeTopologyService,
+        storageUsage: storageUsageService,
         machineService: machineService,
         imageBuild: imageBuildService,
         registry: registryService,
@@ -489,6 +496,10 @@ final class AppModel {
 
   func makeAppOwnedBuildCacheModel() -> AppOwnedBuildCacheModel {
     appOwnedBuildCacheModel
+  }
+
+  func makeStorageOverviewModel() -> StorageOverviewModel {
+    storageOverviewModel
   }
 
   func makeRegistrySettingsModel() -> RegistrySettingsModel {

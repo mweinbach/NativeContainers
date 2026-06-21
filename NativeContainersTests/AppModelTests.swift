@@ -18,6 +18,25 @@ struct AppModelTests {
       model.makeAppOwnedBuildCacheModel()
         === model.makeAppOwnedBuildCacheModel()
     )
+    #expect(
+      model.makeStorageOverviewModel()
+        === model.makeStorageOverviewModel()
+    )
+  }
+
+  @Test
+  func ordinaryInventoryRefreshDoesNotMeasureStorage() async {
+    let storage = CountingAppStorageUsageService()
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      storageUsageService: storage,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [])
+    )
+
+    await model.refresh()
+
+    #expect(await storage.runtimeLoadCount == 0)
+    #expect(await storage.virtualMachineLoadCount == 0)
   }
 
   @Test
@@ -1162,6 +1181,25 @@ private actor MockContainerService: ContainerManaging, MachineManaging {
     authorization: LinuxMachineForceStopAuthorization
   ) async throws {}
   func deleteMachine(_ target: LinuxMachineIdentity) async throws {}
+}
+
+private actor CountingAppStorageUsageService: StorageUsageLoading {
+  private(set) var runtimeLoadCount = 0
+  private(set) var virtualMachineLoadCount = 0
+
+  func loadAppleRuntimeStorageUsage() async throws
+    -> AppleRuntimeStorageUsage
+  {
+    runtimeLoadCount += 1
+    throw StorageUsageError.unavailable
+  }
+
+  func loadVirtualMachineStorageUsage() async throws
+    -> VirtualMachineStorageSummary
+  {
+    virtualMachineLoadCount += 1
+    throw StorageUsageError.unavailable
+  }
 }
 
 private enum AppModelTestError: LocalizedError {
