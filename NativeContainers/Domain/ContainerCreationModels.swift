@@ -93,9 +93,11 @@ struct ContainerCreationRequest: Equatable, Sendable {
   let attachments: ContainerAttachmentSelection
   let startAfterCreation: Bool
   let removeWhenStopped: Bool
-  let forwardSSHAgent: Bool
+  let sshAgent: ContainerSSHAgentConfiguration?
   let readOnlyRootFilesystem: Bool
   let useInitProcess: Bool
+
+  var forwardSSHAgent: Bool { sshAgent != nil }
 
   init(
     operationID: UUID = UUID(),
@@ -111,7 +113,7 @@ struct ContainerCreationRequest: Equatable, Sendable {
     attachments: ContainerAttachmentSelection = .empty,
     startAfterCreation: Bool = true,
     removeWhenStopped: Bool = false,
-    forwardSSHAgent: Bool = false,
+    sshAgent: ContainerSSHAgentConfiguration? = nil,
     readOnlyRootFilesystem: Bool = false,
     useInitProcess: Bool = true
   ) throws {
@@ -163,7 +165,7 @@ struct ContainerCreationRequest: Equatable, Sendable {
     self.attachments = attachments
     self.startAfterCreation = startAfterCreation
     self.removeWhenStopped = removeWhenStopped
-    self.forwardSSHAgent = forwardSSHAgent
+    self.sshAgent = sshAgent
     self.readOnlyRootFilesystem = readOnlyRootFilesystem
     self.useInitProcess = useInitProcess
   }

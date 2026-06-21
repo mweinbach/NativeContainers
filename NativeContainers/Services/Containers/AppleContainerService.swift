@@ -24,6 +24,7 @@ actor AppleContainerService: ContainerManaging, ContainerShellDiscovering {
     inventoryService: AppleRuntimeInventoryService? = nil,
     infrastructureService: AppleInfrastructureService? = nil,
     attachmentService: AppleContainerAttachmentService? = nil,
+    sshAgentService: (any ContainerSSHAgentForwardingManaging)? = nil,
     lifecycleService: AppleContainerLifecycleService? = nil,
     inspectionService: AppleContainerInspectionService? = nil,
     toolService: AppleContainerToolService? = nil,
@@ -48,17 +49,20 @@ actor AppleContainerService: ContainerManaging, ContainerShellDiscovering {
         containerReader: containerReader,
         runtimeMutationCoordinator: runtimeMutationCoordinator
       )
+    let resolvedSSHAgentService = sshAgentService ?? AppleContainerSSHAgentService()
     let resolvedAttachmentService =
       attachmentService
       ?? AppleContainerAttachmentService(
         infrastructureClient: infrastructureClient,
-        containerReader: containerReader
+        containerReader: containerReader,
+        sshAgentService: resolvedSSHAgentService
       )
     let resolvedLifecycleService =
       lifecycleService
       ?? AppleContainerLifecycleService(
         containerClient: containerClient,
-        attachmentService: resolvedAttachmentService
+        attachmentService: resolvedAttachmentService,
+        sshAgentService: resolvedSSHAgentService
       )
     let resolvedInspectionService =
       inspectionService ?? AppleContainerInspectionService(containerClient: containerClient)
@@ -107,6 +111,7 @@ actor AppleContainerService: ContainerManaging, ContainerShellDiscovering {
         attachmentService: resolvedAttachmentService,
         lifecycleService: resolvedLifecycleService,
         ownedContainerRecovery: resolvedRecoveryService,
+        sshAgentService: resolvedSSHAgentService,
         runtimeMutationCoordinator: runtimeMutationCoordinator
       )
     self.imageService = resolvedImageService
@@ -256,6 +261,12 @@ actor AppleContainerService: ContainerManaging, ContainerShellDiscovering {
     await attachmentService.loadContainerAttachmentEnvironment()
   }
 
+  nonisolated func reviewHostDirectory(
+    _ request: ContainerHostDirectoryReviewRequest
+  ) throws -> ContainerHostDirectoryMount {
+    try attachmentService.reviewHostDirectory(request)
+  }
+
   func resolveAttachments(
     _ selection: ContainerAttachmentSelection,
     operationID: UUID,
@@ -270,18 +281,18 @@ actor AppleContainerService: ContainerManaging, ContainerShellDiscovering {
     )
   }
 
-  func validatePublishedSocketsBeforeStart(
-    _ sockets: [PublishSocket],
+  func validateAttachmentsBeforeStart(
+    _ configuration: ContainerConfiguration,
     operationID: UUID
-  ) async throws {
-    try await attachmentService.validatePublishedSocketsBeforeStart(
-      sockets,
+  ) async throws -> ContainerHostDirectoryAccess? {
+    try await attachmentService.validateAttachmentsBeforeStart(
+      configuration,
       operationID: operationID
     )
   }
 
-  func cleanupPublishedSocketWorkspace(operationID: UUID) async {
-    await attachmentService.cleanupPublishedSocketWorkspace(operationID: operationID)
+  func cleanupAttachmentWorkspace(operationID: UUID) async {
+    await attachmentService.cleanupAttachmentWorkspace(operationID: operationID)
   }
 
   func createContainer(

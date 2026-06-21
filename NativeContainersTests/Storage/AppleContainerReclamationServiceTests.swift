@@ -257,16 +257,16 @@ private actor ContainerReclamationTransportDouble:
 }
 
 private actor PublishedSocketWorkspaceDouble:
-  PublishedSocketWorkspaceManaging
+  ContainerAttachmentWorkspaceManaging
 {
   private(set) var cleanedOperationIDs: [UUID] = []
 
-  func validatePublishedSocketsBeforeStart(
-    _ sockets: [PublishSocket],
+  func validateAttachmentsBeforeStart(
+    _ configuration: ContainerConfiguration,
     operationID: UUID
-  ) async throws {}
+  ) async throws -> ContainerHostDirectoryAccess? { nil }
 
-  func cleanupPublishedSocketWorkspace(operationID: UUID) async {
+  func cleanupAttachmentWorkspace(operationID: UUID) async {
     cleanedOperationIDs.append(operationID)
   }
 }

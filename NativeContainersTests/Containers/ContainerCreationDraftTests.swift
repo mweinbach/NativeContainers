@@ -19,6 +19,12 @@ struct ContainerCreationDraftTests {
       hostAccess: ContainerHostAccessCatalog(
         configurations: [hostAccess],
         warnings: []
+      ),
+      sshAgent: .available(
+        ContainerSSHAgentConfiguration(
+          socketPath: "/private/tmp/agent.sock",
+          sourceIdentity: .init(device: 2, inode: 3)
+        )
       )
     )
     var draft = ContainerCreationDraft(defaultNetworkID: builtin.id)
@@ -28,6 +34,13 @@ struct ContainerCreationDraftTests {
       ContainerVolumeMountDraft(
         volumeName: volume.name,
         containerPath: "/var/lib/data",
+        isReadOnly: true
+      )
+    ]
+    draft.hostDirectoryMounts = [
+      ContainerHostDirectoryMountDraft(
+        sourceURL: URL(filePath: "/Users/example/Project", directoryHint: .isDirectory),
+        containerPath: "/workspace/project",
         isReadOnly: true
       )
     ]
@@ -42,18 +55,22 @@ struct ContainerCreationDraftTests {
     ]
     draft.requiresHostAccess = true
     draft.selectedHostAccessID = hostAccess.id
+    draft.forwardSSHAgent = true
 
     let request = try draft.makeRequest(
       availableVolumes: [volume],
       availableNetworks: [builtin, backend],
-      attachmentEnvironment: environment
+      attachmentEnvironment: environment,
+      hostDirectoryReviewer: StubHostDirectoryReviewer()
     )
 
     #expect(request.attachments.volumeMounts.first?.volume == volume.configurationIdentity)
     #expect(request.attachments.volumeMounts.first?.isReadOnly == true)
+    #expect(request.attachments.hostDirectoryMounts.first?.containerPath == "/workspace/project")
     #expect(request.attachments.networks.map(\.networkID) == ["default", "backend"])
     #expect(request.attachments.publishedSockets.first?.hostSocketName == "api.sock")
     #expect(request.attachments.requiredHostAccess == hostAccess)
+    #expect(request.sshAgent == environment.sshAgent.configuration)
   }
 
   @Test
@@ -69,7 +86,8 @@ struct ContainerCreationDraftTests {
       try draft.makeRequest(
         availableVolumes: [],
         availableNetworks: [makeNetwork(id: "default", isBuiltin: true)],
-        attachmentEnvironment: nil
+        attachmentEnvironment: nil,
+        hostDirectoryReviewer: NoopHostDirectoryReviewer()
       )
     }
 
@@ -80,7 +98,8 @@ struct ContainerCreationDraftTests {
       try draft.makeRequest(
         availableVolumes: [],
         availableNetworks: [],
-        attachmentEnvironment: nil
+        attachmentEnvironment: nil,
+        hostDirectoryReviewer: NoopHostDirectoryReviewer()
       )
     }
   }
@@ -132,3 +151,19 @@ struct ContainerCreationDraftTests {
     )
   }
 }
+
+private struct StubHostDirectoryReviewer: ContainerHostDirectoryReviewing {
+  func reviewHostDirectory(
+    _ request: ContainerHostDirectoryReviewRequest
+  ) throws -> ContainerHostDirectoryMount {
+    try ContainerHostDirectoryMount(
+      bookmarkData: Data([1]),
+      lastKnownPath: request.sourceURL.path(percentEncoded: false),
+      sourceIdentity: .init(device: 1, inode: 1),
+      containerPath: request.containerPath,
+      isReadOnly: request.isReadOnly
+    )
+  }
+}
+
+private typealias NoopHostDirectoryReviewer = StubHostDirectoryReviewer

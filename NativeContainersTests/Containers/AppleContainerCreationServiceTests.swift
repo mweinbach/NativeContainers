@@ -127,6 +127,12 @@ private actor CreationAttachmentDouble: ContainerAttachmentManaging {
     )
   }
 
+  nonisolated func reviewHostDirectory(
+    _ request: ContainerHostDirectoryReviewRequest
+  ) throws -> ContainerHostDirectoryMount {
+    throw ResourceManagementError.unsupported
+  }
+
   func resolveAttachments(
     _ selection: ContainerAttachmentSelection,
     operationID: UUID,
@@ -140,12 +146,12 @@ private actor CreationAttachmentDouble: ContainerAttachmentManaging {
     )
   }
 
-  func validatePublishedSocketsBeforeStart(
-    _ sockets: [PublishSocket],
+  func validateAttachmentsBeforeStart(
+    _ configuration: ContainerConfiguration,
     operationID: UUID
-  ) async throws {}
+  ) async throws -> ContainerHostDirectoryAccess? { nil }
 
-  func cleanupPublishedSocketWorkspace(operationID: UUID) async {
+  func cleanupAttachmentWorkspace(operationID: UUID) async {
     cleanedOperationIDs.append(operationID)
   }
 }

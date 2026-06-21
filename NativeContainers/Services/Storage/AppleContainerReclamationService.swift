@@ -130,7 +130,7 @@ struct AppleContainerReclamationService: ContainerStorageReclaiming {
   typealias Sleeper = @Sendable (Duration) async -> Void
 
   private let transport: any ContainerReclamationTransport
-  private let attachmentService: any PublishedSocketWorkspaceManaging
+  private let attachmentService: any ContainerAttachmentWorkspaceManaging
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator
   private let now: @Sendable () -> Date
   private let reconciliationAttempts: Int
@@ -138,7 +138,7 @@ struct AppleContainerReclamationService: ContainerStorageReclaiming {
 
   init(
     transport: any ContainerReclamationTransport = AppleContainerReclamationClient(),
-    attachmentService: any PublishedSocketWorkspaceManaging =
+    attachmentService: any ContainerAttachmentWorkspaceManaging =
       AppleContainerAttachmentService(),
     runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared,
     now: @escaping @Sendable () -> Date = Date.init,
@@ -294,9 +294,7 @@ struct AppleContainerReclamationService: ContainerStorageReclaiming {
           removedAllocatedBytes,
           allocatedBeforeDelete,
         ])
-        if candidate.hasPublishedSockets {
-          await cleanupPublishedSockets(operationID: candidate.ownershipID)
-        }
+        await cleanupAttachments(operationID: candidate.ownershipID)
         if deletionError is CancellationError || Task.isCancelled {
           throw ContainerCleanupPartialCompletionError(
             result: result(pendingStartingAt: index + 1)
@@ -375,10 +373,10 @@ struct AppleContainerReclamationService: ContainerStorageReclaiming {
     }.value
   }
 
-  private func cleanupPublishedSockets(operationID: UUID) async {
+  private func cleanupAttachments(operationID: UUID) async {
     let attachmentService = self.attachmentService
     await Task.detached {
-      await attachmentService.cleanupPublishedSocketWorkspace(
+      await attachmentService.cleanupAttachmentWorkspace(
         operationID: operationID
       )
     }.value

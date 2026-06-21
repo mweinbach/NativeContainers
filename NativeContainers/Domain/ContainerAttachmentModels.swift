@@ -121,18 +121,31 @@ struct ContainerHostAccessCatalog: Equatable, Sendable {
 struct ContainerAttachmentEnvironment: Equatable, Sendable {
   let publishedSocketRootPath: String
   let hostAccess: ContainerHostAccessCatalog
+  let sshAgent: ContainerSSHAgentAvailability
+
+  init(
+    publishedSocketRootPath: String,
+    hostAccess: ContainerHostAccessCatalog,
+    sshAgent: ContainerSSHAgentAvailability = .unavailable(.environmentMissing)
+  ) {
+    self.publishedSocketRootPath = publishedSocketRootPath
+    self.hostAccess = hostAccess
+    self.sshAgent = sshAgent
+  }
 }
 
 struct ContainerAttachmentSelection: Equatable, Sendable {
   static let empty = ContainerAttachmentSelection()
 
   let volumeMounts: [ContainerVolumeMount]
+  let hostDirectoryMounts: [ContainerHostDirectoryMount]
   let networks: [ContainerNetworkAttachment]
   let publishedSockets: [ContainerUnixSocketPublication]
   let requiredHostAccess: ContainerHostAccessConfiguration?
 
   init() {
     volumeMounts = []
+    hostDirectoryMounts = []
     networks = []
     publishedSockets = []
     requiredHostAccess = nil
@@ -140,6 +153,7 @@ struct ContainerAttachmentSelection: Equatable, Sendable {
 
   init(
     volumeMounts: [ContainerVolumeMount],
+    hostDirectoryMounts: [ContainerHostDirectoryMount] = [],
     networks: [ContainerNetworkAttachment],
     publishedSockets: [ContainerUnixSocketPublication],
     requiredHostAccess: ContainerHostAccessConfiguration?
@@ -147,8 +161,13 @@ struct ContainerAttachmentSelection: Equatable, Sendable {
     guard Set(volumeMounts.map(\.volume.name)).count == volumeMounts.count else {
       throw ContainerAttachmentValidationError.duplicateVolume
     }
-    guard Set(volumeMounts.map(\.containerPath)).count == volumeMounts.count else {
+    let mountDestinations =
+      volumeMounts.map(\.containerPath) + hostDirectoryMounts.map(\.containerPath)
+    guard Set(mountDestinations).count == mountDestinations.count else {
       throw ContainerAttachmentValidationError.duplicateMountDestination
+    }
+    guard Set(hostDirectoryMounts.map(\.sourceIdentity)).count == hostDirectoryMounts.count else {
+      throw ContainerAttachmentValidationError.duplicateHostDirectory
     }
     guard Set(networks.map(\.networkID)).count == networks.count else {
       throw ContainerAttachmentValidationError.duplicateNetwork
@@ -161,6 +180,7 @@ struct ContainerAttachmentSelection: Equatable, Sendable {
     }
 
     self.volumeMounts = volumeMounts
+    self.hostDirectoryMounts = hostDirectoryMounts
     self.networks = networks
     self.publishedSockets = publishedSockets
     self.requiredHostAccess = requiredHostAccess
@@ -174,6 +194,7 @@ enum ContainerAttachmentValidationError: LocalizedError, Equatable {
   case containerSocketPathTooLong
   case duplicateVolume
   case duplicateMountDestination
+  case duplicateHostDirectory
   case duplicateNetwork
   case duplicateHostSocketPath
   case duplicateContainerSocketPath
@@ -196,7 +217,9 @@ enum ContainerAttachmentValidationError: LocalizedError, Equatable {
     case .duplicateVolume:
       "Each named volume can be attached only once."
     case .duplicateMountDestination:
-      "Each volume must use a unique path inside the container."
+      "Each storage attachment must use a unique path inside the container."
+    case .duplicateHostDirectory:
+      "Each host folder can be attached only once."
     case .duplicateNetwork:
       "Each network can be attached only once."
     case .duplicateHostSocketPath:
@@ -217,7 +240,7 @@ enum ContainerAttachmentValidationError: LocalizedError, Equatable {
   }
 }
 
-private enum ContainerAttachmentPath {
+enum ContainerAttachmentPath {
   static func containerPath(_ rawValue: String) throws -> String {
     try normalizedAbsolutePath(
       rawValue,

@@ -31,7 +31,7 @@ struct AppServices: Sendable {
   let containerTerminal: any ContainerTerminalOpening
   let terminalPresets: any TerminalPresetManaging
   let terminalTargets: any TerminalTargetOpening
-  let containerAttachments: any ContainerAttachmentEnvironmentLoading
+  let containerAttachments: any ContainerAttachmentPreparing
   let machineCreator: any MachineCreating
   let machineLifecycle: any MachineLifecycleManaging
   let machineCommands: any MachineCommandRunning
@@ -80,7 +80,7 @@ struct AppServices: Sendable {
     containerTerminal: any ContainerTerminalOpening,
     terminalPresets: any TerminalPresetManaging = EphemeralTerminalPresetStore(),
     terminalTargets: any TerminalTargetOpening = UnavailableTerminalTargetService(),
-    containerAttachments: any ContainerAttachmentEnvironmentLoading,
+    containerAttachments: any ContainerAttachmentPreparing,
     machineCreator: any MachineCreating,
     machineLifecycle: any MachineLifecycleManaging,
     machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
@@ -273,6 +273,7 @@ enum AppCompositionRoot {
     let infrastructureClient = AppleInfrastructureClient()
     let cleanupClient = AppleContainerCleanupClient()
     let processClient = AppleContainerProcessXPCClient()
+    let sshAgentService = AppleContainerSSHAgentService()
     let commandExecutor = AppleRuntimeCommandExecutor(processClient: processClient)
     let containerReader = AppleContainerSnapshotReader(client: containerClient)
     let shellService = AppleContainerShellService(
@@ -303,11 +304,13 @@ enum AppCompositionRoot {
     )
     let attachmentService = AppleContainerAttachmentService(
       infrastructureClient: infrastructureClient,
-      containerReader: containerReader
+      containerReader: containerReader,
+      sshAgentService: sshAgentService
     )
     let lifecycleService = AppleContainerLifecycleService(
       containerClient: containerClient,
-      attachmentService: attachmentService
+      attachmentService: attachmentService,
+      sshAgentService: sshAgentService
     )
     let inspectionService = AppleContainerInspectionService(containerClient: containerClient)
     let toolService = AppleContainerToolService(
@@ -349,6 +352,7 @@ enum AppCompositionRoot {
       attachmentService: attachmentService,
       lifecycleService: lifecycleService,
       ownedContainerRecovery: recoveryService,
+      sshAgentService: sshAgentService,
       runtimeMutationCoordinator: mutationCoordinator
     )
     let launchID = UUID()

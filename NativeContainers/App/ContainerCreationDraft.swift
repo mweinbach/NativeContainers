@@ -13,6 +13,7 @@ struct ContainerCreationDraft {
   var workingDirectory = ""
   var publishedPorts: [ContainerPortDraft] = []
   var volumeMounts: [ContainerVolumeMountDraft] = []
+  var hostDirectoryMounts: [ContainerHostDirectoryMountDraft] = []
   var networkAttachments: [ContainerNetworkAttachmentDraft]
   var publishedSockets: [ContainerSocketPublicationDraft] = []
   var requiresHostAccess = false
@@ -40,7 +41,8 @@ struct ContainerCreationDraft {
   func makeRequest(
     availableVolumes: [VolumeRecord],
     availableNetworks: [NetworkRecord],
-    attachmentEnvironment: ContainerAttachmentEnvironment?
+    attachmentEnvironment: ContainerAttachmentEnvironment?,
+    hostDirectoryReviewer: any ContainerHostDirectoryReviewing
   ) throws -> ContainerCreationRequest {
     let operationID = UUID()
     let volumeMounts = try volumeMounts.map { draft in
@@ -78,6 +80,15 @@ struct ContainerCreationDraft {
 
     let attachments = try ContainerAttachmentSelection(
       volumeMounts: volumeMounts,
+      hostDirectoryMounts: try hostDirectoryMounts.map { draft in
+        try hostDirectoryReviewer.reviewHostDirectory(
+          ContainerHostDirectoryReviewRequest(
+            sourceURL: draft.sourceURL,
+            containerPath: draft.containerPath,
+            isReadOnly: draft.isReadOnly
+          )
+        )
+      },
       networks: networks,
       publishedSockets: try publishedSockets.map { try $0.publication() },
       requiredHostAccess: requiredHostAccess
@@ -97,7 +108,7 @@ struct ContainerCreationDraft {
       attachments: attachments,
       startAfterCreation: startAfterCreation,
       removeWhenStopped: removeWhenStopped,
-      forwardSSHAgent: forwardSSHAgent,
+      sshAgent: try reviewedSSHAgent(from: attachmentEnvironment),
       readOnlyRootFilesystem: readOnlyRootFilesystem,
       useInitProcess: useInitProcess
     )
@@ -119,6 +130,21 @@ struct ContainerCreationDraft {
       )
     }
     return result
+  }
+
+  private func reviewedSSHAgent(
+    from environment: ContainerAttachmentEnvironment?
+  ) throws -> ContainerSSHAgentConfiguration? {
+    guard forwardSSHAgent else { return nil }
+    guard let availability = environment?.sshAgent else {
+      throw ContainerSSHAgentError.unavailable(.environmentMissing)
+    }
+    switch availability {
+    case .available(let configuration):
+      return configuration
+    case .unavailable(let reason):
+      throw ContainerSSHAgentError.unavailable(reason)
+    }
   }
 }
 
@@ -175,6 +201,35 @@ struct ContainerVolumeMountDraft: Identifiable {
     self.volumeName = volumeName
     self.containerPath = containerPath
     self.isReadOnly = isReadOnly
+  }
+}
+
+struct ContainerHostDirectoryMountDraft: Identifiable, Equatable {
+  let id: UUID
+  let sourceURL: URL
+  var containerPath: String
+  var isReadOnly: Bool
+
+  init(
+    id: UUID = UUID(),
+    sourceURL: URL,
+    containerPath: String? = nil,
+    isReadOnly: Bool = true
+  ) {
+    self.id = id
+    self.sourceURL = sourceURL.standardizedFileURL
+    self.containerPath = containerPath ?? Self.defaultContainerPath(for: sourceURL)
+    self.isReadOnly = isReadOnly
+  }
+
+  private static func defaultContainerPath(for sourceURL: URL) -> String {
+    let component = sourceURL.lastPathComponent.unicodeScalars.map { scalar in
+      CharacterSet.alphanumerics.contains(scalar) || scalar == "-" || scalar == "_"
+        ? String(scalar)
+        : "-"
+    }.joined()
+    let name = component.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    return "/workspace/\(name.isEmpty ? "shared" : name)"
   }
 }
 

@@ -199,6 +199,12 @@ extension ContainerManaging {
     )
   }
 
+  func reviewHostDirectory(
+    _ request: ContainerHostDirectoryReviewRequest
+  ) throws -> ContainerHostDirectoryMount {
+    throw ResourceManagementError.unsupported
+  }
+
   func resolveAttachments(
     _ selection: ContainerAttachmentSelection,
     operationID: UUID,
@@ -208,16 +214,17 @@ extension ContainerManaging {
     throw ResourceManagementError.unsupported
   }
 
-  func validatePublishedSocketsBeforeStart(
-    _ sockets: [PublishSocket],
+  func validateAttachmentsBeforeStart(
+    _ configuration: ContainerConfiguration,
     operationID: UUID
-  ) async throws {
-    guard sockets.isEmpty else {
+  ) async throws -> ContainerHostDirectoryAccess? {
+    guard configuration.publishedSockets.isEmpty else {
       throw ResourceManagementError.unsupported
     }
+    return nil
   }
 
-  func cleanupPublishedSocketWorkspace(operationID: UUID) async {}
+  func cleanupAttachmentWorkspace(operationID: UUID) async {}
 
   func openTerminal(
     in id: String,

@@ -3,6 +3,7 @@ import Foundation
 
 enum AppleContainerOwnership {
   static let creationOperationLabel = "com.nativecontainers.creation-operation"
+  static let hostDirectoryAttachmentLabel = "com.nativecontainers.host-directories"
 }
 
 protocol OwnedContainerRecovering: Sendable {

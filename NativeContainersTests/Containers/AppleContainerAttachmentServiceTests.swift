@@ -198,6 +198,66 @@ struct AppleContainerAttachmentServiceTests {
     #expect(resolved.networks.first?.options.hostname == "api")
   }
 
+  @Test
+  func resolvesReviewedHostDirectoriesAsVirtioFSAttachments() async throws {
+    let rootURL = URL(
+      filePath: "/private/tmp/nca-attachment-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let sourceURL = rootURL.appending(path: "Source", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sourceURL, withIntermediateDirectories: true)
+    let hostDirectoryService = AppleContainerHostDirectoryService(
+      manifestStore: FileContainerHostDirectoryManifestStore(
+        rootURL: rootURL.appending(path: "Manifests", directoryHint: .isDirectory)
+      )
+    )
+    let reviewed = try hostDirectoryService.reviewHostDirectory(
+      ContainerHostDirectoryReviewRequest(
+        sourceURL: sourceURL,
+        containerPath: "/workspace/source",
+        isReadOnly: true
+      )
+    )
+    let builtin = try makeNetwork(
+      name: "default",
+      subnet: "192.168.64.0/24",
+      gateway: "192.168.64.1",
+      isBuiltin: true
+    )
+    let fixture = AttachmentServiceFixture(
+      volumes: [],
+      networks: [builtin],
+      hostDirectoryService: hostDirectoryService
+    )
+    defer { fixture.remove() }
+    let operationID = UUID()
+    let selection = try ContainerAttachmentSelection(
+      volumeMounts: [],
+      hostDirectoryMounts: [reviewed],
+      networks: [],
+      publishedSockets: [],
+      requiredHostAccess: nil
+    )
+
+    let resolved = try await fixture.service.resolveAttachments(
+      selection,
+      operationID: operationID,
+      containerID: "workspace",
+      dnsDomain: nil
+    )
+    defer {
+      resolved.hostDirectoryAccess?.release()
+      hostDirectoryService.cleanup(operationID: operationID)
+    }
+
+    #expect(resolved.mounts.count == 1)
+    #expect(resolved.mounts[0].isVirtiofs)
+    #expect(resolved.mounts[0].source == reviewed.lastKnownPath)
+    #expect(resolved.mounts[0].destination == "/workspace/source")
+    #expect(resolved.mounts[0].options == ["ro"])
+  }
+
   private func makeNetwork(
     name: String,
     subnet: String,
@@ -265,7 +325,12 @@ private struct AttachmentServiceFixture {
   let socketRootURL: URL
   let service: AppleContainerAttachmentService
 
-  init(volumes: [VolumeConfiguration], networks: [NetworkResource]) {
+  init(
+    volumes: [VolumeConfiguration],
+    networks: [NetworkResource],
+    hostDirectoryService: any ContainerHostDirectoryManaging =
+      AppleContainerHostDirectoryService()
+  ) {
     socketRootURL = URL(
       filePath: "/private/tmp",
       directoryHint: .isDirectory
@@ -279,7 +344,8 @@ private struct AttachmentServiceFixture {
         networks: networks
       ),
       containerReader: AttachmentEmptyContainerReader(),
-      socketWorkspace: ApplePublishedSocketWorkspace(rootURL: socketRootURL)
+      socketWorkspace: ApplePublishedSocketWorkspace(rootURL: socketRootURL),
+      hostDirectoryService: hostDirectoryService
     )
   }
 

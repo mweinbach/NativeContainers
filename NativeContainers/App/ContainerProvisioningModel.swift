@@ -13,18 +13,18 @@ final class ContainerProvisioningModel {
 
   private let containerCreator: any ContainerCreating
   private let imageService: any ImageManaging
-  private let attachmentEnvironmentLoader: any ContainerAttachmentEnvironmentLoading
+  private let attachmentService: any ContainerAttachmentPreparing
   private let didComplete: @MainActor @Sendable () async -> Void
 
   init(
     containerCreator: any ContainerCreating,
     imageService: any ImageManaging,
-    attachmentEnvironmentLoader: any ContainerAttachmentEnvironmentLoading,
+    attachmentService: any ContainerAttachmentPreparing,
     didComplete: @escaping @MainActor @Sendable () async -> Void
   ) {
     self.containerCreator = containerCreator
     self.imageService = imageService
-    self.attachmentEnvironmentLoader = attachmentEnvironmentLoader
+    self.attachmentService = attachmentService
     self.didComplete = didComplete
   }
 
@@ -35,14 +35,27 @@ final class ContainerProvisioningModel {
     self.init(
       containerCreator: service,
       imageService: service,
-      attachmentEnvironmentLoader: service,
+      attachmentService: service,
       didComplete: didComplete
     )
   }
 
   func loadAttachmentEnvironment() async {
     attachmentEnvironment =
-      await attachmentEnvironmentLoader.loadContainerAttachmentEnvironment()
+      await attachmentService.loadContainerAttachmentEnvironment()
+  }
+
+  func makeCreationRequest(
+    from draft: ContainerCreationDraft,
+    availableVolumes: [VolumeRecord],
+    availableNetworks: [NetworkRecord]
+  ) throws -> ContainerCreationRequest {
+    try draft.makeRequest(
+      availableVolumes: availableVolumes,
+      availableNetworks: availableNetworks,
+      attachmentEnvironment: attachmentEnvironment,
+      hostDirectoryReviewer: attachmentService
+    )
   }
 
   func createContainer(_ request: ContainerCreationRequest) async -> Bool {

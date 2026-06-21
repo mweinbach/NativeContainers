@@ -17,10 +17,54 @@ struct ResolvedContainerAttachments: Sendable {
   let mounts: [Filesystem]
   let networks: [AttachmentConfiguration]
   let publishedSockets: [PublishSocket]
+  let hostDirectoryAccess: ContainerHostDirectoryAccess?
+
+  init(
+    mounts: [Filesystem],
+    networks: [AttachmentConfiguration],
+    publishedSockets: [PublishSocket],
+    hostDirectoryAccess: ContainerHostDirectoryAccess? = nil
+  ) {
+    self.mounts = mounts
+    self.networks = networks
+    self.publishedSockets = publishedSockets
+    self.hostDirectoryAccess = hostDirectoryAccess
+  }
 }
 
 protocol ContainerAttachmentEnvironmentLoading: Sendable {
   func loadContainerAttachmentEnvironment() async -> ContainerAttachmentEnvironment
+}
+
+protocol ContainerHostDirectoryReviewing: Sendable {
+  func reviewHostDirectory(
+    _ request: ContainerHostDirectoryReviewRequest
+  ) throws -> ContainerHostDirectoryMount
+}
+
+protocol ContainerAttachmentPreparing:
+  ContainerAttachmentEnvironmentLoading,
+  ContainerHostDirectoryReviewing
+{}
+
+protocol ContainerHostDirectoryManaging: ContainerHostDirectoryReviewing {
+  func prepare(
+    _ mounts: [ContainerHostDirectoryMount],
+    operationID: UUID
+  ) throws -> ContainerHostDirectoryAccess?
+  func validateBeforeStart(
+    _ configuredMounts: [Filesystem],
+    operationID: UUID
+  ) throws -> ContainerHostDirectoryAccess
+  func cleanup(operationID: UUID)
+}
+
+protocol ContainerSSHAgentForwardingManaging: Sendable {
+  func availability() -> ContainerSSHAgentAvailability
+  func environment(
+    for reviewedConfiguration: ContainerSSHAgentConfiguration
+  ) throws -> [String: String]
+  func currentEnvironment() throws -> [String: String]
 }
 
 protocol ContainerAttachmentResolving: Sendable {
@@ -32,18 +76,18 @@ protocol ContainerAttachmentResolving: Sendable {
   ) async throws -> ResolvedContainerAttachments
 }
 
-protocol PublishedSocketWorkspaceManaging: Sendable {
-  func validatePublishedSocketsBeforeStart(
-    _ sockets: [PublishSocket],
+protocol ContainerAttachmentWorkspaceManaging: Sendable {
+  func validateAttachmentsBeforeStart(
+    _ configuration: ContainerConfiguration,
     operationID: UUID
-  ) async throws
-  func cleanupPublishedSocketWorkspace(operationID: UUID) async
+  ) async throws -> ContainerHostDirectoryAccess?
+  func cleanupAttachmentWorkspace(operationID: UUID) async
 }
 
 protocol ContainerAttachmentManaging:
-  ContainerAttachmentEnvironmentLoading,
+  ContainerAttachmentPreparing,
   ContainerAttachmentResolving,
-  PublishedSocketWorkspaceManaging
+  ContainerAttachmentWorkspaceManaging
 {}
 
 protocol ContainerCreating: Sendable {

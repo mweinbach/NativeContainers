@@ -4,41 +4,51 @@ import Foundation
 
 actor AppleContainerLifecycleService: ContainerLifecycleManaging {
   private let containerClient: ContainerClient
-  private let attachmentService: any PublishedSocketWorkspaceManaging
+  private let attachmentService: any ContainerAttachmentWorkspaceManaging
+  private let sshAgentService: any ContainerSSHAgentForwardingManaging
 
   init(
     containerClient: ContainerClient = ContainerClient(),
-    attachmentService: any PublishedSocketWorkspaceManaging =
-      AppleContainerAttachmentService()
+    attachmentService: any ContainerAttachmentWorkspaceManaging =
+      AppleContainerAttachmentService(),
+    sshAgentService: any ContainerSSHAgentForwardingManaging =
+      AppleContainerSSHAgentService()
   ) {
     self.containerClient = containerClient
     self.attachmentService = attachmentService
+    self.sshAgentService = sshAgentService
   }
 
   func startContainer(id: String) async throws {
     let snapshot = try await containerClient.get(id: id)
     guard snapshot.status != .running else { return }
 
-    if !snapshot.configuration.publishedSockets.isEmpty {
+    let hasManagedAttachments =
+      !snapshot.configuration.publishedSockets.isEmpty
+      || snapshot.configuration.labels[AppleContainerOwnership.hostDirectoryAttachmentLabel]
+        == "true"
+    var hostDirectoryAccess: ContainerHostDirectoryAccess?
+    defer { hostDirectoryAccess?.release() }
+    if hasManagedAttachments {
       guard
         let rawOperationID = snapshot.configuration.labels[
           AppleContainerOwnership.creationOperationLabel
         ],
         let operationID = UUID(uuidString: rawOperationID)
       else {
-        throw ContainerLifecycleSafetyError.unownedPublishedSockets(id)
+        throw ContainerLifecycleSafetyError.unownedAttachments(id)
       }
-      try await attachmentService.validatePublishedSocketsBeforeStart(
-        snapshot.configuration.publishedSockets,
+      hostDirectoryAccess = try await attachmentService.validateAttachmentsBeforeStart(
+        snapshot.configuration,
         operationID: operationID
       )
     }
 
-    var environment: [String: String] = [:]
-    if snapshot.configuration.ssh,
-      let socket = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"]
-    {
-      environment["SSH_AUTH_SOCK"] = socket
+    let environment: [String: String]
+    if snapshot.configuration.ssh {
+      environment = try sshAgentService.currentEnvironment()
+    } else {
+      environment = [:]
     }
 
     let process = try await containerClient.bootstrap(
@@ -79,19 +89,19 @@ actor AppleContainerLifecycleService: ContainerLifecycleManaging {
     else {
       return
     }
-    await attachmentService.cleanupPublishedSocketWorkspace(
+    await attachmentService.cleanupAttachmentWorkspace(
       operationID: operationID
     )
   }
 }
 
 private enum ContainerLifecycleSafetyError: LocalizedError {
-  case unownedPublishedSockets(String)
+  case unownedAttachments(String)
 
   var errorDescription: String? {
     switch self {
-    case .unownedPublishedSockets(let id):
-      "Container “\(id)” publishes sockets outside a verifiable NativeContainers operation."
+    case .unownedAttachments(let id):
+      "Container “\(id)” uses managed host attachments outside a verifiable NativeContainers operation."
     }
   }
 }

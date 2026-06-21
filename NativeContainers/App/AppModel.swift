@@ -543,7 +543,7 @@ final class AppModel {
     ContainerProvisioningModel(
       containerCreator: services.containerCreator,
       imageService: services.images,
-      attachmentEnvironmentLoader: services.containerAttachments
+      attachmentService: services.containerAttachments
     ) { [weak self] in
       await self?.refresh()
     }

@@ -42,6 +42,10 @@ struct ContainerCreationView: View {
           mounts: $draft.volumeMounts,
           volumes: appModel.volumes
         )
+        ContainerHostDirectoriesSection(
+          mounts: $draft.hostDirectoryMounts,
+          reportError: { validationMessage = $0 }
+        )
         ContainerNetworksSection(
           attachments: $draft.networkAttachments,
           networks: appModel.networks
@@ -59,6 +63,7 @@ struct ContainerCreationView: View {
           startAfterCreation: $draft.startAfterCreation,
           useInitProcess: $draft.useInitProcess,
           forwardSSHAgent: $draft.forwardSSHAgent,
+          sshAgentAvailability: model.attachmentEnvironment?.sshAgent,
           readOnlyRootFilesystem: $draft.readOnlyRootFilesystem,
           removeWhenStopped: $draft.removeWhenStopped
         )
@@ -131,10 +136,10 @@ struct ContainerCreationView: View {
   private func create() {
     guard operationTask == nil, !model.isWorking else { return }
     do {
-      let request = try draft.makeRequest(
+      let request = try model.makeCreationRequest(
+        from: draft,
         availableVolumes: appModel.volumes,
-        availableNetworks: appModel.networks,
-        attachmentEnvironment: model.attachmentEnvironment
+        availableNetworks: appModel.networks
       )
       validationMessage = nil
       operationTask = Task { @MainActor in

@@ -11,6 +11,7 @@ actor AppleContainerCreationService: ContainerCreating {
   private let attachmentService: any ContainerAttachmentManaging
   private let lifecycleService: any ContainerLifecycleManaging
   private let ownedContainerRecovery: any OwnedContainerRecovering
+  private let sshAgentService: any ContainerSSHAgentForwardingManaging
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator
 
   init(
@@ -20,12 +21,15 @@ actor AppleContainerCreationService: ContainerCreating {
     ownedContainerRecovery: any OwnedContainerRecovering = AppleOwnedContainerRecoveryService(
       ownershipLabel: AppleContainerOwnership.creationOperationLabel
     ),
+    sshAgentService: any ContainerSSHAgentForwardingManaging =
+      AppleContainerSSHAgentService(),
     runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared
   ) {
     self.containerClient = containerClient
     self.attachmentService = attachmentService
     self.lifecycleService = lifecycleService
     self.ownedContainerRecovery = ownedContainerRecovery
+    self.sshAgentService = sshAgentService
     self.runtimeMutationCoordinator = runtimeMutationCoordinator
   }
 
@@ -45,7 +49,7 @@ actor AppleContainerCreationService: ContainerCreating {
           operationID: request.operationID
         )
       } catch {
-        await attachmentService.cleanupPublishedSocketWorkspace(
+        await attachmentService.cleanupAttachmentWorkspace(
           operationID: request.operationID
         )
         throw AppleContainerCreationError.containerCleanupFailed(
@@ -54,7 +58,7 @@ actor AppleContainerCreationService: ContainerCreating {
           cleanup: error.localizedDescription
         )
       }
-      await attachmentService.cleanupPublishedSocketWorkspace(
+      await attachmentService.cleanupAttachmentWorkspace(
         operationID: request.operationID
       )
       throw error
@@ -71,6 +75,10 @@ actor AppleContainerCreationService: ContainerCreating {
 
     if (try? await containerClient.get(id: request.name)) != nil {
       throw AppleContainerCreationError.containerAlreadyExists(request.name)
+    }
+
+    if let sshAgent = request.sshAgent {
+      _ = try sshAgentService.environment(for: sshAgent)
     }
 
     let systemConfiguration = try await loadSystemConfiguration()
@@ -95,6 +103,12 @@ actor AppleContainerCreationService: ContainerCreating {
       cpus: Int64(request.cpuCount),
       memory: "\(request.memoryBytes / ContainerCreationRequest.bytesPerMiB)MiB"
     )
+    var ownershipLabels = [
+      AppleContainerOwnership.creationOperationLabel: request.operationID.uuidString
+    ]
+    if !request.attachments.hostDirectoryMounts.isEmpty {
+      ownershipLabels[AppleContainerOwnership.hostDirectoryAttachmentLabel] = "true"
+    }
     let managementFlags = Flags.Management(
       arch: request.architecture.rawValue,
       capAdd: [],
@@ -106,9 +120,7 @@ actor AppleContainerCreationService: ContainerCreating {
       entrypoint: nil,
       initImage: nil,
       kernel: nil,
-      labels: [
-        "\(AppleContainerOwnership.creationOperationLabel)=\(request.operationID.uuidString)"
-      ],
+      labels: ownershipLabels.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" },
       mounts: [],
       name: request.name,
       networks: [],
@@ -200,9 +212,7 @@ actor AppleContainerCreationService: ContainerCreating {
       defaultMemory: systemConfiguration.container.memory
     )
     configuration.rosetta = request.architecture == .amd64
-    configuration.labels = [
-      AppleContainerOwnership.creationOperationLabel: request.operationID.uuidString
-    ]
+    configuration.labels = ownershipLabels
     configuration.mounts = resolvedAttachments.mounts
     configuration.networks = resolvedAttachments.networks
     configuration.publishedSockets = resolvedAttachments.publishedSockets

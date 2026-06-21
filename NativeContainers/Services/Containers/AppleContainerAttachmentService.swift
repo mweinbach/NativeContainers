@@ -9,24 +9,39 @@ struct AppleContainerAttachmentService: ContainerAttachmentManaging {
   private let containerReader: any ContainerSnapshotReading
   private let hostAccessService: AppleContainerHostAccessService
   private let socketWorkspace: ApplePublishedSocketWorkspace
+  private let hostDirectoryService: any ContainerHostDirectoryManaging
+  private let sshAgentService: any ContainerSSHAgentForwardingManaging
 
   init(
     infrastructureClient: any AppleInfrastructureTransport = AppleInfrastructureClient(),
     containerReader: any ContainerSnapshotReading = AppleContainerSnapshotReader(),
     hostAccessService: AppleContainerHostAccessService = AppleContainerHostAccessService(),
-    socketWorkspace: ApplePublishedSocketWorkspace = ApplePublishedSocketWorkspace()
+    socketWorkspace: ApplePublishedSocketWorkspace = ApplePublishedSocketWorkspace(),
+    hostDirectoryService: any ContainerHostDirectoryManaging =
+      AppleContainerHostDirectoryService(),
+    sshAgentService: any ContainerSSHAgentForwardingManaging =
+      AppleContainerSSHAgentService()
   ) {
     self.infrastructureClient = infrastructureClient
     self.containerReader = containerReader
     self.hostAccessService = hostAccessService
     self.socketWorkspace = socketWorkspace
+    self.hostDirectoryService = hostDirectoryService
+    self.sshAgentService = sshAgentService
   }
 
   func loadContainerAttachmentEnvironment() async -> ContainerAttachmentEnvironment {
     ContainerAttachmentEnvironment(
       publishedSocketRootPath: socketWorkspace.rootPath,
-      hostAccess: hostAccessService.loadCatalog()
+      hostAccess: hostAccessService.loadCatalog(),
+      sshAgent: sshAgentService.availability()
     )
+  }
+
+  func reviewHostDirectory(
+    _ request: ContainerHostDirectoryReviewRequest
+  ) throws -> ContainerHostDirectoryMount {
+    try hostDirectoryService.reviewHostDirectory(request)
   }
 
   func resolveAttachments(
@@ -47,7 +62,7 @@ struct AppleContainerAttachmentService: ContainerAttachmentManaging {
       try hostAccessService.validate(hostAccess)
     }
 
-    let mounts = try selection.volumeMounts.map { requested in
+    let volumeMounts = try selection.volumeMounts.map { requested in
       guard
         let current = volumeConfigurations.first(where: {
           $0.name == requested.volume.name
@@ -101,27 +116,51 @@ struct AppleContainerAttachmentService: ContainerAttachmentManaging {
       )
     }
 
-    try Task.checkCancellation()
-    let sockets = try socketWorkspace.prepare(
-      selection.publishedSockets,
+    let hostDirectoryAccess = try hostDirectoryService.prepare(
+      selection.hostDirectoryMounts,
       operationID: operationID
     )
-    return ResolvedContainerAttachments(
-      mounts: mounts,
-      networks: networks,
-      publishedSockets: sockets
+    do {
+      try Task.checkCancellation()
+      let sockets = try socketWorkspace.prepare(
+        selection.publishedSockets,
+        operationID: operationID
+      )
+      return ResolvedContainerAttachments(
+        mounts: volumeMounts + (hostDirectoryAccess?.mounts ?? []),
+        networks: networks,
+        publishedSockets: sockets,
+        hostDirectoryAccess: hostDirectoryAccess
+      )
+    } catch {
+      hostDirectoryAccess?.release()
+      hostDirectoryService.cleanup(operationID: operationID)
+      throw error
+    }
+  }
+
+  func validateAttachmentsBeforeStart(
+    _ configuration: ContainerConfiguration,
+    operationID: UUID
+  ) async throws -> ContainerHostDirectoryAccess? {
+    try socketWorkspace.validateBeforeStart(
+      configuration.publishedSockets,
+      operationID: operationID
+    )
+    guard
+      configuration.labels[AppleContainerOwnership.hostDirectoryAttachmentLabel] == "true"
+    else {
+      return nil
+    }
+    return try hostDirectoryService.validateBeforeStart(
+      configuration.mounts,
+      operationID: operationID
     )
   }
 
-  func validatePublishedSocketsBeforeStart(
-    _ sockets: [PublishSocket],
-    operationID: UUID
-  ) async throws {
-    try socketWorkspace.validateBeforeStart(sockets, operationID: operationID)
-  }
-
-  func cleanupPublishedSocketWorkspace(operationID: UUID) async {
+  func cleanupAttachmentWorkspace(operationID: UUID) async {
     socketWorkspace.cleanup(operationID: operationID)
+    hostDirectoryService.cleanup(operationID: operationID)
   }
 
   private func resolveNetworks(

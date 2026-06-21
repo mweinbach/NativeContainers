@@ -477,6 +477,7 @@ struct ContainerLifecycleSection: View {
   @Binding var startAfterCreation: Bool
   @Binding var useInitProcess: Bool
   @Binding var forwardSSHAgent: Bool
+  let sshAgentAvailability: ContainerSSHAgentAvailability?
   @Binding var readOnlyRootFilesystem: Bool
   @Binding var removeWhenStopped: Bool
 
@@ -485,8 +486,47 @@ struct ContainerLifecycleSection: View {
       Toggle("Start after creation", isOn: $startAfterCreation)
       Toggle("Use a minimal init process", isOn: $useInitProcess)
       Toggle("Forward SSH agent", isOn: $forwardSSHAgent)
+        .disabled(sshAgentAvailability?.configuration == nil)
+      switch sshAgentAvailability {
+      case .available(let configuration):
+        Label(
+          "Available at \(configuration.socketPath)",
+          systemImage: "checkmark.circle"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .textSelection(.enabled)
+      case .unavailable(let reason):
+        Label(sshAgentUnavailableMessage(reason), systemImage: "key.slash")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      case nil:
+        Label("Checking SSH agent…", systemImage: "ellipsis.circle")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
       Toggle("Read-only root filesystem", isOn: $readOnlyRootFilesystem)
       Toggle("Remove automatically when stopped", isOn: $removeWhenStopped)
+    }
+    .onChange(of: sshAgentAvailability) {
+      if sshAgentAvailability?.configuration == nil {
+        forwardSSHAgent = false
+      }
+    }
+  }
+
+  private func sshAgentUnavailableMessage(
+    _ reason: ContainerSSHAgentUnavailableReason
+  ) -> LocalizedStringResource {
+    switch reason {
+    case .environmentMissing:
+      "SSH_AUTH_SOCK is not set."
+    case .pathInvalid:
+      "SSH_AUTH_SOCK is not an absolute local path."
+    case .pathUnavailable:
+      "The SSH agent socket is unavailable."
+    case .notSocket:
+      "SSH_AUTH_SOCK does not point to a Unix socket."
     }
   }
 }

@@ -64,6 +64,20 @@ struct ContainerAttachmentModelsTests {
     let firstMount = try ContainerVolumeMount(volume: volume, containerPath: "/data")
     let secondMount = try ContainerVolumeMount(volume: secondVolume, containerPath: "/data")
     let duplicateVolume = try ContainerVolumeMount(volume: volume, containerPath: "/backup")
+    let hostDirectory = try ContainerHostDirectoryMount(
+      bookmarkData: Data([1]),
+      lastKnownPath: "/Users/example/Project",
+      sourceIdentity: .init(device: 1, inode: 2),
+      containerPath: "/data",
+      isReadOnly: true
+    )
+    let duplicateHostDirectory = try ContainerHostDirectoryMount(
+      bookmarkData: Data([2]),
+      lastKnownPath: "/Users/example/Project",
+      sourceIdentity: .init(device: 1, inode: 2),
+      containerPath: "/workspace",
+      isReadOnly: true
+    )
     let firstSocket = try ContainerUnixSocketPublication(
       hostSocketName: "one.sock",
       containerPath: "/run/one.sock"
@@ -76,6 +90,24 @@ struct ContainerAttachmentModelsTests {
     #expect(throws: ContainerAttachmentValidationError.duplicateMountDestination) {
       try ContainerAttachmentSelection(
         volumeMounts: [firstMount, secondMount],
+        networks: [],
+        publishedSockets: [],
+        requiredHostAccess: nil
+      )
+    }
+    #expect(throws: ContainerAttachmentValidationError.duplicateMountDestination) {
+      try ContainerAttachmentSelection(
+        volumeMounts: [firstMount],
+        hostDirectoryMounts: [hostDirectory],
+        networks: [],
+        publishedSockets: [],
+        requiredHostAccess: nil
+      )
+    }
+    #expect(throws: ContainerAttachmentValidationError.duplicateHostDirectory) {
+      try ContainerAttachmentSelection(
+        volumeMounts: [],
+        hostDirectoryMounts: [hostDirectory, duplicateHostDirectory],
         networks: [],
         publishedSockets: [],
         requiredHostAccess: nil
