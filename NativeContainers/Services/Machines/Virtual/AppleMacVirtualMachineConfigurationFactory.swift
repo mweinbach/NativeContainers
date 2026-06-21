@@ -14,6 +14,7 @@ import Foundation
     private let sharedDirectoryBookmarkService:
       any MacVirtualMachineSharedDirectoryBookmarkResolving
     private let sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory
+    private let networkDeviceFactory: AppleMacVirtualMachineNetworkDeviceFactory
     private let audioDeviceFactory: AppleMacVirtualMachineAudioDeviceFactory
     private let diskImageService: any AppleVirtualMachineDiskImageServicing
 
@@ -25,6 +26,8 @@ import Foundation
         MacVirtualMachineSharedDirectoryBookmarkService(),
       sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory =
         AppleMacVirtualMachineSharedDirectoryDeviceFactory(),
+      networkDeviceFactory: AppleMacVirtualMachineNetworkDeviceFactory =
+        AppleMacVirtualMachineNetworkDeviceFactory(),
       audioDeviceFactory: AppleMacVirtualMachineAudioDeviceFactory =
         AppleMacVirtualMachineAudioDeviceFactory(),
       diskImageService: any AppleVirtualMachineDiskImageServicing =
@@ -33,6 +36,7 @@ import Foundation
       self.descriptorService = descriptorService
       self.sharedDirectoryBookmarkService = sharedDirectoryBookmarkService
       self.sharedDirectoryDeviceFactory = sharedDirectoryDeviceFactory
+      self.networkDeviceFactory = networkDeviceFactory
       self.audioDeviceFactory = audioDeviceFactory
       self.diskImageService = diskImageService
     }
@@ -96,14 +100,10 @@ import Foundation
         )
       ]
 
-      let network = VZVirtioNetworkDeviceConfiguration()
-      network.attachment = VZNATNetworkDeviceAttachment()
-      guard let macAddress = VZMACAddress(string: descriptor.macAddress) else {
-        throw MacVirtualMachineInstallationError.invalidConfiguration(
-          "the deterministic network address is invalid"
-        )
-      }
-      network.macAddress = macAddress
+      let network = try networkDeviceFactory.makeDevice(
+        configuration: machine.manifest.effectiveNetworkConfiguration,
+        macAddress: descriptor.macAddress
+      )
 
       let configuration = VZVirtualMachineConfiguration()
       configuration.platform = platform
@@ -160,11 +160,17 @@ import Foundation
         throw error
       }
       let saveRestoreSupport: MacVirtualMachineSaveRestoreSupport
-      do {
-        try configuration.validateSaveRestoreSupport()
-        saveRestoreSupport = .supported
-      } catch {
-        saveRestoreSupport = .unsupported(error.localizedDescription)
+      if machine.manifest.effectiveNetworkConfiguration.attachment.usesCustomVmnetNetwork {
+        saveRestoreSupport = .unsupported(
+          "Suspend is unavailable while this VM uses a shared or host-only network."
+        )
+      } else {
+        do {
+          try configuration.validateSaveRestoreSupport()
+          saveRestoreSupport = .supported
+        } catch {
+          saveRestoreSupport = .unsupported(error.localizedDescription)
+        }
       }
       return AppleMacVirtualMachineRuntimeConfiguration(
         configuration: configuration,

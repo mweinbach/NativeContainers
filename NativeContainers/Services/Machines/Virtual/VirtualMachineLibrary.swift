@@ -67,6 +67,7 @@ actor VirtualMachineLibrary:
   MacVirtualMachineRuntimeLeasing,
   MacVirtualMachineSharedDirectoryPersisting,
   MacVirtualMachineAudioConfigurationPersisting,
+  MacVirtualMachineNetworkConfigurationPersisting,
   VirtualMachineDiskImageReplacementStoring
 {
   static let bundleExtension = "nativevm"
@@ -245,6 +246,38 @@ actor VirtualMachineLibrary:
     guard updated != current else { return current }
 
     manifest.audioConfiguration = updated
+    manifest.updatedAt = Date()
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
+    )
+    return updated
+  }
+
+  func macOSNetworkConfiguration(
+    id: UUID
+  ) throws -> MacVirtualMachineNetworkConfiguration {
+    try installationManifest(id: id).effectiveNetworkConfiguration
+  }
+
+  func setMacOSNetworkAttachment(
+    _ attachment: MacVirtualMachineNetworkAttachment,
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> MacVirtualMachineNetworkConfiguration {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try installationManifest(id: lease.target.machineID)
+    let current = manifest.effectiveNetworkConfiguration
+
+    guard current == lease.machine.manifest.effectiveNetworkConfiguration else {
+      throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    let updated = try current.settingAttachment(attachment)
+    guard updated != current else { return current }
+
+    manifest.networkConfiguration = updated
     manifest.updatedAt = Date()
     try bundleStore.write(
       manifest,

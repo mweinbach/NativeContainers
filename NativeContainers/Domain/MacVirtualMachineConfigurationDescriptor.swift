@@ -27,6 +27,7 @@ struct MacVirtualMachineConfigurationDescriptor: Codable, Equatable, Sendable {
   let displayPixelsPerInch: Int
   let networkDevice: String
   let networkAttachment: String
+  let networkConfigurationRevision: UInt64?
   let macAddress: String
   let keyboardDevices: [String]
   let pointingDevices: [String]
@@ -56,6 +57,16 @@ struct MacVirtualMachineConfigurationDescriptorService:
         "auxiliaryStoragePath"
       )
     }
+    let networkConfiguration = machine.manifest.effectiveNetworkConfiguration
+    let networkAttachment =
+      switch networkConfiguration.attachment {
+      case .nat:
+        "NAT"
+      case .shared:
+        "VmnetShared"
+      case .hostOnly:
+        "VmnetHostOnly"
+      }
     let hasDirectorySharingHistory =
       machine.sharedDirectories.revision > 0
       || !machine.sharedDirectories.directories.isEmpty
@@ -77,7 +88,9 @@ struct MacVirtualMachineConfigurationDescriptorService:
       displayHeight: 1_200,
       displayPixelsPerInch: 144,
       networkDevice: "virtio",
-      networkAttachment: "NAT",
+      networkAttachment: networkAttachment,
+      networkConfigurationRevision: networkConfiguration.revision > 0
+        ? networkConfiguration.revision : nil,
       macAddress: Self.macAddress(for: machine.manifest.id),
       keyboardDevices: ["Mac", "USB"],
       pointingDevices: ["MacTrackpad", "USBScreenCoordinate"],

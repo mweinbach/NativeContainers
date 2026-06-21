@@ -69,6 +69,12 @@
 		1F5E63E72FE87FEA00A430FF /* MacVirtualMachineConfigurationEditLockBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63E62FE87FEA00A430FF /* MacVirtualMachineConfigurationEditLockBanner.swift */; };
 		1F5E63E92FE8806300A430FF /* MacVirtualMachineAudioModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63E82FE8806300A430FF /* MacVirtualMachineAudioModelsTests.swift */; };
 		1F5E63EB2FE8806300A430FF /* MacVirtualMachineConfigurationEditPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63EA2FE8806300A430FF /* MacVirtualMachineConfigurationEditPolicyTests.swift */; };
+		1F5E63ED2FE881DA00A430FF /* MacVirtualMachineNetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63EC2FE881DA00A430FF /* MacVirtualMachineNetworkModels.swift */; };
+		1F5E63F12FE881E400A430FF /* AppleMacVirtualMachineNetworkDeviceFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63F02FE881E400A430FF /* AppleMacVirtualMachineNetworkDeviceFactory.swift */; };
+		1F5E63F32FE881EC00A430FF /* MacVirtualMachineNetworkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63F22FE881EC00A430FF /* MacVirtualMachineNetworkService.swift */; };
+		1F5E63F52FE8821100A430FF /* MacVirtualMachineNetworkModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63F42FE8821100A430FF /* MacVirtualMachineNetworkModel.swift */; };
+		1F5E63F72FE8823C00A430FF /* MacVirtualMachineNetworkSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63F62FE8823C00A430FF /* MacVirtualMachineNetworkSection.swift */; };
+		1F5E63F92FE8832600A430FF /* AppleMacVirtualMachineVmnetNetworkPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63F82FE8832600A430FF /* AppleMacVirtualMachineVmnetNetworkPool.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -567,6 +573,12 @@
 		1F5E63E62FE87FEA00A430FF /* MacVirtualMachineConfigurationEditLockBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineConfigurationEditLockBanner.swift; sourceTree = "<group>"; };
 		1F5E63E82FE8806300A430FF /* MacVirtualMachineAudioModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineAudioModelsTests.swift; sourceTree = "<group>"; };
 		1F5E63EA2FE8806300A430FF /* MacVirtualMachineConfigurationEditPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineConfigurationEditPolicyTests.swift; sourceTree = "<group>"; };
+		1F5E63EC2FE881DA00A430FF /* MacVirtualMachineNetworkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineNetworkModels.swift; sourceTree = "<group>"; };
+		1F5E63F02FE881E400A430FF /* AppleMacVirtualMachineNetworkDeviceFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMacVirtualMachineNetworkDeviceFactory.swift; sourceTree = "<group>"; };
+		1F5E63F22FE881EC00A430FF /* MacVirtualMachineNetworkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineNetworkService.swift; sourceTree = "<group>"; };
+		1F5E63F42FE8821100A430FF /* MacVirtualMachineNetworkModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineNetworkModel.swift; sourceTree = "<group>"; };
+		1F5E63F62FE8823C00A430FF /* MacVirtualMachineNetworkSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineNetworkSection.swift; sourceTree = "<group>"; };
+		1F5E63F82FE8832600A430FF /* AppleMacVirtualMachineVmnetNetworkPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMacVirtualMachineVmnetNetworkPool.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1060,6 +1072,7 @@
 				1F5E63CA2FE875CD00A430FF /* ContainerHostDirectoriesSection.swift */,
 				1F5E63D62FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift */,
 				1F5E63E62FE87FEA00A430FF /* MacVirtualMachineConfigurationEditLockBanner.swift */,
+				1F5E63F62FE8823C00A430FF /* MacVirtualMachineNetworkSection.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1111,6 +1124,7 @@
 				1F5E63C02FE8753A00A430FF /* ContainerSSHAgentModels.swift */,
 				1F5E63D82FE87C0000A430FF /* MacVirtualMachineAudioModels.swift */,
 				1F5E63E42FE87FEA00A430FF /* MacVirtualMachineConfigurationEditPolicy.swift */,
+				1F5E63EC2FE881DA00A430FF /* MacVirtualMachineNetworkModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1340,6 +1354,9 @@
 				1F5E63D22FE87A0B00A430FF /* AppleMacVirtualMachineAudioDeviceFactory.swift */,
 				1F5E63DA2FE87C0600A430FF /* AppleMacVirtualMachineMicrophoneAuthorizationService.swift */,
 				1F5E63DC2FE87C0B00A430FF /* MacVirtualMachineAudioService.swift */,
+				1F5E63F02FE881E400A430FF /* AppleMacVirtualMachineNetworkDeviceFactory.swift */,
+				1F5E63F22FE881EC00A430FF /* MacVirtualMachineNetworkService.swift */,
+				1F5E63F82FE8832600A430FF /* AppleMacVirtualMachineVmnetNetworkPool.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -1788,6 +1805,7 @@
 				1F5E639A2FE85CB100A430FF /* AppNotificationSettingsModel.swift */,
 				1F5E63AE2FE86EC800A430FF /* TerminalWorkspaceModel.swift */,
 				1F5E63DE2FE87C0F00A430FF /* MacVirtualMachineAudioModel.swift */,
+				1F5E63F42FE8821100A430FF /* MacVirtualMachineNetworkModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2120,6 +2138,7 @@
 				1F9D2B3B2FE77AA90076F5B9 /* RecordingImageBuildService.swift in Sources */,
 				1F9D2C2F2FE7E6630076F5B9 /* ComposeProjectLifecycleModels.swift in Sources */,
 				1F9D2AE32FE760D80076F5B9 /* AppleOwnedContainerRecoveryService.swift in Sources */,
+				1F5E63F52FE8821100A430FF /* MacVirtualMachineNetworkModel.swift in Sources */,
 				1F9D2B8A2FE7A1540076F5B9 /* VirtualMachineRow.swift in Sources */,
 				1F9D2B602FE795870076F5B9 /* AppleLinuxMachineInventoryService.swift in Sources */,
 				1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */,
@@ -2208,6 +2227,7 @@
 				1F9D2CBE2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift in Sources */,
 				1FEC47622FE84A8A00DC60B2 /* MenuBarQuickControlsView.swift in Sources */,
 				1F5E63972FE85C7700A430FF /* AppNotificationModels.swift in Sources */,
+				1F5E63F12FE881E400A430FF /* AppleMacVirtualMachineNetworkDeviceFactory.swift in Sources */,
 				1F5E63D72FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift in Sources */,
 				1F9D2BBC2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift in Sources */,
 				1F9D2B1F2FE7705A0076F5B9 /* ContainerBuilderManaging.swift in Sources */,
@@ -2226,6 +2246,7 @@
 				1F5E639B2FE85CB100A430FF /* AppNotificationSettingsModel.swift in Sources */,
 				1F5E63DD2FE87C0B00A430FF /* MacVirtualMachineAudioService.swift in Sources */,
 				1F9D2AF32FE764B50076F5B9 /* AppleContainerToolService.swift in Sources */,
+				1F5E63F92FE8832600A430FF /* AppleMacVirtualMachineVmnetNetworkPool.swift in Sources */,
 				1F9D2B392FE77A9A0076F5B9 /* ImageBuildHistoryStore.swift in Sources */,
 				1F9D2CB22FE8065A0076F5B9 /* VirtualMachineStorageReclamationModel.swift in Sources */,
 				1FEC470E2FE8330E00DC60B2 /* MacVirtualMachineRuntimeManaging.swift in Sources */,
@@ -2357,6 +2378,7 @@
 				1F9D2C162FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift in Sources */,
 				1FEC46E52FE8265200DC60B2 /* VirtualMachineDiskImageReplacementFileOperations.swift in Sources */,
 				72D23C0E9992E41005DDACDC /* RootView.swift in Sources */,
+				1F5E63F72FE8823C00A430FF /* MacVirtualMachineNetworkSection.swift in Sources */,
 				1F9D2BD22FE7BDF90076F5B9 /* MacVirtualMachineSharedDirectoryBookmarkService.swift in Sources */,
 				1F9D2C552FE7EC660076F5B9 /* AppleComposeProjectMutationExecutor.swift in Sources */,
 				1F9D2B9E2FE7A7660076F5B9 /* AdvisoryFileLock.swift in Sources */,
@@ -2382,6 +2404,7 @@
 				1F5E639D2FE85D0C00A430FF /* AppNotificationSettingsSection.swift in Sources */,
 				1F9D2C962FE800EC0076F5B9 /* StorageReclamationReviewSheet.swift in Sources */,
 				1F9D2B9C2FE7A3190076F5B9 /* MacVirtualMachineAvailabilityChecker.swift in Sources */,
+				1F5E63ED2FE881DA00A430FF /* MacVirtualMachineNetworkModels.swift in Sources */,
 				1F9D2C7B2FE7FABC0076F5B9 /* VirtualMachinePackagePicker.swift in Sources */,
 				1F9D2BA82FE7AAAA0076F5B9 /* MacVirtualMachineRuntimeService.swift in Sources */,
 				1F9D2AD92FE75FC30076F5B9 /* ContainerServiceFacets.swift in Sources */,
@@ -2395,6 +2418,7 @@
 				1FEC46FD2FE830E100DC60B2 /* AppleImageCleanupService.swift in Sources */,
 				1F9D2BD82FE7BE750076F5B9 /* MacVirtualMachineShutdownScheduler.swift in Sources */,
 				62BCFBEE6E078D471BA3AE65 /* VirtualMachineLibrary.swift in Sources */,
+				1F5E63F32FE881EC00A430FF /* MacVirtualMachineNetworkService.swift in Sources */,
 				1F9D2C5D2FE7F2B70076F5B9 /* ComposeResourceActionService.swift in Sources */,
 				1FEC46D52FE8234400DC60B2 /* VirtualMachineDiskImageReplacementJournal.swift in Sources */,
 				1F9D2CA42FE8053B0076F5B9 /* VirtualMachineStorageReclamationModels.swift in Sources */,

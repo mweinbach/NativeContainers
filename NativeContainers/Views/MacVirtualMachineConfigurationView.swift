@@ -5,6 +5,7 @@ struct MacVirtualMachineConfigurationView: View {
   let runtime: MacVirtualMachineRuntimeModel
 
   @State private var audio: MacVirtualMachineAudioModel
+  @State private var network: MacVirtualMachineNetworkModel
   @State private var sharedDirectories: MacVirtualMachineSharedDirectoriesModel
   let diskMaintenance: VirtualMachineDiskImageMaintenanceModel
   @State private var isConfirmingDiscardSavedState = false
@@ -13,12 +14,14 @@ struct MacVirtualMachineConfigurationView: View {
     machine: VirtualMachineManifest,
     runtime: MacVirtualMachineRuntimeModel,
     audio: MacVirtualMachineAudioModel,
+    network: MacVirtualMachineNetworkModel,
     sharedDirectories: MacVirtualMachineSharedDirectoriesModel,
     diskMaintenance: VirtualMachineDiskImageMaintenanceModel
   ) {
     self.machine = machine
     self.runtime = runtime
     _audio = State(initialValue: audio)
+    _network = State(initialValue: network)
     _sharedDirectories = State(initialValue: sharedDirectories)
     self.diskMaintenance = diskMaintenance
   }
@@ -31,6 +34,14 @@ struct MacVirtualMachineConfigurationView: View {
           runtimeState: runtime.snapshot.state,
           diskMaintenanceOperation: diskMaintenance.operation,
           isRefreshingDiskState: diskMaintenance.isRefreshing
+        )
+        MacVirtualMachineNetworkSection(
+          installState: machine.installState,
+          runtime: runtime,
+          network: network,
+          diskMaintenanceIsBusy: diskMaintenance.isBusy,
+          discardSavedState: canDiscardSavedState
+            ? { isConfirmingDiscardSavedState = true } : nil
         )
         MacVirtualMachineAudioSection(
           installState: machine.installState,
@@ -56,7 +67,8 @@ struct MacVirtualMachineConfigurationView: View {
             ? { isConfirmingDiscardSavedState = true } : nil
         )
         if let errorMessage =
-          audio.errorMessage
+          network.errorMessage
+          ?? audio.errorMessage
           ?? sharedDirectories.errorMessage
           ?? diskMaintenance.errorMessage
           ?? runtime.errorMessage
@@ -64,6 +76,7 @@ struct MacVirtualMachineConfigurationView: View {
           MacVirtualMachineConfigurationErrorBanner(
             message: errorMessage,
             dismiss: {
+              network.clearError()
               audio.clearError()
               sharedDirectories.clearError()
               diskMaintenance.clearError()
@@ -89,7 +102,7 @@ struct MacVirtualMachineConfigurationView: View {
       }
     } message: {
       Text(
-        "The VM remains powered off, but its suspended session cannot be resumed. Virtual disk maintenance, audio changes, and shared-folder changes can then proceed."
+        "The VM remains powered off, but its suspended session cannot be resumed. Virtual disk maintenance, network changes, audio changes, and shared-folder changes can then proceed."
       )
     }
   }

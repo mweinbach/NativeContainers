@@ -228,6 +228,7 @@ extension AppModel {
       dockerComposeClientService: PreviewDockerComposeClientService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: true),
       virtualMachineAudio: PreviewMacVirtualMachineAudioService(),
+      virtualMachineNetwork: PreviewMacVirtualMachineNetworkService(),
       virtualMachineSharedDirectories: sharedDirectories,
       initialInventory: inventory,
       initialVirtualMachines: [macVM]
@@ -697,6 +698,24 @@ private actor PreviewMacVirtualMachineAudioService:
       configuration: configuration,
       microphoneAuthorization: .authorized
     )
+  }
+}
+
+private actor PreviewMacVirtualMachineNetworkService:
+  MacVirtualMachineNetworkManaging
+{
+  private var configuration = MacVirtualMachineNetworkConfiguration.nat
+
+  func snapshot(id: UUID) async throws -> MacVirtualMachineNetworkSnapshot {
+    MacVirtualMachineNetworkSnapshot(configuration: configuration)
+  }
+
+  func setAttachment(
+    _ attachment: MacVirtualMachineNetworkAttachment,
+    for machineID: UUID
+  ) async throws -> MacVirtualMachineNetworkSnapshot {
+    configuration = try configuration.settingAttachment(attachment)
+    return MacVirtualMachineNetworkSnapshot(configuration: configuration)
   }
 }
 

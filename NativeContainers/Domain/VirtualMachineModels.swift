@@ -57,6 +57,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var installationOperationID: UUID? = nil
   var installationFailure: VirtualMachineInstallationFailure? = nil
   var audioConfiguration: MacVirtualMachineAudioConfiguration? = nil
+  var networkConfiguration: MacVirtualMachineNetworkConfiguration? = nil
 
   init(
     id: UUID = UUID(),
@@ -117,10 +118,15 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installationOperationID = nil
     installationFailure = nil
     audioConfiguration = nil
+    networkConfiguration = source.networkConfiguration
   }
 
   var effectiveAudioConfiguration: MacVirtualMachineAudioConfiguration {
     audioConfiguration ?? .disconnected
+  }
+
+  var effectiveNetworkConfiguration: MacVirtualMachineNetworkConfiguration {
+    networkConfiguration ?? .nat
   }
 
   mutating func markInstallationStarted(

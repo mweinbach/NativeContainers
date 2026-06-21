@@ -120,6 +120,9 @@ final class AppModel {
   private var macVirtualMachineAudioModels: [UUID: MacVirtualMachineAudioModel] = [:]
 
   @ObservationIgnored
+  private var macVirtualMachineNetworkModels: [UUID: MacVirtualMachineNetworkModel] = [:]
+
+  @ObservationIgnored
   private var macVirtualMachineSharedDirectoryModels:
     [UUID: MacVirtualMachineSharedDirectoriesModel] = [:]
 
@@ -195,6 +198,8 @@ final class AppModel {
       UnavailableMacVirtualMachineRuntimeService(),
     virtualMachineAudio: any MacVirtualMachineAudioManaging =
       UnavailableMacVirtualMachineAudioService(),
+    virtualMachineNetwork: any MacVirtualMachineNetworkManaging =
+      UnavailableMacVirtualMachineNetworkService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
@@ -234,6 +239,7 @@ final class AppModel {
         virtualMachineInstaller: virtualMachineInstaller,
         virtualMachineRuntime: virtualMachineRuntime,
         virtualMachineAudio: virtualMachineAudio,
+        virtualMachineNetwork: virtualMachineNetwork,
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
         virtualMachineDiskImages: virtualMachineDiskImages,
         virtualMachineAvailability: virtualMachineAvailability,
@@ -777,6 +783,21 @@ final class AppModel {
     return model
   }
 
+  func makeMacVirtualMachineNetworkModel(
+    for machine: VirtualMachineManifest
+  ) -> MacVirtualMachineNetworkModel {
+    if let model = macVirtualMachineNetworkModels[machine.id] {
+      return model
+    }
+    let model = MacVirtualMachineNetworkModel(
+      machineID: machine.id,
+      initialConfiguration: machine.effectiveNetworkConfiguration,
+      service: services.virtualMachineNetwork
+    )
+    macVirtualMachineNetworkModels[machine.id] = model
+    return model
+  }
+
   func makeMacVirtualMachineSharedDirectoriesModel(
     for machine: VirtualMachineManifest
   ) -> MacVirtualMachineSharedDirectoriesModel {
@@ -800,6 +821,10 @@ final class AppModel {
     for identifier in Array(macVirtualMachineAudioModels.keys)
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineAudioModels.removeValue(forKey: identifier)
+    }
+    for identifier in Array(macVirtualMachineNetworkModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      macVirtualMachineNetworkModels.removeValue(forKey: identifier)
     }
     for identifier in Array(macVirtualMachineSharedDirectoryModels.keys)
     where !currentIdentifiers.contains(identifier) {

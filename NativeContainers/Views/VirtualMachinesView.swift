@@ -71,6 +71,7 @@ struct VirtualMachinesView: View {
               machine: selectedMachine,
               runtime: model.makeMacVirtualMachineRuntimeModel(for: selectedMachine),
               audio: model.makeMacVirtualMachineAudioModel(for: selectedMachine),
+              network: model.makeMacVirtualMachineNetworkModel(for: selectedMachine),
               sharedDirectories: model.makeMacVirtualMachineSharedDirectoriesModel(
                 for: selectedMachine
               ),

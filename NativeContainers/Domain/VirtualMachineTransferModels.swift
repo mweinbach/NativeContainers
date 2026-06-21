@@ -8,6 +8,7 @@ extension VirtualMachineManifest {
     manifest.installationOperationID = nil
     manifest.installationFailure = nil
     manifest.audioConfiguration = nil
+    manifest.networkConfiguration = nil
     return manifest
   }
 
