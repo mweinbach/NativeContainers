@@ -7,21 +7,17 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 414 test declarations. The current full
-  app-hosted Xcode run passed all 404 deterministic tests, with ten destructive
-  or external-service integrations skipped behind explicit live gates. That run
-  includes Linux-machine recovery/XPC/inventory coverage, build-history
-  privacy/durability, short-pipe framing, builder mount normalization, and
-  strict path-component-containment regressions. Existing
-  opt-in tests pass against Apple’s live runtime for provisioning, interactive
-  PTY, and image-reference behavior. The push/pull round trip remains
-  hard-gated to a disposable localhost registry and is never run against public
-  services.
+- The suite currently contains 599 test declarations. The current full
+  app-hosted Xcode run passed all 580 deterministic tests, with 19 destructive
+  or external-service integrations skipped behind explicit live gates and no
+  failures. Existing opt-in tests cover Apple runtime provisioning, interactive
+  PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
+  none run against public services by default.
 - The app launches and stops through Xcode. A Preview-owned orphan was terminated
   with a bounded TERM/KILL cleanup, and no residual app process remained.
 - The SwiftUI overview, split container inspector, Linux-machine list,
   Linux-machine creation form, machine command runner, macOS VM list,
-  restore-image preparation sheet, macOS installation sheet, and
+  restore-image preparation sheet, macOS installation sheet, VM clone sheet, and
   generation-keyed macOS runtime console render successfully in Xcode Preview
   in light mode. The app-wide Quick Open sheet, actionable Overview, and
   initial-selection paths for Volumes and Networks also render successfully.
@@ -120,6 +116,18 @@ Updated: 2026-06-21.
   persistence logic and edits only through the service. Existing no-share saved
   states retain the legacy fingerprint, while any sharing history prevents an
   older checkpoint from becoming valid again.
+- Stopped macOS VMs now clone through a focused orchestration service and a
+  library-owned begin/commit/abort transaction. The source runtime lease remains
+  held while Darwin `copyfile` attempts recursive APFS clone-on-write and falls
+  back to sparse copying. Fallback writes expose an immediate cancellation
+  callback; the sheet stays visibly cancelling until the partial is removed and
+  both leases release. The copier rejects links, strips saved/runtime/operation
+  state, and writes a fresh `VZMacMachineIdentifier`; commit independently
+  validates that identity is well formed and distinct before atomically
+  publishing. Deterministic transfer/store/service/app-boundary tests cover
+  successful cloning, cancellation, copy failure, ownership contention,
+  malicious links, duplicate platform identity, and hard-exit recovery. Live
+  guest boot remains entitlement-gated.
 - Container detail inspection uses Apple’s direct API client for configuration,
   disk usage, one-shot CPU/memory/network/block/process statistics, stdout, and
   boot logs. Log reads are bounded to the newest 512 KiB per stream.
@@ -644,12 +652,13 @@ Updated: 2026-06-21.
   membership, order, monotonic progress, and full completion before verification.
   It never writes resource IDs or names as progress. Existing v2 records load as
   redacted manual-only recovery snapshots and cannot be resumed automatically.
-- Create-missing Up and recreation remain policy blockers. Docker Compose 5.1.4
-  can scale down and reconcile resources even under `--no-recreate`, while
-  Socktainer 1.0.0 returns `NotImplemented` for container rename and network
-  connect/disconnect. A deterministic execution overlay that freezes existing
-  resources as external is required before widening this boundary. The pinned
-  conformance manifest now reports the connect/disconnect routes accurately.
+- Create-missing Up and recreation remain separate policy blockers. Research
+  confirms create-missing can use Compose 5.1.4 `--no-recreate` without new
+  Socktainer routes because API 1.51 supplies initial network attachments at
+  create time. It still needs a deterministic external-resource overlay, stable
+  project/config label paths, contiguous replica-prefix validation, attachment
+  postconditions, and an explicit supported-key allowlist. Recreation remains
+  blocked while Socktainer 1.0.0 lacks rename and network connect/disconnect.
 - A separate doubly gated lifecycle smoke now wires the real source renderer,
   planner, journal, execution workspace, Apple inventory, exact mutation
   services, pinned Compose client, and isolated Socktainer context through Up,
@@ -661,6 +670,13 @@ Updated: 2026-06-21.
 - The full Xcode plan passes all 587 outcomes: 568 deterministic tests passed
   and 19 explicitly gated live tests skipped, with no failures. Xcode also built
   for testing successfully.
+- Transactional VM cloning adds a separate store, transfer, identity, service,
+  app-model, and SwiftUI boundary rather than expanding the library actor into a
+  UI facade. The current full Xcode plan passes all 599 outcomes: 580
+  deterministic tests passed and 19 explicitly gated live tests skipped, with
+  no failures. Build-for-testing, zero Xcode navigator warnings, the clone-sheet
+  Preview, and an app launch/stop smoke on `My Mac` also succeeded; no app
+  process remains running.
 
 ## Known configuration issue
 
@@ -675,17 +691,18 @@ entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Keep raw cache strings, remote credentials, SSH forwarding, and cache-only
-   prune out of the UI until the pinned native API exposes a verifiable contract;
-   the fixed app-owned local profile is the only reviewed non-internal mode.
-2. Package a signed and notarized privileged helper if automated host-access
-   mutation is still desired after the explicit command handoff is exercised.
+1. Reuse the cancellable bundle-transfer engine for transactional VM
+   export/import and portable backup. Export preserves platform identity; import
+   must explicitly choose collision rejection or import-as-clone semantics.
+2. Add on-demand Apple-runtime and VM-bundle storage accounting before any
+   reclaim/compaction action. Report point-in-time reclaimable runtime bytes and
+   sparse VM logical-versus-allocated bytes without putting filesystem walks in
+   ordinary inventory refresh.
 3. Add the entitlement through a functioning Xcode capability surface, then
    live-verify the implemented macOS installer, lifecycle service, force-stop
-   recovery, console, and transactional same-host save/restore against a local
-   IPSW.
-4. Build the deterministic external-resource execution overlay and explicit
-   supported-key allowlist needed for safe create-missing Compose Up; keep
-   recreation blocked until the pinned bridge implements rename and network
-   attachment routes. Run the new lifecycle smoke only with both explicit live
-   gates and retain its cleanup evidence.
+   recovery, console, same-host save/restore, and fresh-identity clone boot
+   against a local IPSW.
+4. Build the deterministic Compose external-resource overlay, stable metadata
+   paths, replica-prefix guard, attachment verification, and supported-key
+   allowlist needed for safe create-missing Up. Keep recreation blocked until
+   the pinned bridge implements rename and network attachment routes.

@@ -40,8 +40,10 @@ BuildKit APIs with image-store, OCI-archive, root-filesystem tar, and folder
 outputs, one-shot reviewed file-backed build secrets, reviewed shared-builder
 Stop/Force Stop/internal-cache reset, a transactional app-owned local build
 cache with token-bound promotion and separate status/reset controls, private
-persistent build history, and macOS
-restore-image preparation. Persistent Linux machines now have native
+persistent build history, and macOS restore-image preparation, installation,
+generation-safe runtime/console controls, same-host suspend, persistent
+VirtioFS shares, and stopped-only VM cloning with fresh platform identity and
+cancellable APFS/sparse transfer. Persistent Linux machines now have native
 create/start/stop/Force Stop/delete controls, cancellable first-boot user
 provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
 memory, and reviewed home-directory configuration. The same machines now expose
@@ -57,7 +59,9 @@ XPC/process transport, machine image preparation, machine process-target
 resolution, machine commands/terminals, canonical Compose topology derivation,
 source-pinned and isolated live Compose conformance, reviewed Compose planning,
 container/resource action execution, command execution, postcondition proof,
-and owned-resource recovery are independent services. A
+owned-resource recovery, VM bundle transactions, cancellable bundle transfer,
+platform-identity generation, installation, runtime, saved state, shared
+directories, and cloning are independent services. A
 dedicated machine-management service owns machine creation and lifecycle rather
 than routing those operations through the container compatibility facade.
 
