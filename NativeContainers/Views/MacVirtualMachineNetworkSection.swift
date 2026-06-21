@@ -87,36 +87,46 @@ private struct MacVirtualMachineNetworkOptionRow: View {
   let select: () -> Void
 
   var body: some View {
-    Button(action: select) {
-      HStack(spacing: 12) {
-        Image(systemName: option.systemImage)
-          .foregroundStyle(option.tint)
-          .frame(width: 24)
-          .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 3) {
-          Text(option.title)
-          Text(option.summary)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.leading)
+    Group {
+      if isSelected {
+        content
+      } else {
+        Button(action: select) {
+          content
         }
-        Spacer(minLength: 16)
-        if isSelected {
-          Label("Selected", systemImage: "checkmark.circle.fill")
-            .labelStyle(.iconOnly)
-            .foregroundStyle(.green)
-            .accessibilityLabel("Selected")
-        } else {
-          Text("Use")
-            .foregroundStyle(canEdit ? Color.accentColor : .secondary)
-        }
+        .buttonStyle(.plain)
+        .disabled(!canEdit)
       }
-      .contentShape(Rectangle())
-      .padding(.vertical, 10)
     }
-    .buttonStyle(.plain)
-    .disabled(isSelected || !canEdit)
     .accessibilityValue(isSelected ? "Selected" : "Not selected")
+  }
+
+  private var content: some View {
+    HStack(spacing: 12) {
+      Image(systemName: option.systemImage)
+        .foregroundStyle(option.tint)
+        .frame(width: 24)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(option.title)
+        Text(option.summary)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.leading)
+      }
+      Spacer(minLength: 16)
+      if isSelected {
+        Label("Selected", systemImage: "checkmark.circle.fill")
+          .labelStyle(.iconOnly)
+          .foregroundStyle(.green)
+          .accessibilityLabel("Selected")
+      } else {
+        Text("Use")
+          .foregroundStyle(canEdit ? Color.accentColor : .secondary)
+      }
+    }
+    .contentShape(Rectangle())
+    .padding(.vertical, 10)
   }
 }
 
@@ -127,9 +137,10 @@ private struct MacVirtualMachineNetworkGuidance: View {
     Label {
       Text(attachment.guidance)
     } icon: {
-      Image(systemName: attachment.usesCustomVmnetNetwork
-        ? "exclamationmark.triangle"
-        : "info.circle")
+      Image(
+        systemName: attachment.usesCustomVmnetNetwork
+          ? "exclamationmark.triangle"
+          : "info.circle")
     }
     .font(.caption)
     .foregroundStyle(attachment.usesCustomVmnetNetwork ? .orange : .secondary)
@@ -137,8 +148,8 @@ private struct MacVirtualMachineNetworkGuidance: View {
   }
 }
 
-private extension MacVirtualMachineNetworkAttachment {
-  var title: String {
+extension MacVirtualMachineNetworkAttachment {
+  fileprivate var title: String {
     switch self {
     case .nat:
       "Automatic NAT"
@@ -149,7 +160,7 @@ private extension MacVirtualMachineNetworkAttachment {
     }
   }
 
-  var summary: String {
+  fileprivate var summary: String {
     switch self {
     case .nat:
       "Private guest with outbound access through this Mac"
@@ -160,7 +171,7 @@ private extension MacVirtualMachineNetworkAttachment {
     }
   }
 
-  var guidance: String {
+  fileprivate var guidance: String {
     switch self {
     case .nat:
       "NAT is portable and supports suspend. Network changes apply on the next cold start."
@@ -171,7 +182,7 @@ private extension MacVirtualMachineNetworkAttachment {
     }
   }
 
-  var systemImage: String {
+  fileprivate var systemImage: String {
     switch self {
     case .nat:
       "shield.lefthalf.filled"
@@ -182,7 +193,7 @@ private extension MacVirtualMachineNetworkAttachment {
     }
   }
 
-  var tint: Color {
+  fileprivate var tint: Color {
     switch self {
     case .nat:
       .green
@@ -207,7 +218,7 @@ private extension MacVirtualMachineNetworkAttachment {
   .frame(width: 650)
 }
 
-#Preview("Shared VM network") {
+#Preview("Shared VM network · Dark") {
   MacVirtualMachineNetworkContent(
     attachment: .shared,
     isLoading: false,
@@ -218,6 +229,7 @@ private extension MacVirtualMachineNetworkAttachment {
   )
   .padding(24)
   .frame(width: 650)
+  .preferredColorScheme(.dark)
 }
 
 #Preview("Host-only network locked") {
