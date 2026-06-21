@@ -14,18 +14,7 @@ struct NativeContainersApp: App {
     }
     .defaultSize(width: 1180, height: 760)
     .commands {
-      CommandGroup(after: .sidebar) {
-        Button("Quick Open…", systemImage: "magnifyingglass") {
-          model.presentQuickOpen()
-        }
-        .keyboardShortcut("k", modifiers: .command)
-
-        Button("Refresh All", systemImage: "arrow.clockwise") {
-          Task { await model.refresh() }
-        }
-        .keyboardShortcut("r", modifiers: .command)
-        .disabled(model.isRefreshing)
-      }
+      NativeContainersCommands(model: model)
     }
 
     WindowGroup(

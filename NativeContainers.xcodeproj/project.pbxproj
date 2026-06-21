@@ -150,6 +150,8 @@
 		1F5E648C2FE8A80000A430FF /* DemandStartedService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E648B2FE8A80000A430FF /* DemandStartedService.swift */; };
 		1F5E648E2FE8A80000A430FF /* OptionalIntegrationServiceModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E648D2FE8A80000A430FF /* OptionalIntegrationServiceModule.swift */; };
 		1F5E64902FE8A82E00A430FF /* DemandStartedServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E648F2FE8A82E00A430FF /* DemandStartedServiceTests.swift */; };
+		1F5E64932FE8A97200A430FF /* NativeContainersCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64922FE8A97200A430FF /* NativeContainersCommands.swift */; };
+		1F5E64952FE8A9AF00A430FF /* NativeContainersCommandsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64942FE8A9AF00A430FF /* NativeContainersCommandsTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -729,6 +731,8 @@
 		1F5E648B2FE8A80000A430FF /* DemandStartedService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemandStartedService.swift; sourceTree = "<group>"; };
 		1F5E648D2FE8A80000A430FF /* OptionalIntegrationServiceModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionalIntegrationServiceModule.swift; sourceTree = "<group>"; };
 		1F5E648F2FE8A82E00A430FF /* DemandStartedServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemandStartedServiceTests.swift; sourceTree = "<group>"; };
+		1F5E64922FE8A97200A430FF /* NativeContainersCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContainersCommands.swift; sourceTree = "<group>"; };
+		1F5E64942FE8A9AF00A430FF /* NativeContainersCommandsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContainersCommandsTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1304,6 +1308,14 @@
 			path = Composition;
 			sourceTree = "<group>";
 		};
+		1F5E64912FE8A97200A430FF /* Commands */ = {
+			isa = PBXGroup;
+			children = (
+				1F5E64922FE8A97200A430FF /* NativeContainersCommands.swift */,
+			);
+			path = Commands;
+			sourceTree = "<group>";
+		};
 		1FEC47132FE834A200DC60B2 /* Compatibility */ = {
 			isa = PBXGroup;
 			children = (
@@ -1656,6 +1668,7 @@
 				1F5E64622FE89D8000A430FF /* MacVirtualMachineDiskSnapshotModelTests.swift */,
 				1F5E64782FE8A39400A430FF /* MacVirtualMachineUSBModelTests.swift */,
 				1F5E64862FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift */,
+				1F5E64942FE8A9AF00A430FF /* NativeContainersCommandsTests.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2039,6 +2052,7 @@
 				1F5E645E2FE89CE500A430FF /* MacVirtualMachineDiskSnapshotModel.swift */,
 				1F5E64742FE8A26500A430FF /* MacVirtualMachineUSBModel.swift */,
 				1F5E64882FE8A7E700A430FF /* Composition */,
+				1F5E64912FE8A97200A430FF /* Commands */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2362,6 +2376,7 @@
 				1F5E64792FE8A39400A430FF /* MacVirtualMachineUSBModelTests.swift in Sources */,
 				1F9D2AE92FE7618B0076F5B9 /* AppleXPCRequestClientTests.swift in Sources */,
 				1F9D2BF82FE7C5990076F5B9 /* LiveSocktainerCompatibilitySmokeTests.swift in Sources */,
+				1F5E64952FE8A9AF00A430FF /* NativeContainersCommandsTests.swift in Sources */,
 				1F9D2C792FE7FA620076F5B9 /* VirtualMachineTransferServiceTests.swift in Sources */,
 				1F9D2C8E2FE7FE860076F5B9 /* StorageOverviewModelTests.swift in Sources */,
 				1F9D2B4C2FE78C270076F5B9 /* ImageBuildOutputServiceTests.swift in Sources */,
@@ -2403,6 +2418,7 @@
 				1F5E63F52FE8821100A430FF /* MacVirtualMachineNetworkModel.swift in Sources */,
 				1F9D2B8A2FE7A1540076F5B9 /* MacVirtualMachineRow.swift in Sources */,
 				1F5E64612FE89D1600A430FF /* MacVirtualMachineDiskSnapshotsSection.swift in Sources */,
+				1F5E64932FE8A97200A430FF /* NativeContainersCommands.swift in Sources */,
 				1F9D2B602FE795870076F5B9 /* AppleLinuxMachineInventoryService.swift in Sources */,
 				1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */,
 				1F9D2C6F2FE7F73C0076F5B9 /* CopyfileVirtualMachineBundleTransfer.swift in Sources */,
@@ -2829,9 +2845,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nativecontainers.app;
 				PRODUCT_NAME = NativeContainers;
 				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
 			name = Debug;
 		};
@@ -3030,9 +3048,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nativecontainers.app;
 				PRODUCT_NAME = NativeContainers;
 				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
 			name = Release;
 		};

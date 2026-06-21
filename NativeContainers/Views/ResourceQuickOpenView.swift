@@ -112,6 +112,7 @@ private struct ResourceQuickOpenResultsList: View {
       }
       .buttonStyle(.plain)
       .disabled(lockedRoute != nil && entry.route.baseRoute != lockedRoute?.baseRoute)
+      .accessibilityInputLabels([LocalizedStringKey(entry.title)])
       .accessibilityHint("Opens this resource in its management view")
     }
   }

@@ -25,12 +25,22 @@ struct RootView: View {
           model.presentQuickOpen()
         }
         .help("Find and open a managed resource (Command-K)")
+        .accessibilityInputLabels([
+          "Quick Open",
+          "Find Resource",
+          "Search Resources",
+        ])
 
         Button("Refresh", systemImage: "arrow.clockwise") {
           Task { await model.refresh() }
         }
         .disabled(model.isRefreshing)
         .help("Refresh container and virtual machine state")
+        .accessibilityInputLabels([
+          "Refresh",
+          "Refresh All",
+          "Reload",
+        ])
       }
     }
     .sheet(isPresented: $navigation.isQuickOpenPresented) {

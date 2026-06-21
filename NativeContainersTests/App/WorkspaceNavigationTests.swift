@@ -270,12 +270,16 @@ struct WorkspaceNavigationTests {
       initialInventory: fixture.inventory,
       initialVirtualMachines: [fixture.macVirtualMachine]
     )
+    #expect(model.canNavigate(to: .builds))
+    #expect(model.canNavigate(to: .containers))
     #expect(model.navigate(to: .builds))
 
     let buildModel = model.makeImageBuildModel()
     let prepared = await buildModel.prepare(makeBuildRequest())
     #expect(prepared == plan)
     #expect(model.isBuildWorkspaceNavigationLocked)
+    #expect(model.canNavigate(to: .builds))
+    #expect(!model.canNavigate(to: .containers))
 
     #expect(!model.navigate(to: .container("api")))
     #expect(model.workspaceRoute == .builds)
@@ -284,6 +288,7 @@ struct WorkspaceNavigationTests {
 
     await buildModel.discardPlan()
     #expect(!model.isBuildWorkspaceNavigationLocked)
+    #expect(model.canNavigate(to: .container("api")))
     #expect(model.navigate(to: .container("api")))
     #expect(model.workspaceRoute == .container("api"))
   }

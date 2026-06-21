@@ -638,6 +638,13 @@ final class AppModel {
     _ = navigate(to: destination.workspaceRoute)
   }
 
+  func canNavigate(to route: WorkspaceRoute) -> Bool {
+    workspaceNavigation.canNavigate(
+      to: route,
+      lockedTo: isBuildWorkspaceNavigationLocked ? .builds : nil
+    )
+  }
+
   @discardableResult
   func navigate(to route: WorkspaceRoute) -> Bool {
     workspaceNavigation.navigate(
