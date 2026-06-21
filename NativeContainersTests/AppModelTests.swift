@@ -17,6 +17,17 @@ struct AppModelTests {
   }
 
   @Test
+  func macVirtualMachineRuntimeUsesAStableAppScopedModel() throws {
+    let model = AppModel.previewVirtualMachines
+    let machine = try #require(model.virtualMachines.first)
+
+    #expect(
+      model.makeMacVirtualMachineRuntimeModel(for: machine)
+        === model.makeMacVirtualMachineRuntimeModel(for: machine)
+    )
+  }
+
+  @Test
   func refreshPublishesContainerAndVirtualMachineInventories() async throws {
     let inventory = ContainerInventory(
       system: ContainerSystemInfo(

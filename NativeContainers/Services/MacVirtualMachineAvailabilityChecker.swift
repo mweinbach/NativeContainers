@@ -2,7 +2,7 @@ import Foundation
 import Security
 @preconcurrency import Virtualization
 
-enum MacVirtualMachineInstallationAvailability: Equatable, Sendable {
+enum MacVirtualMachineAvailability: Equatable, Sendable {
   case available
   case requiresAppleSilicon
   case virtualizationUnavailable
@@ -17,19 +17,19 @@ enum MacVirtualMachineInstallationAvailability: Equatable, Sendable {
     case .virtualizationUnavailable:
       "Virtualization.framework is unavailable on this Mac."
     case .missingVirtualizationEntitlement:
-      "Add the Virtualization entitlement to the NativeContainers app target before installing macOS."
+      "Add the Virtualization entitlement to the NativeContainers app target before using macOS virtual machines."
     }
   }
 }
 
-protocol MacVirtualMachineInstallationAvailabilityChecking: Sendable {
-  func availability() -> MacVirtualMachineInstallationAvailability
+protocol MacVirtualMachineAvailabilityChecking: Sendable {
+  func availability() -> MacVirtualMachineAvailability
 }
 
-struct AppleMacVirtualMachineInstallationAvailabilityChecker:
-  MacVirtualMachineInstallationAvailabilityChecking
+struct AppleMacVirtualMachineAvailabilityChecker:
+  MacVirtualMachineAvailabilityChecking
 {
-  func availability() -> MacVirtualMachineInstallationAvailability {
+  func availability() -> MacVirtualMachineAvailability {
     #if arch(arm64)
       guard VZVirtualMachine.isSupported else {
         return .virtualizationUnavailable
@@ -51,12 +51,12 @@ struct AppleMacVirtualMachineInstallationAvailabilityChecker:
   }
 }
 
-struct StaticMacVirtualMachineInstallationAvailabilityChecker:
-  MacVirtualMachineInstallationAvailabilityChecking
+struct StaticMacVirtualMachineAvailabilityChecker:
+  MacVirtualMachineAvailabilityChecking
 {
-  let value: MacVirtualMachineInstallationAvailability
+  let value: MacVirtualMachineAvailability
 
-  func availability() -> MacVirtualMachineInstallationAvailability {
+  func availability() -> MacVirtualMachineAvailability {
     value
   }
 }

@@ -327,6 +327,7 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   ) {
     let value = MacVirtualMachineRuntimeSnapshot(
       machineID: machineID,
+      revision: (snapshots[machineID]?.revision ?? 0) + 1,
       target: target,
       state: state,
       errorMessage: errorMessage

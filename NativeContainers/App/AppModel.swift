@@ -33,6 +33,9 @@ final class AppModel {
     await self?.refresh()
   }
 
+  @ObservationIgnored
+  private var macVirtualMachineRuntimeModels: [UUID: MacVirtualMachineRuntimeModel] = [:]
+
   private var hasLoaded = false
   private var refreshRequested = false
   private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
@@ -65,9 +68,11 @@ final class AppModel {
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
-    virtualMachineInstallationAvailability:
-      any MacVirtualMachineInstallationAvailabilityChecking =
-      StaticMacVirtualMachineInstallationAvailabilityChecker(value: .available),
+    virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
+      UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineAvailability:
+      any MacVirtualMachineAvailabilityChecking =
+      StaticMacVirtualMachineAvailabilityChecker(value: .available),
     restoreImageDiscovery: any MacRestoreImageDiscovering = MacRestoreImageService(),
     restoreImageDownloader: any MacRestoreImageDownloading = RestoreImageDownloadService(),
     restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService(),
@@ -82,7 +87,8 @@ final class AppModel {
         registry: registryService,
         virtualMachineLibrary: virtualMachineLibrary,
         virtualMachineInstaller: virtualMachineInstaller,
-        virtualMachineInstallationAvailability: virtualMachineInstallationAvailability,
+        virtualMachineRuntime: virtualMachineRuntime,
+        virtualMachineAvailability: virtualMachineAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
         restoreImageDownloader: restoreImageDownloader,
         restoreImageImporter: restoreImageImporter
@@ -209,8 +215,8 @@ final class AppModel {
     }
   }
 
-  var virtualMachineInstallationAvailability: MacVirtualMachineInstallationAvailability {
-    services.virtualMachineInstallationAvailability.availability()
+  var virtualMachineAvailability: MacVirtualMachineAvailability {
+    services.virtualMachineAvailability.availability()
   }
 
   func createVirtualMachineDraft(
@@ -392,6 +398,20 @@ final class AppModel {
     ) { [weak self] in
       await self?.refresh()
     }
+  }
+
+  func makeMacVirtualMachineRuntimeModel(
+    for machine: VirtualMachineManifest
+  ) -> MacVirtualMachineRuntimeModel {
+    if let model = macVirtualMachineRuntimeModels[machine.id] {
+      return model
+    }
+    let model = MacVirtualMachineRuntimeModel(
+      machineID: machine.id,
+      service: services.virtualMachineRuntime
+    )
+    macVirtualMachineRuntimeModels[machine.id] = model
+    return model
   }
 
   private func performMutation(

@@ -23,7 +23,8 @@ struct AppServices: Sendable {
   let registry: any RegistryManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   let virtualMachineInstaller: any MacVirtualMachineInstalling
-  let virtualMachineInstallationAvailability: any MacVirtualMachineInstallationAvailabilityChecking
+  let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
+  let virtualMachineAvailability: any MacVirtualMachineAvailabilityChecking
   let restoreImageDiscovery: any MacRestoreImageDiscovering
   let restoreImageDownloader: any MacRestoreImageDownloading
   let restoreImageImporter: any MacRestoreImageImporting
@@ -51,9 +52,11 @@ struct AppServices: Sendable {
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
-    virtualMachineInstallationAvailability:
-      any MacVirtualMachineInstallationAvailabilityChecking =
-      StaticMacVirtualMachineInstallationAvailabilityChecker(value: .available),
+    virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
+      UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineAvailability:
+      any MacVirtualMachineAvailabilityChecking =
+      StaticMacVirtualMachineAvailabilityChecker(value: .available),
     restoreImageDiscovery: any MacRestoreImageDiscovering,
     restoreImageDownloader: any MacRestoreImageDownloading,
     restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService()
@@ -79,7 +82,8 @@ struct AppServices: Sendable {
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
-    self.virtualMachineInstallationAvailability = virtualMachineInstallationAvailability
+    self.virtualMachineRuntime = virtualMachineRuntime
+    self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageDownloader = restoreImageDownloader
     self.restoreImageImporter = restoreImageImporter
@@ -97,9 +101,11 @@ struct AppServices: Sendable {
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
-    virtualMachineInstallationAvailability:
-      any MacVirtualMachineInstallationAvailabilityChecking =
-      StaticMacVirtualMachineInstallationAvailabilityChecker(value: .available),
+    virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
+      UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineAvailability:
+      any MacVirtualMachineAvailabilityChecking =
+      StaticMacVirtualMachineAvailabilityChecker(value: .available),
     restoreImageDiscovery: any MacRestoreImageDiscovering,
     restoreImageDownloader: any MacRestoreImageDownloading,
     restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService()
@@ -125,7 +131,8 @@ struct AppServices: Sendable {
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
-    self.virtualMachineInstallationAvailability = virtualMachineInstallationAvailability
+    self.virtualMachineRuntime = virtualMachineRuntime
+    self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageDownloader = restoreImageDownloader
     self.restoreImageImporter = restoreImageImporter
@@ -217,6 +224,10 @@ enum AppCompositionRoot {
       store: virtualMachineLibrary,
       engine: AppleMacVirtualMachineInstallationEngine()
     )
+    let virtualMachineRuntime = MacVirtualMachineRuntimeService(
+      leasingStore: virtualMachineLibrary,
+      engine: AppleMacVirtualMachineRuntimeEngine()
+    )
     let imageBuildService = RecordingImageBuildService(
       base: AppleContainerBuildService(
         runtimeMutationCoordinator: mutationCoordinator,
@@ -247,8 +258,9 @@ enum AppCompositionRoot {
       registry: AppleRegistryService(),
       virtualMachineLibrary: virtualMachineLibrary,
       virtualMachineInstaller: virtualMachineInstaller,
-      virtualMachineInstallationAvailability:
-        AppleMacVirtualMachineInstallationAvailabilityChecker(),
+      virtualMachineRuntime: virtualMachineRuntime,
+      virtualMachineAvailability:
+        AppleMacVirtualMachineAvailabilityChecker(),
       restoreImageDiscovery: MacRestoreImageService(),
       restoreImageDownloader: RestoreImageDownloadService(),
       restoreImageImporter: RestoreImageImportService()

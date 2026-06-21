@@ -3,7 +3,7 @@ import SwiftUI
 
 #if arch(arm64)
   struct VirtualMachineConsoleView: NSViewRepresentable {
-    let virtualMachine: VZVirtualMachine
+    let console: MacVirtualMachineConsole
     let capturesSystemKeys: Bool
     let automaticallyReconfiguresDisplay: Bool
 
@@ -22,6 +22,7 @@ import SwiftUI
     }
 
     private func configure(_ view: VZVirtualMachineView, coordinator: Coordinator) {
+      let virtualMachine = console.virtualMachine
       if #available(macOS 27.0, *) {
         let adaptor: VZVirtualMachineViewAdaptor
         let identifier = ObjectIdentifier(virtualMachine)
@@ -40,6 +41,16 @@ import SwiftUI
       }
       view.capturesSystemKeys = capturesSystemKeys
       view.automaticallyReconfiguresDisplay = automaticallyReconfiguresDisplay
+    }
+
+    static func dismantleNSView(_ view: VZVirtualMachineView, coordinator: Coordinator) {
+      if #available(macOS 27.0, *) {
+        view.adaptor = nil
+      } else {
+        view.virtualMachine = nil
+      }
+      coordinator.adaptorStorage = nil
+      coordinator.virtualMachineIdentifier = nil
     }
 
     @MainActor

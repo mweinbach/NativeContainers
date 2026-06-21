@@ -2,9 +2,12 @@ import SwiftUI
 
 struct VirtualMachineRow: View {
   let machine: VirtualMachineManifest
-  let installationAvailability: MacVirtualMachineInstallationAvailability
+  let availability: MacVirtualMachineAvailability
+  let runtime: MacVirtualMachineRuntimeModel
   let prepare: () -> Void
   let install: () -> Void
+  let open: () -> Void
+  let forceStop: () -> Void
   let discard: () -> Void
 
   var body: some View {
@@ -28,7 +31,39 @@ struct VirtualMachineRow: View {
         action
         if machine.installState != .installing {
           Menu {
-            Button("Discard VM…", role: .destructive, action: discard)
+            if machine.installState == .stopped {
+              if runtime.snapshot.canPause {
+                Button("Pause", systemImage: "pause.fill") {
+                  Task { await runtime.pause() }
+                }
+              }
+              if runtime.snapshot.canResume {
+                Button("Resume", systemImage: "play.fill") {
+                  Task { await runtime.resume() }
+                }
+              }
+              if runtime.snapshot.canRequestStop {
+                Button("Shut Down", systemImage: "power") {
+                  Task { await runtime.requestStop() }
+                }
+              }
+              if runtime.snapshot.canForceStop {
+                Button(
+                  "Force Stop…",
+                  systemImage: "exclamationmark.octagon",
+                  role: .destructive,
+                  action: forceStop
+                )
+              }
+            }
+            if runtime.snapshot.target == nil,
+              runtime.snapshot.state != .ownedElsewhere
+            {
+              if machine.installState == .stopped {
+                Divider()
+              }
+              Button("Discard VM…", role: .destructive, action: discard)
+            }
           } label: {
             Image(systemName: "ellipsis.circle")
           }
@@ -38,6 +73,7 @@ struct VirtualMachineRow: View {
       }
     }
     .padding(.vertical, 7)
+    .task { await runtime.observe() }
   }
 
   @ViewBuilder
@@ -46,26 +82,47 @@ struct VirtualMachineRow: View {
     case .draft:
       Button("Prepare…", action: prepare)
         .buttonStyle(.borderedProminent)
-        .disabled(installationAvailability != .available)
-        .help(installationAvailability.unavailableReason ?? "Prepare macOS")
+        .disabled(availability != .available)
+        .help(availability.unavailableReason ?? "Prepare macOS")
     case .readyToInstall:
       Button("Install…", action: install)
         .buttonStyle(.borderedProminent)
-        .disabled(installationAvailability != .available)
-        .help(installationAvailability.unavailableReason ?? "Install macOS")
+        .disabled(availability != .available)
+        .help(availability.unavailableReason ?? "Install macOS")
     case .installing:
       ProgressView()
         .controlSize(.small)
         .help("macOS installation is active.")
     case .stopped:
-      Button("Open") {}
-        .disabled(true)
-        .help("VM lifecycle and console ownership are the next implementation slice.")
+      runtimeAction
     case .failed:
       Label("Needs attention", systemImage: "exclamationmark.triangle.fill")
         .font(.caption)
         .foregroundStyle(.orange)
         .help(machine.installationFailure?.message ?? "The VM needs attention.")
+    }
+  }
+
+  @ViewBuilder
+  private var runtimeAction: some View {
+    switch runtime.snapshot.state {
+    case .stopped, .ownedElsewhere:
+      Button(runtime.snapshot.state == .ownedElsewhere ? "Retry" : "Start") {
+        Task { await runtime.start() }
+      }
+      .buttonStyle(.borderedProminent)
+      .disabled(availability != .available)
+      .help(availability.unavailableReason ?? "Start macOS")
+    case .running, .paused, .stopping:
+      Button("Open", action: open)
+        .buttonStyle(.borderedProminent)
+    case .starting, .pausing, .resuming:
+      HStack(spacing: 6) {
+        ProgressView()
+          .controlSize(.small)
+        Text(runtime.snapshot.state.label)
+          .font(.caption)
+      }
     }
   }
 
@@ -78,7 +135,7 @@ struct VirtualMachineRow: View {
     case .installing:
       "Installing macOS"
     case .stopped:
-      "Stopped"
+      runtime.snapshot.state.label
     case .failed:
       machine.installationFailure?.message ?? "Needs attention"
     }

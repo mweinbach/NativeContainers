@@ -61,17 +61,20 @@ enum MacVirtualMachineRuntimeState: Equatable, Sendable {
 
 struct MacVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   let machineID: UUID
+  let revision: UInt64
   let target: MacVirtualMachineRuntimeTarget?
   let state: MacVirtualMachineRuntimeState
   let errorMessage: String?
 
   init(
     machineID: UUID,
+    revision: UInt64 = 0,
     target: MacVirtualMachineRuntimeTarget? = nil,
     state: MacVirtualMachineRuntimeState = .stopped,
     errorMessage: String? = nil
   ) {
     self.machineID = machineID
+    self.revision = revision
     self.target = target
     self.state = state
     self.errorMessage = errorMessage

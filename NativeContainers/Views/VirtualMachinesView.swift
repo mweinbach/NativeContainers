@@ -6,6 +6,8 @@ struct VirtualMachinesView: View {
   @State private var isCreating = false
   @State private var machineToPrepare: VirtualMachineManifest?
   @State private var machineToInstall: VirtualMachineManifest?
+  @State private var machineToOpen: VirtualMachineManifest?
+  @State private var machineToForceStop: VirtualMachineManifest?
   @State private var machineToDiscard: VirtualMachineManifest?
 
   var body: some View {
@@ -23,9 +25,12 @@ struct VirtualMachinesView: View {
         List(model.virtualMachines) { machine in
           VirtualMachineRow(
             machine: machine,
-            installationAvailability: model.virtualMachineInstallationAvailability,
+            availability: model.virtualMachineAvailability,
+            runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
             prepare: { machineToPrepare = machine },
             install: { machineToInstall = machine },
+            open: { machineToOpen = machine },
+            forceStop: { machineToForceStop = machine },
             discard: { machineToDiscard = machine }
           )
         }
@@ -47,6 +52,28 @@ struct VirtualMachinesView: View {
     }
     .sheet(item: $machineToInstall) { machine in
       MacVirtualMachineInstallationView(machine: machine, appModel: model)
+    }
+    .sheet(item: $machineToOpen) { machine in
+      MacVirtualMachineRuntimeView(
+        machine: machine,
+        model: model.makeMacVirtualMachineRuntimeModel(for: machine)
+      )
+    }
+    .confirmationDialog(
+      "Force stop virtual machine?",
+      isPresented: Binding(
+        get: { machineToForceStop != nil },
+        set: { if !$0 { machineToForceStop = nil } }
+      ),
+      presenting: machineToForceStop
+    ) { machine in
+      Button("Force Stop \(machine.name)", role: .destructive) {
+        machineToForceStop = nil
+        let runtime = model.makeMacVirtualMachineRuntimeModel(for: machine)
+        Task { await runtime.forceStop() }
+      }
+    } message: { machine in
+      Text("This immediately powers off \(machine.name) and may lose unsaved guest data.")
     }
     .confirmationDialog(
       "Discard virtual machine?",

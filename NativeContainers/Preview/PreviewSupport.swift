@@ -146,6 +146,7 @@ extension AppModel {
     let macVM = try! VirtualMachineManifest(
       name: "macOS Sequoia",
       guest: .macOS,
+      installState: .stopped,
       resources: machineResources
     )
     let service = PreviewContainerService(inventory: inventory)
