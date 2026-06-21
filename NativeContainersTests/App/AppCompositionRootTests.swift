@@ -40,9 +40,34 @@ struct AppCompositionRootTests {
     #expect(services.imageBuildHistory is ImageBuildHistoryStore)
     #expect(services.builder is AppleContainerBuilderManagementService)
     #expect(services.appOwnedBuildCache is AppleAppOwnedBuildCacheService)
-    #expect(services.dockerCompatibility is DockerCompatibilityService)
+    #expect(
+      services.dockerCompatibility is DemandStartedDockerCompatibilityService
+    )
     #expect(services.composeBridgeConformance is SocktainerComposeConformanceService)
-    #expect(services.dockerComposeClient is DockerComposeClientInstallService)
+    #expect(
+      services.dockerComposeClient is DemandStartedDockerComposeClientService
+    )
+    #expect(
+      services.composeProjectLifecycle
+        is DemandStartedComposeProjectLifecycleService
+    )
+
+    let dockerCompatibility =
+      services.dockerCompatibility as? DemandStartedDockerCompatibilityService
+    let dockerComposeClient =
+      services.dockerComposeClient as? DemandStartedDockerComposeClientService
+    let composeProjectLifecycle =
+      services.composeProjectLifecycle as? DemandStartedComposeProjectLifecycleService
+
+    #expect(dockerCompatibility?.hasStarted == false)
+    #expect(dockerComposeClient?.hasStarted == false)
+    #expect(composeProjectLifecycle?.hasStarted == false)
+
+    _ = dockerComposeClient?.release
+
+    #expect(dockerCompatibility?.hasStarted == true)
+    #expect(dockerComposeClient?.hasStarted == true)
+    #expect(composeProjectLifecycle?.hasStarted == true)
     #expect(services.virtualMachineLibrary is VirtualMachineLibrary)
     #expect(services.virtualMachineTransfer is VirtualMachineTransferService)
     #expect(services.virtualMachineInstaller is MacVirtualMachineInstallationService)

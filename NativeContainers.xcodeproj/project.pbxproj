@@ -146,6 +146,10 @@
 		1F5E64832FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64822FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift */; };
 		1F5E64852FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64842FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift */; };
 		1F5E64872FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64862FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift */; };
+		1F5E648A2FE8A7E700A430FF /* AppCompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64892FE8A7E700A430FF /* AppCompositionRoot.swift */; };
+		1F5E648C2FE8A80000A430FF /* DemandStartedService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E648B2FE8A80000A430FF /* DemandStartedService.swift */; };
+		1F5E648E2FE8A80000A430FF /* OptionalIntegrationServiceModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E648D2FE8A80000A430FF /* OptionalIntegrationServiceModule.swift */; };
+		1F5E64902FE8A82E00A430FF /* DemandStartedServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E648F2FE8A82E00A430FF /* DemandStartedServiceTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -721,6 +725,10 @@
 		1F5E64822FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResourceDefaultServiceTests.swift; sourceTree = "<group>"; };
 		1F5E64842FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkloadResourceConstraintNotice.swift; sourceTree = "<group>"; };
 		1F5E64862FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkloadCreationDefaultsIntegrationTests.swift; sourceTree = "<group>"; };
+		1F5E64892FE8A7E700A430FF /* AppCompositionRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCompositionRoot.swift; sourceTree = "<group>"; };
+		1F5E648B2FE8A80000A430FF /* DemandStartedService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemandStartedService.swift; sourceTree = "<group>"; };
+		1F5E648D2FE8A80000A430FF /* OptionalIntegrationServiceModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionalIntegrationServiceModule.swift; sourceTree = "<group>"; };
+		1F5E648F2FE8A82E00A430FF /* DemandStartedServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemandStartedServiceTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1287,6 +1295,15 @@
 			path = Domain;
 			sourceTree = "<group>";
 		};
+		1F5E64882FE8A7E700A430FF /* Composition */ = {
+			isa = PBXGroup;
+			children = (
+				1F5E64892FE8A7E700A430FF /* AppCompositionRoot.swift */,
+				1F5E648D2FE8A80000A430FF /* OptionalIntegrationServiceModule.swift */,
+			);
+			path = Composition;
+			sourceTree = "<group>";
+		};
 		1FEC47132FE834A200DC60B2 /* Compatibility */ = {
 			isa = PBXGroup;
 			children = (
@@ -1576,6 +1593,7 @@
 				1F5E647C2FE8A5FB00A430FF /* HostResourceStateProviding.swift */,
 				1F5E647E2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift */,
 				1F5E64802FE8A60300A430FF /* HostResourceDefaultService.swift */,
+				1F5E648B2FE8A80000A430FF /* DemandStartedService.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -1912,6 +1930,7 @@
 				1F9D2C302FE7E6DA0076F5B9 /* HostProcessServiceTests.swift */,
 				1F5E639E2FE85D4F00A430FF /* AppNotificationTestSupport.swift */,
 				1F5E64822FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift */,
+				1F5E648F2FE8A82E00A430FF /* DemandStartedServiceTests.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -2019,6 +2038,7 @@
 				1F5E644C2FE8988100A430FF /* MacGuestProvisioningFormModel.swift */,
 				1F5E645E2FE89CE500A430FF /* MacVirtualMachineDiskSnapshotModel.swift */,
 				1F5E64742FE8A26500A430FF /* MacVirtualMachineUSBModel.swift */,
+				1F5E64882FE8A7E700A430FF /* Composition */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2265,6 +2285,7 @@
 				1F9D2C712FE7F7E60076F5B9 /* CopyfileVirtualMachineBundleTransferTests.swift in Sources */,
 				1F5E63A72FE8612700A430FF /* AppleContainerShellServiceTests.swift in Sources */,
 				1F9D2C4D2FE7EA920076F5B9 /* ComposeOperationJournalTests.swift in Sources */,
+				1F5E64902FE8A82E00A430FF /* DemandStartedServiceTests.swift in Sources */,
 				1F9D2B782FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift in Sources */,
 				1F5E64872FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift in Sources */,
 				1F5E64832FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift in Sources */,
@@ -2363,6 +2384,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1F5E648A2FE8A7E700A430FF /* AppCompositionRoot.swift in Sources */,
 				6DF203F008ABAD5C4AB7903C /* AppModel.swift in Sources */,
 				1F5E64452FE8971600A430FF /* MacGuestProvisioningModels.swift in Sources */,
 				1F9D2AFD2FE765FB0076F5B9 /* AppleImageService.swift in Sources */,
@@ -2427,6 +2449,7 @@
 				1F9D2CBC2FE80A7B0076F5B9 /* RestoreImageCacheService.swift in Sources */,
 				B7F945D799F10D4D0189C473 /* ContainerBuilderSafetyPolicy.swift in Sources */,
 				55143B3A37AFE0BD7CB78CD1 /* ContainerCreationModels.swift in Sources */,
+				1F5E648C2FE8A80000A430FF /* DemandStartedService.swift in Sources */,
 				1FEC46EF2FE82F7D00DC60B2 /* VirtualMachineBundleValidator.swift in Sources */,
 				1F9D2B502FE791D60076F5B9 /* RuntimeProcessWaiter.swift in Sources */,
 				1F9D2B212FE770870076F5B9 /* AppleContainerBuilderManagementService.swift in Sources */,
@@ -2719,6 +2742,7 @@
 				1F9D2B562FE7923C0076F5B9 /* LinuxMachineManagementModel.swift in Sources */,
 				1F9D2C652FE7F57C0076F5B9 /* VirtualMachineCloneModels.swift in Sources */,
 				1F9D2BEE2FE7C4760076F5B9 /* SecureFileSystemPath.swift in Sources */,
+				1F5E648E2FE8A80000A430FF /* OptionalIntegrationServiceModule.swift in Sources */,
 				1F9D2C4B2FE7EA4A0076F5B9 /* ComposeOperationJournal.swift in Sources */,
 				1F9D2C0E2FE7D0B20076F5B9 /* ComposeBridgeLiveConformanceModels.swift in Sources */,
 				B10B22FAA12D249A147360B3 /* VolumesView.swift in Sources */,
