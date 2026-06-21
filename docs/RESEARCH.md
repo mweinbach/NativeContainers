@@ -476,8 +476,15 @@ The installed Apple documentation confirms:
   automatic display reconfiguration and optional capture of system keys. SDK
   27's `VZVirtualMachineViewAdaptor` retains its VM, so a console must detach the
   adaptor when its generation closes.
-- Shared directories use VirtioFS. Linux clipboard integration uses the SPICE
-  agent and requires guest support.
+- `VZVirtioFileSystemDeviceConfiguration`, `VZMultipleDirectoryShare`, and
+  `VZSharedDirectory` expose native host directories through VirtioFS. A Linux
+  guest kernel must include `CONFIG_VIRTIO_FS`.
+- Apple's installed documentation explicitly leaves the guest mount operation
+  to the user: the host app cannot execute or script it. The guest runs
+  `mount -t virtiofs <tag> <directory>` after creating its mount point, so the
+  product must show an exact command rather than claim automatic mounting.
+- Linux clipboard integration is separate: it uses the SPICE agent and requires
+  guest support.
 - Apple's GUI Linux sample uses `VZGenericPlatformConfiguration`, a persistent
   `VZGenericMachineIdentifier`, `VZEFIBootLoader` with
   `VZEFIVariableStore`, a read-only ISO through

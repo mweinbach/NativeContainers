@@ -44,7 +44,8 @@ cache with token-bound promotion and separate status/reset controls, private
 persistent build history, and macOS restore-image preparation, installation,
 generation-safe runtime/console controls, per-VM opt-in host audio input that
 resets on clone/export, host audio output, same-host suspend,
-persistent VirtioFS shares, per-VM automatic NAT/shared/host-only networking,
+persistent macOS and GUI Linux VirtioFS shares, per-VM automatic
+NAT/shared/host-only networking,
 and stopped-only VM cloning with fresh platform
 identity and cancellable APFS/sparse transfer. Portable VM package export/import
 supports identity-preserving restore or an explicit fresh-identity copy, with

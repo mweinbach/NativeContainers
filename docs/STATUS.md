@@ -7,8 +7,8 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 829 test declarations and 834 expanded outcomes.
-  The current full app-hosted Xcode run passed all 813 deterministic outcomes,
+- The suite currently contains 866 test declarations and 871 expanded outcomes.
+  The current full app-hosted Xcode run passed all 850 deterministic outcomes,
   with 21 destructive or external-service integrations skipped behind explicit
   live gates and no failures. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
@@ -974,11 +974,35 @@ Updated: 2026-06-21.
   the known macOS 27 beta SetStore donation-service noise, and the app was
   stopped cleanly.
 
+## GUI Linux VM shared-folder checkpoint
+
+- Shared-folder domain values, validation, security-scoped bookmark access,
+  mode-0600 sidecar persistence, app state, and VirtioFS construction are now
+  guest-neutral contracts rather than macOS-owned primitives. macOS and Linux
+  services contain only their distinct lifecycle rules.
+- `LinuxVirtualMachineSharedDirectoryService` provides stopped-only add/remove
+  operations through generation-pinned Linux runtime leases. Runtime acquisition
+  reloads the sidecar, resolves every bookmark fail-closed, and holds the access
+  lease until the exact engine session closes.
+- One Linux `VZMultipleDirectoryShare` exposes all selected folders under the
+  stable `nativecontainers` tag. The configuration inspector shows host and guest
+  paths, read-only/read-write policy, cold-start behavior, the required VirtioFS
+  kernel support, and an exact selectable guest mount command.
+- Portable exports/imports continue to strip host-local bookmark capability
+  data; same-host clones retain it. The existing portability regression and 21
+  focused sharing, runtime, composition, and macOS compatibility tests pass.
+- The full Xcode plan passes all 871 outcomes: 850 deterministic tests passed,
+  21 explicitly gated live tests skipped, and no outcome failed or remained
+  unrun. Build-for-testing, the selected-Linux preview, a normal build, and a
+  signed launch/stop also pass on `NativeContainers` / `My Mac`; launch emits
+  only the known macOS 27 beta SetStore donation-service error.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
 verified. Installing and rebooting a reviewed Linux distribution through the
-new GUI workflow still need a disposable ISO smoke pass. Installing, booting,
+new GUI workflow, then mounting and exercising a shared folder, still need a
+disposable ISO smoke pass. Installing, booting,
 saving/restoring, and clone-booting macOS are not claimed as live-verified until
 a local IPSW and disposable installed guest are available for that destructive
 integration pass.
@@ -986,8 +1010,8 @@ integration pass.
 ## Next implementation slice
 
 1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
-   eject its ISO, reboot from disk, and exercise both graceful and watchdog
-   force-stop paths.
+   mount a read-only and read-write host folder, eject its ISO, reboot from disk,
+   and exercise both graceful and watchdog force-stop paths.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.

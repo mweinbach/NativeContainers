@@ -131,6 +131,9 @@ must leave a usable, test-backed product slice.
 - [x] Generation-pinned GUI Linux runtime ownership, start/pause/resume,
       graceful stop with a 30-second automatic force-stop watchdog, explicit
       Force Stop, native console, installer-media ejection, and creation UI.
+- [x] Persistent GUI Linux VirtioFS shared folders through security-scoped
+      bookmarks, stopped-only lease-backed editing, one stable
+      `nativecontainers` mount tag, and exact in-guest mount guidance.
 
 ## M4 — macOS VMs
 

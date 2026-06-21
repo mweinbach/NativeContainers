@@ -501,6 +501,7 @@ VMs live as self-contained bundles in Application Support. Each bundle owns:
 - serialized hardware model and machine identifier data;
 - EFI variable storage, generic machine identity, and copied installer media
   for EFI Linux guests;
+- an optional mode-0600 host-local shared-folder capability sidecar;
 - saved machine state and thumbnails when supported.
 
 Bundle-owned artifact paths are relative, allowing a bundle to be moved or
@@ -542,6 +543,17 @@ is also an explicit UI action and can queue safely while start, pause, resume,
 or ejection is completing. Delegate stop/error events are authoritative, and
 exactly-once finalization prevents a stale callback from releasing a replacement
 session.
+
+Linux shared folders reuse the guest-neutral directory domain, bookmark,
+sidecar-store, observable-model, and VirtioFS-device primitives. A
+`LinuxVirtualMachineSharedDirectoryService` adds only Linux lifecycle policy:
+it acquires the generation-pinned Linux runtime lease and permits persistence
+only while the bundle is ready to install or stopped. Runtime configuration
+resolves every security-scoped bookmark, attaches one
+`VZMultipleDirectoryShare` under the stable `nativecontainers` tag, and retains
+the access lease until that exact engine session closes. SwiftUI renders the
+service snapshot and the exact guest mount command; it never owns bookmarks or
+scripts the guest.
 
 Installer media is a USB mass-storage device so the running engine can detach
 it through the XHCI controller after installation. Only a successful detach is
@@ -755,12 +767,14 @@ than sharing presentation state across an implied multi-window group.
   that the VM is stopped but cleanup is pending, and the runtime lease is never
   released until the save/restore callback and persistence cleanup quiesce.
 - Shared-directory configuration is a separate private sidecar inside the VM
-  bundle. UI models call a narrow management service; that service serializes
-  stopped-only mutations through the existing runtime lease and saved-state
-  inspector; the library owns monotonic atomic persistence; the bookmark service
-  owns security-scoped access; and the Apple factory owns the single automounted
-  VirtioFS device. Runtime acquisition locks the bundle before reading the
-  sidecar, and the engine session closes its access lease explicitly.
+  bundle. One guest-neutral observable model calls a narrow management contract;
+  macOS and Linux services add their own lifecycle policy. The library owns
+  monotonic atomic persistence, the bookmark service owns security-scoped
+  access, and guest-specific Apple factories create either the single macOS
+  automount device or the single Linux `nativecontainers` device. Runtime
+  acquisition locks the bundle before reading the sidecar, and each engine
+  session closes its access lease explicitly. Portable package preparation
+  removes the host capability sidecar; same-host clones preserve it.
 - VM cloning is a separate application service rather than another filesystem
   method on the UI model. The library-backed transaction store owns begin,
   commit, and abort, holding the library mutation lease and source runtime lease

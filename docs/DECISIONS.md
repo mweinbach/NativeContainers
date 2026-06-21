@@ -1393,3 +1393,27 @@ a persistence failure remains retryable without issuing a second detach. This
 keeps VM ownership, framework callbacks, shutdown escalation, and installation
 state out of the SwiftUI layer while preserving both automatic recovery and an
 explicit kill path.
+
+## ADR-050: Share GUI Linux folders through stopped-only VirtioFS configuration
+
+**Status:** Accepted — 2026-06-21
+
+GUI Linux VMs reuse the guest-neutral shared-directory domain, security-scoped
+bookmark adapter, mode-0600 atomic sidecar store, observable app model, and
+multiple-directory VirtioFS factory already proven by the macOS lane. Linux
+lifecycle policy remains in a separate `LinuxVirtualMachineSharedDirectoryService`
+instead of adding guest switches to the shared primitives or the view.
+
+Adding or removing a share acquires the generation-pinned Linux runtime lease
+and is accepted only while the bundle is ready to install or stopped. Runtime
+acquisition reloads the sidecar while holding bundle ownership, resolves every
+bookmark fail-closed, attaches one `VZMultipleDirectoryShare` under the stable
+`nativecontainers` tag, and retains security-scoped access until the exact
+engine session closes. Portable package preparation strips the host-local
+bookmark sidecar, while same-host clones retain it.
+
+Apple's public API configures the VirtioFS device but does not execute commands
+inside a Linux guest. NativeContainers therefore presents the exact
+`mount -t virtiofs nativecontainers /mnt/nativecontainers` workflow and the
+guest-kernel requirement instead of claiming automatic mounting or injecting a
+hidden guest agent.
