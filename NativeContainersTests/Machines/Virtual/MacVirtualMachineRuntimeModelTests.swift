@@ -69,6 +69,26 @@ struct MacVirtualMachineRuntimeModelTests {
   }
 
   @Test
+  func provisionedStartRoutesTheRequestAndMarksFirstBootConsumed() async throws {
+    let machineID = UUID()
+    let service = RuntimeModelService(machineID: machineID)
+    let model = MacVirtualMachineRuntimeModel(machineID: machineID, service: service)
+    let request = try MacGuestProvisioningRequest(
+      fullName: "Ada Lovelace",
+      username: "ada",
+      password: "secret",
+      logsInAutomatically: true,
+      enablesRemoteLogin: true
+    )
+
+    let didStart = await model.start(provisioning: request)
+
+    #expect(didStart)
+    #expect(model.hasStartedSinceLoad)
+    #expect(service.calls == [.provisionedStart(request)])
+  }
+
+  @Test
   func repeatedObservationStartsOneStreamAndOneSavedStateRefresh() async {
     let machineID = UUID()
     let service = RuntimeModelService(machineID: machineID)
@@ -84,6 +104,7 @@ struct MacVirtualMachineRuntimeModelTests {
 
 private enum RuntimeModelCall: Equatable {
   case start
+  case provisionedStart(MacGuestProvisioningRequest)
   case startFresh
   case pause
   case resume
@@ -135,6 +156,19 @@ private final class RuntimeModelService: MacVirtualMachineRuntimeManaging {
 
   func start(id: UUID) async throws {
     calls.append(.start)
+    if let startError { throw startError }
+    publish(state: .running, target: target)
+  }
+
+  func start(
+    id: UUID,
+    provisioning: MacGuestProvisioningRequest?
+  ) async throws {
+    guard let provisioning else {
+      try await start(id: id)
+      return
+    }
+    calls.append(.provisionedStart(provisioning))
     if let startError { throw startError }
     publish(state: .running, target: target)
   }

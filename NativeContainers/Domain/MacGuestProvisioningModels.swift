@@ -85,6 +85,7 @@ enum MacGuestProvisioningError: LocalizedError, Equatable, Sendable {
   case emptyFullName
   case emptyUsername
   case emptyPassword
+  case passwordsDoNotMatch
   case hostUnsupported
   case guestVersionUnknown
   case guestUnsupported(String)
@@ -99,6 +100,8 @@ enum MacGuestProvisioningError: LocalizedError, Equatable, Sendable {
       "Enter a username for the guest account."
     case .emptyPassword:
       "Enter a password for the guest account."
+    case .passwordsDoNotMatch:
+      "The guest account passwords do not match."
     case .hostUnsupported:
       "Automated macOS guest setup requires macOS 27 or later on the host."
     case .guestVersionUnknown:

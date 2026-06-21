@@ -171,6 +171,30 @@ struct MacGuestProvisioningTests {
     #expect(await persistence.transitions.isEmpty)
   }
 
+  @Test
+  @MainActor
+  func formModelRequiresMatchingPasswordsAndClearsSecrets() throws {
+    let model = MacGuestProvisioningFormModel()
+    model.fullName = "Ada Lovelace"
+    model.username = "ada"
+    model.password = "secret"
+    model.passwordConfirmation = "different"
+
+    #expect(!model.canSubmit)
+    #expect(throws: MacGuestProvisioningError.passwordsDoNotMatch) {
+      _ = try model.makeRequest()
+    }
+
+    model.passwordConfirmation = "secret"
+    #expect(model.canSubmit)
+    #expect(try model.makeRequest().username == "ada")
+
+    model.clearSecrets()
+    #expect(model.password.isEmpty)
+    #expect(model.passwordConfirmation.isEmpty)
+    #expect(!model.canSubmit)
+  }
+
   private func makeManifest() throws -> VirtualMachineManifest {
     try VirtualMachineManifest(
       name: "Provisioning Test",

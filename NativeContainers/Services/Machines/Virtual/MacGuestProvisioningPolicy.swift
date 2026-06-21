@@ -7,6 +7,10 @@ struct MacGuestProvisioningPolicy: Sendable {
     self.hostSupportsProvisioning = hostSupportsProvisioning
   }
 
+  func isEligible(manifest: VirtualMachineManifest) -> Bool {
+    (try? validate(manifest: manifest, resumesSavedState: false)) != nil
+  }
+
   func validate(
     manifest: VirtualMachineManifest,
     resumesSavedState: Bool

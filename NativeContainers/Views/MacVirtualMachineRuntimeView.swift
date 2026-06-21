@@ -8,6 +8,8 @@ struct MacVirtualMachineRuntimeView: View {
   @State private var isConfirmingForceStop = false
   @State private var isConfirmingStartFresh = false
   @State private var isConfirmingDiscardSavedState = false
+  @State private var isPresentingGuestProvisioning = false
+  @State private var guestProvisioningModel = MacGuestProvisioningFormModel()
 
   var body: some View {
     VStack(spacing: 0) {
@@ -24,6 +26,17 @@ struct MacVirtualMachineRuntimeView: View {
         confirmStartFresh: { isConfirmingStartFresh = true },
         confirmDiscardSavedState: { isConfirmingDiscardSavedState = true }
       )
+
+      if canOfferGuestProvisioning,
+        let operatingSystem = machine.macOSGuestOperatingSystem
+      {
+        MacGuestProvisioningCallout(
+          operatingSystem: operatingSystem
+        ) {
+          guestProvisioningModel.clearError()
+          isPresentingGuestProvisioning = true
+        }
+      }
 
       MacVirtualMachineSavedStateBanner(snapshot: model.snapshot)
 
@@ -47,6 +60,16 @@ struct MacVirtualMachineRuntimeView: View {
       alignment: .top
     )
     .task { await model.observe() }
+    .sheet(isPresented: $isPresentingGuestProvisioning) {
+      if let operatingSystem = machine.macOSGuestOperatingSystem {
+        MacGuestProvisioningView(
+          machineName: machine.name,
+          operatingSystem: operatingSystem,
+          runtimeModel: model,
+          model: guestProvisioningModel
+        )
+      }
+    }
     .confirmationDialog(
       "Force stop \(machine.name)?",
       isPresented: $isConfirmingForceStop
@@ -77,6 +100,16 @@ struct MacVirtualMachineRuntimeView: View {
     } message: {
       Text("The VM remains powered off, but its suspended session cannot be resumed.")
     }
+  }
+
+  private var canOfferGuestProvisioning: Bool {
+    guard !model.hasStartedSinceLoad,
+      model.snapshot.canStart,
+      model.snapshot.savedStateStatus == .none
+    else {
+      return false
+    }
+    return MacGuestProvisioningPolicy().isEligible(manifest: machine)
   }
 }
 

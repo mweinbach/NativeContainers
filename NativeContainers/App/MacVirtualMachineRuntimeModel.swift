@@ -7,6 +7,7 @@ final class MacVirtualMachineRuntimeModel {
   let machineID: UUID
   private(set) var snapshot: MacVirtualMachineRuntimeSnapshot
   private(set) var actionErrorMessage: String?
+  private(set) var hasStartedSinceLoad = false
 
   private let service: any MacVirtualMachineRuntimeManaging
   @ObservationIgnored private var observationTask: Task<Void, Never>?
@@ -51,14 +52,31 @@ final class MacVirtualMachineRuntimeModel {
   }
 
   func start() async {
-    await perform {
+    if await perform({
       try await service.start(id: machineID)
+    }) {
+      hasStartedSinceLoad = true
     }
   }
 
+  func start(provisioning: MacGuestProvisioningRequest) async -> Bool {
+    let didStart = await perform {
+      try await service.start(
+        id: machineID,
+        provisioning: provisioning
+      )
+    }
+    if didStart {
+      hasStartedSinceLoad = true
+    }
+    return didStart
+  }
+
   func startFresh() async {
-    await perform {
+    if await perform({
       try await service.startFresh(id: machineID)
+    }) {
+      hasStartedSinceLoad = true
     }
   }
 
@@ -117,13 +135,16 @@ final class MacVirtualMachineRuntimeModel {
     hasRefreshedSavedState = false
   }
 
-  private func perform(_ operation: () async throws -> Void) async {
+  @discardableResult
+  private func perform(_ operation: () async throws -> Void) async -> Bool {
     actionErrorMessage = nil
     defer { snapshot = service.snapshot(for: machineID) }
     do {
       try await operation()
+      return true
     } catch {
       actionErrorMessage = error.localizedDescription
+      return false
     }
   }
 

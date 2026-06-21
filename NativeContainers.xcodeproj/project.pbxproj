@@ -116,6 +116,8 @@
 		1F5E64472FE8978600A430FF /* MacGuestProvisioningPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64462FE8978600A430FF /* MacGuestProvisioningPolicy.swift */; };
 		1F5E64492FE8979200A430FF /* MacVirtualMachineFirstBootService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64482FE8979200A430FF /* MacVirtualMachineFirstBootService.swift */; };
 		1F5E644B2FE8983200A430FF /* MacGuestProvisioningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E644A2FE8983200A430FF /* MacGuestProvisioningTests.swift */; };
+		1F5E644D2FE8988100A430FF /* MacGuestProvisioningFormModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E644C2FE8988100A430FF /* MacGuestProvisioningFormModel.swift */; };
+		1F5E644F2FE8988A00A430FF /* MacGuestProvisioningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E644E2FE8988A00A430FF /* MacGuestProvisioningView.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -661,6 +663,8 @@
 		1F5E64462FE8978600A430FF /* MacGuestProvisioningPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacGuestProvisioningPolicy.swift; sourceTree = "<group>"; };
 		1F5E64482FE8979200A430FF /* MacVirtualMachineFirstBootService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineFirstBootService.swift; sourceTree = "<group>"; };
 		1F5E644A2FE8983200A430FF /* MacGuestProvisioningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacGuestProvisioningTests.swift; sourceTree = "<group>"; };
+		1F5E644C2FE8988100A430FF /* MacGuestProvisioningFormModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacGuestProvisioningFormModel.swift; sourceTree = "<group>"; };
+		1F5E644E2FE8988A00A430FF /* MacGuestProvisioningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacGuestProvisioningView.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1160,6 +1164,7 @@
 				1F5E64322FE88B8900A430FF /* LinuxVirtualMachineRuntimeView.swift */,
 				1F5E64382FE8907500A430FF /* LinuxVirtualMachineSharedDirectoriesView.swift */,
 				1F5E64402FE8944700A430FF /* LinuxMachineConfigurationEditor.swift */,
+				1F5E644E2FE8988A00A430FF /* MacGuestProvisioningView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1929,6 +1934,7 @@
 				1F5E63DE2FE87C0F00A430FF /* MacVirtualMachineAudioModel.swift */,
 				1F5E63F42FE8821100A430FF /* MacVirtualMachineNetworkModel.swift */,
 				1F5E64282FE88AE600A430FF /* LinuxVirtualMachineRuntimeModel.swift */,
+				1F5E644C2FE8988100A430FF /* MacGuestProvisioningFormModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2498,6 +2504,7 @@
 				CFB51BBFC7DA4F81E784E745 /* PrivateBuildArtifactStore.swift in Sources */,
 				1F9D2B822FE7A0E70076F5B9 /* RestoreImageImportService.swift in Sources */,
 				1F5E64092FE8870500A430FF /* LinuxVirtualMachineBundleResolver.swift in Sources */,
+				1F5E644D2FE8988100A430FF /* MacGuestProvisioningFormModel.swift in Sources */,
 				2CEB095A2F3E92AB8DD58DF8 /* RegistryManaging.swift in Sources */,
 				1F9D2BB42FE7AE290076F5B9 /* MacVirtualMachineSavedStateModels.swift in Sources */,
 				1F9D2CB62FE806B60076F5B9 /* VirtualMachineStorageReclamationReviewSheet.swift in Sources */,
@@ -2518,6 +2525,7 @@
 				BEF88012C7F13A21B4B2C57E /* RestoreImageDownloadService.swift in Sources */,
 				1F9D2B8C2FE7A15F0076F5B9 /* MacRestoreImagePreparationView.swift in Sources */,
 				1F5E63A32FE860BF00A430FF /* ContainerShellModels.swift in Sources */,
+				1F5E644F2FE8988A00A430FF /* MacGuestProvisioningView.swift in Sources */,
 				1F9D2B482FE78A460076F5B9 /* ImageBuildOutputService.swift in Sources */,
 				1F9D2BE02FE7C33B0076F5B9 /* SocktainerInstallService.swift in Sources */,
 				1F9D2B292FE771A70076F5B9 /* ContainerBuilderManagementView.swift in Sources */,
