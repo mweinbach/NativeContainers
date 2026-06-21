@@ -82,6 +82,8 @@ actor VirtualMachineLibrary:
   VirtualMachineRestoreImageReferenceStoring,
   MacVirtualMachineInstallationStoring,
   MacVirtualMachineRuntimeLeasing,
+  LinuxVirtualMachineRuntimeLeasing,
+  LinuxVirtualMachineInstallationCompleting,
   MacVirtualMachineSharedDirectoryPersisting,
   MacVirtualMachineAudioConfigurationPersisting,
   MacVirtualMachineNetworkConfigurationPersisting,
@@ -121,6 +123,7 @@ actor VirtualMachineLibrary:
   private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
   private let linuxPlatformArtifactPreparer: any LinuxPlatformArtifactPreparing
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
+  private let linuxVirtualMachineBundleResolver: any LinuxVirtualMachineBundleResolving
   private let sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring
   private let sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating
   private var operationLockLease: AdvisoryFileLockLease?
@@ -156,6 +159,10 @@ actor VirtualMachineLibrary:
       rootURL: resolvedRootURL,
       fileManager: fileManager
     )
+    let linuxBundleResolver = LinuxVirtualMachineBundleResolver(
+      rootURL: resolvedRootURL,
+      fileManager: fileManager
+    )
     self.fileManager = fileManager
     self.launchID = launchID
     self.rootURL = resolvedRootURL
@@ -163,6 +170,7 @@ actor VirtualMachineLibrary:
     self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
     self.linuxPlatformArtifactPreparer = linuxPlatformArtifactPreparer
     self.macVirtualMachineBundleResolver = bundleResolver
+    self.linuxVirtualMachineBundleResolver = linuxBundleResolver
     self.sharedDirectoryStore = sharedDirectoryStore
     self.sharedDirectoryNameValidator = sharedDirectoryNameValidator
     self.bundleValidator = VirtualMachineBundleValidator(
@@ -916,19 +924,7 @@ actor VirtualMachineLibrary:
         )
       )
       let target = MacVirtualMachineRuntimeTarget(machineID: id, generation: UUID())
-      let ownerURL = machine.bundleURL.appending(path: Self.runtimeOwnerFilename)
-      let owner = MacVirtualMachineRuntimeOwnerRecord(
-        machineID: id,
-        generation: target.generation,
-        launchID: launchID,
-        processID: ProcessInfo.processInfo.processIdentifier,
-        acquiredAt: Date()
-      )
-      try Self.encoder.encode(owner).write(to: ownerURL, options: .atomic)
-      try fileManager.setAttributes(
-        [.posixPermissions: 0o600],
-        ofItemAtPath: ownerURL.path
-      )
+      let ownerURL = try writeRuntimeOwner(for: target, in: machine.bundleURL)
 
       let fileManager = fileManager
       return MacVirtualMachineRuntimeLease(machine: machine, target: target) {
@@ -938,6 +934,112 @@ actor VirtualMachineLibrary:
     } catch {
       runtimeLock.release()
       throw error
+    }
+  }
+
+  func acquireLinuxRuntime(id: UUID) throws -> LinuxVirtualMachineRuntimeLease {
+    try bundleStore.ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
+    let manifest = try linuxRuntimeManifest(id: id)
+    guard manifest.installState == .readyToInstall || manifest.installState == .stopped else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+    let bundleURL = bundleStore.bundleURL(for: manifest.id)
+    try bundleStore.requireDirectory(bundleURL)
+    try requireNoLinuxDiskImageReplacementJournal(in: bundleURL, machineID: id)
+
+    let lockURL = bundleURL.appending(path: Self.runtimeLockFilename)
+    guard let runtimeLock = try AdvisoryFileLock.acquire(at: lockURL) else {
+      throw LinuxVirtualMachineRuntimeError.ownedElsewhere(id)
+    }
+
+    do {
+      let machine = try linuxVirtualMachineBundleResolver.resolve(manifest)
+      let target = LinuxVirtualMachineRuntimeTarget(machineID: id, generation: UUID())
+      let ownerURL = try writeRuntimeOwner(for: target, in: machine.bundleURL)
+      let fileManager = fileManager
+      return LinuxVirtualMachineRuntimeLease(machine: machine, target: target) {
+        try? fileManager.removeItem(at: ownerURL)
+        runtimeLock.release()
+      }
+    } catch {
+      runtimeLock.release()
+      throw error
+    }
+  }
+
+  func completeLinuxInstallation(
+    lease: LinuxVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineManifest {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
+    var manifest = try linuxRuntimeManifest(id: lease.target.machineID)
+    guard manifest.id == lease.machine.manifest.id else {
+      throw LinuxVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+    if manifest.installState == .stopped,
+      manifest.linuxConfiguration?.installationMediaPath == nil
+    {
+      return manifest
+    }
+    guard manifest.installState == .readyToInstall,
+      manifest.linuxConfiguration?.installationMediaPath != nil
+    else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+
+    manifest.markLinuxInstallationCompleted()
+    try bundleStore.write(
+      manifest,
+      to: bundleStore.manifestURL(for: manifest.id)
+    )
+    return manifest
+  }
+
+  private func writeRuntimeOwner(
+    for target: VirtualMachineRuntimeTarget,
+    in bundleURL: URL
+  ) throws -> URL {
+    let ownerURL = bundleURL.appending(path: Self.runtimeOwnerFilename)
+    let owner = VirtualMachineRuntimeOwnerRecord(
+      machineID: target.machineID,
+      generation: target.generation,
+      launchID: launchID,
+      processID: ProcessInfo.processInfo.processIdentifier,
+      acquiredAt: Date()
+    )
+    try Self.encoder.encode(owner).write(to: ownerURL, options: .atomic)
+    try fileManager.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: ownerURL.path
+    )
+    return ownerURL
+  }
+
+  private func requireNoLinuxDiskImageReplacementJournal(
+    in bundleURL: URL,
+    machineID: UUID
+  ) throws {
+    do {
+      guard
+        try FileVirtualMachineDiskImageReplacementJournalStore(
+          fileManager: fileManager
+        ).load(in: bundleURL) == nil
+      else {
+        throw LinuxVirtualMachineRuntimeError.diskReplacementPending(machineID)
+      }
+    } catch let error as LinuxVirtualMachineRuntimeError {
+      throw error
+    } catch {
+      throw LinuxVirtualMachineRuntimeError.diskReplacementPending(machineID)
     }
   }
 
@@ -1204,6 +1306,14 @@ actor VirtualMachineLibrary:
     let manifest = try bundleStore.manifest(id: id)
     guard manifest.guest == .macOS else {
       throw VirtualMachineModelError.requiresMacOSGuest(id)
+    }
+    return manifest
+  }
+
+  private func linuxRuntimeManifest(id: UUID) throws -> VirtualMachineManifest {
+    let manifest = try bundleStore.manifest(id: id)
+    guard manifest.guest == .linux else {
+      throw VirtualMachineModelError.requiresLinuxGuest(id)
     }
     return manifest
   }

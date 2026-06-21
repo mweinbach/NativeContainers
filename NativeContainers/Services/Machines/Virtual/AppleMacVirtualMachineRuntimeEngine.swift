@@ -2,20 +2,6 @@ import Foundation
 @preconcurrency import Virtualization
 
 @MainActor
-final class MacVirtualMachineConsole {
-  let target: MacVirtualMachineRuntimeTarget
-
-  #if arch(arm64)
-    let virtualMachine: VZVirtualMachine
-
-    init(target: MacVirtualMachineRuntimeTarget, virtualMachine: VZVirtualMachine) {
-      self.target = target
-      self.virtualMachine = virtualMachine
-    }
-  #endif
-}
-
-@MainActor
 final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine {
   #if arch(arm64)
     private let configurationFactory: AppleMacVirtualMachineConfigurationFactory

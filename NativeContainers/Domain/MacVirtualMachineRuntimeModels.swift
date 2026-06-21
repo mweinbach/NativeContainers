@@ -195,11 +195,6 @@ struct MacVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   }
 }
 
-enum MacVirtualMachineRuntimeEvent: Equatable, Sendable {
-  case guestStopped
-  case stoppedWithError(String)
-}
-
 enum MacVirtualMachineRuntimeError: LocalizedError, Equatable, Sendable {
   case unavailable
   case requiresAppleSilicon

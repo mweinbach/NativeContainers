@@ -50,17 +50,6 @@ protocol MacVirtualMachineRuntimeManaging: Sendable {
   func discardSavedState(id: UUID) async throws
 }
 
-extension MacVirtualMachineRuntimeEvent {
-  var errorMessage: String? {
-    switch self {
-    case .guestStopped:
-      nil
-    case .stoppedWithError(let message):
-      message
-    }
-  }
-}
-
 @MainActor
 struct UnavailableMacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   func snapshot(for machineID: UUID) -> MacVirtualMachineRuntimeSnapshot {

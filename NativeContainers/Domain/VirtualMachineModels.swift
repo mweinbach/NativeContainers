@@ -223,6 +223,14 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installationFailure = nil
     self.updatedAt = updatedAt
   }
+
+  mutating func markLinuxInstallationCompleted(updatedAt: Date = Date()) {
+    installState = .stopped
+    linuxConfiguration?.installationMediaPath = nil
+    installationOperationID = nil
+    installationFailure = nil
+    self.updatedAt = updatedAt
+  }
 }
 
 struct MacRestoreImageInfo: Codable, Equatable, Sendable {
