@@ -18,7 +18,7 @@ actor AppleContainerService: ContainerManaging {
   private let toolService: AppleContainerToolService
   private let terminalService: AppleContainerTerminalService
   private let machineLifecycleService: AppleMachineLifecycleService
-  private let ownedContainerRecovery: AppleOwnedContainerRecoveryService
+  private let creationService: AppleContainerCreationService
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator
 
   init(
@@ -34,44 +34,62 @@ actor AppleContainerService: ContainerManaging {
     toolService: AppleContainerToolService? = nil,
     terminalService: AppleContainerTerminalService? = nil,
     machineLifecycleService: AppleMachineLifecycleService? = nil,
+    creationService: AppleContainerCreationService? = nil,
     ownedContainerRecovery: AppleOwnedContainerRecoveryService? = nil,
     runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared
   ) {
-    self.containerClient = containerClient
     let containerReader = AppleContainerSnapshotReader(client: containerClient)
-    self.inventoryService =
+    let resolvedInventoryService =
       inventoryService
       ?? AppleRuntimeInventoryService(
         infrastructureClient: infrastructureClient,
         containerReader: containerReader,
         machineClient: machineClient
       )
-    self.infrastructureService =
+    let resolvedInfrastructureService =
       infrastructureService
       ?? AppleInfrastructureService(
         infrastructureClient: infrastructureClient,
         containerReader: containerReader,
         runtimeMutationCoordinator: runtimeMutationCoordinator
       )
-    self.lifecycleService =
+    let resolvedLifecycleService =
       lifecycleService ?? AppleContainerLifecycleService(containerClient: containerClient)
-    self.inspectionService =
+    let resolvedInspectionService =
       inspectionService ?? AppleContainerInspectionService(containerClient: containerClient)
-    self.toolService =
+    let resolvedToolService =
       toolService ?? AppleContainerToolService(containerClient: containerClient)
-    self.terminalService =
+    let resolvedTerminalService =
       terminalService
       ?? AppleContainerTerminalService(
         terminalProcessLauncher: terminalProcessLauncher
           ?? AppleContainerTerminalProcessLauncher(containerClient: containerClient)
       )
-    self.machineLifecycleService =
+    let resolvedMachineLifecycleService =
       machineLifecycleService ?? AppleMachineLifecycleService(machineClient: machineClient)
-    self.ownedContainerRecovery =
+    let resolvedRecoveryService =
       ownedContainerRecovery
       ?? AppleOwnedContainerRecoveryService(
         cleanupClient: containerCleanupClient,
         ownershipLabel: AppleContainerOwnership.creationOperationLabel
+      )
+
+    self.containerClient = containerClient
+    self.inventoryService = resolvedInventoryService
+    self.infrastructureService = resolvedInfrastructureService
+    self.lifecycleService = resolvedLifecycleService
+    self.inspectionService = resolvedInspectionService
+    self.toolService = resolvedToolService
+    self.terminalService = resolvedTerminalService
+    self.machineLifecycleService = resolvedMachineLifecycleService
+    self.creationService =
+      creationService
+      ?? AppleContainerCreationService(
+        containerClient: containerClient,
+        infrastructureService: resolvedInfrastructureService,
+        lifecycleService: resolvedLifecycleService,
+        ownedContainerRecovery: resolvedRecoveryService,
+        runtimeMutationCoordinator: runtimeMutationCoordinator
       )
     self.runtimeMutationCoordinator = runtimeMutationCoordinator
   }
@@ -714,209 +732,7 @@ actor AppleContainerService: ContainerManaging {
     request: ContainerCreationRequest,
     progress: @escaping ContainerProgressHandler
   ) async throws {
-    do {
-      try await withRuntimeMutation {
-        try await self.createContainerWhileLocked(request: request, progress: progress)
-      }
-    } catch {
-      let operationMessage = error.localizedDescription
-      do {
-        try await ownedContainerRecovery.removeOwnedContainer(
-          id: request.name,
-          operationID: request.operationID
-        )
-      } catch {
-        throw AppleContainerServiceError.containerCleanupFailed(
-          id: request.name,
-          operation: operationMessage,
-          cleanup: error.localizedDescription
-        )
-      }
-      throw error
-    }
-  }
-
-  private func createContainerWhileLocked(
-    request: ContainerCreationRequest,
-    progress: @escaping ContainerProgressHandler
-  ) async throws {
-    let relay = AppleContainerProgressRelay(handler: progress)
-    await relay.emit(phase: .preparing, message: "Preparing container")
-    try Utility.validEntityName(request.name)
-
-    if (try? await containerClient.get(id: request.name)) != nil {
-      throw AppleContainerServiceError.containerAlreadyExists(request.name)
-    }
-
-    let systemConfiguration = try await loadSystemConfiguration()
-    let processFlags = Flags.Process(
-      cwd: request.workingDirectory,
-      env: request.environment.map(\.entry),
-      envFile: [],
-      gid: nil,
-      interactive: false,
-      tty: false,
-      uid: nil,
-      ulimits: [],
-      user: nil
-    )
-    let resourceFlags = Flags.Resource(
-      cpus: Int64(request.cpuCount),
-      memory: "\(request.memoryBytes / ContainerCreationRequest.bytesPerMiB)MiB"
-    )
-    let managementFlags = Flags.Management(
-      arch: request.architecture.rawValue,
-      capAdd: [],
-      capDrop: [],
-      cidfile: "",
-      detach: true,
-      dns: Flags.DNS(),
-      dnsDisabled: false,
-      entrypoint: nil,
-      initImage: nil,
-      kernel: nil,
-      labels: [
-        "\(AppleContainerOwnership.creationOperationLabel)=\(request.operationID.uuidString)"
-      ],
-      mounts: [],
-      name: request.name,
-      networks: [],
-      os: "linux",
-      platform: nil,
-      publishPorts: request.publishedPorts.map(\.appleSpecification),
-      publishSockets: [],
-      readOnly: request.readOnlyRootFilesystem,
-      remove: request.removeWhenStopped,
-      rosetta: false,
-      runtime: nil,
-      ssh: request.forwardSSHAgent,
-      shmSize: nil,
-      tmpFs: [],
-      useInit: request.useInitProcess,
-      virtualization: false,
-      volumes: []
-    )
-    try managementFlags.validate()
-    let appleProgress: ProgressUpdateHandler = { events in
-      await relay.consume(events)
-    }
-    let requestedPlatform = Parser.platform(os: "linux", arch: request.architecture.rawValue)
-    await relay.emit(phase: .fetchingImage, message: "Checking image platform")
-    let image: ClientImage
-    if let localImage = try? await ClientImage.get(
-      reference: request.imageReference,
-      containerSystemConfig: systemConfiguration
-    ) {
-      do {
-        _ = try await localImage.config(for: requestedPlatform)
-        image = localImage
-      } catch {
-        image = try await ClientImage.pull(
-          reference: request.imageReference,
-          platform: requestedPlatform,
-          containerSystemConfig: systemConfiguration,
-          progressUpdate: appleProgress
-        )
-      }
-    } else {
-      image = try await ClientImage.fetch(
-        reference: request.imageReference,
-        platform: requestedPlatform,
-        containerSystemConfig: systemConfiguration,
-        progressUpdate: appleProgress
-      )
-    }
-
-    await relay.emit(phase: .unpackingImage, message: "Unpacking image")
-    _ = try await image.getCreateSnapshot(
-      platform: requestedPlatform,
-      progressUpdate: appleProgress
-    )
-
-    await relay.emit(phase: .fetchingKernel, message: "Preparing Linux kernel")
-    let kernel = try await ClientKernel.getDefaultKernel(for: .current)
-
-    await relay.emit(phase: .fetchingInitImage, message: "Fetching runtime image")
-    let initImage = try await ClientImage.fetch(
-      reference: systemConfiguration.vminit.image,
-      platform: .current,
-      containerSystemConfig: systemConfiguration,
-      progressUpdate: appleProgress
-    )
-    await relay.emit(phase: .unpackingInitImage, message: "Unpacking runtime image")
-    _ = try await initImage.getCreateSnapshot(
-      platform: .current,
-      progressUpdate: appleProgress
-    )
-
-    let imageConfiguration = try await image.config(for: requestedPlatform).config
-    let processConfiguration = try Parser.process(
-      arguments: request.arguments,
-      processFlags: processFlags,
-      managementFlags: managementFlags,
-      config: imageConfiguration
-    )
-    var configuration = ContainerConfiguration(
-      id: request.name,
-      image: image.description,
-      process: processConfiguration
-    )
-    configuration.platform = requestedPlatform
-    configuration.resources = try Parser.resources(
-      cpus: resourceFlags.cpus,
-      memory: resourceFlags.memory,
-      defaultCPUs: systemConfiguration.container.cpus,
-      defaultMemory: systemConfiguration.container.memory
-    )
-    configuration.rosetta = request.architecture == .amd64
-    configuration.labels = [
-      AppleContainerOwnership.creationOperationLabel: request.operationID.uuidString
-    ]
-    configuration.publishedPorts = try Parser.publishPorts(
-      request.publishedPorts.map(\.appleSpecification)
-    )
-    guard configuration.publishedPorts.count <= 64 else {
-      throw ContainerCreationValidationError.tooManyPortPublications
-    }
-    guard !configuration.publishedPorts.hasOverlaps() else {
-      throw ContainerCreationValidationError.duplicatePortPublication
-    }
-    configuration.ssh = request.forwardSSHAgent
-    configuration.readOnly = request.readOnlyRootFilesystem
-    configuration.useInit = request.useInitProcess
-    configuration.stopSignal = imageConfiguration?.stopSignal
-
-    guard let builtinNetwork = try await infrastructureService.builtinNetworkResource() else {
-      throw AppleContainerServiceError.builtinNetworkUnavailable
-    }
-    let hostname = systemConfiguration.dns.domain.map { "\(request.name).\($0)." } ?? request.name
-    configuration.networks = [
-      AttachmentConfiguration(
-        network: builtinNetwork.id,
-        options: AttachmentOptions(hostname: hostname, macAddress: nil, mtu: 1_280)
-      )
-    ]
-    configuration.dns = .init(
-      nameservers: [],
-      domain: systemConfiguration.dns.domain,
-      searchDomains: [],
-      options: []
-    )
-
-    await relay.emit(phase: .creating, message: "Creating container")
-    try await containerClient.create(
-      configuration: configuration,
-      options: ContainerCreateOptions(autoRemove: request.removeWhenStopped),
-      kernel: kernel
-    )
-
-    try Task.checkCancellation()
-    if request.startAfterCreation {
-      await relay.emit(phase: .starting, message: "Starting container")
-      try await lifecycleService.startContainer(id: request.name)
-    }
-    try Task.checkCancellation()
-    await relay.emit(phase: .completed, message: "Container ready")
+    try await creationService.createContainer(request: request, progress: progress)
   }
 
   func inspectContainer(id: String) async throws -> ContainerInspection {
@@ -1285,24 +1101,7 @@ actor AppleContainerService: ContainerManaging {
   }
 }
 
-private enum AppleContainerServiceError: LocalizedError {
-  case containerAlreadyExists(String)
-  case builtinNetworkUnavailable
-  case containerCleanupFailed(id: String, operation: String, cleanup: String)
-
-  var errorDescription: String? {
-    switch self {
-    case .containerAlreadyExists(let name):
-      "A container named “\(name)” already exists."
-    case .builtinNetworkUnavailable:
-      "Apple’s built-in container network is unavailable."
-    case .containerCleanupFailed(let id, let operation, let cleanup):
-      "Container operation failed: \(operation) Automatic KILL and force deletion for “\(id)” also failed: \(cleanup)"
-    }
-  }
-}
-
-private actor AppleContainerProgressRelay {
+actor AppleContainerProgressRelay {
   private let handler: ContainerProgressHandler
   private var phase: ContainerOperationProgress.Phase = .preparing
   private var message = "Preparing"

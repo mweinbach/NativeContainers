@@ -8,7 +8,7 @@ private enum InfrastructureLookup<Value: Sendable>: Sendable {
   case failed
 }
 
-struct AppleInfrastructureService: InfrastructureManaging {
+struct AppleInfrastructureService: InfrastructureManaging, BuiltinNetworkProviding {
   private let infrastructureClient: any AppleInfrastructureTransport
   private let containerReader: any ContainerSnapshotReading
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator

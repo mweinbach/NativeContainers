@@ -113,6 +113,13 @@ enum AppCompositionRoot {
       )
     )
     let machineLifecycleService = AppleMachineLifecycleService(machineClient: machineClient)
+    let creationService = AppleContainerCreationService(
+      containerClient: containerClient,
+      infrastructureService: infrastructureService,
+      lifecycleService: lifecycleService,
+      ownedContainerRecovery: recoveryService,
+      runtimeMutationCoordinator: mutationCoordinator
+    )
     let containerService = AppleContainerService(
       containerClient: containerClient,
       machineClient: machineClient,
@@ -125,6 +132,7 @@ enum AppCompositionRoot {
       toolService: toolService,
       terminalService: terminalService,
       machineLifecycleService: machineLifecycleService,
+      creationService: creationService,
       ownedContainerRecovery: recoveryService,
       runtimeMutationCoordinator: mutationCoordinator
     )
@@ -132,7 +140,7 @@ enum AppCompositionRoot {
     return AppServices(
       inventory: inventoryService,
       containerLifecycle: lifecycleService,
-      containerCreator: containerService,
+      containerCreator: creationService,
       containerInspector: inspectionService,
       containerTools: toolService,
       containerTerminal: terminalService,

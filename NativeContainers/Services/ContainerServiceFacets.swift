@@ -1,7 +1,12 @@
+import ContainerResource
 import Foundation
 
 protocol ContainerInventoryLoading: Sendable {
   func loadInventory() async throws -> ContainerInventory
+}
+
+protocol BuiltinNetworkProviding: Sendable {
+  func builtinNetworkResource() async throws -> NetworkResource?
 }
 
 protocol ContainerCreating: Sendable {
