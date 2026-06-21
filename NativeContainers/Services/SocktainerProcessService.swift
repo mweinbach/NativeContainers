@@ -213,7 +213,7 @@ actor SocktainerProcessService: SocktainerProcessManaging {
     }
     stopRequested = true
     runtimeState = .stopping
-    try await terminateOwnedProcess(session, gracefulFirst: true)
+    await terminateOwnedProcess(session, gracefulFirst: true)
     guard !session.isRunning else {
       throw DockerCompatibilityError.processDidNotExitAfterKill
     }
@@ -226,7 +226,7 @@ actor SocktainerProcessService: SocktainerProcessManaging {
     }
     stopRequested = true
     runtimeState = .stopping
-    try await terminateOwnedProcess(session, gracefulFirst: false)
+    await terminateOwnedProcess(session, gracefulFirst: false)
     guard !session.isRunning else {
       throw DockerCompatibilityError.processDidNotExitAfterKill
     }

@@ -478,6 +478,8 @@ Updated: 2026-06-21.
 - Project lifecycle is explicitly policy-blocked until a reviewed Compose model
   supplies desired replicas, orphan handling, volume intent, and frozen resource
   identities. No project mutation action was added.
+- The full Xcode plan passes all 479 outcomes: 468 deterministic tests passed
+  and 11 explicitly gated live tests skipped, with no failures.
 
 ## Known configuration issue
 
