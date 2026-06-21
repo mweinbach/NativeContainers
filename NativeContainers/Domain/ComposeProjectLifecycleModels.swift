@@ -58,6 +58,21 @@ struct ComposeProjectSourceSummary: Equatable, Sendable {
   let fileIdentity: ComposeProjectSourceFileIdentity
 }
 
+struct ComposeProjectSourceLease: Equatable, Identifiable, Sendable {
+  let id: UUID
+  let directoryURL: URL
+  let composeFileURL: URL
+  let summary: ComposeProjectSourceSummary
+}
+
+struct ComposeRenderedConfiguration: Equatable, Sendable {
+  let fullConfiguration: Data
+  let activeConfiguration: Data
+  let fullConfigurationSHA256: String
+  let activeConfigurationSHA256: String
+  let composeReleaseVersion: String
+}
+
 enum ComposeDesiredResourceKind: String, Equatable, Sendable {
   case volume
   case network
@@ -99,6 +114,11 @@ struct ComposeDesiredState: Equatable, Sendable {
   }
 }
 
+struct ComposeDesiredStateReview: Equatable, Sendable {
+  let desiredState: ComposeDesiredState
+  let issues: [ComposeProjectReviewIssue]
+}
+
 enum ComposeProjectReviewIssueSeverity: Int, Equatable, Sendable {
   case warning
   case blocker
@@ -112,6 +132,7 @@ enum ComposeProjectReviewIssueCode: String, Equatable, Sendable {
   case resourceIdentityConflict
   case crossProjectConsumer
   case observedProjectDrift
+  case executionPolicy
 }
 
 struct ComposeProjectReviewIssue: Equatable, Identifiable, Sendable {
@@ -189,9 +210,9 @@ struct ComposeProjectPlan: Equatable, Identifiable, Sendable {
   let options: ComposeProjectReviewOptions
   let source: ComposeProjectSourceSummary
   let desiredState: ComposeDesiredState
-  let fullConfiguration: Data
   let fullConfigurationSHA256: String
   let activeConfigurationSHA256: String
+  let composeReleaseVersion: String
   let observedIdentity: ComposeProjectInventoryIdentity
   let issues: [ComposeProjectReviewIssue]
   let affectedContainerIDs: [String]
