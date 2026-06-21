@@ -333,7 +333,7 @@ enum ContainerBuilderSafetyPolicy {
     }
   }
 
-  private static func identityMismatches(
+  static func identityMismatches(
     _ observed: ContainerBuilderIdentitySnapshot?,
     requirements: ContainerBuilderIdentityRequirements
   ) -> [ContainerBuilderIdentityMismatch] {

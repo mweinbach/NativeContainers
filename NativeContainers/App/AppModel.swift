@@ -254,6 +254,12 @@ final class AppModel {
     }
   }
 
+  func makeContainerBuilderManagementModel() -> ContainerBuilderManagementModel {
+    ContainerBuilderManagementModel(service: services.builder) { [weak self] in
+      await self?.refresh()
+    }
+  }
+
   func makeRegistrySettingsModel() -> RegistrySettingsModel {
     RegistrySettingsModel(service: services.registry)
   }

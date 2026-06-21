@@ -15,6 +15,7 @@ struct AppServices: Sendable {
   let networks: any NetworkManaging
   let browser: any ContainerBrowserResolving
   let imageBuild: any ImageBuilding
+  let builder: any ContainerBuilderManaging
   let registry: any RegistryManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   let restoreImageDiscovery: any MacRestoreImageDiscovering
@@ -34,6 +35,7 @@ struct AppServices: Sendable {
     networks: any NetworkManaging,
     browser: any ContainerBrowserResolving,
     imageBuild: any ImageBuilding,
+    builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
     registry: any RegistryManaging,
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     restoreImageDiscovery: any MacRestoreImageDiscovering,
@@ -52,6 +54,7 @@ struct AppServices: Sendable {
     self.networks = networks
     self.browser = browser
     self.imageBuild = imageBuild
+    self.builder = builder
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
     self.restoreImageDiscovery = restoreImageDiscovery
@@ -61,6 +64,7 @@ struct AppServices: Sendable {
   init(
     containerService: any ContainerManaging,
     imageBuild: any ImageBuilding,
+    builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
     registry: any RegistryManaging,
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     restoreImageDiscovery: any MacRestoreImageDiscovering,
@@ -79,6 +83,7 @@ struct AppServices: Sendable {
     networks = containerService
     browser = containerService
     self.imageBuild = imageBuild
+    self.builder = builder
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
     self.restoreImageDiscovery = restoreImageDiscovery
@@ -89,6 +94,7 @@ struct AppServices: Sendable {
 enum AppCompositionRoot {
   static func live() -> AppServices {
     let mutationCoordinator = RuntimeMutationCoordinator.shared
+    let buildExecutionCoordinator = RuntimeMutationCoordinator.imageBuilds
     let containerClient = ContainerClient()
     let machineClient = MachineClient()
     let infrastructureClient = AppleInfrastructureClient()
@@ -128,6 +134,10 @@ enum AppCompositionRoot {
       )
     )
     let machineLifecycleService = AppleMachineLifecycleService(machineClient: machineClient)
+    let builderManagementService = AppleContainerBuilderManagementService(
+      runtimeMutationCoordinator: mutationCoordinator,
+      buildExecutionCoordinator: buildExecutionCoordinator
+    )
     let creationService = AppleContainerCreationService(
       containerClient: containerClient,
       attachmentService: attachmentService,
@@ -149,8 +159,10 @@ enum AppCompositionRoot {
       networks: infrastructureService,
       browser: infrastructureService,
       imageBuild: AppleContainerBuildService(
-        runtimeMutationCoordinator: mutationCoordinator
+        runtimeMutationCoordinator: mutationCoordinator,
+        buildExecutionCoordinator: buildExecutionCoordinator
       ),
+      builder: builderManagementService,
       registry: AppleRegistryService(),
       virtualMachineLibrary: VirtualMachineLibrary(),
       restoreImageDiscovery: MacRestoreImageService(),
