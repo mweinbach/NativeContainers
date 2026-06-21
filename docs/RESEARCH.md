@@ -422,6 +422,28 @@ The installed Apple documentation confirms:
 
 The UI and marketing must not collapse those four claims into one.
 
+### Socktainer 1.0.0 integration audit — 2026-06-21
+
+- [Socktainer v1.0.0](https://github.com/socktainer/socktainer/releases/tag/v1.0.0)
+  pins `apple/container` 1.0.0 and Containerization 0.33.3, matching this app’s
+  native runtime generation. Its advertised Docker Engine compatibility remains
+  partial API v1.51 rather than a complete Docker daemon contract.
+- The release zip is pinned by SHA-256
+  `911a207bb791f5ea1592a329938600680263b68022552641f21d1d172d591e37`.
+  The contained arm64 executable passed strict code-signature verification and
+  is signed with Developer ID Application team `HYSCB8KRL2`.
+- The v1.0.0 source binds only to `$HOME/.socktainer/container.sock`; it does not
+  expose a product-specific socket argument. The release tag also does not
+  create a Docker context even though later `main` documentation describes
+  automatic context registration. NativeContainers must therefore pin behavior
+  to the release tag, validate the existing socket directory before launch, and
+  create a separate `nativecontainers` Docker context explicitly rather than
+  relying on moving-branch behavior.
+- Runtime download/install, process ownership, socket collision handling,
+  context review, TERM-to-KILL shutdown, and launch-on-login remain a dedicated
+  compatibility-service slice. They must not be folded into the native Apple
+  container service graph or represented as built-in Engine API support.
+
 Apple maintainers treat the Engine API as a separate service/plugin concern.
 [Socktainer](https://github.com/socktainer/socktainer) is an active Apache-2.0
 bridge for part of Docker API v1.51 and is the preferred starting point. A

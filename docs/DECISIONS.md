@@ -622,3 +622,33 @@ completion is reported separately from callback cleanup: the VM may be stopped,
 but ownership remains pinned until that callback quiesces. Terminal delegate
 events are deferred across the operation, and ownership is released exactly
 once after persistence cleanup.
+
+## ADR-026: Derive exact workspace navigation from live inventory
+
+**Status:** Accepted — 2026-06-21
+
+The app uses one typed `WorkspaceRoute` for both sidebar destinations and exact
+container, image, volume, network, Linux-machine, and macOS-VM selection. A
+focused `WorkspaceResourceCatalog` maps the current inventory snapshot into
+stable search entries and ranks normalized exact, prefix, word-prefix, and
+substring matches deterministically. Localized resource-kind titles are indexed
+alongside English CLI aliases. The catalog is derived state and is never
+persisted; Apple’s services and the VM bundle library remain authoritative.
+
+`WorkspaceNavigationModel` owns the active route, Quick Open presentation, and
+prepared results so list views do not each invent incompatible selection state.
+When refresh removes the selected resource, the route falls back to that
+resource type’s top-level destination rather than silently selecting an
+unrelated identity. Missing-resource reconciliation runs only after the owning
+inventory service completes successfully. Transient service failures may clear
+the visible catalog but retain the exact route for a later recovery refresh.
+Views may then select the first current item using the same route API. Command-K
+and Overview links are navigation-only and cannot perform mutations.
+
+Navigation and Quick Open presentation are app-scoped, so NativeContainers
+declares one unique main `Window` instead of advertising independent windows
+that would silently share route and sheet state.
+
+The image-build navigation guard applies to every route, not only sidebar
+clicks. A reviewed plan or active build refuses Quick Open and Overview routes
+outside Builds until the owning operation is discarded or completed.

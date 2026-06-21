@@ -43,6 +43,9 @@ must leave a usable, test-backed product slice.
       handoff.
 - [ ] Signed and notarized privileged helper for optional host-access mutation.
 - [x] Registry login/list/logout through Apple’s shared Keychain domain.
+- [x] App-wide Command-K resource navigator with deterministic search and exact
+      deep links for containers, images, volumes, networks, Linux machines,
+      and macOS VMs.
 
 ## M2 — Developer workflow and Docker compatibility
 

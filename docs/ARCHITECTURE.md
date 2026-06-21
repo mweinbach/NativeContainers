@@ -346,6 +346,22 @@ Feature views take narrow values. AppKit bridges are intentionally narrow:
 `VZVirtualMachineView` for VM display. SwiftUI remains the source of truth for
 selection and lifecycle commands.
 
+Workspace navigation is a separate focused slice. `WorkspaceRoute` represents
+both top-level destinations and exact resource identities. A pure
+`WorkspaceResourceCatalog` derives searchable entries from the current Apple
+inventory and VM library without persisting a second index. The main-actor
+`WorkspaceNavigationModel` owns the active route, prepared search results, and
+Quick Open presentation. Inventory replacement reconciles a missing exact
+resource back to its safe top-level destination only after that resource's
+service completed an authoritative refresh. A transient runtime failure may
+clear visible entries, but it preserves the pending exact route so recovery can
+restore the same selection. Localized resource-kind titles join stable runtime
+identities and familiar CLI aliases in the search index. Overview links, list
+selection, sidebar state, and Command-K therefore use one route, while a
+reviewed or active build still locks every path away from Builds. The app uses
+one unique main `Window`, matching this app-scoped navigation ownership rather
+than sharing presentation state across an implied multi-window group.
+
 ## Persistence and safety
 
 - Inventory refreshes are read-only and can run concurrently.

@@ -7,8 +7,8 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 372 test declarations. The current full
-  app-hosted Xcode run passed all 362 deterministic tests, with ten destructive
+- The suite currently contains 414 test declarations. The current full
+  app-hosted Xcode run passed all 404 deterministic tests, with ten destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes Linux-machine recovery/XPC/inventory coverage, build-history
   privacy/durability, short-pipe framing, builder mount normalization, and
@@ -23,7 +23,17 @@ Updated: 2026-06-21.
   Linux-machine creation form, machine command runner, macOS VM list,
   restore-image preparation sheet, macOS installation sheet, and
   generation-keyed macOS runtime console render successfully in Xcode Preview
-  in light mode.
+  in light mode. The app-wide Quick Open sheet, actionable Overview, and
+  initial-selection paths for Volumes and Networks also render successfully.
+- A typed workspace navigator now unifies sidebar state, exact resource
+  selection, Overview links, and Command-K search. Its pure catalog derives
+  stable entries from live inventory, ranks exact/prefix/word/substring matches,
+  indexes localized kind names, and stores no secondary index. An authoritative
+  refresh reconciles a removed resource back to its safe category, while a
+  transient service failure preserves the pending exact route through recovery.
+  Reviewed or active builds refuse every route away from Builds, including
+  Quick Open. Navigation owns one unique main window rather than leaking app-wide
+  route and sheet state across multiple scenes.
 - A live Xcode snippet called `AppleContainerService.loadInventory()` against
   the installed XPC services and returned the 1.0.0 server plus live container,
   image, volume, network, and machine counts.
@@ -379,7 +389,7 @@ Updated: 2026-06-21.
 - The History preview renders successfully in Xcode after replacing the macOS
   `List` path that crashed the current SDK’s outline diff with a stable
   `ScrollView`/`LazyVStack` presentation, and remains covered by the current
-  372-test Xcode run.
+  414-test Xcode run.
 
 ## Known configuration issue
 
