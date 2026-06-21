@@ -31,7 +31,7 @@ struct ContainerTerminalModelTests {
     #expect(output == Data([0x1B, 0x5B, 0x32, 0x4A]) + Data("ready\r\n".utf8))
     #expect(model.errorMessage == nil)
     #expect(await recorder.containerIDs == ["dev"])
-    #expect(await recorder.requests.first?.executable == "/bin/sh")
+    #expect(await recorder.requests.first?.program == .preferredShell)
   }
 
   @Test

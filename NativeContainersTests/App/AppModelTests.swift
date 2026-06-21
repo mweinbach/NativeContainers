@@ -1034,7 +1034,11 @@ struct AppModelTests {
   @Test
   func toolsModelExecutesCommandAndCopiesBothDirections() async throws {
     let service = MockContainerService(inventory: emptyInventory())
-    let model = ContainerToolsModel(containerID: "web", service: service)
+    let model = ContainerToolsModel(
+      containerID: "web",
+      tooling: service,
+      shellDiscovery: UnavailableContainerShellService()
+    )
     let command = try ContainerCommandRequest(
       executable: "/bin/echo",
       arguments: ["hello"],

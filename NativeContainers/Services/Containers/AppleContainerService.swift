@@ -2,19 +2,21 @@ import ContainerAPIClient
 import ContainerResource
 import Foundation
 
-actor AppleContainerService: ContainerManaging {
+actor AppleContainerService: ContainerManaging, ContainerShellDiscovering {
   private let inventoryService: AppleRuntimeInventoryService
   private let infrastructureService: AppleInfrastructureService
   private let attachmentService: AppleContainerAttachmentService
   private let lifecycleService: AppleContainerLifecycleService
   private let inspectionService: AppleContainerInspectionService
   private let toolService: AppleContainerToolService
+  private let shellDiscovery: any ContainerShellDiscovering
   private let terminalService: AppleContainerTerminalService
   private let creationService: AppleContainerCreationService
   private let imageService: AppleImageService
 
   init(
     terminalProcessLauncher: (any ContainerTerminalProcessLaunching)? = nil,
+    shellDiscovery: (any ContainerShellDiscovering)? = nil,
     containerClient: ContainerClient = ContainerClient(),
     machineInventory: any LinuxMachineInventoryLoading = AppleLinuxMachineInventoryService(),
     infrastructureClient: any AppleInfrastructureTransport = AppleInfrastructureClient(),
@@ -60,11 +62,20 @@ actor AppleContainerService: ContainerManaging {
       )
     let resolvedInspectionService =
       inspectionService ?? AppleContainerInspectionService(containerClient: containerClient)
+    let resolvedShellDiscovery =
+      shellDiscovery
+      ?? AppleContainerShellService(
+        configurationLoader: AppleContainerShellConfigurationLoader(
+          snapshotReader: containerReader
+        )
+      )
     let resolvedToolService =
-      toolService ?? AppleContainerToolService(containerClient: containerClient)
+      toolService
+      ?? AppleContainerToolService(containerClient: containerClient)
     let resolvedTerminalService =
       terminalService
       ?? AppleContainerTerminalService(
+        shellDiscovery: resolvedShellDiscovery,
         terminalProcessLauncher: terminalProcessLauncher
           ?? AppleContainerTerminalProcessLauncher(containerClient: containerClient)
       )
@@ -87,6 +98,7 @@ actor AppleContainerService: ContainerManaging {
     self.lifecycleService = resolvedLifecycleService
     self.inspectionService = resolvedInspectionService
     self.toolService = resolvedToolService
+    self.shellDiscovery = resolvedShellDiscovery
     self.terminalService = resolvedTerminalService
     self.creationService =
       creationService
@@ -305,6 +317,10 @@ actor AppleContainerService: ContainerManaging {
 
   func deleteContainer(id: String) async throws {
     try await lifecycleService.deleteContainer(id: id)
+  }
+
+  func discoverShell(in id: String) async throws -> ContainerShell {
+    try await shellDiscovery.discoverShell(in: id)
   }
 
   func executeCommand(

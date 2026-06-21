@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 struct ContainerExecView: View {
   @Environment(\.dismiss) private var dismiss
   @State private var model: ContainerToolsModel
-  @State private var executable = "/bin/sh"
-  @State private var argumentsText = "-lc\necho hello from $(hostname)"
+  @State private var executable = ""
+  @State private var argumentsText = "-c\necho hello from the container"
   @State private var environmentText = ""
   @State private var workingDirectory = ""
   @State private var timeoutSeconds = 30
@@ -21,8 +21,16 @@ struct ContainerExecView: View {
     NavigationStack {
       Form {
         Section("Command") {
-          TextField("Executable", text: $executable)
-            .font(.body.monospaced())
+          TextField(
+            "Executable",
+            text: $executable,
+            prompt: Text("Enter executable")
+          )
+          .font(.body.monospaced())
+          ContainerShellDetectionStatus(
+            isDetecting: model.isDetectingShell,
+            message: model.shellDetectionMessage
+          )
           LabeledContent("Arguments") {
             TextEditor(text: $argumentsText)
               .font(.body.monospaced())
@@ -122,6 +130,12 @@ struct ContainerExecView: View {
     }
     .frame(minWidth: 650, minHeight: 630)
     .interactiveDismissDisabled(model.isRunningCommand)
+    .task {
+      guard executable.isEmpty else { return }
+      if let shell = await model.detectShell(), executable.isEmpty {
+        executable = shell.executable
+      }
+    }
   }
 
   private func runCommand() {
@@ -158,6 +172,22 @@ struct ContainerExecView: View {
     let components = duration.components
     let seconds = Double(components.seconds) + Double(components.attoseconds) / 1e18
     return seconds.formatted(.number.precision(.fractionLength(2))) + " s"
+  }
+}
+
+private struct ContainerShellDetectionStatus: View {
+  let isDetecting: Bool
+  let message: String?
+
+  var body: some View {
+    if isDetecting {
+      ProgressView("Detecting the container shell…")
+        .controlSize(.small)
+    } else if let message {
+      Label(message, systemImage: "info.circle")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
   }
 }
 

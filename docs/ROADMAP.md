@@ -106,7 +106,9 @@ must leave a usable, test-backed product slice.
 - [x] Native completion notifications for image builds, restore-image
       preparation, and macOS installation, with system-owned permission state
       and typed workspace routing from notification responses.
-- [ ] Shell discovery and fallback beyond `/bin/sh`.
+- [x] Typed container-shell discovery that prefers the container `SHELL` and
+      shell init process, then probes bounded common-shell fallbacks before
+      reporting that the image has no supported interactive shell.
 - [ ] Detachable terminal windows, tabs, saved shell presets, and session
       restoration.
 

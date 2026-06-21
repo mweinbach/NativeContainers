@@ -67,14 +67,32 @@ protocol ContainerLifecycleManaging: Sendable {
   func deleteContainer(id: String) async throws
 }
 
-protocol ContainerTooling: Sendable {
+protocol ContainerCommandRunning: Sendable {
   func executeCommand(
     in id: String,
     request: ContainerCommandRequest
   ) async throws -> ContainerCommandResult
+}
+
+protocol ContainerFileTransferring: Sendable {
   func copyIntoContainer(id: String, source: URL, destination: String) async throws
   func copyFromContainer(id: String, source: String, destination: URL) async throws
 }
+
+protocol ContainerShellDiscovering: Sendable {
+  func discoverShell(in id: String) async throws -> ContainerShell
+}
+
+struct UnavailableContainerShellService: ContainerShellDiscovering {
+  func discoverShell(in id: String) async throws -> ContainerShell {
+    throw ContainerShellDiscoveryError.unavailable(id)
+  }
+}
+
+protocol ContainerTooling:
+  ContainerCommandRunning,
+  ContainerFileTransferring
+{}
 
 protocol ContainerTerminalOpening: Sendable {
   func openTerminal(

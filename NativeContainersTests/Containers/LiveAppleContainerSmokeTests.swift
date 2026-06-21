@@ -142,7 +142,7 @@ struct LiveAppleContainerSmokeTests {
       imageReference: "docker.io/library/alpine:3.21",
       cpuCount: 1,
       memoryBytes: 256 * ContainerCreationRequest.bytesPerMiB,
-      arguments: ["/bin/sh", "-c", "while :; do sleep 3600; done"],
+      arguments: ["/bin/sleep", "3600"],
       startAfterCreation: true
     )
     var session: (any ContainerTerminalSession)?
@@ -150,10 +150,12 @@ struct LiveAppleContainerSmokeTests {
 
     do {
       try await service.createContainer(request: request) { _ in }
+      let shell = try await service.discoverShell(in: id)
+      #expect(shell == ContainerShell(executable: "/bin/ash", source: .fallback))
       let openedSession = try await service.openTerminal(
         in: id,
         request: ContainerTerminalRequest(
-          executable: "/bin/sh",
+          program: .executable(shell.executable),
           arguments: [
             "-c",
             """

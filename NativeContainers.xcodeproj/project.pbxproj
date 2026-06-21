@@ -32,6 +32,10 @@
 		1F5E639D2FE85D0C00A430FF /* AppNotificationSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E639C2FE85D0C00A430FF /* AppNotificationSettingsSection.swift */; };
 		1F5E639F2FE85D4F00A430FF /* AppNotificationTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E639E2FE85D4F00A430FF /* AppNotificationTestSupport.swift */; };
 		1F5E63A12FE85D6500A430FF /* AppNotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63A02FE85D6500A430FF /* AppNotificationTests.swift */; };
+		1F5E63A32FE860BF00A430FF /* ContainerShellModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63A22FE860BF00A430FF /* ContainerShellModels.swift */; };
+		1F5E63A52FE860BF00A430FF /* AppleContainerShellService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63A42FE860BF00A430FF /* AppleContainerShellService.swift */; };
+		1F5E63A72FE8612700A430FF /* AppleContainerShellServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63A62FE8612700A430FF /* AppleContainerShellServiceTests.swift */; };
+		1F5E63A92FE8616300A430FF /* ContainerToolsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63A82FE8616300A430FF /* ContainerToolsModelTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -493,6 +497,10 @@
 		1F5E639C2FE85D0C00A430FF /* AppNotificationSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationSettingsSection.swift; sourceTree = "<group>"; };
 		1F5E639E2FE85D4F00A430FF /* AppNotificationTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationTestSupport.swift; sourceTree = "<group>"; };
 		1F5E63A02FE85D6500A430FF /* AppNotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationTests.swift; sourceTree = "<group>"; };
+		1F5E63A22FE860BF00A430FF /* ContainerShellModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerShellModels.swift; sourceTree = "<group>"; };
+		1F5E63A42FE860BF00A430FF /* AppleContainerShellService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleContainerShellService.swift; sourceTree = "<group>"; };
+		1F5E63A62FE8612700A430FF /* AppleContainerShellServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleContainerShellServiceTests.swift; sourceTree = "<group>"; };
+		1F5E63A82FE8616300A430FF /* ContainerToolsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerToolsModelTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1025,6 +1033,7 @@
 				1FEC47392FE8388D00DC60B2 /* VirtualMachineDiskImageReplacementModels.swift */,
 				1FEC47552FE849FA00DC60B2 /* LaunchAtLoginModels.swift */,
 				1F5E63962FE85C7700A430FF /* AppNotificationModels.swift */,
+				1F5E63A22FE860BF00A430FF /* ContainerShellModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1098,6 +1107,7 @@
 				1F9D2ADE2FE760400076F5B9 /* AppleRuntimeInventoryService.swift */,
 				18FEBB337510AA54210882BB /* ContainerManaging.swift */,
 				1F9D2AD82FE75FC30076F5B9 /* ContainerServiceFacets.swift */,
+				1F5E63A42FE860BF00A430FF /* AppleContainerShellService.swift */,
 			);
 			path = Containers;
 			sourceTree = "<group>";
@@ -1388,6 +1398,8 @@
 				E3BC90DD8367F9DF0D051650 /* ContainerTerminalTests.swift */,
 				D872832B249A2CC9F3C873EF /* LiveAppleContainerSmokeTests.swift */,
 				1F9D2AE42FE761110076F5B9 /* OwnedContainerRecoveryServiceTests.swift */,
+				1F5E63A62FE8612700A430FF /* AppleContainerShellServiceTests.swift */,
+				1F5E63A82FE8616300A430FF /* ContainerToolsModelTests.swift */,
 			);
 			path = Containers;
 			sourceTree = "<group>";
@@ -1909,6 +1921,7 @@
 				1F9D2B052FE768E10076F5B9 /* ContainerAttachmentModelsTests.swift in Sources */,
 				1F9D2AFF2FE766480076F5B9 /* AppleImageServiceTests.swift in Sources */,
 				1F9D2C712FE7F7E60076F5B9 /* CopyfileVirtualMachineBundleTransferTests.swift in Sources */,
+				1F5E63A72FE8612700A430FF /* AppleContainerShellServiceTests.swift in Sources */,
 				1F9D2C4D2FE7EA920076F5B9 /* ComposeOperationJournalTests.swift in Sources */,
 				1F9D2B782FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift in Sources */,
 				1F9D2BF62FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift in Sources */,
@@ -1942,6 +1955,7 @@
 				1F9D2B922FE7A19D0076F5B9 /* RestoreImageImportServiceTests.swift in Sources */,
 				1F9D2C1C2FE7D3150076F5B9 /* DockerComposeClientInstallServiceTests.swift in Sources */,
 				1F9D2BEA2FE7C3A20076F5B9 /* DockerContextServiceTests.swift in Sources */,
+				1F5E63A92FE8616300A430FF /* ContainerToolsModelTests.swift in Sources */,
 				1FEC46D12FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift in Sources */,
 				1F9D2ACF2FE754CA0076F5B9 /* InfrastructureManagementTests.swift in Sources */,
 				A84C9E71E18B6F05297928CC /* MacRestoreImagePreparationModelTests.swift in Sources */,
@@ -2130,6 +2144,7 @@
 				1FEC46DF2FE8249200DC60B2 /* VirtualMachineDiskImageMaintenanceModel.swift in Sources */,
 				AEF8A0C79D65EBF3BC79F55A /* ImageInspectorView.swift in Sources */,
 				09827E0EC05BF4BA13CA3F8B /* ImageManagementModels.swift in Sources */,
+				1F5E63A52FE860BF00A430FF /* AppleContainerShellService.swift in Sources */,
 				1F9D2C732FE7F9710076F5B9 /* VirtualMachineTransferModels.swift in Sources */,
 				1F9D2C392FE7E7670076F5B9 /* ComposeLifecyclePlanner.swift in Sources */,
 				1F9D2BA22FE7AA0C0076F5B9 /* MacVirtualMachineRuntimeOwnershipStore.swift in Sources */,
@@ -2199,6 +2214,7 @@
 				1F9D2AF72FE765700076F5B9 /* AppleContainerCreationService.swift in Sources */,
 				BEF88012C7F13A21B4B2C57E /* RestoreImageDownloadService.swift in Sources */,
 				1F9D2B8C2FE7A15F0076F5B9 /* MacRestoreImagePreparationView.swift in Sources */,
+				1F5E63A32FE860BF00A430FF /* ContainerShellModels.swift in Sources */,
 				1F9D2B482FE78A460076F5B9 /* ImageBuildOutputService.swift in Sources */,
 				1F9D2BE02FE7C33B0076F5B9 /* SocktainerInstallService.swift in Sources */,
 				1F9D2B292FE771A70076F5B9 /* ContainerBuilderManagementView.swift in Sources */,

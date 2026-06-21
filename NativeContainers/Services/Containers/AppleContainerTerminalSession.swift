@@ -12,7 +12,7 @@ protocol ContainerTerminalProcess: Sendable {
 protocol ContainerTerminalProcessLaunching: Sendable {
   func makeProcess(
     containerID: String,
-    request: ContainerTerminalRequest,
+    request: ResolvedContainerTerminalRequest,
     standardInput: FileHandle,
     standardOutput: FileHandle
   ) async throws -> any ContainerTerminalProcess
@@ -32,7 +32,7 @@ struct AppleContainerTerminalProcessLauncher: ContainerTerminalProcessLaunching 
 
   func makeProcess(
     containerID: String,
-    request: ContainerTerminalRequest,
+    request: ResolvedContainerTerminalRequest,
     standardInput: FileHandle,
     standardOutput: FileHandle
   ) async throws -> any ContainerTerminalProcess {

@@ -277,6 +277,13 @@ Updated: 2026-06-21.
   through bounded, lossless backpressure into a pinned SwiftTerm 1.13.0 AppKit
   surface; input, resize, Control-C/Control-D, explicit signals, title, working
   directory, scrollback, copy, and paste are wired without a CLI subprocess.
+- Ordinary container terminals no longer assume `/bin/sh`. A shared typed shell
+  service prefers the final `SHELL` environment value, recognizes a shell used
+  by the container init process, and then probes bounded common-shell candidates.
+  The terminal resolves automatic requests through that service, while the exec
+  sheet pre-fills the same detected executable and still permits an explicit
+  override. Linux machines continue to delegate login-shell selection to
+  Apple’s machine init helper.
 - Terminal shutdown closes stdin, sends hangup, allows a short graceful exit,
   and escalates to kill. Output recovery retains only the newest configured
   bytes, while the live stream preserves every byte. The pipe reader uses

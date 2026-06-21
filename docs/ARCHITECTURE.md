@@ -146,7 +146,8 @@ the complete runtime adapter. `AppleRuntimeInventoryService`,
 `AppleContainerAttachmentService`, `ApplePublishedSocketWorkspace`,
 `AppleContainerHostAccessService`,
 `AppleContainerLifecycleService`, `AppleContainerInspectionService`,
-`AppleContainerToolService`, `AppleContainerTerminalService`,
+`AppleContainerShellService`, `AppleContainerToolService`,
+`AppleContainerTerminalService`,
 `AppleRuntimeCommandExecutor`, `AppleImageService`,
 `AppleMachineManagementService`, `AppleLinuxMachineProcessService`,
 `AppleOwnedContainerRecoveryService`, and `AppleXPCRequestClient` own their
@@ -175,6 +176,14 @@ into SwiftTerm. Transport and rendering are separate: the service owns process,
 descriptor, signal, resize, retention, and cancellation semantics; the AppKit
 surface owns VT parsing, drawing, keyboard input, selection, and terminal
 protocol replies.
+
+Container shell choice is a separate injectable service shared by terminal and
+exec tooling. It derives ordered candidates from the container process
+configuration, probes each candidate as a bounded non-terminal child, and
+returns a typed source plus executable. Automatic terminal requests are resolved
+before they reach the process launcher, so the launcher accepts only an explicit
+executable. Persistent Linux machines intentionally bypass this policy and keep
+using Apple’s machine init helper for the configured login shell.
 
 Native builds cross a narrower `ImageBuilding` boundary. Review first copies
 the local context beneath a mode-0700 app-owned boundary, preserves the source

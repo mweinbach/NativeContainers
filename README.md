@@ -59,6 +59,9 @@ provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
 memory, and reviewed home-directory configuration. The same machines now expose
 a native login-shell terminal and bounded one-shot shell commands; stopped
 machines auto-start and provision before either workflow.
+Ordinary container terminals and the exec sheet share typed, bounded shell
+discovery instead of assuming `/bin/sh`, while preserving explicit executable
+overrides for minimal and custom images.
 
 The app is composed from narrow injectable service facets. Inventory, container
 creation and lifecycle, inspection, command tools, terminal sessions, image
@@ -66,7 +69,8 @@ management, infrastructure, attachment resolution, private socket workspace,
 host-access discovery, build-secret review/consumption, shared-builder
 management, build-history recording and persistence, machine lifecycle, bounded
 XPC/process transport, machine image preparation, machine process-target
-resolution, machine commands/terminals, canonical Compose topology derivation,
+resolution, machine commands/terminals, container shell discovery, canonical
+Compose topology derivation,
 source-pinned and isolated live Compose conformance, reviewed Compose planning,
 container/resource action execution, command execution, postcondition proof,
 owned-resource recovery, VM bundle transactions, cancellable bundle transfer,

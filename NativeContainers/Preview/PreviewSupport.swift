@@ -220,6 +220,7 @@ extension AppModel {
     let service = PreviewContainerService(inventory: inventory)
     return AppModel(
       containerService: service,
+      containerShellService: service,
       machineService: service,
       registryService: PreviewRegistryService(),
       dockerCompatibilityService: PreviewDockerCompatibilityService(),
@@ -249,6 +250,7 @@ extension AppModel {
     let service = PreviewContainerService(inventory: inventory)
     return AppModel(
       containerService: service,
+      containerShellService: service,
       machineService: service,
       registryService: PreviewRegistryService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: false),
@@ -327,7 +329,8 @@ private actor PreviewDockerComposeClientService: DockerComposeClientInstalling {
   func install() async throws {}
 }
 
-private actor PreviewContainerService: ContainerManaging, MachineManaging {
+private actor PreviewContainerService: ContainerManaging, ContainerShellDiscovering, MachineManaging
+{
   let inventory: ContainerInventory
 
   init(inventory: ContainerInventory) {
@@ -538,6 +541,9 @@ private actor PreviewContainerService: ContainerManaging, MachineManaging {
   func restartContainer(id: String) async throws {}
   func forceStopContainer(id: String) async throws {}
   func deleteContainer(id: String) async throws {}
+  func discoverShell(in id: String) -> ContainerShell {
+    ContainerShell(executable: "/bin/ash", source: .fallback)
+  }
   func executeCommand(
     in id: String,
     request: ContainerCommandRequest

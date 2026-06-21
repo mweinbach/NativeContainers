@@ -22,10 +22,15 @@ struct ContainerTerminalSize: Equatable, Sendable {
   }
 }
 
+enum ContainerTerminalProgram: Equatable, Sendable {
+  case preferredShell
+  case executable(String)
+}
+
 struct ContainerTerminalRequest: Equatable, Sendable {
   static let maximumRetentionLimit = 16 * 1_024 * 1_024
 
-  let executable: String
+  let program: ContainerTerminalProgram
   let arguments: [String]
   let environment: [ContainerEnvironmentVariable]
   let workingDirectory: String?
@@ -33,16 +38,23 @@ struct ContainerTerminalRequest: Equatable, Sendable {
   let maximumRetainedOutputBytes: Int
 
   init(
-    executable: String = "/bin/sh",
+    program: ContainerTerminalProgram = .preferredShell,
     arguments: [String] = [],
     environment: [ContainerEnvironmentVariable] = [],
     workingDirectory: String? = nil,
     initialSize: ContainerTerminalSize = .standard,
     maximumRetainedOutputBytes: Int = 1_024 * 1_024
   ) throws {
-    let executable = executable.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !executable.isEmpty else {
-      throw ContainerTerminalError.missingExecutable
+    let normalizedProgram: ContainerTerminalProgram
+    switch program {
+    case .preferredShell:
+      normalizedProgram = .preferredShell
+    case .executable(let executable):
+      let executable = executable.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !executable.isEmpty else {
+        throw ContainerTerminalError.missingExecutable
+      }
+      normalizedProgram = .executable(executable)
     }
 
     let workingDirectory = workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -56,12 +68,34 @@ struct ContainerTerminalRequest: Equatable, Sendable {
       throw ContainerTerminalError.invalidRetentionLimit
     }
 
-    self.executable = executable
+    self.program = normalizedProgram
     self.arguments = arguments
     self.environment = environment
     self.workingDirectory = workingDirectory.flatMap { $0.isEmpty ? nil : $0 }
     self.initialSize = initialSize
     self.maximumRetainedOutputBytes = maximumRetainedOutputBytes
+  }
+}
+
+struct ResolvedContainerTerminalRequest: Equatable, Sendable {
+  let executable: String
+  let arguments: [String]
+  let environment: [ContainerEnvironmentVariable]
+  let workingDirectory: String?
+  let initialSize: ContainerTerminalSize
+  let maximumRetainedOutputBytes: Int
+
+  init(request: ContainerTerminalRequest, executable: String) throws {
+    let executable = executable.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !executable.isEmpty else {
+      throw ContainerTerminalError.missingExecutable
+    }
+    self.executable = executable
+    arguments = request.arguments
+    environment = request.environment
+    workingDirectory = request.workingDirectory
+    initialSize = request.initialSize
+    maximumRetainedOutputBytes = request.maximumRetainedOutputBytes
   }
 }
 

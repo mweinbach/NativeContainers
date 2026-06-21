@@ -161,6 +161,7 @@ final class AppModel {
 
   convenience init(
     containerService: any ContainerManaging = AppleContainerService(),
+    containerShellService: any ContainerShellDiscovering = UnavailableContainerShellService(),
     launchAtLoginService: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     notificationService: any AppNotificationManaging = UnavailableAppNotificationService(),
     composeTopologyService: any ComposeTopologyDeriving = ComposeTopologyService(),
@@ -204,6 +205,7 @@ final class AppModel {
     self.init(
       services: AppServices(
         containerService: containerService,
+        containerShell: containerShellService,
         launchAtLogin: launchAtLoginService,
         notifications: notificationService,
         composeTopology: composeTopologyService,
@@ -657,7 +659,11 @@ final class AppModel {
   }
 
   func makeContainerToolsModel(containerID: String) -> ContainerToolsModel {
-    ContainerToolsModel(containerID: containerID, service: services.containerTools)
+    ContainerToolsModel(
+      containerID: containerID,
+      tooling: services.containerTools,
+      shellDiscovery: services.containerShell
+    )
   }
 
   func makeContainerTerminalModel(containerID: String) -> ContainerTerminalModel {

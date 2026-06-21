@@ -27,6 +27,7 @@ struct AppServices: Sendable {
   let containerCreator: any ContainerCreating
   let containerInspector: any ContainerInspecting
   let containerTools: any ContainerTooling
+  let containerShell: any ContainerShellDiscovering
   let containerTerminal: any ContainerTerminalOpening
   let containerAttachments: any ContainerAttachmentEnvironmentLoading
   let machineCreator: any MachineCreating
@@ -73,6 +74,7 @@ struct AppServices: Sendable {
     containerCreator: any ContainerCreating,
     containerInspector: any ContainerInspecting,
     containerTools: any ContainerTooling,
+    containerShell: any ContainerShellDiscovering = UnavailableContainerShellService(),
     containerTerminal: any ContainerTerminalOpening,
     containerAttachments: any ContainerAttachmentEnvironmentLoading,
     machineCreator: any MachineCreating,
@@ -126,6 +128,7 @@ struct AppServices: Sendable {
     self.containerCreator = containerCreator
     self.containerInspector = containerInspector
     self.containerTools = containerTools
+    self.containerShell = containerShell
     self.containerTerminal = containerTerminal
     self.containerAttachments = containerAttachments
     self.machineCreator = machineCreator
@@ -160,6 +163,7 @@ struct AppServices: Sendable {
 
   init(
     containerService: any ContainerManaging,
+    containerShell: any ContainerShellDiscovering = UnavailableContainerShellService(),
     launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
@@ -215,6 +219,7 @@ struct AppServices: Sendable {
     containerCreator = containerService
     containerInspector = containerService
     containerTools = containerService
+    self.containerShell = containerShell
     containerTerminal = containerService
     containerAttachments = containerService
     machineCreator = machineService
@@ -260,6 +265,12 @@ enum AppCompositionRoot {
     let processClient = AppleContainerProcessXPCClient()
     let commandExecutor = AppleRuntimeCommandExecutor(processClient: processClient)
     let containerReader = AppleContainerSnapshotReader(client: containerClient)
+    let shellService = AppleContainerShellService(
+      configurationLoader: AppleContainerShellConfigurationLoader(
+        snapshotReader: containerReader
+      ),
+      commandExecutor: commandExecutor
+    )
     let inventoryService = AppleRuntimeInventoryService(
       infrastructureClient: infrastructureClient,
       containerReader: containerReader,
@@ -294,6 +305,7 @@ enum AppCompositionRoot {
       commandExecutor: commandExecutor
     )
     let terminalService = AppleContainerTerminalService(
+      shellDiscovery: shellService,
       terminalProcessLauncher: AppleContainerTerminalProcessLauncher(
         containerClient: containerClient,
         processClient: processClient
@@ -494,6 +506,7 @@ enum AppCompositionRoot {
       containerCreator: creationService,
       containerInspector: inspectionService,
       containerTools: toolService,
+      containerShell: shellService,
       containerTerminal: terminalService,
       containerAttachments: attachmentService,
       machineCreator: machineService,

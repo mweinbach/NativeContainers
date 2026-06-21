@@ -1,12 +1,15 @@
 import Foundation
 
 actor AppleContainerTerminalService: ContainerTerminalOpening {
+  private let shellDiscovery: any ContainerShellDiscovering
   private let terminalProcessLauncher: any ContainerTerminalProcessLaunching
 
   init(
+    shellDiscovery: any ContainerShellDiscovering = AppleContainerShellService(),
     terminalProcessLauncher: any ContainerTerminalProcessLaunching =
       AppleContainerTerminalProcessLauncher()
   ) {
+    self.shellDiscovery = shellDiscovery
     self.terminalProcessLauncher = terminalProcessLauncher
   }
 
@@ -19,11 +22,23 @@ actor AppleContainerTerminalService: ContainerTerminalOpening {
       throw ContainerTerminalError.invalidContainerIdentifier
     }
 
+    let executable: String
+    switch request.program {
+    case .preferredShell:
+      executable = try await shellDiscovery.discoverShell(in: id).executable
+    case .executable(let requestedExecutable):
+      executable = requestedExecutable
+    }
+    let resolvedRequest = try ResolvedContainerTerminalRequest(
+      request: request,
+      executable: executable
+    )
+
     let transport = PipeContainerTerminalTransport()
     do {
       let process = try await terminalProcessLauncher.makeProcess(
         containerID: id,
-        request: request,
+        request: resolvedRequest,
         standardInput: transport.childStandardInput,
         standardOutput: transport.childStandardOutput
       )
@@ -31,9 +46,9 @@ actor AppleContainerTerminalService: ContainerTerminalOpening {
       let session = AppleContainerTerminalSession(
         process: process,
         transport: transport,
-        maximumRetainedOutputBytes: request.maximumRetainedOutputBytes
+        maximumRetainedOutputBytes: resolvedRequest.maximumRetainedOutputBytes
       )
-      try await session.start(initialSize: request.initialSize)
+      try await session.start(initialSize: resolvedRequest.initialSize)
       return session
     } catch {
       transport.closeAll()

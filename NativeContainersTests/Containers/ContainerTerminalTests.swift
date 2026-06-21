@@ -10,7 +10,7 @@ struct ContainerTerminalTests {
     let variable = try ContainerEnvironmentVariable(key: " MODE ", value: "test")
     let size = try ContainerTerminalSize(columns: 132, rows: 43)
     let request = try ContainerTerminalRequest(
-      executable: "  /bin/zsh  ",
+      program: .executable("  /bin/zsh  "),
       arguments: ["-l"],
       environment: [variable],
       workingDirectory: "  /workspace  ",
@@ -18,14 +18,15 @@ struct ContainerTerminalTests {
       maximumRetainedOutputBytes: 4_096
     )
 
-    #expect(request.executable == "/bin/zsh")
+    #expect(request.program == .executable("/bin/zsh"))
+    #expect(try ContainerTerminalRequest().program == .preferredShell)
     #expect(request.environment == [variable])
     #expect(request.workingDirectory == "/workspace")
     #expect(request.initialSize == size)
     #expect(request.maximumRetainedOutputBytes == 4_096)
 
     #expect(throws: ContainerTerminalError.missingExecutable) {
-      try ContainerTerminalRequest(executable: "  ")
+      try ContainerTerminalRequest(program: .executable("  "))
     }
     #expect(throws: ContainerTerminalError.invalidWorkingDirectory("relative")) {
       try ContainerTerminalRequest(workingDirectory: "relative")
@@ -393,7 +394,7 @@ struct ContainerTerminalTests {
     let launcher = MockTerminalProcessLauncher(process: process)
     let service = AppleContainerService(terminalProcessLauncher: launcher)
     let request = try ContainerTerminalRequest(
-      executable: "/bin/bash",
+      program: .executable("/bin/bash"),
       arguments: ["-l"],
       initialSize: try ContainerTerminalSize(columns: 100, rows: 35)
     )
@@ -401,7 +402,10 @@ struct ContainerTerminalTests {
     let session = try await service.openTerminal(in: "  web  ", request: request)
 
     #expect(await launcher.containerIDs == ["web"])
-    #expect(await launcher.requests == [request])
+    #expect(
+      await launcher.requests
+        == [try ResolvedContainerTerminalRequest(request: request, executable: "/bin/bash")]
+    )
     #expect(await process.startCount == 1)
     #expect(await process.sizes == [request.initialSize])
 
@@ -508,7 +512,7 @@ private enum MockTerminalProcessError: Error {
 private actor MockTerminalProcessLauncher: ContainerTerminalProcessLaunching {
   private let process: any ContainerTerminalProcess
   private(set) var containerIDs: [String] = []
-  private(set) var requests: [ContainerTerminalRequest] = []
+  private(set) var requests: [ResolvedContainerTerminalRequest] = []
 
   init(process: any ContainerTerminalProcess) {
     self.process = process
@@ -516,7 +520,7 @@ private actor MockTerminalProcessLauncher: ContainerTerminalProcessLaunching {
 
   func makeProcess(
     containerID: String,
-    request: ContainerTerminalRequest,
+    request: ResolvedContainerTerminalRequest,
     standardInput: FileHandle,
     standardOutput: FileHandle
   ) async throws -> any ContainerTerminalProcess {
