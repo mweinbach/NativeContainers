@@ -60,6 +60,13 @@ Verified architecture:
 - Release 1.0.0 pins Containerization 0.33.3. Its XPC compatibility shim was
   removed and protocol negotiation is not yet available, so client/server
   versions must remain matched.
+- The installed 1.0.0 `MachineClient.setConfig(id:bootConfig:)` and matching
+  server route persist a replacement `MachineConfig` for the next boot. The
+  supported mutable CLI surface is exactly CPU count, memory, and home-mount
+  policy; disk, kernel, Rosetta, and nested virtualization are not exposed by
+  `container machine set` in this release. The route accepts only a machine ID,
+  so the app must revalidate its richer creation identity before mutation and
+  verify the resulting configuration afterward without claiming atomic CAS.
 - The runtime is supported on macOS 26+ and Apple silicon.
 
 The package remains an actively evolving open-source surface. Pinning an exact

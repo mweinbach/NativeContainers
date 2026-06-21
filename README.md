@@ -60,7 +60,10 @@ candidate has a smaller measured allocation, without claiming guaranteed
 compaction or APFS free-space recovery. Persistent Linux machines now have native
 create/start/stop/Force Stop/delete controls, cancellable first-boot user
 provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
-memory, and reviewed home-directory configuration. The same machines now expose
+memory, and reviewed home-directory configuration. Existing machines can edit
+those settings through a dedicated identity-pinned configuration service and
+native sheet; changes are verified after persistence and apply on the next
+start or restart. The same machines now expose
 a native login-shell terminal and bounded one-shot shell commands; stopped
 machines auto-start and provision before either workflow.
 Ordinary container terminals and the exec sheet share typed, bounded shell
@@ -76,8 +79,9 @@ creation and lifecycle, inspection, command tools, terminal sessions, image
 management, infrastructure, attachment resolution, private socket workspace,
 host-directory bookmark/manifest management, SSH-agent validation,
 host-access discovery, build-secret review/consumption, shared-builder
-management, build-history recording and persistence, machine lifecycle, bounded
-XPC/process transport, machine image preparation, machine process-target
+management, build-history recording and persistence, machine lifecycle and
+configuration, shared machine-snapshot mapping, bounded XPC/process transport,
+machine image preparation, machine process-target
 resolution, machine commands/terminals, container shell discovery, canonical
 Compose topology derivation,
 source-pinned and isolated live Compose conformance, reviewed Compose planning,

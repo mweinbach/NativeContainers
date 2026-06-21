@@ -116,8 +116,9 @@ must leave a usable, test-backed product slice.
 
 - [x] Create, first-boot provision, start, stop, force-stop, and perform
       revalidated stopped-only deletion of Apple container machines.
-- [x] CPU, memory, and reviewed none/read-only/read-write home-mount
-      configuration.
+- [x] Create-time and persistent CPU, memory, and reviewed
+      none/read-only/read-write home-mount configuration, with exact-identity
+      revalidation, reply reconciliation, and next-start/restart guidance.
 - [ ] Disk, kernel, Rosetta, and nested-virtualization configuration after a
       verified runtime upgrade; pinned Apple 1.0 machine config does not expose
       these controls.

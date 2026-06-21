@@ -7,8 +7,8 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 866 test declarations and 871 expanded outcomes.
-  The current full app-hosted Xcode run passed all 850 deterministic outcomes,
+- The suite currently contains 874 test declarations and 879 expanded outcomes.
+  The current full app-hosted Xcode run passed all 858 deterministic outcomes,
   with 21 destructive or external-service integrations skipped behind explicit
   live gates and no failures. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
@@ -34,7 +34,8 @@ Updated: 2026-06-21.
   entitlement remains absent. An app-hosted availability probe reports the
   Virtualization capability as available.
 - The SwiftUI overview, split container inspector, Linux-machine list,
-  Linux-machine creation form, machine command runner, macOS VM list,
+  Linux-machine creation and persistent-configuration forms, machine command
+  runner, macOS VM list,
   restore-image preparation sheet, macOS installation sheet, VM clone sheet,
   portable VM export/import sheets, and generation-keyed macOS runtime console
   render successfully in Xcode Preview
@@ -995,6 +996,32 @@ Updated: 2026-06-21.
   21 explicitly gated live tests skipped, and no outcome failed or remained
   unrun. Build-for-testing, the selected-Linux preview, a normal build, and a
   signed launch/stop also pass on `NativeContainers` / `My Mac`; launch emits
+  only the known macOS 27 beta SetStore donation-service error.
+
+## Persistent Linux machine configuration checkpoint
+
+- Apple Linux-machine CPU, memory, and none/read-only/read-write home-mount
+  values now round-trip through one shared snapshot mapper instead of separate
+  inventory and lifecycle conversions.
+- `MachineConfigurationManaging` is a dedicated composition facet backed by
+  `AppleLinuxMachineConfigurationService`. It shares the runtime mutation
+  coordinator, requires a stable creation identity, re-inspects immediately
+  before Apple’s ID-only route, and verifies the exact persisted configuration
+  after every reply.
+- Cancellation and request failures reconcile in a cancellation-independent
+  task. A committed desired state is accepted, a missing or replaced machine
+  fails explicitly, and unverifiable persistence reports an unknown outcome
+  instead of a false success or retry suggestion.
+- The native configuration sheet edits only Apple 1.0’s supported fields,
+  requires explicit confirmation for writable host-home access, and explains
+  next-start versus next-restart application. Disk, kernel, Rosetta, and nested
+  virtualization controls remain deferred because the pinned runtime does not
+  expose them.
+- Seven focused configuration-service cases plus transport, inventory,
+  composition, and observable-model regressions pass. The editor Preview,
+  build-for-testing, normal build, and signed launch/stop pass. The full Xcode
+  plan passes all 879 outcomes: 858 deterministic tests passed, 21 explicit
+  live gates skipped, and no outcome failed or remained unrun. Launch emitted
   only the known macOS 27 beta SetStore donation-service error.
 
 ## Remaining live verification gap

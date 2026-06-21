@@ -71,14 +71,22 @@ re-fetches immediately before mutation, and treats built-in networks and new
 references as hard stops. Apple remains the final atomic in-use authority.
 
 Persistent Linux machines cross separate `MachineCreating`,
-`MachineLifecycleManaging`, `MachineCommandRunning`, and
-`MachineTerminalOpening` facets. `AppleMachineManagementService` owns the
+`MachineLifecycleManaging`, `MachineConfigurationManaging`,
+`MachineCommandRunning`, and `MachineTerminalOpening` facets.
+`AppleMachineManagementService` owns the
 reviewed workflow and shared mutation lease, while
 `AppleMachineRuntimeClient` contains Apple package types,
 `AppleMachineImagePreparationService` prepares standard OCI-rootfs machines
 through public image fetch/unpack APIs without the CLI-oriented flags helper,
 `AppleMachineXPCTransport` bounds machine requests with fresh watchdog-closed
-connections. `AppleLinuxMachineProcessTargetResolver` invokes readiness and
+connections. `AppleLinuxMachineSnapshotMapper` is the single adapter from
+Apple snapshots to app identity, state, inventory, and mutable configuration.
+`AppleLinuxMachineConfigurationService` shares the runtime mutation lease,
+requires a stable creation identity, re-inspects immediately before Apple’s
+ID-only `setConfig` route, and reconciles the persisted CPU, memory, and home
+mount in a cancellation-independent task before reporting success. Running
+machines may be edited, but the UI accurately says the new boot configuration
+takes effect after restart. `AppleLinuxMachineProcessTargetResolver` invokes readiness and
 then re-inspects the complete stable machine identity to capture its fresh
 per-boot backing-container ID. `AppleLinuxMachineProcessService` constructs
 Apple's `/sbin.machine/init -s` configuration with the persisted mapped user

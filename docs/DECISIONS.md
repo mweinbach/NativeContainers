@@ -1417,3 +1417,32 @@ inside a Linux guest. NativeContainers therefore presents the exact
 `mount -t virtiofs nativecontainers /mnt/nativecontainers` workflow and the
 guest-kernel requirement instead of claiming automatic mounting or injecting a
 hidden guest agent.
+
+## ADR-051: Edit persistent-machine boot configuration through a focused reconciled service
+
+**Status:** Accepted — 2026-06-21
+
+Persistent Apple Linux-machine configuration crosses a dedicated
+`MachineConfigurationManaging` facet rather than expanding the lifecycle
+service or placing Apple package types in SwiftUI. A shared snapshot mapper owns
+the exact conversion between `MachineSnapshot`, stable app identity, runtime
+state, inventory fields, and the mutable CPU, memory, and home-mount domain.
+The composition root injects one machine transport and one runtime mutation
+coordinator into inventory, lifecycle, process, and configuration services.
+
+Every edit requires a creation timestamp, lists and inspects the exact machine
+before mutation, then sends the replacement `MachineConfig` through the bounded
+XPC transport. A successful reply is not accepted as proof: the service
+re-inspects and compares the complete requested configuration. A failed,
+cancelled, or timed-out reply triggers the same reconciliation in a detached
+task; a committed value is success, a missing or replaced machine is explicit,
+and failed verification reports an unknown outcome. This preserves the app's
+identity-safety and cancellation contracts even though Apple 1.0 exposes only
+an ID, not a conditional mutation token, so an external replacement race still
+cannot be made atomic.
+
+The editor permits Apple’s supported running-machine update and labels it as a
+next-restart change; a stopped edit applies on next start. Writable home access
+requires a separate explicit confirmation. Disk, kernel, Rosetta, and nested
+virtualization controls remain absent until the pinned runtime genuinely
+exposes them.
