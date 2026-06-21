@@ -58,6 +58,7 @@ protocol MacVirtualMachineInstallationStoring: Sendable {
 
 actor VirtualMachineLibrary:
   VirtualMachineLibraryProtocol,
+  VirtualMachineCloneStoring,
   MacVirtualMachineInstallationStoring,
   MacVirtualMachineRuntimeLeasing,
   MacVirtualMachineSharedDirectoryPersisting
@@ -74,6 +75,13 @@ actor VirtualMachineLibrary:
   static let runtimeOwnerFilename = ".runtime-owner.json"
   static let deletionTombstonePrefix = ".Deletion-"
   static let deletionTombstoneSuffix = ".partial"
+  static let cloneStagingPrefix = ".Clone-"
+  static let cloneStagingSuffix = ".partial"
+
+  private struct ActiveClone {
+    let transaction: VirtualMachineCloneTransaction
+    let runtimeLock: AdvisoryFileLockLease
+  }
 
   private let rootURL: URL
   private let fileManager: FileManager
@@ -85,6 +93,7 @@ actor VirtualMachineLibrary:
   private var operationLockLease: AdvisoryFileLockLease?
   private var operationAccessTokens = Set<UUID>()
   private var installationOperationIDs = Set<UUID>()
+  private var activeClones: [UUID: ActiveClone] = [:]
 
   init(
     rootURL: URL? = nil,
@@ -345,6 +354,89 @@ actor VirtualMachineLibrary:
     try fileManager.removeItem(at: tombstoneURL)
   }
 
+  func beginClone(id: UUID, name: String) throws -> VirtualMachineCloneTransaction {
+    try ensureRootExists()
+    let operationID = UUID()
+    try acquireOperationAccess(token: operationID)
+    var runtimeLock: AdvisoryFileLockLease?
+    var didBegin = false
+    defer {
+      if !didBegin {
+        runtimeLock?.release()
+        releaseOperationAccess(token: operationID)
+      }
+    }
+
+    let source = try installationManifest(id: id)
+    guard source.installState == .stopped else {
+      throw VirtualMachineCloneError.invalidSourceState(source.installState)
+    }
+    let sourceBundleURL = bundleURL(for: id)
+    try requireDirectory(sourceBundleURL)
+    guard
+      let acquiredRuntimeLock = try AdvisoryFileLock.acquire(
+        at: sourceBundleURL.appending(path: Self.runtimeLockFilename)
+      )
+    else {
+      throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
+    }
+    runtimeLock = acquiredRuntimeLock
+    _ = try macVirtualMachineBundleResolver.resolveRuntime(source)
+
+    let clone = try VirtualMachineManifest(cloning: source, name: name)
+    let finalBundleURL = bundleURL(for: clone.id)
+    guard !fileManager.fileExists(atPath: finalBundleURL.path) else {
+      throw VirtualMachineModelError.duplicateIdentifier(clone.id)
+    }
+    let stagingBundleURL = rootURL.appending(
+      path:
+        "\(Self.cloneStagingPrefix)\(clone.id.uuidString.lowercased())-\(operationID.uuidString.lowercased())\(Self.cloneStagingSuffix)",
+      directoryHint: .isDirectory
+    )
+    guard !fileManager.fileExists(atPath: stagingBundleURL.path) else {
+      throw VirtualMachineCloneError.invalidBundle("a clone staging bundle already exists")
+    }
+
+    let transaction = VirtualMachineCloneTransaction(
+      operationID: operationID,
+      source: source,
+      clone: clone,
+      sourceBundleURL: sourceBundleURL,
+      stagingBundleURL: stagingBundleURL,
+      finalBundleURL: finalBundleURL
+    )
+    activeClones[operationID] = ActiveClone(
+      transaction: transaction,
+      runtimeLock: acquiredRuntimeLock
+    )
+    didBegin = true
+    return transaction
+  }
+
+  func commitClone(
+    _ transaction: VirtualMachineCloneTransaction
+  ) throws -> VirtualMachineManifest {
+    _ = try activeClone(transaction)
+    try validateCloneBundle(transaction)
+    guard !fileManager.fileExists(atPath: transaction.finalBundleURL.path) else {
+      throw VirtualMachineModelError.duplicateIdentifier(transaction.clone.id)
+    }
+    try fileManager.moveItem(
+      at: transaction.stagingBundleURL,
+      to: transaction.finalBundleURL
+    )
+    finishClone(operationID: transaction.operationID)
+    return transaction.clone
+  }
+
+  func abortClone(_ transaction: VirtualMachineCloneTransaction) throws {
+    _ = try activeClone(transaction)
+    defer { finishClone(operationID: transaction.operationID) }
+    guard fileManager.fileExists(atPath: transaction.stagingBundleURL.path) else { return }
+    try requireDirectory(transaction.stagingBundleURL)
+    try fileManager.removeItem(at: transaction.stagingBundleURL)
+  }
+
   func acquireMacOSRuntime(id: UUID) throws -> MacVirtualMachineRuntimeLease {
     try ensureRootExists()
     let accessToken = UUID()
@@ -601,6 +693,7 @@ actor VirtualMachineLibrary:
     defer { releaseOperationAccess(token: recoveryToken) }
 
     try removeDeletionTombstones()
+    try removeCloneStagingBundles()
     for var manifest in try list() {
       try removeOrphanedInstallationStagingDirectories(id: manifest.id)
       let installedDirectory = installationInstalledDirectory(id: manifest.id)
@@ -632,6 +725,69 @@ actor VirtualMachineLibrary:
       throw VirtualMachineModelError.requiresMacOSGuest(id)
     }
     return manifest
+  }
+
+  private func activeClone(
+    _ transaction: VirtualMachineCloneTransaction
+  ) throws -> ActiveClone {
+    guard let active = activeClones[transaction.operationID],
+      active.transaction == transaction
+    else {
+      throw VirtualMachineCloneError.staleTransaction(transaction.source.id)
+    }
+    return active
+  }
+
+  private func validateCloneBundle(_ transaction: VirtualMachineCloneTransaction) throws {
+    try requireDirectory(transaction.stagingBundleURL)
+    let manifest = try readManifest(in: transaction.stagingBundleURL)
+    guard manifest == transaction.clone, manifest.installState == .stopped else {
+      throw VirtualMachineCloneError.invalidBundle(
+        "the staged manifest does not match the clone transaction"
+      )
+    }
+
+    _ = try macVirtualMachineBundleResolver.resolveArtifact(
+      manifest.diskImagePath,
+      named: "diskImagePath",
+      in: transaction.stagingBundleURL,
+      writable: true
+    )
+    for (path, name, writable) in [
+      (manifest.auxiliaryStoragePath, "auxiliaryStoragePath", true),
+      (manifest.hardwareModelPath, "hardwareModelPath", false),
+      (manifest.machineIdentifierPath, "machineIdentifierPath", false),
+    ] {
+      guard let path else {
+        throw VirtualMachineCloneError.invalidBundle("the staged manifest is missing \(name)")
+      }
+      _ = try macVirtualMachineBundleResolver.resolveArtifact(
+        path,
+        named: name,
+        in: transaction.stagingBundleURL,
+        writable: writable
+      )
+    }
+    _ = try validatedSharedDirectoryConfiguration(in: transaction.stagingBundleURL)
+
+    let entries = try fileManager.contentsOfDirectory(
+      at: transaction.stagingBundleURL,
+      includingPropertiesForKeys: nil,
+      options: []
+    )
+    guard !entries.contains(where: { isTransientCloneEntry($0.lastPathComponent) }) else {
+      throw VirtualMachineCloneError.invalidBundle(
+        "runtime, installation, or saved-state transaction data remains in the staged bundle"
+      )
+    }
+  }
+
+  private func isTransientCloneEntry(_ name: String) -> Bool {
+    name == Self.runtimeLockFilename
+      || name == Self.runtimeOwnerFilename
+      || name == MacVirtualMachineSavedStateStore.directoryName
+      || name.hasPrefix(Self.installationStagingPrefix)
+      || name.hasPrefix(MacVirtualMachineSavedStateStore.stagingPrefix)
   }
 
   private func requireConfigurationMutationLease(
@@ -710,6 +866,24 @@ actor VirtualMachineLibrary:
       let name = entry.lastPathComponent
       guard name.hasPrefix(Self.deletionTombstonePrefix),
         name.hasSuffix(Self.deletionTombstoneSuffix)
+      else {
+        continue
+      }
+      try requireDirectory(entry)
+      try fileManager.removeItem(at: entry)
+    }
+  }
+
+  private func removeCloneStagingBundles() throws {
+    let entries = try fileManager.contentsOfDirectory(
+      at: rootURL,
+      includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+      options: []
+    )
+    for entry in entries {
+      let name = entry.lastPathComponent
+      guard name.hasPrefix(Self.cloneStagingPrefix),
+        name.hasSuffix(Self.cloneStagingSuffix)
       else {
         continue
       }
@@ -798,6 +972,12 @@ actor VirtualMachineLibrary:
 
   private func finishInstallationOperation(_ operationID: UUID) {
     installationOperationIDs.remove(operationID)
+    releaseOperationAccess(token: operationID)
+  }
+
+  private func finishClone(operationID: UUID) {
+    guard let active = activeClones.removeValue(forKey: operationID) else { return }
+    active.runtimeLock.release()
     releaseOperationAccess(token: operationID)
   }
 

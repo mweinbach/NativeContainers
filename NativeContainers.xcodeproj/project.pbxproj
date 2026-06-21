@@ -229,6 +229,10 @@
 		1F9D2C5F2FE7F2BB0076F5B9 /* ComposeUpCommandService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C5E2FE7F2BB0076F5B9 /* ComposeUpCommandService.swift */; };
 		1F9D2C612FE7F2C90076F5B9 /* ComposePostconditionVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C602FE7F2C90076F5B9 /* ComposePostconditionVerifier.swift */; };
 		1F9D2C632FE7F36B0076F5B9 /* LiveComposeProjectLifecycleSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C622FE7F36B0076F5B9 /* LiveComposeProjectLifecycleSmokeTests.swift */; };
+		1F9D2C652FE7F57C0076F5B9 /* VirtualMachineCloneModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C642FE7F57C0076F5B9 /* VirtualMachineCloneModels.swift */; };
+		1F9D2C672FE7F57C0076F5B9 /* VirtualMachineCloneService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C662FE7F57C0076F5B9 /* VirtualMachineCloneService.swift */; };
+		1F9D2C692FE7F5AD0076F5B9 /* CloneVirtualMachineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C682FE7F5AD0076F5B9 /* CloneVirtualMachineView.swift */; };
+		1F9D2C6B2FE7F5EA0076F5B9 /* VirtualMachineCloneServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C6A2FE7F5EA0076F5B9 /* VirtualMachineCloneServiceTests.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -568,6 +572,10 @@
 		1F9D2C5E2FE7F2BB0076F5B9 /* ComposeUpCommandService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeUpCommandService.swift; sourceTree = "<group>"; };
 		1F9D2C602FE7F2C90076F5B9 /* ComposePostconditionVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposePostconditionVerifier.swift; sourceTree = "<group>"; };
 		1F9D2C622FE7F36B0076F5B9 /* LiveComposeProjectLifecycleSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveComposeProjectLifecycleSmokeTests.swift; sourceTree = "<group>"; };
+		1F9D2C642FE7F57C0076F5B9 /* VirtualMachineCloneModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineCloneModels.swift; sourceTree = "<group>"; };
+		1F9D2C662FE7F57C0076F5B9 /* VirtualMachineCloneService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineCloneService.swift; sourceTree = "<group>"; };
+		1F9D2C682FE7F5AD0076F5B9 /* CloneVirtualMachineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneVirtualMachineView.swift; sourceTree = "<group>"; };
+		1F9D2C6A2FE7F5EA0076F5B9 /* VirtualMachineCloneServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineCloneServiceTests.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -739,6 +747,7 @@
 				1F9D2BF32FE7C5140076F5B9 /* DockerCompatibilitySettingsView.swift */,
 				1F9D2BFF2FE7C8AB0076F5B9 /* ComposeProjectsView.swift */,
 				1F9D2C462FE7E8330076F5B9 /* ComposeProjectManagementView.swift */,
+				1F9D2C682FE7F5AD0076F5B9 /* CloneVirtualMachineView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -774,6 +783,7 @@
 				1F9D2C172FE7D2EE0076F5B9 /* DockerComposeClientModels.swift */,
 				1F9D2C2E2FE7E6630076F5B9 /* ComposeProjectLifecycleModels.swift */,
 				1F9D2C582FE7EFBA0076F5B9 /* ComposeProjectActions.swift */,
+				1F9D2C642FE7F57C0076F5B9 /* VirtualMachineCloneModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -858,6 +868,7 @@
 				1F9D2C502FE7EBF20076F5B9 /* ComposeExecutionWorkspaceTests.swift */,
 				1F9D2C562FE7ED120076F5B9 /* ComposeProjectMutationExecutorTests.swift */,
 				1F9D2C622FE7F36B0076F5B9 /* LiveComposeProjectLifecycleSmokeTests.swift */,
+				1F9D2C6A2FE7F5EA0076F5B9 /* VirtualMachineCloneServiceTests.swift */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -964,6 +975,7 @@
 				1F9D2C5C2FE7F2B70076F5B9 /* ComposeResourceActionService.swift */,
 				1F9D2C5E2FE7F2BB0076F5B9 /* ComposeUpCommandService.swift */,
 				1F9D2C602FE7F2C90076F5B9 /* ComposePostconditionVerifier.swift */,
+				1F9D2C662FE7F57C0076F5B9 /* VirtualMachineCloneService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1260,6 +1272,7 @@
 				6B4AE3F68105CB5C9086241B /* ImageBuildServiceTests.swift in Sources */,
 				1F9D2C3D2FE7E79F0076F5B9 /* ComposeProjectSourceServiceTests.swift in Sources */,
 				1F9D2BBE2FE7B0E80076F5B9 /* MacVirtualMachineSavedStateServiceTests.swift in Sources */,
+				1F9D2C6B2FE7F5EA0076F5B9 /* VirtualMachineCloneServiceTests.swift in Sources */,
 				1F9D2AF92FE765BC0076F5B9 /* AppleContainerCreationServiceTests.swift in Sources */,
 				1F9D2BAC2FE7AAEA0076F5B9 /* MacVirtualMachineRuntimeServiceTests.swift in Sources */,
 				1F9D2B172FE76B2E0076F5B9 /* ContainerCreationDraftTests.swift in Sources */,
@@ -1356,6 +1369,7 @@
 				1F9D2C352FE7E7360076F5B9 /* DockerComposeConfigService.swift in Sources */,
 				9B0B0A2D8D7E816F5DB11F1E /* ContainerManaging.swift in Sources */,
 				5EF45D5EC2FC881A0CADCA99 /* ContainerModels.swift in Sources */,
+				1F9D2C692FE7F5AD0076F5B9 /* CloneVirtualMachineView.swift in Sources */,
 				1F9D2B582FE7923F0076F5B9 /* LinuxMachineCreationDraft.swift in Sources */,
 				1F9D2B882FE7A1440076F5B9 /* MacVirtualMachineInstallationModel.swift in Sources */,
 				EDB26DFD01272D05145851C1 /* ContainerProvisioningModel.swift in Sources */,
@@ -1506,10 +1520,12 @@
 				1F9D2B3D2FE77B6B0076F5B9 /* ImageBuildHistoryModel.swift in Sources */,
 				236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */,
 				1F9D2B562FE7923C0076F5B9 /* LinuxMachineManagementModel.swift in Sources */,
+				1F9D2C652FE7F57C0076F5B9 /* VirtualMachineCloneModels.swift in Sources */,
 				1F9D2BEE2FE7C4760076F5B9 /* SecureFileSystemPath.swift in Sources */,
 				1F9D2C4B2FE7EA4A0076F5B9 /* ComposeOperationJournal.swift in Sources */,
 				1F9D2C0E2FE7D0B20076F5B9 /* ComposeBridgeLiveConformanceModels.swift in Sources */,
 				B10B22FAA12D249A147360B3 /* VolumesView.swift in Sources */,
+				1F9D2C672FE7F57C0076F5B9 /* VirtualMachineCloneService.swift in Sources */,
 				1F9D2B312FE775060076F5B9 /* ImageBuildSecretsSection.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

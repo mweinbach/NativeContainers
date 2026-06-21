@@ -10,6 +10,7 @@ struct VirtualMachineRow: View {
   let install: () -> Void
   let open: () -> Void
   let forceStop: () -> Void
+  let clone: () -> Void
   let discard: () -> Void
 
   @State private var isConfirmingStartFresh = false
@@ -92,6 +93,10 @@ struct VirtualMachineRow: View {
                 ) {
                   isConfirmingDiscardSavedState = true
                 }
+              }
+              if runtime.snapshot.target == nil, runtime.snapshot.state == .stopped {
+                Divider()
+                Button("Clone VM…", systemImage: "square.on.square", action: clone)
               }
             }
             if runtime.snapshot.target == nil,

@@ -81,6 +81,34 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.diskImagePath = diskImagePath
   }
 
+  init(
+    cloning source: VirtualMachineManifest,
+    id: UUID = UUID(),
+    name: String,
+    createdAt: Date = Date()
+  ) throws {
+    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedName.isEmpty else {
+      throw VirtualMachineModelError.emptyName
+    }
+
+    schemaVersion = Self.currentSchemaVersion
+    self.id = id
+    self.name = trimmedName
+    guest = source.guest
+    installState = source.installState
+    resources = source.resources
+    self.createdAt = createdAt
+    updatedAt = createdAt
+    diskImagePath = source.diskImagePath
+    auxiliaryStoragePath = source.auxiliaryStoragePath
+    hardwareModelPath = source.hardwareModelPath
+    machineIdentifierPath = source.machineIdentifierPath
+    restoreImageURL = source.restoreImageURL
+    installationOperationID = nil
+    installationFailure = nil
+  }
+
   mutating func markInstallationStarted(
     operationID: UUID,
     updatedAt: Date = Date()

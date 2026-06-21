@@ -8,6 +8,7 @@ struct VirtualMachinesView: View {
   @State private var machineToInstall: VirtualMachineManifest?
   @State private var machineToOpen: VirtualMachineManifest?
   @State private var machineToForceStop: VirtualMachineManifest?
+  @State private var machineToClone: VirtualMachineManifest?
   @State private var machineToDiscard: VirtualMachineManifest?
 
   var body: some View {
@@ -36,6 +37,7 @@ struct VirtualMachinesView: View {
               install: { machineToInstall = machine },
               open: { machineToOpen = machine },
               forceStop: { machineToForceStop = machine },
+              clone: { machineToClone = machine },
               discard: { machineToDiscard = machine }
             )
           }
@@ -87,6 +89,9 @@ struct VirtualMachinesView: View {
         machine: machine,
         model: model.makeMacVirtualMachineRuntimeModel(for: machine)
       )
+    }
+    .sheet(item: $machineToClone) { machine in
+      CloneVirtualMachineView(machine: machine, model: model)
     }
     .confirmationDialog(
       "Force stop virtual machine?",

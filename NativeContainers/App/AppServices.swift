@@ -28,6 +28,7 @@ struct AppServices: Sendable {
   let dockerComposeClient: any DockerComposeClientInstalling
   let composeProjectLifecycle: any ComposeProjectLifecycleManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
+  let virtualMachineCloner: any VirtualMachineCloning
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
   let virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging
@@ -67,6 +68,7 @@ struct AppServices: Sendable {
     composeProjectLifecycle: any ComposeProjectLifecycleManaging =
       UnavailableComposeProjectLifecycleService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
+    virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
@@ -106,6 +108,7 @@ struct AppServices: Sendable {
     self.dockerComposeClient = dockerComposeClient
     self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
+    self.virtualMachineCloner = virtualMachineCloner
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
@@ -135,6 +138,7 @@ struct AppServices: Sendable {
     composeProjectLifecycle: any ComposeProjectLifecycleManaging =
       UnavailableComposeProjectLifecycleService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
+    virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
@@ -174,6 +178,7 @@ struct AppServices: Sendable {
     self.dockerComposeClient = dockerComposeClient
     self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
+    self.virtualMachineCloner = virtualMachineCloner
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
@@ -268,6 +273,7 @@ enum AppCompositionRoot {
     let launchID = UUID()
     let imageBuildHistory = ImageBuildHistoryStore(launchID: launchID)
     let virtualMachineLibrary = VirtualMachineLibrary()
+    let virtualMachineCloner = VirtualMachineCloneService(store: virtualMachineLibrary)
     let virtualMachineInstaller = MacVirtualMachineInstallationService(
       store: virtualMachineLibrary,
       engine: AppleMacVirtualMachineInstallationEngine()
@@ -354,6 +360,7 @@ enum AppCompositionRoot {
       dockerComposeClient: dockerComposeClient,
       composeProjectLifecycle: composeProjectLifecycle,
       virtualMachineLibrary: virtualMachineLibrary,
+      virtualMachineCloner: virtualMachineCloner,
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,
       virtualMachineSharedDirectories: virtualMachineSharedDirectories,

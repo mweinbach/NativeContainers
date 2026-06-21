@@ -110,6 +110,7 @@ final class AppModel {
     dockerComposeClientService: any DockerComposeClientInstalling =
       UnavailableDockerComposeClientService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
+    virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
@@ -136,6 +137,7 @@ final class AppModel {
         composeBridgeConformance: composeBridgeConformance,
         dockerComposeClient: dockerComposeClientService,
         virtualMachineLibrary: virtualMachineLibrary,
+        virtualMachineCloner: virtualMachineCloner,
         virtualMachineInstaller: virtualMachineInstaller,
         virtualMachineRuntime: virtualMachineRuntime,
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
@@ -303,6 +305,15 @@ final class AppModel {
     await performMutation {
       try await self.services.virtualMachineLibrary.discardVirtualMachine(id: id)
     }
+  }
+
+  @discardableResult
+  func cloneVirtualMachine(id: UUID, name: String) async throws -> VirtualMachineManifest {
+    let clone = try await services.virtualMachineCloner.cloneVirtualMachine(id: id, name: name)
+    virtualMachines = try await services.virtualMachineLibrary.list()
+    updateWorkspaceNavigation()
+    navigate(to: .macOSVirtualMachine(clone.id))
+    return clone
   }
 
   func prepareMacVirtualMachine(id: UUID, restoreImageURL: URL) async throws {
