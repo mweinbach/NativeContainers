@@ -10,6 +10,15 @@ protocol ComposeDesiredStateDecoding: Sendable {
 struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
   private typealias JSONObject = [String: Any]
 
+  private let canonicalModelValidator: any ComposeCanonicalModelValidating
+
+  init(
+    canonicalModelValidator: any ComposeCanonicalModelValidating =
+      ComposeCanonicalModelValidator()
+  ) {
+    self.canonicalModelValidator = canonicalModelValidator
+  }
+
   func decode(
     rendered: ComposeRenderedConfiguration,
     expectedProjectName: String
@@ -28,7 +37,11 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
       )
     }
 
-    var issues: [ComposeProjectReviewIssue] = []
+    var issues = try canonicalModelValidator.reviewIssues(
+      fullConfiguration: rendered.fullConfiguration,
+      activeConfiguration: rendered.activeConfiguration,
+      projectName: expectedProjectName
+    )
     let declaredServiceNames = fullServices.keys.sorted(by: composeStringOrder)
     guard Set(rendered.serviceConfigurationHashes.keys) == Set(declaredServiceNames) else {
       throw ComposeProjectLifecycleError.configOutputInvalid(

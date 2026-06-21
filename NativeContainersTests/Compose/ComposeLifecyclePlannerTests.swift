@@ -225,6 +225,36 @@ struct ComposeLifecyclePlannerTests {
   }
 
   @Test
+  func createMissingUpRequiresAContiguousExistingReplicaPrefix() {
+    let desired = desiredWebState(replicaCount: 2)
+    let existing = container(
+      id: "web-2",
+      service: "web",
+      replica: 2,
+      state: .stopped,
+      imageDigest: "sha256:web"
+    )
+
+    let plan = planner.plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      inventory: makeInventory(
+        containers: [existing],
+        images: [image(reference: "example/web:latest", digest: "sha256:web")]
+      )
+    )
+
+    #expect(
+      plan.blockers.contains {
+        $0.code == .executionPolicy && $0.message.contains("contiguous prefix")
+      }
+    )
+    #expect(!plan.canExecute)
+  }
+
+  @Test
   func downSeparatesDeclaredOrphanNetworkAndVolumeDeletionActions() {
     let desired = ComposeDesiredState(
       projectName: "demo",

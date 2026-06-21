@@ -316,6 +316,50 @@ struct ComposeDesiredStateDecoderTests {
   }
 
   @Test
+  func blocksCanonicalKeysOutsideTheExplicitExecutionAllowlist() throws {
+    let rendered = renderedConfiguration(
+      full: """
+        {
+          "name": "demo",
+          "services": {
+            "web": {
+              "image": "nginx:1.27",
+              "read_only": true,
+              "ports": [{"target": 80, "published": "8080", "mode": "host"}]
+            }
+          },
+          "volumes": {
+            "data": {"name": "demo_data", "labels": {"private": "redacted"}}
+          }
+        }
+        """,
+      active: """
+        {
+          "name": "demo",
+          "services": {
+            "web": {
+              "image": "nginx:1.27",
+              "read_only": true,
+              "ports": [{"target": 80, "published": "8080", "mode": "host"}]
+            }
+          },
+          "volumes": {
+            "data": {"name": "demo_data", "labels": {"private": "redacted"}}
+          }
+        }
+        """
+    )
+
+    let review = try decoder.decode(rendered: rendered, expectedProjectName: "demo")
+    let messages = review.issues.map(\.message)
+
+    #expect(messages.contains { $0.contains("unsupported key read_only") })
+    #expect(messages.contains("Only ingress-mode published ports are supported."))
+    #expect(messages.contains { $0.contains("Custom volume labels") })
+    #expect(!messages.joined().contains("redacted"))
+  }
+
+  @Test
   func derivesReplicaCountAndRejectsContainerNameScaling() throws {
     let rendered = renderedConfiguration(
       full: """

@@ -285,6 +285,17 @@ struct ComposeContainerLifecyclePlanner: Sendable {
       actionName: "Up",
       issues: &issues
     )
+    let expectedPrefix = instances.isEmpty ? Set<Int>() : Set(1...instances.count)
+    if Set(replicas.values) != expectedPrefix {
+      issues.append(
+        ComposeLifecycleIssue.blocker(
+          .executionPolicy,
+          subject: service.name,
+          message:
+            "Create-missing Up requires existing replicas to form the contiguous prefix 1...\(instances.count)."
+        )
+      )
+    }
   }
 
   private func validateExactReplicaSet(
