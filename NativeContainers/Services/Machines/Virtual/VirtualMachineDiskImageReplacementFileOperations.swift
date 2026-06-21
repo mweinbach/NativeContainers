@@ -223,6 +223,3 @@ struct VirtualMachineDiskImageReplacementFileOperations:
     }
   }
 }
-
-typealias VirtualMachineDiskImageMigrationFileOperations =
-  VirtualMachineDiskImageReplacementFileOperations

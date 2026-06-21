@@ -63,8 +63,10 @@ struct VirtualMachineDiskImageReplacementJournal:
   Equatable,
   Sendable
 {
-  static let currentVersion = 2
+  static let currentVersion = 3
   static let legacyVersion = 1
+  static let operationMetadataVersion = 2
+  static let geometryMetadataVersion = 3
 
   let version: Int
   let operation: VirtualMachineDiskImageReplacementOperation
@@ -77,6 +79,7 @@ struct VirtualMachineDiskImageReplacementJournal:
   let destinationFormat: VirtualMachineDiskImageFormat
   let sourceIdentity: VirtualMachineStorageArtifactIdentity
   let sourceLogicalBytes: UInt64
+  let sourceBlockSizeBytes: UInt64?
   var destinationIdentity: VirtualMachineStorageArtifactIdentity?
   var phase: VirtualMachineDiskImageReplacementPhase
   var terminationQuarantine: VirtualMachineDiskImageReplacementTerminationQuarantine?
@@ -94,6 +97,7 @@ struct VirtualMachineDiskImageReplacementJournal:
     destinationFormat: VirtualMachineDiskImageFormat? = nil,
     sourceIdentity: VirtualMachineStorageArtifactIdentity,
     sourceLogicalBytes: UInt64,
+    sourceBlockSizeBytes: UInt64? = nil,
     destinationIdentity: VirtualMachineStorageArtifactIdentity?,
     phase: VirtualMachineDiskImageReplacementPhase,
     terminationQuarantine:
@@ -111,6 +115,7 @@ struct VirtualMachineDiskImageReplacementJournal:
     self.destinationFormat = destinationFormat ?? operation.destinationFormat
     self.sourceIdentity = sourceIdentity
     self.sourceLogicalBytes = sourceLogicalBytes
+    self.sourceBlockSizeBytes = sourceBlockSizeBytes
     self.destinationIdentity = destinationIdentity
     self.phase = phase
     self.terminationQuarantine = terminationQuarantine
@@ -129,6 +134,7 @@ struct VirtualMachineDiskImageReplacementJournal:
     case destinationFormat
     case sourceIdentity
     case sourceLogicalBytes
+    case sourceBlockSizeBytes
     case destinationIdentity
     case phase
     case terminationQuarantine
@@ -169,6 +175,11 @@ struct VirtualMachineDiskImageReplacementJournal:
         ),
       sourceLogicalBytes:
         try container.decode(UInt64.self, forKey: .sourceLogicalBytes),
+      sourceBlockSizeBytes:
+        try container.decodeIfPresent(
+          UInt64.self,
+          forKey: .sourceBlockSizeBytes
+        ),
       destinationIdentity:
         try container.decodeIfPresent(
           VirtualMachineStorageArtifactIdentity.self,
@@ -312,12 +323,6 @@ enum VirtualMachineDiskImageReplacementError:
   }
 }
 
-typealias VirtualMachineDiskImageMigrationPhase =
-  VirtualMachineDiskImageReplacementPhase
-typealias VirtualMachineDiskImageMigrationTerminationQuarantine =
-  VirtualMachineDiskImageReplacementTerminationQuarantine
-typealias VirtualMachineDiskImageMigrationArtifacts =
-  VirtualMachineDiskImageReplacementArtifacts
 typealias VirtualMachineDiskImageMigrationJournal =
   VirtualMachineDiskImageReplacementJournal
 typealias VirtualMachineDiskImageMigrationCommit =
@@ -326,9 +331,5 @@ typealias VirtualMachineDiskImageMigrationResult =
   VirtualMachineDiskImageReplacementResult
 typealias VirtualMachineDiskImageRewriteResult =
   VirtualMachineDiskImageReplacementResult
-typealias VirtualMachineDiskImageMigrationRecoveryReport =
-  VirtualMachineDiskImageReplacementRecoveryReport
-typealias VirtualMachineDiskImageMigrationRecoveryFailure =
-  VirtualMachineDiskImageReplacementRecoveryFailure
 typealias VirtualMachineDiskImageMigrationError =
   VirtualMachineDiskImageReplacementError

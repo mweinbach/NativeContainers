@@ -49,8 +49,11 @@ transaction cleanup and no destination replacement. Installed macOS VMs can now
 convert a stopped RAW disk to ASIF through a journaled, out-of-place transaction;
 the runtime reads logical capacity through DiskImageKit instead of mistaking the
 sparse container's host file length for guest capacity. TERM-to-KILL cancellation
-keeps uncertain exits quarantined, and pending migration journals block runtime,
-discard, clone, and transfer paths until recovery is safe. Persistent Linux machines now have native
+keeps uncertain exits quarantined, and pending replacement journals block runtime,
+discard, clone, and transfer paths until recovery is safe. Standalone ASIF disks
+can also be rewritten out of place; the manifest switches only when the verified
+candidate has a smaller measured allocation, without claiming guaranteed
+compaction or APFS free-space recovery. Persistent Linux machines now have native
 create/start/stop/Force Stop/delete controls, cancellable first-boot user
 provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
 memory, and reviewed home-directory configuration. The same machines now expose

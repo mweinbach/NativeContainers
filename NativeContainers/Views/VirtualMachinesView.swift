@@ -48,7 +48,7 @@ struct VirtualMachinesView: View {
               machine: machine,
               availability: model.virtualMachineAvailability,
               runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
-              diskMigration: model.makeVirtualMachineDiskImageMigrationModel(
+              diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
                 for: machine
               ),
               isSelected: selectedMachineID == machine.id,
@@ -73,7 +73,7 @@ struct VirtualMachinesView: View {
               sharedDirectories: model.makeMacVirtualMachineSharedDirectoriesModel(
                 for: selectedMachine
               ),
-              diskMigration: model.makeVirtualMachineDiskImageMigrationModel(
+              diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
                 for: selectedMachine
               )
             )
@@ -231,5 +231,10 @@ struct VirtualMachinesView: View {
 
 #Preview("macOS virtual machines") {
   RootView(model: .previewVirtualMachines)
+    .frame(width: 1_080, height: 720)
+}
+
+#Preview("macOS virtual machines — ASIF") {
+  RootView(model: .previewASIFVirtualMachines)
     .frame(width: 1_080, height: 720)
 }

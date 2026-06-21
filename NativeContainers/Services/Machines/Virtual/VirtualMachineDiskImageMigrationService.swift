@@ -11,15 +11,8 @@ protocol VirtualMachineDiskImageMigrating: Sendable {
 }
 
 @MainActor
-protocol VirtualMachineDiskImageMigrationRecovering: Sendable {
-  func recoverInterruptedMigrations() async throws
-    -> VirtualMachineDiskImageMigrationRecoveryReport
-}
-
-@MainActor
 protocol VirtualMachineDiskImageMigrationManaging:
-  VirtualMachineDiskImageMigrating,
-  VirtualMachineDiskImageMigrationRecovering
+  VirtualMachineDiskImageMigrating
 {}
 
 @MainActor
@@ -68,11 +61,6 @@ final class VirtualMachineDiskImageMigrationService:
     )
   }
 
-  func recoverInterruptedMigrations() async throws
-    -> VirtualMachineDiskImageMigrationRecoveryReport
-  {
-    try await coordinator.recoverInterruptedReplacements()
-  }
 }
 
 @MainActor
@@ -83,11 +71,5 @@ struct UnavailableVirtualMachineDiskImageMigrationService:
     machineID _: UUID
   ) async throws -> VirtualMachineDiskImageMigrationResult {
     throw VirtualMachineDiskImageReplacementError.unavailable
-  }
-
-  func recoverInterruptedMigrations() async throws
-    -> VirtualMachineDiskImageMigrationRecoveryReport
-  {
-    .empty
   }
 }

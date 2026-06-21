@@ -6,7 +6,7 @@ must leave a usable, test-backed product slice.
 ## M0 — Verified native foundation
 
 - [x] Native macOS app and unit-test targets build in Xcode.
-- [ ] Add the required Virtualization entitlement through Xcode.
+- [x] Add and signing-verify the required Virtualization entitlement through Xcode.
 - [x] Direct Apple client adapter reports container system health.
 - [x] Live inventories for containers, images, volumes, and Linux machines.
 - [x] Stable domain models and mockable service protocols.
@@ -133,8 +133,8 @@ must leave a usable, test-backed product slice.
       service/UI path, progress, supported cancellation, operation leases,
       interruption recovery, and deterministic cleanup tests are implemented.
 - [x] Start, pause, resume, request stop, and explicit force stop through an
-      app-scoped, generation-safe runtime service. Live verification remains
-      gated by the Virtualization entitlement.
+      app-scoped, generation-safe runtime service. Live guest verification still
+      requires an installed macOS VM.
 - [x] Transactional same-host save/restore with configuration fingerprints,
       single-use restore consumption, and queued Force Stop. Live verification
       remains gated by the Virtualization entitlement and an installed guest.
@@ -156,7 +156,7 @@ must leave a usable, test-backed product slice.
       regeneration, stopped/runtime leases, host-state scrubbing, collision
       rejection, write-level cancellation, atomic publication, and partial
       recovery.
-- [ ] Safe disk-space reclamation.
+- [x] Safe disk-space reclamation.
   - [x] Reviewed Apple-runtime container, image, and volume reclamation with
         exact identities, bounded clients, non-force stopped-container delete,
         cancellation checkpoints, and partial-result reconciliation.
@@ -168,6 +168,8 @@ must leave a usable, test-backed product slice.
         policy, atomic retirement, and crash-tombstone recovery.
   - [x] Stopped-only sparse compaction through an explicit RAW-to-ASIF
         migration; raw truncation remains prohibited.
+  - [x] Stopped-only standalone ASIF rewrite through the shared journaled
+        replacement coordinator, committing only a measured allocation reduction.
 
 ## M5 — Optimization and polish
 
@@ -177,7 +179,7 @@ must leave a usable, test-backed product slice.
       category-level reclaimable estimates, sparse logical-versus-allocated
       bytes, hidden-partial attribution, and cancellable scans outside ordinary
       inventory refresh.
-- [ ] Sparse image compaction.
+- [x] Measured standalone-ASIF rewrite reclamation without a compaction guarantee.
 - [ ] Accessibility, localization, keyboard navigation, and command menus.
 - [ ] Signed/notarized packaging, updater, migration, crash diagnostics.
 - [ ] Performance benchmarks for cold start, warm start, I/O, network, build,

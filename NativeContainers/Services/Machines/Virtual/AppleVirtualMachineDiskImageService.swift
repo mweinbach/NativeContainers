@@ -32,13 +32,18 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
         throw VirtualMachineDiskImageError.invalidLogicalSize(0)
       }
       let logicalBytes = number.uint64Value
-      guard logicalBytes > 0, logicalBytes.isMultiple(of: 512) else {
+      guard
+        logicalBytes > 0,
+        logicalBytes.isMultiple(
+          of: VirtualMachineDiskImageDescriptor.rawBlockSizeBytes
+        )
+      else {
         throw VirtualMachineDiskImageError.invalidLogicalSize(logicalBytes)
       }
       return VirtualMachineDiskImageDescriptor(
         format: .raw,
         logicalBytes: logicalBytes,
-        blockSizeBytes: 512
+        blockSizeBytes: VirtualMachineDiskImageDescriptor.rawBlockSizeBytes
       )
     } catch let error as VirtualMachineDiskImageError {
       throw error
@@ -106,7 +111,7 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
     case nil:
       nil
     @unknown default:
-      nil
+      .unknown
     }
   }
 }

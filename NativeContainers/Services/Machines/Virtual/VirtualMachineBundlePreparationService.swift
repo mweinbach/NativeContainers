@@ -58,7 +58,7 @@ struct VirtualMachineBundlePreparationService:
   func prepare(_ request: VirtualMachineBundlePreparationRequest) async throws {
     try Task.checkCancellation()
     let sourceSnapshot = try inspector.snapshot(of: request.sourceBundleURL)
-    try requireNoDiskImageMigrationArtifacts(in: sourceSnapshot)
+    try requireNoDiskImageReplacementArtifacts(in: sourceSnapshot)
     try await transfer.copyBundle(
       from: request.sourceBundleURL,
       to: request.destinationBundleURL
@@ -81,18 +81,18 @@ struct VirtualMachineBundlePreparationService:
     try Task.checkCancellation()
   }
 
-  private func requireNoDiskImageMigrationArtifacts(
+  private func requireNoDiskImageReplacementArtifacts(
     in snapshot: VirtualMachineBundleSnapshot
   ) throws {
     guard
       !snapshot.entries.contains(where: {
-        VirtualMachineDiskImageMigrationArtifacts.isControlArtifact(
+        VirtualMachineDiskImageReplacementArtifacts.isControlArtifact(
           relativePath: $0.relativePath
         )
       })
     else {
       throw VirtualMachineBundleError.invalidBundle(
-        "disk-image migration data is pending recovery"
+        "disk-image replacement data is pending recovery"
       )
     }
   }

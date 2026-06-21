@@ -117,6 +117,7 @@ struct VirtualMachineDiskImageReplacementJournalTests {
     object.removeValue(forKey: "operation")
     object.removeValue(forKey: "sourceFormat")
     object.removeValue(forKey: "destinationFormat")
+    object.removeValue(forKey: "sourceBlockSizeBytes")
     try JSONSerialization.data(withJSONObject: object).write(
       to: bundle.appending(
         path: FileVirtualMachineDiskImageReplacementJournalStore.filename
@@ -151,6 +152,7 @@ struct VirtualMachineDiskImageReplacementJournalTests {
         "Installed/.DiskImageMigration-\(operationID.uuidString.lowercased()).asif.partial",
       sourceIdentity: identity(inode: 1),
       sourceLogicalBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      sourceBlockSizeBytes: 512,
       destinationIdentity: nil,
       phase: .planned,
       hostBootIdentifier: UUID().uuidString.lowercased()
@@ -163,6 +165,7 @@ struct VirtualMachineDiskImageReplacementJournalTests {
     #expect(decoded.operation == .rewriteASIF)
     #expect(decoded.sourceFormat == .asif)
     #expect(decoded.destinationFormat == .asif)
+    #expect(decoded.sourceBlockSizeBytes == 512)
   }
 
   private func temporaryBundle() -> URL {
@@ -190,6 +193,7 @@ struct VirtualMachineDiskImageReplacementJournalTests {
         "Installed/.DiskImageMigration-\(operationID.uuidString.lowercased()).asif.partial",
       sourceIdentity: identity(inode: 1),
       sourceLogicalBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      sourceBlockSizeBytes: 512,
       destinationIdentity: nil,
       phase: .planned,
       hostBootIdentifier: UUID().uuidString.lowercased()

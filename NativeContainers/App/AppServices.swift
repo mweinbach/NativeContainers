@@ -1,6 +1,30 @@
 import ContainerAPIClient
 import Foundation
 
+struct VirtualMachineDiskImageMaintenanceServices: Sendable {
+  let migration: any VirtualMachineDiskImageMigrationManaging
+  let rewrite: any VirtualMachineDiskImageRewriting
+  let recovery: any VirtualMachineDiskImageReplacementRecovering
+
+  init(
+    migration: any VirtualMachineDiskImageMigrationManaging,
+    rewrite: any VirtualMachineDiskImageRewriting,
+    recovery: any VirtualMachineDiskImageReplacementRecovering
+  ) {
+    self.migration = migration
+    self.rewrite = rewrite
+    self.recovery = recovery
+  }
+
+  static var unavailable: Self {
+    Self(
+      migration: UnavailableVirtualMachineDiskImageMigrationService(),
+      rewrite: UnavailableVirtualMachineDiskImageRewriteService(),
+      recovery: UnavailableVirtualMachineDiskImageReplacementRecoveryService()
+    )
+  }
+}
+
 struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
   let composeTopology: any ComposeTopologyDeriving
@@ -36,7 +60,7 @@ struct AppServices: Sendable {
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
   let virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging
-  let virtualMachineDiskImageMigration: any VirtualMachineDiskImageMigrationManaging
+  let virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices
   let virtualMachineAvailability: any MacVirtualMachineAvailabilityChecking
   let restoreImageDiscovery: any MacRestoreImageDiscovering
   let restoreImageAcquisition: any RestoreImageAcquiring
@@ -88,8 +112,7 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineRuntimeService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
-    virtualMachineDiskImageMigration: any VirtualMachineDiskImageMigrationManaging =
-      UnavailableVirtualMachineDiskImageMigrationService(),
+    virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -132,7 +155,7 @@ struct AppServices: Sendable {
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
-    self.virtualMachineDiskImageMigration = virtualMachineDiskImageMigration
+    self.virtualMachineDiskImages = virtualMachineDiskImages
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageAcquisition = restoreImageAcquisition
@@ -174,8 +197,7 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineRuntimeService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
-    virtualMachineDiskImageMigration: any VirtualMachineDiskImageMigrationManaging =
-      UnavailableVirtualMachineDiskImageMigrationService(),
+    virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -218,7 +240,7 @@ struct AppServices: Sendable {
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
-    self.virtualMachineDiskImageMigration = virtualMachineDiskImageMigration
+    self.virtualMachineDiskImages = virtualMachineDiskImages
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageAcquisition = restoreImageAcquisition
@@ -377,10 +399,18 @@ enum AppCompositionRoot {
     let virtualMachineSavedState = MacVirtualMachineSavedStateService(
       store: virtualMachineSavedStateStore
     )
-    let virtualMachineDiskImageMigration =
-      VirtualMachineDiskImageMigrationService(
+    let virtualMachineDiskImageReplacement =
+      VirtualMachineDiskImageReplacementCoordinator(
         store: virtualMachineLibrary,
         savedStates: virtualMachineSavedState
+      )
+    let virtualMachineDiskImageMigration =
+      VirtualMachineDiskImageMigrationService(
+        coordinator: virtualMachineDiskImageReplacement
+      )
+    let virtualMachineDiskImageRewrite =
+      VirtualMachineDiskImageRewriteService(
+        coordinator: virtualMachineDiskImageReplacement
       )
     let virtualMachineStorageReclamation =
       VirtualMachineStorageReclamationService(
@@ -487,7 +517,11 @@ enum AppCompositionRoot {
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,
       virtualMachineSharedDirectories: virtualMachineSharedDirectories,
-      virtualMachineDiskImageMigration: virtualMachineDiskImageMigration,
+      virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(
+        migration: virtualMachineDiskImageMigration,
+        rewrite: virtualMachineDiskImageRewrite,
+        recovery: virtualMachineDiskImageReplacement
+      ),
       virtualMachineAvailability:
         AppleMacVirtualMachineAvailabilityChecker(),
       restoreImageDiscovery: MacRestoreImageService(),

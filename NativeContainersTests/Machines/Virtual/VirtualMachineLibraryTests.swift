@@ -525,7 +525,7 @@ struct VirtualMachineLibraryTests {
       path: fixture.manifest.diskImagePath
     )
     let operationID = UUID()
-    try FileVirtualMachineDiskImageMigrationJournalStore().save(
+    try FileVirtualMachineDiskImageReplacementJournalStore().save(
       VirtualMachineDiskImageMigrationJournal(
         version: VirtualMachineDiskImageMigrationJournal.currentVersion,
         operationID: operationID,
@@ -533,10 +533,11 @@ struct VirtualMachineLibraryTests {
         sourcePath: fixture.manifest.diskImagePath,
         destinationPath: "Disk.asif",
         stagingPath:
-          "\(VirtualMachineDiskImageMigrationArtifacts.stagingPrefix)\(operationID.uuidString.lowercased())\(VirtualMachineDiskImageMigrationArtifacts.stagingSuffix)",
+          "\(VirtualMachineDiskImageReplacementArtifacts.stagingPrefix)\(operationID.uuidString.lowercased())\(VirtualMachineDiskImageReplacementArtifacts.stagingSuffix)",
         sourceIdentity: try FileVirtualMachineStorageArtifactInspector()
           .inspect(at: sourceURL),
         sourceLogicalBytes: fixture.manifest.resources.diskBytes,
+        sourceBlockSizeBytes: 512,
         destinationIdentity: nil,
         phase: .planned,
         hostBootIdentifier: UUID().uuidString.lowercased()

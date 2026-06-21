@@ -383,8 +383,8 @@ The installed Apple documentation confirms:
   `com.apple.security.virtualization` entitlement.
 - That entitlement is a normal Boolean capability, not a restricted entitlement
   requiring Apple approval. Apple’s own runtime is locally ad-hoc signed with
-  it. The current blocker is Xcode MCP’s entitlement catalog rejecting the key,
-  not the developer account or provisioning profile.
+  it. The app target now carries the entitlement under automatic Apple Development
+  signing, and an app-hosted availability probe reports Virtualization support.
 - `VZMacOSRestoreImage.latestSupported` discovers the newest restore image the
   current host supports; SDK 27 exposes local loading as
   `VZMacOSRestoreImage.image(from:) async throws`.

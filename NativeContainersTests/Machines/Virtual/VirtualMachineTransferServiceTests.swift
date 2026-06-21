@@ -187,7 +187,7 @@ struct VirtualMachineTransferServiceTests {
     )
     try Data("pending".utf8).write(
       to: sourceBundle.appending(
-        path: VirtualMachineDiskImageMigrationArtifacts.journalFilename
+        path: VirtualMachineDiskImageReplacementArtifacts.journalFilename
       )
     )
     let destination = fixture.root.appending(path: "Rejected.nativevm")
@@ -297,7 +297,7 @@ struct VirtualMachineTransferServiceTests {
     let operationID = UUID()
     let partial = package.appending(
       path:
-        "MacPlatform/\(VirtualMachineDiskImageMigrationArtifacts.stagingPrefix)\(operationID.uuidString.lowercased())\(VirtualMachineDiskImageMigrationArtifacts.stagingSuffix)"
+        "MacPlatform/\(VirtualMachineDiskImageReplacementArtifacts.stagingPrefix)\(operationID.uuidString.lowercased())\(VirtualMachineDiskImageReplacementArtifacts.stagingSuffix)"
     )
     try Data("partial".utf8).write(to: partial)
 

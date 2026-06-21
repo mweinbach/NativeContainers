@@ -7,14 +7,19 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 726 test declarations. The current full
-  app-hosted Xcode run passed all 707 deterministic tests, with 19 destructive
-  or external-service integrations skipped behind explicit live gates and no
-  failures. Existing opt-in tests cover Apple runtime provisioning, interactive
+- The suite currently contains 742 test declarations and 747 expanded outcomes.
+  The current full app-hosted Xcode run passed all 728 deterministic outcomes,
+  with 19 destructive or external-service integrations skipped behind explicit
+  live gates and no failures. Existing opt-in tests cover Apple runtime provisioning, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
   none run against public services by default.
 - The app launches and stops through Xcode. A Preview-owned orphan was terminated
   with a bounded TERM/KILL cleanup, and no residual app process remained.
+- The app target is automatically Apple Development signed with
+  `com.apple.security.virtualization`, while `ENABLE_APP_SANDBOX` remains `NO`
+  as required by the checked-in project specification and the app's private
+  `/private/tmp` socket workspace. An app-hosted availability probe reports the
+  Virtualization capability as available.
 - The SwiftUI overview, split container inspector, Linux-machine list,
   Linux-machine creation form, machine command runner, macOS VM list,
   restore-image preparation sheet, macOS installation sheet, VM clone sheet,
@@ -95,8 +100,8 @@ Updated: 2026-06-21.
   callbacks finalize once; and caller cancellation cannot release an accepted
   start. The native console uses automatic display reconfiguration, opt-in
   Mac-shortcut capture, SDK 27's adaptor, and detaches stale views. Deterministic
-  ownership/service/model tests pass, while real VM launch remains
-  entitlement-gated.
+  ownership/service/model tests pass, while real VM launch still requires an
+  installed local macOS guest.
 - Same-host suspend/resume is implemented behind focused runtime, saved-state
   callback, and transactional filesystem services. The live configuration uses
   a deterministic per-VM MAC and records save/restore capability independently
@@ -106,8 +111,7 @@ Updated: 2026-06-21.
   Suspend, Resume, confirmed Start Fresh/Discard Saved State, incompatible-state
   diagnostics, and a generation-pinned Force Stop that queues while save/restore
   callbacks are outstanding. Deterministic store/service/runtime/model tests are
-  implemented; a real save/restore remains gated by the Virtualization
-  entitlement and installed macOS guest.
+  implemented; a real save/restore still requires an installed macOS guest.
 - Installed macOS VM bundles can persist shared host directories in a private,
   bounded `SharedDirectories.json` capability sidecar. A focused orchestration
   service acquires the runtime lease, rejects running or checkpointed VMs, and
@@ -128,7 +132,7 @@ Updated: 2026-06-21.
   publishing. Deterministic transfer/store/service/app-boundary tests cover
   successful cloning, cancellation, copy failure, ownership contention,
   malicious links, duplicate platform identity, and hard-exit recovery. Live
-  guest boot remains entitlement-gated.
+  guest boot still requires an installed macOS guest.
 - Stopped macOS VMs now export to a portable `.nativevm` package through a
   source/runtime lease, balanced destination security scope, shared
   policy-driven bundle preparer, hidden sibling staging directory, and
@@ -778,7 +782,7 @@ Updated: 2026-06-21.
   or errors. Launch emitted only the existing macOS 27 beta
   `com.apple.linkd.autoShortcut`/SetStore registration noise.
 - macOS VM disks now have an explicit RAW/ASIF model and a modular macOS 27
-  migration lane. DiskImageKit supplies ASIF virtual geometry and the native VZ
+  replacement lane. DiskImageKit supplies ASIF virtual geometry and the native VZ
   attachment, so sparse host length is never mistaken for guest capacity.
   Conversion is stopped-only and saved-state-free, runs out of place through
   the documented `diskutil image create from --format ASIF` route, inherits
@@ -787,38 +791,43 @@ Updated: 2026-06-21.
   another cancellation point. Unconfirmed exit retains the runtime lease and
   journal; failed KILL delivery is tied to `kern.bootsessionuuid` and cannot
   recover until a reboot proves quiescence. Runtime/discard leases and
-  clone/export/import paths reject pending migration state. Relaunch continues
+  clone/export/import paths reject pending replacement state. Relaunch continues
   recovery across per-VM failures, rolls back only safe pre-commit artifacts,
-  or completes post-commit cleanup. The VM configuration screen exposes the operation, its
-  blockers, cancellation, uncancellable refresh, and measured savings; competing
+  or completes post-commit cleanup. The same coordinator now supports a
+  standalone ASIF-to-ASIF rewrite. It rejects cache/overlay layers, verifies
+  virtual capacity and block size, and commits a uniquely named candidate only
+  when sealed filesystem accounting measures fewer allocated bytes; equal or
+  larger candidates are cleaned up as a successful no-op. Journal schema 3
+  records source block geometry in addition to schema-2 operation/format data,
+  while recovery remains compatible with schema-1 and schema-2 journals.
+  Thin migration/rewrite services, required shared recovery, and one app-scoped
+  maintenance model keep the runtime, discard, transfer, and shared-folder gates
+  aligned. The VM
+  configuration screen exposes the operation, its blockers, cancellation,
+  uncancellable refresh, and measured savings; competing
   controls remain disabled, and raw truncation remains prohibited.
-  Xcode MCP's complete 726-test plan passed 707 deterministic tests, skipped the
-  19 explicit live gates, and left no failures or unrun tests. Build-for-testing
-  passed in 10.115 seconds, the refreshed VM inspector rendered in Preview, the
-  app launched as PID 46995 and Xcode stopped that exact PID, and the Issue
-  Navigator reported no warnings or errors.
+  Xcode MCP's complete 747-outcome plan passed 728 deterministic outcomes,
+  skipped the 19 explicit live gates, and left no failures or unrun tests.
+  Build-for-testing passed, and both RAW and ASIF VM inspectors rendered in
+  Preview. The signed app launched as PID 20113 and Xcode stopped that exact
+  process; the Preview-owned PID 13620 accepted bounded TERM cleanup, and no
+  NativeContainers process remained. The Issue Navigator reported no warnings
+  or errors. Launch emitted only the existing macOS 27 beta SetStore donation
+  noise.
 
-## Known configuration issue
+## Remaining live verification gap
 
-Apple documentation and SDK headers require
-`com.apple.security.virtualization`. Xcode MCP’s entitlement action returned
-“This entitlement does not exist” for that documented key and explicitly
-forbids a manual workaround. The app therefore builds and the container lane is
-live, but installing or starting a VM is intentionally not claimed as
-runtime-verified until the entitlement can be added through a functioning Xcode
-capability surface. Official Apple sources confirm this is a normal Boolean
-entitlement; no developer-team or provisioning-profile change should be needed.
+The entitlement, signing configuration, build, and capability availability are
+verified. Installing, booting, saving/restoring, and clone-booting macOS are not
+claimed as live-verified until a local IPSW and disposable installed guest are
+available for that destructive integration pass.
 
 ## Next implementation slice
 
-1. Add a separately reviewed ASIF-to-ASIF transactional rewrite that reports
-   measured reclaimed bytes without calling it a guaranteed compact primitive;
-   exclude stacked layers until UUID/parent semantics are fully modeled.
-2. Add the entitlement through a functioning Xcode capability surface, then
-   live-verify the implemented macOS installer, lifecycle service, force-stop
+1. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.
-3. Build the deterministic Compose external-resource overlay, stable metadata
+2. Build the deterministic Compose external-resource overlay, stable metadata
    paths, replica-prefix guard, attachment verification, and supported-key
    allowlist needed for safe create-missing Up. Keep recreation blocked until
    the pinned bridge implements rename and network attachment routes.

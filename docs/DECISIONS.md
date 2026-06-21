@@ -1156,5 +1156,36 @@ for unrelated VMs, and never guesses across an invalid identity or journal.
 
 DiskImageKit exposes no populated-image converter or compact API, and its
 truncate operation does not resize guest content. Raw truncation, same-path
-conversion, and in-place resize are therefore prohibited. ASIF-to-ASIF rewrite
-with measured reclaimed bytes remains a separate future maintenance action.
+conversion, and in-place resize are therefore prohibited. ADR-042 defines the
+separate ASIF-to-ASIF rewrite maintenance action.
+
+## ADR-042: Reclaim standalone ASIF allocation through measured replacement
+
+**Status:** Accepted — 2026-06-21
+
+ASIF reclamation reuses the journaled out-of-place disk replacement coordinator
+from ADR-041. Thin migration and rewrite services select an operation policy;
+the coordinator owns the maintenance lease, saved-state gate, filesystem seals,
+DiskImageKit geometry checks, `diskutil image create from --format ASIF`, exact-PID
+TERM-to-KILL behavior, manifest commit, cleanup, and launch recovery. Journal
+schema 2 introduced the operation and source/destination formats; schema 3 adds
+the source block size so recovery can revalidate geometry. Schemas 1 and 2 remain
+decodable with their original semantics, while new journals require the geometry
+field. Legacy RAW migration recovery derives the format's required 512-byte block
+size; only legacy ASIF rewrites lack recoverable source-geometry metadata.
+
+Rewrite accepts only a stopped VM with no saved state and a standalone ASIF
+source. Cache and overlay layers are rejected because their parent and UUID
+semantics are not represented by the manifest. Every replacement candidate must
+match both virtual capacity and block size. It is promoted to a unique
+sibling path, never over the source. The manifest switches and the old source is
+retired only when the candidate's sealed filesystem identity reports strictly
+fewer allocated bytes. Equal or larger candidates are removed as a successful
+measured no-op.
+
+The product calls this action “Rewrite ASIF,” reports only the measured
+allocated-byte reduction, and explicitly notes that APFS free-space growth can
+differ. It does not claim a public compact primitive, guaranteed reclamation, or
+guest-filesystem shrink. Migration and rewrite share one app-scoped maintenance
+model so runtime, transfer, discard, and shared-folder controls observe the same
+busy state.

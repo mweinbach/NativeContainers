@@ -4,7 +4,7 @@ struct VirtualMachineRow: View {
   let machine: VirtualMachineManifest
   let availability: MacVirtualMachineAvailability
   let runtime: MacVirtualMachineRuntimeModel
-  let diskMigration: VirtualMachineDiskImageMigrationModel
+  let diskMaintenance: VirtualMachineDiskImageMaintenanceModel
   let isSelected: Bool
   let onSelect: () -> Void
   let prepare: () -> Void
@@ -114,7 +114,7 @@ struct VirtualMachineRow: View {
             Image(systemName: "ellipsis.circle")
           }
           .menuStyle(.borderlessButton)
-          .disabled(diskMigration.isBusy)
+          .disabled(diskMaintenance.isBusy)
           .help("More virtual machine actions")
           .accessibilityLabel("More virtual machine actions")
         }
@@ -181,11 +181,11 @@ struct VirtualMachineRow: View {
 
   @ViewBuilder
   private var runtimeAction: some View {
-    if diskMigration.isBusy {
+    if diskMaintenance.isBusy {
       HStack(spacing: 6) {
         ProgressView()
           .controlSize(.small)
-        Text("Converting disk")
+        Text(diskMaintenanceStatusLabel)
           .font(.caption)
       }
     } else {
@@ -218,6 +218,13 @@ struct VirtualMachineRow: View {
         }
       }
     }
+  }
+
+  private var diskMaintenanceStatusLabel: LocalizedStringResource {
+    if diskMaintenance.isRefreshing {
+      return "Refreshing disk"
+    }
+    return diskMaintenance.operation?.progressLabel ?? "Maintaining disk"
   }
 
   private var installStateLabel: LocalizedStringResource {

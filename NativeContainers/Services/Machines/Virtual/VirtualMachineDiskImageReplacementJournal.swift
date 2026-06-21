@@ -141,14 +141,21 @@ struct FileVirtualMachineDiskImageReplacementJournalStore:
     let hasValidOperation =
       journal.sourceFormat == journal.operation.sourceFormat
       && journal.destinationFormat == journal.operation.destinationFormat
+    let hasValidSourceGeometry =
+      journal.sourceBlockSizeBytes.map { $0 > 0 }
+      ?? (journal.version
+        < VirtualMachineDiskImageReplacementJournal.geometryMetadataVersion)
+    let hasSupportedVersion =
+      journal.version
+      >= VirtualMachineDiskImageReplacementJournal.legacyVersion
+      && journal.version
+        <= VirtualMachineDiskImageReplacementJournal.currentVersion
     guard
-      [
-        VirtualMachineDiskImageReplacementJournal.legacyVersion,
-        VirtualMachineDiskImageReplacementJournal.currentVersion,
-      ].contains(journal.version),
+      hasSupportedVersion,
       journal.version != VirtualMachineDiskImageReplacementJournal.legacyVersion
         || journal.operation == .rawToASIF,
       hasValidOperation,
+      hasValidSourceGeometry,
       journal.sourceLogicalBytes > 0,
       isSafeRelativePath(journal.sourcePath),
       isSafeRelativePath(journal.destinationPath),
@@ -194,7 +201,8 @@ struct FileVirtualMachineDiskImageReplacementJournalStore:
       current.sourceFormat == updated.sourceFormat,
       current.destinationFormat == updated.destinationFormat,
       current.sourceIdentity == updated.sourceIdentity,
-      current.sourceLogicalBytes == updated.sourceLogicalBytes
+      current.sourceLogicalBytes == updated.sourceLogicalBytes,
+      current.sourceBlockSizeBytes == updated.sourceBlockSizeBytes
     else {
       throw VirtualMachineDiskImageReplacementError.invalidJournal
     }
@@ -259,8 +267,3 @@ struct FileVirtualMachineDiskImageReplacementJournalStore:
     }
   }
 }
-
-typealias VirtualMachineDiskImageMigrationJournaling =
-  VirtualMachineDiskImageReplacementJournaling
-typealias FileVirtualMachineDiskImageMigrationJournalStore =
-  FileVirtualMachineDiskImageReplacementJournalStore

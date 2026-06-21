@@ -7,6 +7,12 @@ extension AppModel {
     return model
   }
 
+  static var previewASIFVirtualMachines: AppModel {
+    let model = preview(diskFormat: .asif)
+    model.selection = .macOSVirtualMachines
+    return model
+  }
+
   static var previewContainers: AppModel {
     let model = preview
     model.selection = .containers
@@ -14,6 +20,12 @@ extension AppModel {
   }
 
   static var preview: AppModel {
+    preview(diskFormat: .raw)
+  }
+
+  private static func preview(
+    diskFormat: VirtualMachineDiskImageFormat
+  ) -> AppModel {
     let now = Date()
     let inventory = ContainerInventory(
       system: ContainerSystemInfo(
@@ -164,12 +176,18 @@ extension AppModel {
       memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
       diskBytes: 64 * VirtualMachineResources.bytesPerGiB
     )
-    let macVM = try! VirtualMachineManifest(
+    var macVM = try! VirtualMachineManifest(
       name: "macOS Sequoia",
       guest: .macOS,
       installState: .stopped,
       resources: machineResources
     )
+    if diskFormat == .asif {
+      macVM.markDiskImageReplaced(
+        to: "Installed/Disk.asif",
+        format: .asif
+      )
+    }
     let sharedDirectories = PreviewMacVirtualMachineSharedDirectoryService(
       initialConfiguration: MacVirtualMachineSharedDirectoryConfiguration(
         revision: 2,

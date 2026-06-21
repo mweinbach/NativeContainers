@@ -106,8 +106,8 @@ final class AppModel {
     [UUID: MacVirtualMachineSharedDirectoriesModel] = [:]
 
   @ObservationIgnored
-  private var virtualMachineDiskImageMigrationModels:
-    [UUID: VirtualMachineDiskImageMigrationModel] = [:]
+  private var virtualMachineDiskImageMaintenanceModels:
+    [UUID: VirtualMachineDiskImageMaintenanceModel] = [:]
 
   private var hasLoaded = false
   private var refreshRequested = false
@@ -167,8 +167,7 @@ final class AppModel {
       UnavailableMacVirtualMachineRuntimeService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
-    virtualMachineDiskImageMigration: any VirtualMachineDiskImageMigrationManaging =
-      UnavailableVirtualMachineDiskImageMigrationService(),
+    virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -200,7 +199,7 @@ final class AppModel {
         virtualMachineInstaller: virtualMachineInstaller,
         virtualMachineRuntime: virtualMachineRuntime,
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
-        virtualMachineDiskImageMigration: virtualMachineDiskImageMigration,
+        virtualMachineDiskImages: virtualMachineDiskImages,
         virtualMachineAvailability: virtualMachineAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
         restoreImageAcquisition: restoreImageAcquisition,
@@ -228,15 +227,15 @@ final class AppModel {
         return
       }
       let diskRecovery =
-        try await services.virtualMachineDiskImageMigration
-        .recoverInterruptedMigrations()
+        try await services.virtualMachineDiskImages.recovery
+        .recoverInterruptedDiskImageReplacements()
       try await services.restoreImageStoreRecovery.recover()
       if let failure = diskRecovery.failures.first {
         virtualMachineRecoveryErrorMessage =
-          "Disk migration recovery needs attention for \(diskRecovery.failures.count) virtual machine(s): \(failure.diagnostic)"
+          "Disk replacement recovery needs attention for \(diskRecovery.failures.count) virtual machine(s): \(failure.diagnostic)"
       } else if !diskRecovery.deferredMachineIDs.isEmpty {
         virtualMachineRecoveryErrorMessage =
-          "Disk migration recovery is waiting for another NativeContainers process to release \(diskRecovery.deferredMachineIDs.count) virtual machine(s)."
+          "Disk replacement recovery is waiting for another NativeContainers process to release \(diskRecovery.deferredMachineIDs.count) virtual machine(s)."
       } else {
         virtualMachineRecoveryErrorMessage = nil
       }
@@ -660,22 +659,23 @@ final class AppModel {
     return model
   }
 
-  func makeVirtualMachineDiskImageMigrationModel(
+  func makeVirtualMachineDiskImageMaintenanceModel(
     for machine: VirtualMachineManifest
-  ) -> VirtualMachineDiskImageMigrationModel {
-    if let model = virtualMachineDiskImageMigrationModels[machine.id] {
+  ) -> VirtualMachineDiskImageMaintenanceModel {
+    if let model = virtualMachineDiskImageMaintenanceModels[machine.id] {
       return model
     }
     let runtime = makeMacVirtualMachineRuntimeModel(for: machine)
-    let model = VirtualMachineDiskImageMigrationModel(
+    let model = VirtualMachineDiskImageMaintenanceModel(
       machineID: machine.id,
-      service: services.virtualMachineDiskImageMigration
+      migration: services.virtualMachineDiskImages.migration,
+      rewrite: services.virtualMachineDiskImages.rewrite
     ) { [weak self] in
       await self?.refreshVirtualMachineStorageAfterMutation()
     } didSettle: {
       await runtime.refreshSavedState()
     }
-    virtualMachineDiskImageMigrationModels[machine.id] = model
+    virtualMachineDiskImageMaintenanceModels[machine.id] = model
     return model
   }
 
@@ -703,10 +703,10 @@ final class AppModel {
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineSharedDirectoryModels.removeValue(forKey: identifier)
     }
-    for identifier in Array(virtualMachineDiskImageMigrationModels.keys)
+    for identifier in Array(virtualMachineDiskImageMaintenanceModels.keys)
     where !currentIdentifiers.contains(identifier) {
-      virtualMachineDiskImageMigrationModels.removeValue(forKey: identifier)?
-        .cancelMigration()
+      virtualMachineDiskImageMaintenanceModels.removeValue(forKey: identifier)?
+        .cancelMaintenance()
     }
   }
 

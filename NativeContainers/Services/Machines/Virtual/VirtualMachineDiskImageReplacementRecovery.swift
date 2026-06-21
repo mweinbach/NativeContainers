@@ -1,7 +1,24 @@
 import Foundation
 
+@MainActor
+protocol VirtualMachineDiskImageReplacementRecovering: Sendable {
+  func recoverInterruptedDiskImageReplacements() async throws
+    -> VirtualMachineDiskImageReplacementRecoveryReport
+}
+
+@MainActor
+struct UnavailableVirtualMachineDiskImageReplacementRecoveryService:
+  VirtualMachineDiskImageReplacementRecovering
+{
+  func recoverInterruptedDiskImageReplacements() async throws
+    -> VirtualMachineDiskImageReplacementRecoveryReport
+  {
+    .empty
+  }
+}
+
 extension VirtualMachineDiskImageReplacementCoordinator {
-  func recoverInterruptedReplacements() async throws
+  func recoverInterruptedDiskImageReplacements() async throws
     -> VirtualMachineDiskImageReplacementRecoveryReport
   {
     var recovered: [UUID] = []
@@ -98,6 +115,25 @@ extension VirtualMachineDiskImageReplacementCoordinator {
       }
       guard descriptor.layerType == nil else {
         throw VirtualMachineDiskImageReplacementError.stackedImageUnsupported
+      }
+      let expectedBlockSize =
+        journal.sourceBlockSizeBytes
+        ?? (journal.operation == .rawToASIF
+          ? VirtualMachineDiskImageDescriptor.rawBlockSizeBytes : nil)
+      if let expectedBlockSize {
+        guard descriptor.blockSizeBytes == expectedBlockSize else {
+          throw VirtualMachineDiskImageReplacementError.blockSizeMismatch(
+            expected: expectedBlockSize,
+            actual: descriptor.blockSizeBytes
+          )
+        }
+      } else {
+        guard
+          journal.version
+            < VirtualMachineDiskImageReplacementJournal.geometryMetadataVersion
+        else {
+          throw VirtualMachineDiskImageReplacementError.invalidJournal
+        }
       }
       try await finishCommittedCleanup(
         journal: journal,

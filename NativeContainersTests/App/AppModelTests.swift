@@ -66,13 +66,13 @@ struct AppModelTests {
   }
 
   @Test
-  func diskMigrationUsesAStableAppScopedModel() throws {
+  func diskMaintenanceUsesAStableAppScopedModel() throws {
     let model = AppModel.previewVirtualMachines
     let machine = try #require(model.virtualMachines.first)
 
     #expect(
-      model.makeVirtualMachineDiskImageMigrationModel(for: machine)
-        === model.makeVirtualMachineDiskImageMigrationModel(for: machine)
+      model.makeVirtualMachineDiskImageMaintenanceModel(for: machine)
+        === model.makeVirtualMachineDiskImageMaintenanceModel(for: machine)
     )
   }
 
@@ -361,11 +361,15 @@ struct AppModelTests {
       machineIdentifierPath: "MacPlatform/MachineIdentifier"
     )
     let restoreImageRecovery = RecoveryRecordingRestoreImageStoreRecovery()
-    let diskRecovery = RecoveryRecordingDiskImageMigrationService()
+    let diskRecovery = RecoveryRecordingDiskImageReplacementService()
     let model = AppModel(
       containerService: MockContainerService(inventory: emptyInventory()),
       virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [prepared]),
-      virtualMachineDiskImageMigration: diskRecovery,
+      virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(
+        migration: UnavailableVirtualMachineDiskImageMigrationService(),
+        rewrite: UnavailableVirtualMachineDiskImageRewriteService(),
+        recovery: diskRecovery
+      ),
       restoreImageStoreRecovery: restoreImageRecovery
     )
 
@@ -379,12 +383,12 @@ struct AppModelTests {
   func diskRecoveryFailureDoesNotStarveRestoreImageRecovery() async throws {
     let machineID = UUID()
     let restoreImageRecovery = RecoveryRecordingRestoreImageStoreRecovery()
-    let diskRecovery = RecoveryRecordingDiskImageMigrationService(
-      report: VirtualMachineDiskImageMigrationRecoveryReport(
+    let diskRecovery = RecoveryRecordingDiskImageReplacementService(
+      report: VirtualMachineDiskImageReplacementRecoveryReport(
         recoveredMachineIDs: [],
         deferredMachineIDs: [],
         failures: [
-          VirtualMachineDiskImageMigrationRecoveryFailure(
+          VirtualMachineDiskImageReplacementRecoveryFailure(
             machineID: machineID,
             diagnostic: "malformed journal"
           )
@@ -394,7 +398,11 @@ struct AppModelTests {
     let model = AppModel(
       containerService: MockContainerService(inventory: emptyInventory()),
       virtualMachineLibrary: MockVirtualMachineLibrary(manifests: []),
-      virtualMachineDiskImageMigration: diskRecovery,
+      virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(
+        migration: UnavailableVirtualMachineDiskImageMigrationService(),
+        rewrite: UnavailableVirtualMachineDiskImageRewriteService(),
+        recovery: diskRecovery
+      ),
       restoreImageStoreRecovery: restoreImageRecovery
     )
 
@@ -1505,24 +1513,18 @@ private actor AppModelVirtualMachineTransferFixture:
 }
 
 @MainActor
-private final class RecoveryRecordingDiskImageMigrationService:
-  VirtualMachineDiskImageMigrationManaging
+private final class RecoveryRecordingDiskImageReplacementService:
+  VirtualMachineDiskImageReplacementRecovering
 {
   private(set) var recoveryCount = 0
-  private let report: VirtualMachineDiskImageMigrationRecoveryReport
+  private let report: VirtualMachineDiskImageReplacementRecoveryReport
 
-  init(report: VirtualMachineDiskImageMigrationRecoveryReport = .empty) {
+  init(report: VirtualMachineDiskImageReplacementRecoveryReport = .empty) {
     self.report = report
   }
 
-  func migrateToASIF(
-    machineID _: UUID
-  ) async throws -> VirtualMachineDiskImageMigrationResult {
-    throw VirtualMachineDiskImageMigrationError.unavailable
-  }
-
-  func recoverInterruptedMigrations() async throws
-    -> VirtualMachineDiskImageMigrationRecoveryReport
+  func recoverInterruptedDiskImageReplacements() async throws
+    -> VirtualMachineDiskImageReplacementRecoveryReport
   {
     recoveryCount += 1
     return report

@@ -14,7 +14,9 @@ protocol VirtualMachineDiskImageReplacementStoring:
 }
 
 @MainActor
-final class VirtualMachineDiskImageReplacementCoordinator {
+final class VirtualMachineDiskImageReplacementCoordinator:
+  VirtualMachineDiskImageReplacementRecovering
+{
   let store: any VirtualMachineDiskImageReplacementStoring
   private let savedStates: any MacVirtualMachineSavedStateInspecting
   private let converter: any VirtualMachineDiskImageConverting
@@ -130,6 +132,7 @@ final class VirtualMachineDiskImageReplacementCoordinator {
       stagingPath: paths.staging,
       sourceIdentity: sourceIdentity,
       sourceLogicalBytes: sourceDescriptor.logicalBytes,
+      sourceBlockSizeBytes: sourceDescriptor.blockSizeBytes,
       destinationIdentity: nil,
       phase: .planned,
       hostBootIdentifier: try hostBootSession.currentBootIdentifier()
@@ -325,9 +328,7 @@ final class VirtualMachineDiskImageReplacementCoordinator {
     guard destination.layerType == nil else {
       throw VirtualMachineDiskImageReplacementError.stackedImageUnsupported
     }
-    if operation == .rewriteASIF,
-      destination.blockSizeBytes != source.blockSizeBytes
-    {
+    if destination.blockSizeBytes != source.blockSizeBytes {
       throw VirtualMachineDiskImageReplacementError.blockSizeMismatch(
         expected: source.blockSizeBytes,
         actual: destination.blockSizeBytes

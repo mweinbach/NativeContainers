@@ -17,9 +17,12 @@ enum VirtualMachineDiskImageFormat: String, Codable, CaseIterable, Sendable {
 enum VirtualMachineDiskImageLayerType: String, Codable, Sendable {
   case cache
   case overlay
+  case unknown
 }
 
 struct VirtualMachineDiskImageDescriptor: Equatable, Sendable {
+  static let rawBlockSizeBytes: UInt64 = 512
+
   let format: VirtualMachineDiskImageFormat
   let logicalBytes: UInt64
   let blockSizeBytes: UInt64

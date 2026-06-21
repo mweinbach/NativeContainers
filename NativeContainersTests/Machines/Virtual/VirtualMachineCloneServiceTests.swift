@@ -17,7 +17,7 @@ struct VirtualMachineCloneServiceTests {
     let sourceBundle = bundleURL(root: root, id: source.id)
     try Data("pending".utf8).write(
       to: sourceBundle.appending(
-        path: VirtualMachineDiskImageMigrationArtifacts.journalFilename
+        path: VirtualMachineDiskImageReplacementArtifacts.journalFilename
       )
     )
 

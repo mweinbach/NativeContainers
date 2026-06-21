@@ -43,8 +43,16 @@ struct AppCompositionRootTests {
     #expect(services.virtualMachineInstaller is MacVirtualMachineInstallationService)
     #expect(services.virtualMachineRuntime is MacVirtualMachineRuntimeService)
     #expect(
-      services.virtualMachineDiskImageMigration
+      services.virtualMachineDiskImages.migration
         is VirtualMachineDiskImageMigrationService
+    )
+    #expect(
+      services.virtualMachineDiskImages.rewrite
+        is VirtualMachineDiskImageRewriteService
+    )
+    #expect(
+      services.virtualMachineDiskImages.recovery
+        is VirtualMachineDiskImageReplacementCoordinator
     )
     #expect(
       services.virtualMachineAvailability
