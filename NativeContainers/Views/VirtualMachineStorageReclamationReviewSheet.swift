@@ -105,7 +105,7 @@ struct VirtualMachineStorageReclamationReviewSheet: View {
       Button("Cancel", role: .cancel) {}
     } message: {
       Text(
-        "Saved states cannot be recovered. Only the exact reviewed app-owned artifacts are eligible; active, replaced, or changed items are skipped. VM disks and restore images are never touched."
+        "Saved states cannot be recovered. Selected unreferenced restore images must be downloaded again if needed. Active, referenced, replaced, or changed items are preserved; VM disks are never touched."
       )
     }
   }
@@ -145,6 +145,21 @@ private struct VirtualMachineReclamationScopeSection: View {
       )
       .disabled(model.isWorking)
 
+      Toggle(
+        "Downloaded macOS restore images",
+        isOn: Binding(
+          get: { model.reclaimRestoreImages },
+          set: { model.setReclaimRestoreImages($0) }
+        )
+      )
+      .disabled(model.isWorking)
+
+      Text(
+        "Restore-image cleanup is off by default. Only exact private-store files with no VM reference or active lease are reviewable; partial downloads must also be at least seven days old."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+
       Text(
         "Changing scope discards the current plan. Scan again to review the new exact candidate set."
       )
@@ -160,7 +175,7 @@ private struct VirtualMachineReclamationBoundarySection: View {
       Label("Exact reviewed cleanup", systemImage: "checkmark.shield")
         .font(.headline)
       Text(
-        "This pass can discard committed same-host saved states and exact allowlisted residue from interrupted app operations. It never starts, stops, force-stops, or kills a VM."
+        "This pass can discard committed same-host saved states, exact allowlisted operation residue, and explicitly selected unreferenced restore images. It never starts, stops, force-stops, or kills a VM."
       )
       .font(.callout)
       .foregroundStyle(.secondary)
@@ -168,12 +183,12 @@ private struct VirtualMachineReclamationBoundarySection: View {
       ViewThatFits(in: .horizontal) {
         HStack(spacing: 12) {
           boundaryLabel("No disk compaction", systemImage: "internaldrive")
-          boundaryLabel("No restore-image deletion", systemImage: "arrow.down.doc")
+          boundaryLabel("Referenced images protected", systemImage: "arrow.down.doc")
           boundaryLabel("Commit-time revalidation", systemImage: "arrow.triangle.2.circlepath")
         }
         VStack(alignment: .leading, spacing: 8) {
           boundaryLabel("No disk compaction", systemImage: "internaldrive")
-          boundaryLabel("No restore-image deletion", systemImage: "arrow.down.doc")
+          boundaryLabel("Referenced images protected", systemImage: "arrow.down.doc")
           boundaryLabel("Commit-time revalidation", systemImage: "arrow.triangle.2.circlepath")
         }
       }
@@ -257,7 +272,7 @@ private struct VirtualMachineReclamationPlanSection: View {
           "Nothing eligible was found",
           systemImage: "checkmark.circle",
           description: Text(
-            "No selected saved state or exact interrupted-operation residue is currently reclaimable."
+            "No selected saved state, exact interrupted-operation residue, or unreferenced restore image is currently reclaimable."
           )
         )
         .frame(maxWidth: .infinity, minHeight: 180)
@@ -271,10 +286,54 @@ private struct VirtualMachineReclamationPlanSection: View {
         if let residue = plan.residuePlan?.candidates, !residue.isEmpty {
           VirtualMachineResidueCandidateSection(candidates: residue)
         }
+
+        if let restoreImages = plan.restoreImagePlan?.candidates,
+          !restoreImages.isEmpty
+        {
+          RestoreImageCacheCandidateSection(candidates: restoreImages)
+        }
       }
 
       if !plan.issues.isEmpty {
         VirtualMachineReclamationIssueSection(issues: plan.issues)
+      }
+    }
+  }
+}
+
+private struct RestoreImageCacheCandidateSection: View {
+  let candidates: [RestoreImageCacheReclamationCandidate]
+
+  var body: some View {
+    VirtualMachineReclamationCard {
+      Label("Downloaded restore images", systemImage: "arrow.down.doc")
+        .font(.headline)
+
+      ForEach(candidates) { candidate in
+        Divider()
+        HStack(alignment: .top, spacing: 12) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text(String(localized: candidate.kind.title))
+              .fontWeight(.semibold)
+            Text(candidate.entryName)
+              .font(.caption2.monospaced())
+              .foregroundStyle(.tertiary)
+              .textSelection(.enabled)
+              .lineLimit(2)
+            Text(
+              "Last changed \(candidate.modifiedAt.formatted(date: .abbreviated, time: .shortened))"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          }
+          Spacer()
+          Text(
+            StorageByteFormatter.string(
+              from: candidate.estimatedAllocatedBytes
+            )
+          )
+          .monospacedDigit()
+        }
       }
     }
   }
@@ -480,8 +539,26 @@ private enum VirtualMachineReclamationPreviewData {
     statusChangeNanoseconds: 4,
     treeFingerprint: String(repeating: "a", count: 64)
   )
+  static let restoreImageIdentity = VirtualMachineStorageArtifactIdentity(
+    device: 1,
+    inode: 9,
+    fileType: .regularFile,
+    ownerUserID: 501,
+    linkCount: 1,
+    logicalBytes: 14_000_000_000,
+    allocatedBytes: 14_000_001_792,
+    entryCount: 1,
+    modificationSeconds: 1_749_900_000,
+    modificationNanoseconds: 0,
+    statusChangeSeconds: 1_749_900_000,
+    statusChangeNanoseconds: 0,
+    treeFingerprint: String(repeating: "d", count: 64)
+  )
   static let plan = VirtualMachineStorageReclamationPlan(
-    request: VirtualMachineStorageReclamationRequest(source: source),
+    request: VirtualMachineStorageReclamationRequest(
+      source: source,
+      reclaimRestoreImages: true
+    ),
     generatedAt: Date(timeIntervalSince1970: 1_750_000_060),
     savedStatePlan: VirtualMachineSavedStateReclamationPlan(
       candidates: [
@@ -533,6 +610,17 @@ private enum VirtualMachineReclamationPreviewData {
             "A changed shared-folder staging file was preserved because its filesystem identity no longer matched."
         )
       ]
+    ),
+    restoreImagePlan: RestoreImageCacheReclamationPlan(
+      candidates: [
+        RestoreImageCacheReclamationCandidate(
+          entryName: "UniversalMac-0123456789abcdef0123.ipsw",
+          kind: .completedImage,
+          modifiedAt: Date(timeIntervalSince1970: 1_749_900_000),
+          artifactIdentity: restoreImageIdentity
+        )
+      ],
+      issues: []
     )
   )
   static let emptyPlan = VirtualMachineStorageReclamationPlan(

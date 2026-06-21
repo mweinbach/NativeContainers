@@ -11,16 +11,19 @@ struct VirtualMachineStorageReclamationRequest: Equatable, Sendable {
   let source: VirtualMachineStorageReclamationSource
   let savedStateMachineIDs: Set<UUID>
   let reclaimInterruptedResidue: Bool
+  let reclaimRestoreImages: Bool
 
   init(
     source: VirtualMachineStorageReclamationSource,
     savedStateMachineIDs: Set<UUID>? = nil,
-    reclaimInterruptedResidue: Bool = true
+    reclaimInterruptedResidue: Bool = true,
+    reclaimRestoreImages: Bool = false
   ) {
     self.source = source
     self.savedStateMachineIDs =
       savedStateMachineIDs ?? source.measuredSavedStateMachineIDs
     self.reclaimInterruptedResidue = reclaimInterruptedResidue
+    self.reclaimRestoreImages = reclaimRestoreImages
   }
 
   var categories: [VirtualMachineStorageReclamationCategory] {
@@ -30,6 +33,9 @@ struct VirtualMachineStorageReclamationRequest: Equatable, Sendable {
     }
     if reclaimInterruptedResidue {
       categories.append(.interruptedResidue)
+    }
+    if reclaimRestoreImages {
+      categories.append(.restoreImages)
     }
     return categories
   }
@@ -44,6 +50,7 @@ enum VirtualMachineStorageReclamationCategory:
 {
   case savedStates
   case interruptedResidue
+  case restoreImages
 
   var id: Self { self }
 
@@ -53,6 +60,8 @@ enum VirtualMachineStorageReclamationCategory:
       "Saved states"
     case .interruptedResidue:
       "Interrupted-operation residue"
+    case .restoreImages:
+      "Downloaded restore images"
     }
   }
 }
@@ -179,15 +188,67 @@ struct VirtualMachineStorageResidueReclamationPlan: Equatable, Sendable {
   let issues: [VirtualMachineStorageReclamationPlanningIssue]
 }
 
+enum RestoreImageCacheReclamationKind: String, Equatable, Sendable {
+  case completedImage
+  case abandonedPartial
+
+  var title: LocalizedStringResource {
+    switch self {
+    case .completedImage:
+      "Downloaded restore image"
+    case .abandonedPartial:
+      "Abandoned partial download"
+    }
+  }
+}
+
+struct RestoreImageCacheReclamationCandidate:
+  Equatable,
+  Sendable,
+  Identifiable
+{
+  let entryName: String
+  let kind: RestoreImageCacheReclamationKind
+  let modifiedAt: Date
+  let artifactIdentity: VirtualMachineStorageArtifactIdentity
+
+  var id: String { "restore-image:\(kind.rawValue):\(entryName)" }
+
+  var estimatedAllocatedBytes: UInt64 {
+    artifactIdentity.allocatedBytes
+  }
+}
+
+struct RestoreImageCacheReclamationPlan: Equatable, Sendable {
+  let candidates: [RestoreImageCacheReclamationCandidate]
+  let issues: [VirtualMachineStorageReclamationPlanningIssue]
+}
+
 struct VirtualMachineStorageReclamationPlan: Equatable, Sendable {
   let request: VirtualMachineStorageReclamationRequest
   let generatedAt: Date
   let savedStatePlan: VirtualMachineSavedStateReclamationPlan?
   let residuePlan: VirtualMachineStorageResidueReclamationPlan?
+  let restoreImagePlan: RestoreImageCacheReclamationPlan?
+
+  init(
+    request: VirtualMachineStorageReclamationRequest,
+    generatedAt: Date,
+    savedStatePlan: VirtualMachineSavedStateReclamationPlan?,
+    residuePlan: VirtualMachineStorageResidueReclamationPlan?,
+    restoreImagePlan: RestoreImageCacheReclamationPlan? = nil
+  ) {
+    self.request = request
+    self.generatedAt = generatedAt
+    self.savedStatePlan = savedStatePlan
+    self.residuePlan = residuePlan
+    self.restoreImagePlan = restoreImagePlan
+  }
 
   var candidateCount: Int {
     (savedStatePlan?.candidates.count ?? 0)
       + (residuePlan?.candidates.count ?? 0)
+      + (restoreImagePlan?.candidates.count ?? 0)
   }
 
   var isEmpty: Bool {
@@ -198,11 +259,14 @@ struct VirtualMachineStorageReclamationPlan: Equatable, Sendable {
     StorageByteMath.saturatingSum(
       (savedStatePlan?.candidates.map(\.estimatedAllocatedBytes) ?? [])
         + (residuePlan?.candidates.map(\.estimatedAllocatedBytes) ?? [])
+        + (restoreImagePlan?.candidates.map(\.estimatedAllocatedBytes) ?? [])
     )
   }
 
   var issues: [VirtualMachineStorageReclamationPlanningIssue] {
-    (savedStatePlan?.issues ?? []) + (residuePlan?.issues ?? [])
+    (savedStatePlan?.issues ?? [])
+      + (residuePlan?.issues ?? [])
+      + (restoreImagePlan?.issues ?? [])
   }
 
   var categories: [VirtualMachineStorageReclamationCategory] {
@@ -263,27 +327,44 @@ struct VirtualMachineStorageReclamationCategoryFailure:
 struct VirtualMachineStorageReclamationResult: Equatable, Sendable {
   let savedStateResult: VirtualMachineStorageReclamationBatchResult?
   let residueResult: VirtualMachineStorageReclamationBatchResult?
+  let restoreImageResult: VirtualMachineStorageReclamationBatchResult?
   let categoryFailures: [VirtualMachineStorageReclamationCategoryFailure]
+
+  init(
+    savedStateResult: VirtualMachineStorageReclamationBatchResult?,
+    residueResult: VirtualMachineStorageReclamationBatchResult?,
+    restoreImageResult: VirtualMachineStorageReclamationBatchResult? = nil,
+    categoryFailures: [VirtualMachineStorageReclamationCategoryFailure]
+  ) {
+    self.savedStateResult = savedStateResult
+    self.residueResult = residueResult
+    self.restoreImageResult = restoreImageResult
+    self.categoryFailures = categoryFailures
+  }
 
   static let empty = VirtualMachineStorageReclamationResult(
     savedStateResult: nil,
     residueResult: nil,
+    restoreImageResult: nil,
     categoryFailures: []
   )
 
   var removedCandidateCount: Int {
     (savedStateResult?.removedCandidateIDs.count ?? 0)
       + (residueResult?.removedCandidateIDs.count ?? 0)
+      + (restoreImageResult?.removedCandidateIDs.count ?? 0)
   }
 
   var staleCandidateCount: Int {
     (savedStateResult?.staleCandidateIDs.count ?? 0)
       + (residueResult?.staleCandidateIDs.count ?? 0)
+      + (restoreImageResult?.staleCandidateIDs.count ?? 0)
   }
 
   var failedCandidateCount: Int {
     (savedStateResult?.failedCandidates.count ?? 0)
       + (residueResult?.failedCandidates.count ?? 0)
+      + (restoreImageResult?.failedCandidates.count ?? 0)
       + categoryFailures.count
   }
 
@@ -291,11 +372,13 @@ struct VirtualMachineStorageReclamationResult: Equatable, Sendable {
     StorageByteMath.saturatingSum([
       savedStateResult?.removedAllocatedBytes ?? 0,
       residueResult?.removedAllocatedBytes ?? 0,
+      restoreImageResult?.removedAllocatedBytes ?? 0,
     ])
   }
 
   var hasRecordedWork: Bool {
-    savedStateResult != nil || residueResult != nil || !categoryFailures.isEmpty
+    savedStateResult != nil || residueResult != nil
+      || restoreImageResult != nil || !categoryFailures.isEmpty
   }
 }
 

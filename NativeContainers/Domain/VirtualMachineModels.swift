@@ -127,6 +127,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installState = .stopped
     self.diskImagePath = diskImagePath
     self.auxiliaryStoragePath = auxiliaryStoragePath
+    restoreImageURL = nil
     installationOperationID = nil
     installationFailure = nil
     self.updatedAt = updatedAt

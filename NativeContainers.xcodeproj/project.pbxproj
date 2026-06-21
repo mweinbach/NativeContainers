@@ -275,6 +275,7 @@
 		1F9D2CBC2FE80A7B0076F5B9 /* RestoreImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CBB2FE80A7B0076F5B9 /* RestoreImageCacheService.swift */; };
 		1F9D2CBE2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CBD2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift */; };
 		1F9D2CC02FE80C040076F5B9 /* RestoreImageCacheServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CBF2FE80C040076F5B9 /* RestoreImageCacheServiceTests.swift */; };
+		1F9D2CC22FE80D080076F5B9 /* RestoreImageCacheReclamationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CC12FE80D080076F5B9 /* RestoreImageCacheReclamationService.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -661,6 +662,7 @@
 		1F9D2CBB2FE80A7B0076F5B9 /* RestoreImageCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageCacheService.swift; sourceTree = "<group>"; };
 		1F9D2CBD2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageAcquisitionService.swift; sourceTree = "<group>"; };
 		1F9D2CBF2FE80C040076F5B9 /* RestoreImageCacheServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageCacheServiceTests.swift; sourceTree = "<group>"; };
+		1F9D2CC12FE80D080076F5B9 /* RestoreImageCacheReclamationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageCacheReclamationService.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -1100,6 +1102,7 @@
 				1F9D2CAB2FE805AA0076F5B9 /* VirtualMachineStorageReclamationService.swift */,
 				1F9D2CBB2FE80A7B0076F5B9 /* RestoreImageCacheService.swift */,
 				1F9D2CBD2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift */,
+				1F9D2CC12FE80D080076F5B9 /* RestoreImageCacheReclamationService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1533,6 +1536,7 @@
 				1F9D2B152FE76B040076F5B9 /* ContainerCreationSections.swift in Sources */,
 				1F9D2BF42FE7C5140076F5B9 /* DockerCompatibilitySettingsView.swift in Sources */,
 				1F9D2B092FE769800076F5B9 /* ApplePublishedSocketWorkspace.swift in Sources */,
+				1F9D2CC22FE80D080076F5B9 /* RestoreImageCacheReclamationService.swift in Sources */,
 				1F9D2C2D2FE7DD9F0076F5B9 /* AppOwnedBuildCacheModel.swift in Sources */,
 				1F9D2AD12FE7564A0076F5B9 /* AppleInfrastructureClient.swift in Sources */,
 				1F9D2ADD2FE7600F0076F5B9 /* AppleInfrastructureService.swift in Sources */,

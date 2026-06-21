@@ -13,6 +13,10 @@ struct AppCompositionRootTests {
     #expect(services.composeTopology is ComposeTopologyService)
     #expect(services.storageUsage is StorageUsageService)
     #expect(services.storageReclamation is StorageReclamationService)
+    #expect(
+      services.virtualMachineStorageReclamation
+        is VirtualMachineStorageReclamationService
+    )
     #expect(services.containerLifecycle is AppleContainerLifecycleService)
     #expect(services.containerCreator is AppleContainerCreationService)
     #expect(services.containerInspector is AppleContainerInspectionService)

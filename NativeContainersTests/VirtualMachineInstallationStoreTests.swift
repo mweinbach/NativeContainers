@@ -45,6 +45,7 @@ struct VirtualMachineInstallationStoreTests {
     #expect(installing.installationFailure == nil)
     #expect(installing.diskImagePath == "Installed/Disk.img")
     #expect(installing.auxiliaryStoragePath == "Installed/AuxiliaryStorage")
+    #expect(installing.restoreImageURL == nil)
   }
 
   @Test
@@ -76,6 +77,7 @@ struct VirtualMachineInstallationStoreTests {
     #expect(failed.installationOperationID == nil)
     #expect(failed.installationFailure?.kind == .cancelled)
     #expect(failed.installationFailure?.message == "Cancelled by test")
+    #expect(failed.restoreImageURL == fixture.restoreImage)
   }
 
   @Test

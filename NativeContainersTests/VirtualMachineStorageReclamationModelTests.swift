@@ -7,6 +7,23 @@ import Testing
 @MainActor
 struct VirtualMachineStorageReclamationModelTests {
   @Test
+  func restoreImageCleanupIsAnExplicitOptInScope() {
+    let fixture = VMReclamationModelFixture()
+    let model = VirtualMachineStorageReclamationModel(
+      service: fixture.service,
+      currentSource: { fixture.source }
+    )
+
+    #expect(model.reclaimRestoreImages == false)
+    model.setReclaimSavedStates(false)
+    model.setReclaimInterruptedResidue(false)
+    #expect(model.hasSelectedScope == false)
+
+    model.setReclaimRestoreImages(true)
+    #expect(model.hasSelectedScope)
+  }
+
+  @Test
   func preparationStoresOnlyAPlanFromTheCurrentMeasurement() async {
     let fixture = VMReclamationModelFixture()
     var currentSource: VirtualMachineStorageReclamationSource? = fixture.source

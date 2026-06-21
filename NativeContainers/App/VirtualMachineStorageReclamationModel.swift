@@ -12,6 +12,7 @@ final class VirtualMachineStorageReclamationModel {
   private(set) var isCancelling = false
   private(set) var reclaimSavedStates = true
   private(set) var reclaimInterruptedResidue = true
+  private(set) var reclaimRestoreImages = false
 
   private let service: any VirtualMachineStorageReclamationManaging
   private let currentSource: @MainActor @Sendable () -> VirtualMachineStorageReclamationSource?
@@ -45,6 +46,7 @@ final class VirtualMachineStorageReclamationModel {
     if let request = plan?.request {
       reclaimSavedStates = !request.savedStateMachineIDs.isEmpty
       reclaimInterruptedResidue = request.reclaimInterruptedResidue
+      reclaimRestoreImages = request.reclaimRestoreImages
     }
   }
 
@@ -56,6 +58,7 @@ final class VirtualMachineStorageReclamationModel {
     (reclaimSavedStates
       && currentSource()?.measuredSavedStateMachineIDs.isEmpty == false)
       || reclaimInterruptedResidue
+      || reclaimRestoreImages
   }
 
   var measuredSavedStateCount: Int {
@@ -74,6 +77,12 @@ final class VirtualMachineStorageReclamationModel {
     invalidateReview()
   }
 
+  func setReclaimRestoreImages(_ enabled: Bool) {
+    guard reclaimRestoreImages != enabled else { return }
+    reclaimRestoreImages = enabled
+    invalidateReview()
+  }
+
   func startPreparing() {
     guard let source = currentSource() else {
       errorMessage =
@@ -85,7 +94,8 @@ final class VirtualMachineStorageReclamationModel {
       source: source,
       savedStateMachineIDs: reclaimSavedStates
         ? source.measuredSavedStateMachineIDs : [],
-      reclaimInterruptedResidue: reclaimInterruptedResidue
+      reclaimInterruptedResidue: reclaimInterruptedResidue,
+      reclaimRestoreImages: reclaimRestoreImages
     )
     start { model in
       await model.prepare(request)

@@ -353,7 +353,15 @@ enum AppCompositionRoot {
         ),
         residue: VirtualMachineResidueReclamationService(
           inventory: virtualMachineLibrary
-        )
+        ),
+        restoreImages: RestoreImageCacheReclamationService(
+          store: restoreImageCache
+        ) {
+          Set(
+            try await virtualMachineLibrary.list()
+              .compactMap(\.restoreImageURL)
+          )
+        }
       )
     let virtualMachineRuntime = MacVirtualMachineRuntimeService(
       leasingStore: virtualMachineLibrary,

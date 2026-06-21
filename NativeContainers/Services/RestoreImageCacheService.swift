@@ -16,10 +16,16 @@ protocol RestoreImageCacheManaging: Sendable {
   ) async throws
 }
 
-actor RestoreImageCacheService: RestoreImageCacheManaging {
+actor RestoreImageCacheService:
+  RestoreImageCacheManaging,
+  RestoreImageCacheReclamationStoring
+{
   static let operationLockFilename = ".operations.lock"
   static let leaseMarkerSuffix = ".cache-lease.json"
   static let legacyImportMarkerSuffix = ".import-pending"
+  static let reclamationTombstonePrefix = ".RestoreImageReclamation-"
+  static let reclamationTombstoneSuffix = ".partial"
+  static let defaultPartialRetentionInterval: TimeInterval = 7 * 24 * 60 * 60
 
   private struct LeaseMarker: Codable, Equatable, Sendable {
     let version: Int
@@ -37,6 +43,8 @@ actor RestoreImageCacheService: RestoreImageCacheManaging {
 
   private let cacheDirectoryURL: URL
   private let fileManager: FileManager
+  private let artifactInspector: any VirtualMachineStorageArtifactInspecting
+  private let partialRetentionInterval: TimeInterval
   private let now: @Sendable () -> Date
   private var activeLeases: [UUID: ActiveLease] = [:]
   private var operationTokens = Set<UUID>()
@@ -46,12 +54,18 @@ actor RestoreImageCacheService: RestoreImageCacheManaging {
   init(
     cacheDirectoryURL: URL? = nil,
     fileManager: FileManager = .default,
+    artifactInspector: any VirtualMachineStorageArtifactInspecting =
+      FileVirtualMachineStorageArtifactInspector(),
+    partialRetentionInterval: TimeInterval =
+      RestoreImageCacheService.defaultPartialRetentionInterval,
     now: @escaping @Sendable () -> Date = Date.init
   ) {
     self.cacheDirectoryURL =
       (cacheDirectoryURL ?? RestoreImageCacheDirectory.defaultURL(fileManager: fileManager))
       .standardizedFileURL
     self.fileManager = fileManager
+    self.artifactInspector = artifactInspector
+    self.partialRetentionInterval = max(0, partialRetentionInterval)
     self.now = now
   }
 
@@ -134,6 +148,7 @@ actor RestoreImageCacheService: RestoreImageCacheManaging {
     }
     defer { releaseExclusiveOperationAccess(token: token) }
 
+    try recoverReclamationTombstones()
     let references = Set(try await referencedURLs().map(\.standardizedFileURL))
     let entries = try fileManager.contentsOfDirectory(
       at: cacheDirectoryURL,
@@ -171,6 +186,338 @@ actor RestoreImageCacheService: RestoreImageCacheManaging {
     }
 
     try recoverLegacyImports(entries: entries, references: references)
+  }
+
+  func prepareRestoreImageCacheReclamation(
+    referencedURLs: @Sendable () async throws -> Set<URL>
+  ) async throws -> RestoreImageCacheReclamationPlan {
+    guard fileManager.fileExists(atPath: cacheDirectoryURL.path) else {
+      return RestoreImageCacheReclamationPlan(candidates: [], issues: [])
+    }
+    try ensurePrivateStoreExists()
+    let token = UUID()
+    guard try acquireExclusiveOperationAccess(token: token) else {
+      throw RestoreImageCacheError.cacheInUse
+    }
+    defer { releaseExclusiveOperationAccess(token: token) }
+
+    try recoverReclamationTombstones()
+    let references = Set(try await referencedURLs().map(\.standardizedFileURL))
+    let entries = try fileManager.contentsOfDirectory(
+      at: cacheDirectoryURL,
+      includingPropertiesForKeys: nil,
+      options: []
+    )
+    var candidates: [RestoreImageCacheReclamationCandidate] = []
+    var issues: [VirtualMachineStorageReclamationPlanningIssue] = []
+
+    for entry in entries.sorted(by: {
+      $0.lastPathComponent.utf8.lexicographicallyPrecedes(
+        $1.lastPathComponent.utf8
+      )
+    }) {
+      try Task.checkCancellation()
+      guard
+        let kind = reclamationKind(
+          entryName: entry.lastPathComponent,
+          references: references
+        )
+      else {
+        continue
+      }
+      do {
+        let identity = try artifactInspector.inspect(at: entry)
+        guard identity.fileType == .regularFile else {
+          throw VirtualMachineStorageReclamationError.unsafeArtifact(
+            "\(entry.lastPathComponent) is not a regular file"
+          )
+        }
+        let modifiedAt = modificationDate(identity)
+        if kind == .abandonedPartial,
+          now().timeIntervalSince(modifiedAt) < partialRetentionInterval
+        {
+          continue
+        }
+        candidates.append(
+          RestoreImageCacheReclamationCandidate(
+            entryName: entry.lastPathComponent,
+            kind: kind,
+            modifiedAt: modifiedAt,
+            artifactIdentity: identity
+          )
+        )
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        issues.append(
+          VirtualMachineStorageReclamationPlanningIssue(
+            id: "restore-image:\(entry.lastPathComponent)",
+            category: .restoreImages,
+            machineID: nil,
+            message: error.localizedDescription
+          )
+        )
+      }
+    }
+    return RestoreImageCacheReclamationPlan(
+      candidates: candidates,
+      issues: issues
+    )
+  }
+
+  func reclaimRestoreImageCache(
+    _ plan: RestoreImageCacheReclamationPlan,
+    referencedURLs: @Sendable () async throws -> Set<URL>
+  ) async throws -> VirtualMachineStorageReclamationBatchResult {
+    let ids = plan.candidates.map(\.id)
+    guard Set(ids).count == ids.count,
+      plan.candidates.allSatisfy({
+        $0.artifactIdentity.fileType == .regularFile
+          && basicReclamationKind(entryName: $0.entryName) == $0.kind
+      })
+    else {
+      throw VirtualMachineStorageReclamationError.invalidPlan
+    }
+    guard fileManager.fileExists(atPath: cacheDirectoryURL.path) else {
+      return VirtualMachineStorageReclamationBatchResult(
+        removedCandidateIDs: [],
+        staleCandidateIDs: ids,
+        failedCandidates: [],
+        removedAllocatedBytes: 0
+      )
+    }
+
+    try ensurePrivateStoreExists()
+    let token = UUID()
+    guard try acquireExclusiveOperationAccess(token: token) else {
+      throw RestoreImageCacheError.cacheInUse
+    }
+    defer { releaseExclusiveOperationAccess(token: token) }
+
+    try recoverReclamationTombstones()
+    let references = Set(try await referencedURLs().map(\.standardizedFileURL))
+    var result = VirtualMachineStorageReclamationBatchResult.empty
+
+    for (index, candidate) in plan.candidates.enumerated() {
+      guard !Task.isCancelled else {
+        throw partialReclamationError(
+          result: result,
+          remaining: plan.candidates[index...]
+        )
+      }
+      do {
+        if try reclaim(candidate, references: references) {
+          result = result.merging(
+            VirtualMachineStorageReclamationBatchResult(
+              removedCandidateIDs: [candidate.id],
+              staleCandidateIDs: [],
+              failedCandidates: [],
+              removedAllocatedBytes: candidate.estimatedAllocatedBytes
+            )
+          )
+        } else {
+          result = result.merging(staleResult(candidate.id))
+        }
+      } catch is CancellationError {
+        throw partialReclamationError(
+          result: result,
+          remaining: plan.candidates[index...]
+        )
+      } catch {
+        result = result.merging(
+          VirtualMachineStorageReclamationBatchResult(
+            removedCandidateIDs: [],
+            staleCandidateIDs: [],
+            failedCandidates: [
+              VirtualMachineStorageReclamationCandidateFailure(
+                candidateID: candidate.id,
+                message: error.localizedDescription
+              )
+            ],
+            removedAllocatedBytes: 0
+          )
+        )
+      }
+
+      guard !Task.isCancelled else {
+        let next = plan.candidates.index(after: index)
+        throw partialReclamationError(
+          result: result,
+          remaining: plan.candidates[next...]
+        )
+      }
+    }
+    return result
+  }
+
+  private func basicReclamationKind(
+    entryName: String
+  ) -> RestoreImageCacheReclamationKind? {
+    guard !entryName.hasPrefix(".") else { return nil }
+    let lowercaseName = entryName.lowercased()
+    if lowercaseName.hasSuffix(".ipsw.partial") {
+      return .abandonedPartial
+    }
+    if lowercaseName.hasSuffix(".ipsw") {
+      return .completedImage
+    }
+    return nil
+  }
+
+  private func reclamationKind(
+    entryName: String,
+    references: Set<URL>
+  ) -> RestoreImageCacheReclamationKind? {
+    guard let kind = basicReclamationKind(entryName: entryName) else {
+      return nil
+    }
+    let finalName: String
+    switch kind {
+    case .completedImage:
+      finalName = entryName
+    case .abandonedPartial:
+      finalName = String(
+        entryName.dropLast(".\(RestoreImageDownloadService.partialFileExtension)".count)
+      )
+    }
+    let finalURL = cacheDirectoryURL.appending(
+      path: finalName,
+      directoryHint: .notDirectory
+    ).standardizedFileURL
+    guard !references.contains(finalURL), !hasOwnershipMarker(for: finalURL) else {
+      return nil
+    }
+    return kind
+  }
+
+  private func hasOwnershipMarker(for finalURL: URL) -> Bool {
+    if fileManager.fileExists(atPath: leaseMarkerURL(for: finalURL).path) {
+      return true
+    }
+    let legacyMarker = cacheDirectoryURL.appending(
+      path: ".\(finalURL.lastPathComponent)\(Self.legacyImportMarkerSuffix)",
+      directoryHint: .notDirectory
+    )
+    return fileManager.fileExists(atPath: legacyMarker.path)
+  }
+
+  private func modificationDate(
+    _ identity: VirtualMachineStorageArtifactIdentity
+  ) -> Date {
+    Date(
+      timeIntervalSince1970:
+        TimeInterval(identity.modificationSeconds)
+        + TimeInterval(identity.modificationNanoseconds) / 1_000_000_000
+    )
+  }
+
+  private func reclaim(
+    _ candidate: RestoreImageCacheReclamationCandidate,
+    references: Set<URL>
+  ) throws -> Bool {
+    guard
+      reclamationKind(
+        entryName: candidate.entryName,
+        references: references
+      ) == candidate.kind
+    else {
+      return false
+    }
+    let fileURL = cacheDirectoryURL.appending(
+      path: candidate.entryName,
+      directoryHint: .notDirectory
+    )
+    guard fileManager.fileExists(atPath: fileURL.path) else { return false }
+    let identity = try artifactInspector.inspect(at: fileURL)
+    guard identity == candidate.artifactIdentity else { return false }
+    if candidate.kind == .abandonedPartial,
+      now().timeIntervalSince(candidate.modifiedAt) < partialRetentionInterval
+    {
+      return false
+    }
+    try Task.checkCancellation()
+
+    let tombstoneURL = cacheDirectoryURL.appending(
+      path:
+        "\(Self.reclamationTombstonePrefix)\(UUID().uuidString.lowercased())\(Self.reclamationTombstoneSuffix)",
+      directoryHint: .notDirectory
+    )
+    guard !fileManager.fileExists(atPath: tombstoneURL.path) else {
+      throw VirtualMachineStorageReclamationError.unsafeArtifact(
+        "a restore-image cleanup tombstone already exists"
+      )
+    }
+    try fileManager.moveItem(at: fileURL, to: tombstoneURL)
+    try syncCacheDirectory()
+
+    // Rename is the commit point. Finish deletion even if cancellation arrives
+    // so a reviewed artifact never becomes active again under its old name.
+    try fileManager.removeItem(at: tombstoneURL)
+    try syncCacheDirectory()
+    return true
+  }
+
+  private func recoverReclamationTombstones() throws {
+    guard fileManager.fileExists(atPath: cacheDirectoryURL.path) else { return }
+    let entries = try fileManager.contentsOfDirectory(
+      at: cacheDirectoryURL,
+      includingPropertiesForKeys: nil,
+      options: []
+    )
+    for entry in entries where isReclamationTombstone(entry.lastPathComponent) {
+      try removeOwnedRegularArtifactIfPresent(at: entry)
+      try syncCacheDirectory()
+    }
+  }
+
+  private func isReclamationTombstone(_ entryName: String) -> Bool {
+    guard entryName.hasPrefix(Self.reclamationTombstonePrefix),
+      entryName.hasSuffix(Self.reclamationTombstoneSuffix)
+    else {
+      return false
+    }
+    let start = entryName.index(
+      entryName.startIndex,
+      offsetBy: Self.reclamationTombstonePrefix.count
+    )
+    let end = entryName.index(
+      entryName.endIndex,
+      offsetBy: -Self.reclamationTombstoneSuffix.count
+    )
+    return UUID(uuidString: String(entryName[start..<end])) != nil
+  }
+
+  private func staleResult(
+    _ candidateID: String
+  ) -> VirtualMachineStorageReclamationBatchResult {
+    VirtualMachineStorageReclamationBatchResult(
+      removedCandidateIDs: [],
+      staleCandidateIDs: [candidateID],
+      failedCandidates: [],
+      removedAllocatedBytes: 0
+    )
+  }
+
+  private func partialReclamationError(
+    result: VirtualMachineStorageReclamationBatchResult,
+    remaining: ArraySlice<RestoreImageCacheReclamationCandidate>
+  ) -> VirtualMachineStorageReclamationBatchPartialCompletionError {
+    VirtualMachineStorageReclamationBatchPartialCompletionError(
+      result: result,
+      remainingCandidateIDs: remaining.map(\.id)
+    )
+  }
+
+  private func syncCacheDirectory() throws {
+    let descriptor = Darwin.open(
+      cacheDirectoryURL.path(percentEncoded: false),
+      O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
+    )
+    guard descriptor >= 0 else { throw CocoaError(.fileReadUnknown) }
+    defer { Darwin.close(descriptor) }
+    guard Darwin.fsync(descriptor) == 0 else {
+      throw CocoaError(.fileWriteUnknown)
+    }
   }
 
   private func activeLease(matching lease: RestoreImageCacheLease) -> ActiveLease? {
