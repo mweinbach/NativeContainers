@@ -318,7 +318,7 @@ private enum CommandOutputKind: String, CaseIterable, Identifiable {
   }
 }
 
-private func parseEnvironment(_ text: String) throws -> [ContainerEnvironmentVariable] {
+func parseEnvironment(_ text: String) throws -> [ContainerEnvironmentVariable] {
   var result: [ContainerEnvironmentVariable] = []
   for (offset, rawLine) in text.components(separatedBy: .newlines).enumerated() {
     let line = rawLine.trimmingCharacters(in: .whitespaces)

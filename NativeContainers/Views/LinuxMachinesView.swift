@@ -7,6 +7,7 @@ struct LinuxMachinesView: View {
   @State private var isPresentingCreation = false
   @State private var pendingDeletion: LinuxMachineRecord?
   @State private var pendingForceStop: LinuxMachineRecord?
+  @State private var presentedTool: LinuxMachineToolPresentation?
 
   init(model: AppModel) {
     appModel = model
@@ -53,6 +54,12 @@ struct LinuxMachinesView: View {
             onForceStop: {
               pendingForceStop = machine
             },
+            onRunCommand: {
+              presentedTool = .command(machine)
+            },
+            onOpenTerminal: {
+              presentedTool = .terminal(machine)
+            },
             onDelete: {
               pendingDeletion = machine
             }
@@ -77,6 +84,14 @@ struct LinuxMachinesView: View {
     }
     .sheet(isPresented: $isPresentingCreation) {
       LinuxMachineCreationView(model: managementModel)
+    }
+    .sheet(item: $presentedTool) { presentation in
+      switch presentation {
+      case .command(let machine):
+        LinuxMachineCommandView(machine: machine, appModel: appModel)
+      case .terminal(let machine):
+        ContainerTerminalView(machine: machine, appModel: appModel)
+      }
     }
     .confirmationDialog(
       "Force-stop Linux machine?",
@@ -134,6 +149,8 @@ struct LinuxMachineRow: View {
   let onStart: () -> Void
   let onStop: () -> Void
   let onForceStop: () -> Void
+  let onRunCommand: () -> Void
+  let onOpenTerminal: () -> Void
   let onDelete: () -> Void
 
   var body: some View {
@@ -166,6 +183,26 @@ struct LinuxMachineRow: View {
         .foregroundStyle(.tertiary)
       }
       Spacer()
+      Menu("Machine Tools", systemImage: "terminal") {
+        Button(
+          machine.state == .stopped ? "Start & Open Terminal" : "Open Terminal",
+          systemImage: "terminal"
+        ) {
+          onOpenTerminal()
+        }
+        Button(
+          machine.state == .stopped ? "Start & Run Command" : "Run Command",
+          systemImage: "chevron.left.forwardslash.chevron.right"
+        ) {
+          onRunCommand()
+        }
+      }
+      .labelStyle(.iconOnly)
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .disabled(!canUseTools)
+      .help(toolHelp)
+
       ResourceActionMenu(
         isRunning: machine.state == .running || machine.state == .stopping,
         onStart: onStart,
@@ -176,5 +213,37 @@ struct LinuxMachineRow: View {
       )
     }
     .padding(.vertical, 7)
+  }
+
+  private var canUseTools: Bool {
+    machine.createdAt != nil && (machine.state == .running || machine.state == .stopped)
+  }
+
+  private var toolHelp: String {
+    guard machine.createdAt != nil else {
+      return "Refresh this legacy machine before running commands."
+    }
+    switch machine.state {
+    case .running:
+      return "Open a shell or run a one-shot command."
+    case .stopped:
+      return "Start the machine, then open a shell or run a command."
+    case .stopping, .unknown:
+      return "Wait for a stable running or stopped state."
+    }
+  }
+}
+
+private enum LinuxMachineToolPresentation: Identifiable {
+  case command(LinuxMachineRecord)
+  case terminal(LinuxMachineRecord)
+
+  var id: String {
+    switch self {
+    case .command(let machine):
+      "command-\(machine.id)"
+    case .terminal(let machine):
+      "terminal-\(machine.id)"
+    }
   }
 }

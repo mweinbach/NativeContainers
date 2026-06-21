@@ -58,7 +58,7 @@ struct AppleContainerProcessXPCClientTests {
     #expect(await sender.identifiers == Array(repeating: "machine-runtime/setup", count: 5))
     #expect(await sender.createdStandardIO == [true, true, false])
     #expect(await sender.terminalSizes == ["132x43"])
-    #expect(await sender.signals == [Int64(SIGKILL)])
+    #expect(await sender.signals == [String(SIGKILL)])
   }
 
   @Test
@@ -111,7 +111,7 @@ struct AppleContainerProcessXPCClientTests {
 
     #expect(await signalSender.routes == [XPCRoute.containerKill.rawValue])
     #expect(await signalSender.identifiers == ["machine-runtime/one-shot-id"])
-    #expect(await signalSender.signals == [Int64(SIGKILL)])
+    #expect(await signalSender.signals == [String(SIGKILL)])
   }
 }
 
@@ -128,7 +128,7 @@ private struct FailingProcessXPCSender: AppleXPCRequestSending {
 private actor RecordingProcessXPCSender: AppleXPCRequestSending {
   private(set) var routes: [String] = []
   private(set) var identifiers: [String] = []
-  private(set) var signals: [Int64] = []
+  private(set) var signals: [String] = []
   private(set) var createdStandardIO: [Bool] = []
   private(set) var terminalSizes: [String] = []
 
@@ -139,7 +139,7 @@ private actor RecordingProcessXPCSender: AppleXPCRequestSending {
       "\(message.string(key: .id) ?? "")/\(message.string(key: .processIdentifier) ?? "")"
     )
     if route == XPCRoute.containerKill.rawValue {
-      signals.append(message.int64(key: .signal))
+      signals.append(message.string(key: .signal) ?? "")
     }
     if route == XPCRoute.containerCreateProcess.rawValue {
       createdStandardIO = [

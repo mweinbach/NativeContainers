@@ -112,6 +112,8 @@
 		1F9D2B742FE79C170076F5B9 /* LinuxMachineToolModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B732FE79C170076F5B9 /* LinuxMachineToolModels.swift */; };
 		1F9D2B762FE79C2C0076F5B9 /* AppleLinuxMachineProcessService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B752FE79C2C0076F5B9 /* AppleLinuxMachineProcessService.swift */; };
 		1F9D2B782FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B772FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift */; };
+		1F9D2B7A2FE79C8A0076F5B9 /* LinuxMachineCommandModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B792FE79C8A0076F5B9 /* LinuxMachineCommandModel.swift */; };
+		1F9D2B7C2FE79CA80076F5B9 /* LinuxMachineToolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B7B2FE79CA80076F5B9 /* LinuxMachineToolsView.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -335,6 +337,8 @@
 		1F9D2B732FE79C170076F5B9 /* LinuxMachineToolModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachineToolModels.swift; sourceTree = "<group>"; };
 		1F9D2B752FE79C2C0076F5B9 /* AppleLinuxMachineProcessService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLinuxMachineProcessService.swift; sourceTree = "<group>"; };
 		1F9D2B772FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLinuxMachineProcessServiceTests.swift; sourceTree = "<group>"; };
+		1F9D2B792FE79C8A0076F5B9 /* LinuxMachineCommandModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachineCommandModel.swift; sourceTree = "<group>"; };
+		1F9D2B7B2FE79CA80076F5B9 /* LinuxMachineToolsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachineToolsView.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -495,6 +499,7 @@
 				1F9D2B3E2FE77B840076F5B9 /* ImageBuildHistoryView.swift */,
 				1F9D2B492FE78B6F0076F5B9 /* ImageBuildOutputSection.swift */,
 				1F9D2B592FE792540076F5B9 /* LinuxMachineCreationView.swift */,
+				1F9D2B7B2FE79CA80076F5B9 /* LinuxMachineToolsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -682,6 +687,7 @@
 				1F9D2B3C2FE77B6B0076F5B9 /* ImageBuildHistoryModel.swift */,
 				1F9D2B552FE7923C0076F5B9 /* LinuxMachineManagementModel.swift */,
 				1F9D2B572FE7923F0076F5B9 /* LinuxMachineCreationDraft.swift */,
+				1F9D2B792FE79C8A0076F5B9 /* LinuxMachineCommandModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -998,6 +1004,7 @@
 				1F9D2AE12FE760790076F5B9 /* AppServices.swift in Sources */,
 				1F9D2B3F2FE77B840076F5B9 /* ImageBuildHistoryView.swift in Sources */,
 				21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */,
+				1F9D2B7C2FE79CA80076F5B9 /* LinuxMachineToolsView.swift in Sources */,
 				1F9D2B522FE791EA0076F5B9 /* AppleMachineRuntimeClient.swift in Sources */,
 				455E49DED3838B07FB756991 /* ImagesView.swift in Sources */,
 				6EFDAA07140EDCC9B4FB8615 /* LinuxMachinesView.swift in Sources */,
@@ -1037,6 +1044,7 @@
 				1F9D2AD92FE75FC30076F5B9 /* ContainerServiceFacets.swift in Sources */,
 				544A5C0316B516173A705366 /* SidebarView.swift in Sources */,
 				5BF5FFC00ABD566B235306A7 /* VirtualMachineConsoleView.swift in Sources */,
+				1F9D2B7A2FE79C8A0076F5B9 /* LinuxMachineCommandModel.swift in Sources */,
 				62BCFBEE6E078D471BA3AE65 /* VirtualMachineLibrary.swift in Sources */,
 				1F9D2B4A2FE78B6F0076F5B9 /* ImageBuildOutputSection.swift in Sources */,
 				4DBEA60A3A33B0528C68106A /* VirtualMachineModels.swift in Sources */,

@@ -7,10 +7,28 @@ struct ContainerTerminalView: View {
   @State private var model: ContainerTerminalModel
   @State private var connectionTask: Task<Void, Never>?
   @State private var isConfirmingClose = false
+  private let targetKind: String
+  private let didChange: @MainActor @Sendable () async -> Void
+  private let openingMessage: String
 
   init(containerID: String, appModel: AppModel) {
+    targetKind = "container"
+    openingMessage = "Opening terminal…"
+    didChange = { await appModel.refresh() }
     _model = State(
       initialValue: appModel.makeContainerTerminalModel(containerID: containerID)
+    )
+  }
+
+  init(machine: LinuxMachineRecord, appModel: AppModel) {
+    targetKind = "Linux machine"
+    openingMessage =
+      machine.state == .stopped
+      ? "Starting Linux machine and opening terminal…"
+      : "Opening terminal…"
+    didChange = { await appModel.refresh() }
+    _model = State(
+      initialValue: appModel.makeLinuxMachineTerminalModel(for: machine)
     )
   }
 
@@ -20,9 +38,9 @@ struct ContainerTerminalView: View {
         statusBar
         Divider()
         ZStack {
-          ContainerTerminalSurface(model: model)
+          ContainerTerminalSurface(model: model, targetKind: targetKind)
           if model.isConnecting {
-            ProgressView("Opening terminal…")
+            ProgressView(openingMessage)
               .padding(18)
               .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
           }
@@ -109,10 +127,14 @@ struct ContainerTerminalView: View {
     }
     .task {
       await model.connect()
+      await didChange()
     }
     .onDisappear {
       connectionTask?.cancel()
-      Task { await model.close() }
+      Task {
+        await model.close()
+        await didChange()
+      }
     }
   }
 
@@ -176,6 +198,7 @@ struct ContainerTerminalView: View {
     guard connectionTask == nil else { return }
     connectionTask = Task {
       await model.connect()
+      await didChange()
       connectionTask = nil
     }
   }
@@ -183,6 +206,7 @@ struct ContainerTerminalView: View {
 
 private struct ContainerTerminalSurface: NSViewRepresentable {
   let model: ContainerTerminalModel
+  let targetKind: String
 
   func makeCoordinator() -> Coordinator {
     Coordinator(model: model)
@@ -199,9 +223,9 @@ private struct ContainerTerminalSurface: NSViewRepresentable {
     terminal.optionAsMetaKey = true
     terminal.allowMouseReporting = true
     terminal.setAccessibilityRole(.group)
-    terminal.setAccessibilityLabel("Interactive terminal for \(model.containerID)")
+    terminal.setAccessibilityLabel("Interactive terminal for \(targetKind) \(model.containerID)")
     terminal.setAccessibilityHelp(
-      "Type commands in the running container. Control-C interrupts and Control-D exits."
+      "Type commands in the running \(targetKind). Control-C interrupts and Control-D exits."
     )
     context.coordinator.attach(to: terminal)
 

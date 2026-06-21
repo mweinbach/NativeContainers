@@ -11,6 +11,8 @@ struct AppServices: Sendable {
   let containerAttachments: any ContainerAttachmentEnvironmentLoading
   let machineCreator: any MachineCreating
   let machineLifecycle: any MachineLifecycleManaging
+  let machineCommands: any MachineCommandRunning
+  let machineTerminal: any MachineTerminalOpening
   let images: any ImageManaging
   let volumes: any VolumeManaging
   let networks: any NetworkManaging
@@ -33,6 +35,8 @@ struct AppServices: Sendable {
     containerAttachments: any ContainerAttachmentEnvironmentLoading,
     machineCreator: any MachineCreating,
     machineLifecycle: any MachineLifecycleManaging,
+    machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
+    machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
     images: any ImageManaging,
     volumes: any VolumeManaging,
     networks: any NetworkManaging,
@@ -54,6 +58,8 @@ struct AppServices: Sendable {
     self.containerAttachments = containerAttachments
     self.machineCreator = machineCreator
     self.machineLifecycle = machineLifecycle
+    self.machineCommands = machineCommands
+    self.machineTerminal = machineTerminal
     self.images = images
     self.volumes = volumes
     self.networks = networks
@@ -70,6 +76,8 @@ struct AppServices: Sendable {
   init(
     containerService: any ContainerManaging,
     machineService: any MachineManaging = AppleMachineManagementService(),
+    machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
+    machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
     imageBuild: any ImageBuilding,
     imageBuildHistory: any ImageBuildHistoryStoring = NoopImageBuildHistoryStore(),
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
@@ -87,6 +95,8 @@ struct AppServices: Sendable {
     containerAttachments = containerService
     machineCreator = machineService
     machineLifecycle = machineService
+    self.machineCommands = machineCommands
+    self.machineTerminal = machineTerminal
     images = containerService
     volumes = containerService
     networks = containerService
@@ -109,6 +119,8 @@ enum AppCompositionRoot {
     let machineTransport = AppleMachineXPCTransport()
     let infrastructureClient = AppleInfrastructureClient()
     let cleanupClient = AppleContainerCleanupClient()
+    let processClient = AppleContainerProcessXPCClient()
+    let commandExecutor = AppleRuntimeCommandExecutor(processClient: processClient)
     let containerReader = AppleContainerSnapshotReader(client: containerClient)
     let inventoryService = AppleRuntimeInventoryService(
       infrastructureClient: infrastructureClient,
@@ -139,18 +151,31 @@ enum AppCompositionRoot {
       attachmentService: attachmentService
     )
     let inspectionService = AppleContainerInspectionService(containerClient: containerClient)
-    let toolService = AppleContainerToolService(containerClient: containerClient)
+    let toolService = AppleContainerToolService(
+      containerClient: containerClient,
+      commandExecutor: commandExecutor
+    )
     let terminalService = AppleContainerTerminalService(
       terminalProcessLauncher: AppleContainerTerminalProcessLauncher(
-        containerClient: containerClient
+        containerClient: containerClient,
+        processClient: processClient
       )
     )
     let machineService = AppleMachineManagementService(
       runtime: AppleMachineRuntimeClient(
         machineTransport: machineTransport,
+        processClient: processClient,
         containerKillClient: cleanupClient
       ),
       runtimeMutationCoordinator: mutationCoordinator
+    )
+    let machineProcessService = AppleLinuxMachineProcessService(
+      targetResolver: AppleLinuxMachineProcessTargetResolver(
+        lifecycle: machineService,
+        machineTransport: machineTransport
+      ),
+      commandExecutor: commandExecutor,
+      processClient: processClient
     )
     let builderManagementService = AppleContainerBuilderManagementService(
       runtimeMutationCoordinator: mutationCoordinator,
@@ -183,6 +208,8 @@ enum AppCompositionRoot {
       containerAttachments: attachmentService,
       machineCreator: machineService,
       machineLifecycle: machineService,
+      machineCommands: machineProcessService,
+      machineTerminal: machineProcessService,
       images: imageService,
       volumes: infrastructureService,
       networks: infrastructureService,

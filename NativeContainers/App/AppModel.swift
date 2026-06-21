@@ -215,6 +215,30 @@ final class AppModel {
     }
   }
 
+  func makeLinuxMachineCommandModel(
+    for machine: LinuxMachineRecord
+  ) -> LinuxMachineCommandModel {
+    LinuxMachineCommandModel(
+      machine: machine,
+      service: services.machineCommands
+    ) { [weak self] in
+      await self?.refresh()
+    }
+  }
+
+  func makeLinuxMachineTerminalModel(
+    for machine: LinuxMachineRecord
+  ) -> ContainerTerminalModel {
+    let target = LinuxMachineIdentity(machine: machine)
+    let service = services.machineTerminal
+    return ContainerTerminalModel(containerID: machine.id) { _, request in
+      try await service.openTerminal(
+        in: target,
+        request: try LinuxMachineTerminalRequest(containerRequest: request)
+      )
+    }
+  }
+
   func makeContainerProvisioningModel() -> ContainerProvisioningModel {
     ContainerProvisioningModel(
       containerCreator: services.containerCreator,

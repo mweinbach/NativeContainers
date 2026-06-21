@@ -158,7 +158,9 @@ private struct AppleContainerXPCProcess: AppleRuntimeProcess {
     let request = XPCMessage(route: .containerKill)
     request.set(key: .id, value: containerID)
     request.set(key: .processIdentifier, value: processID)
-    request.set(key: .signal, value: Int64(signal))
+    // The pinned 1.0 server decodes this field as a signal string even though its
+    // high-level ClientProcess currently encodes an integer.
+    request.set(key: .signal, value: String(signal))
     _ = try await signalSender.send(
       request,
       operation: "Signal runtime process"

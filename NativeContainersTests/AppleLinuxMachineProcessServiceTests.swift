@@ -7,6 +7,41 @@ import Testing
 
 @testable import NativeContainers
 
+@Suite("Linux machine command model")
+@MainActor
+struct LinuxMachineCommandModelTests {
+  @Test
+  func routesThePinnedMachineIdentityAndRefreshesAfterExecution() async throws {
+    let service = RecordingMachineCommandService()
+    let refresh = MachineToolRefreshCounter()
+    let machine = LinuxMachineRecord(
+      id: "dev",
+      imageReference: "alpine:3.22",
+      platform: "linux/arm64",
+      state: .stopped,
+      ipAddress: nil,
+      createdAt: Date(timeIntervalSince1970: 1),
+      startedAt: nil,
+      diskSizeBytes: 1,
+      cpuCount: 2,
+      memoryDescription: "2 GiB",
+      isInitialized: false
+    )
+    let model = LinuxMachineCommandModel(machine: machine, service: service) {
+      await refresh.record()
+    }
+    let request = try LinuxMachineCommandRequest(command: "id -u")
+
+    await model.execute(request)
+
+    #expect(model.commandResult?.standardOutput == "501\n")
+    #expect(model.errorMessage == nil)
+    #expect(await service.targets == [LinuxMachineIdentity(machine: machine)])
+    #expect(await service.requests == [request])
+    #expect(await refresh.count == 1)
+  }
+}
+
 @Suite("Linux machine process configuration")
 struct LinuxMachineProcessConfigurationTests {
   @Test
@@ -362,5 +397,33 @@ private actor RecordingMachineRuntimeProcess: AppleRuntimeProcess {
 
   func resize(to size: ContainerTerminalSize) {
     sizes.append(size)
+  }
+}
+
+private actor RecordingMachineCommandService: MachineCommandRunning {
+  private(set) var targets: [LinuxMachineIdentity] = []
+  private(set) var requests: [LinuxMachineCommandRequest] = []
+
+  func executeCommand(
+    in target: LinuxMachineIdentity,
+    request: LinuxMachineCommandRequest
+  ) -> ContainerCommandResult {
+    targets.append(target)
+    requests.append(request)
+    return ContainerCommandResult(
+      exitCode: 0,
+      standardOutput: "501\n",
+      standardError: "",
+      outputWasTruncated: false,
+      duration: .zero
+    )
+  }
+}
+
+private actor MachineToolRefreshCounter {
+  private(set) var count = 0
+
+  func record() {
+    count += 1
   }
 }
