@@ -634,6 +634,23 @@ than sharing presentation state across an implied multi-window group.
   removals before the next candidate is abandoned. After execution, ordinary
   inventory and only the Apple accounting lane refresh; the unrelated VM
   filesystem scan remains on demand.
+- VM reclamation is a separate sibling graph with a thin
+  `VirtualMachineStorageReclamationManaging` coordinator over two category
+  services. The saved-state service acquires the existing per-VM runtime lease
+  and delegates exact checkpoint retirement to the saved-state store. The
+  residue service owns only a strict top-level allowlist, takes the library
+  operation lock plus the bundle runtime lock, and uses a reusable
+  descriptor-relative inspector to seal device, inode, ownership, link count,
+  timestamps, allocation, and the complete metadata tree. Symbolic links, hard
+  links, special files, ownership changes, mount crossings, replacements, and
+  unrecognized hidden entries fail closed. Execution revalidates immediately
+  before an atomic same-parent rename, then finishes deletion without another
+  cancellation checkpoint; any surviving tombstone remains in an existing
+  recovery-recognized namespace. The app model binds plans to the VM accounting
+  and library revisions and refreshes only VM inventory plus the VM accounting
+  lane after accepted work. Disk images and restore-image cache entries are not
+  candidates, and no reclamation service invokes Start, Stop, Force Stop, or
+  KILL.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before

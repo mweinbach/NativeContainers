@@ -10,6 +10,9 @@ struct VirtualMachineStorageReclamationReviewSheet: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
           VirtualMachineReclamationBoundarySection()
+          if model.result == nil {
+            VirtualMachineReclamationScopeSection(model: model)
+          }
 
           if model.isPreparing {
             VirtualMachineReclamationProgressSection(
@@ -70,7 +73,7 @@ struct VirtualMachineStorageReclamationReviewSheet: View {
         ToolbarItem(placement: .confirmationAction) {
           if let plan = model.plan, !plan.isEmpty, model.result == nil {
             Button(
-              "Reclaim \(plan.candidateCount) Reviewed Item\(plan.candidateCount == 1 ? "" : "s")…",
+              "Reclaim \(plan.candidateCount) Item\(plan.candidateCount == 1 ? "" : "s")…",
               role: .destructive
             ) {
               isConfirming = true
@@ -80,6 +83,7 @@ struct VirtualMachineStorageReclamationReviewSheet: View {
             Button("Scan Again") {
               model.startPreparing()
             }
+            .disabled(!model.hasSelectedScope)
           }
         }
       }
@@ -112,6 +116,41 @@ struct VirtualMachineStorageReclamationReviewSheet: View {
     }
     return
       "Permanently reclaim \(plan.candidateCount) reviewed item\(plan.candidateCount == 1 ? "" : "s")?"
+  }
+}
+
+private struct VirtualMachineReclamationScopeSection: View {
+  @Bindable var model: VirtualMachineStorageReclamationModel
+
+  var body: some View {
+    VirtualMachineReclamationCard {
+      Text("Review scope")
+        .font(.headline)
+
+      Toggle(
+        "Saved states (\(model.measuredSavedStateCount))",
+        isOn: Binding(
+          get: { model.reclaimSavedStates },
+          set: { model.setReclaimSavedStates($0) }
+        )
+      )
+      .disabled(model.measuredSavedStateCount == 0 || model.isWorking)
+
+      Toggle(
+        "Interrupted-operation residue",
+        isOn: Binding(
+          get: { model.reclaimInterruptedResidue },
+          set: { model.setReclaimInterruptedResidue($0) }
+        )
+      )
+      .disabled(model.isWorking)
+
+      Text(
+        "Changing scope discards the current plan. Scan again to review the new exact candidate set."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    }
   }
 }
 

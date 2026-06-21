@@ -998,3 +998,39 @@ and partial-completion errors retain confirmed removals and remaining exact
 identities. Image bytes are Apple's orphan-cleanup report; container and volume
 bytes are allocation measured before confirmed removal. Their aggregate is
 labeled estimated/reported removed bytes, never measured host free-space gain.
+
+## ADR-038: Reclaim VM host artifacts through category services and exact seals
+
+**Status:** Accepted — 2026-06-21
+
+VM accounting remains read-only. A sibling
+`VirtualMachineStorageReclamationManaging` service composes independently
+replaceable saved-state and interrupted-residue services, records the VM
+measurement and library revisions as review provenance, and executes only the
+immutable candidates shown in the confirmation sheet. This keeps filesystem
+ownership out of SwiftUI and avoids growing the library actor into a general
+cleanup facade.
+
+Committed saved states are planned and discarded by the existing saved-state
+store while a per-VM runtime lease is held. A replacement checkpoint cannot
+match the reviewed directory identity and complete tree fingerprint. Residue
+is limited to exact app-owned transaction names for draft creation, deletion,
+clone, import, installation, platform preparation, saved-state transitions,
+shared-folder writes, and manifest-proven orphan installation media. The
+residue service holds the library operation lock and bundle runtime lock,
+rejects links, special files, foreign owners, mount crossings, and changed
+metadata, then atomically retires an accepted candidate before deletion.
+
+Cancellation is observed before each candidate and immediately before its
+retirement rename. After that rename the mutation is committed and cleanup is
+finished without another cancellation checkpoint; partial results retain exact
+removed, stale, and failed identities. The feature never starts, stops,
+force-stops, or kills a VM and never considers a committed disk or cached
+restore image.
+
+Virtualization's RAW attachment remains a one-to-one block mapping. The public
+SDK exposes no RAW compaction operation; DiskImageKit exposes ASIF creation and
+resize primitives on the newer platform, while truncation explicitly does not
+resize the guest filesystem and can destroy data. This change therefore does
+not approximate compaction with raw truncation. Compaction remains a separate
+format-migration or transactional rewrite decision.

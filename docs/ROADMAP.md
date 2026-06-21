@@ -155,8 +155,11 @@ must leave a usable, test-backed product slice.
   - [x] Reviewed Apple-runtime container, image, and volume reclamation with
         exact identities, bounded clients, non-force stopped-container delete,
         cancellation checkpoints, and partial-result reconciliation.
-  - [ ] VM saved-state/residue reclamation and stopped-only sparse compaction;
-        cached restore images remain deferred until cache leases are unified.
+  - [x] Reviewed VM saved-state and exact allowlisted interrupted-residue
+        reclamation with runtime/library locks, filesystem identity seals,
+        atomic retirement, cancellation checkpoints, and partial results.
+  - [ ] Stopped-only sparse compaction and cached restore-image reclamation;
+        cache deletion remains deferred until ownership leases are unified.
 
 ## M5 — Optimization and polish
 

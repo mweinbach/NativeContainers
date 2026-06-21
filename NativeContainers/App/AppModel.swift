@@ -129,7 +129,7 @@ final class AppModel {
       virtualMachines = initialVirtualMachines
       hasLoaded = true
       containerInventoryRevision = 1
-      virtualMachineInventoryRevision = initialVirtualMachines.isEmpty ? 0 : 1
+      virtualMachineInventoryRevision = 1
       lastRefresh = Date()
     }
     updateWorkspaceNavigation()

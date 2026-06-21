@@ -355,6 +355,7 @@ actor VirtualMachineResidueReclamationService:
   ) throws -> T {
     let libraryLock = try acquireLibraryLock(rootURL: rootURL)
     do {
+      try requireOwnedDirectory(bundleURL)
       guard
         let runtimeLock = try AdvisoryFileLock.acquire(
           at: bundleURL.appending(path: VirtualMachineLibrary.runtimeLockFilename)
@@ -375,6 +376,7 @@ actor VirtualMachineResidueReclamationService:
   private func acquireLibraryLock(
     rootURL: URL
   ) throws -> AdvisoryFileLockLease {
+    try requireOwnedDirectory(rootURL)
     guard
       let lock = try AdvisoryFileLock.acquire(
         at: rootURL.appending(path: VirtualMachineLibrary.operationLockFilename)
@@ -385,13 +387,58 @@ actor VirtualMachineResidueReclamationService:
     return lock
   }
 
+  private func requireOwnedDirectory(_ url: URL) throws {
+    var metadata = stat()
+    guard
+      Darwin.lstat(url.path(percentEncoded: false), &metadata) == 0,
+      metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR),
+      metadata.st_uid == Darwin.geteuid()
+    else {
+      throw VirtualMachineStorageReclamationError.unsafeArtifact(
+        "a library directory is missing, symbolic, or owned by another user"
+      )
+    }
+  }
+
   private func currentManifest(
     in bundleURL: URL,
     expectedID: UUID
   ) throws -> VirtualMachineManifest {
-    let data = try Data(
-      contentsOf: bundleURL.appending(path: VirtualMachineLibrary.manifestFilename)
+    let manifestURL = bundleURL.appending(
+      path: VirtualMachineLibrary.manifestFilename
     )
+    let descriptor = Darwin.open(
+      manifestURL.path(percentEncoded: false),
+      O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+    )
+    guard descriptor >= 0 else {
+      throw VirtualMachineStorageReclamationError.unsafeArtifact(
+        "the VM manifest cannot be opened safely"
+      )
+    }
+    defer { Darwin.close(descriptor) }
+
+    var metadata = stat()
+    let maximumManifestBytes = 1_048_576
+    guard
+      Darwin.fstat(descriptor, &metadata) == 0,
+      metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+      metadata.st_uid == Darwin.geteuid(),
+      metadata.st_nlink == 1,
+      metadata.st_size >= 0,
+      metadata.st_size <= off_t(maximumManifestBytes)
+    else {
+      throw VirtualMachineStorageReclamationError.unsafeArtifact(
+        "the VM manifest is not a private bounded regular file"
+      )
+    }
+    let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
+    let data = try handle.read(upToCount: maximumManifestBytes + 1) ?? Data()
+    guard data.count <= maximumManifestBytes else {
+      throw VirtualMachineStorageReclamationError.unsafeArtifact(
+        "the VM manifest is too large"
+      )
+    }
     let manifest = try JSONDecoder().decode(
       VirtualMachineManifest.self,
       from: data

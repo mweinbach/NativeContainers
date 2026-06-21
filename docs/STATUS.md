@@ -720,6 +720,22 @@ Updated: 2026-06-21.
   app launch/stop leaves no NativeContainers process running. Launch emitted
   only the existing macOS 27 beta `com.apple.linkd.autoShortcut` registration
   noise.
+- Reviewed VM host-storage reclamation is live behind separate saved-state,
+  interrupted-residue, artifact-inspection, aggregate, app-model, and SwiftUI
+  services. Plans are sealed to the VM accounting and library revisions and
+  list exact committed saved states plus allowlisted app transaction residue.
+  Commit-time checks hold operation/runtime locks and reject replacement,
+  symbolic links, hard links, special files, foreign ownership, and mount
+  crossings before an atomic retirement. Cancellation preserves exact partial
+  results. The workflow never starts, stops, force-stops, or kills a VM and
+  never touches committed disks or restore images. Build-for-testing succeeds,
+  all 18 focused service/store/model/accounting tests pass, and the reviewing,
+  empty, partial-result, and loaded Overview previews render successfully. The
+  full Xcode plan passes all 661 outcomes: 642 deterministic tests passed, 19
+  explicitly gated live tests skipped, and no tests failed. A fresh Xcode
+  launch/stop succeeds; an orphaned Preview process accepted exact-PID TERM,
+  and no NativeContainers process remains. The only launch errors were the
+  existing macOS 27 beta `com.apple.linkd.autoShortcut` registration noise.
 
 ## Known configuration issue
 
@@ -734,11 +750,11 @@ entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add stopped-only sparse VM compaction as a separate transactional service
-   with runtime/library leases, free-space checks, cancellation cleanup, atomic
-   replacement, and post-operation logical/allocated verification.
-2. Add a separately reviewed VM saved-state/interrupted-residue reclaimer;
-   defer restore-image cache deletion until cache ownership leases are unified.
+1. Unify restore-image download/import/preparation ownership under a durable
+   cache lease, then add separately reviewed unreferenced-image reclamation.
+2. Design an explicit RAW-to-ASIF migration path for the macOS 27 tier before
+   offering compaction. The macOS 26 path must not use raw truncation because
+   public APIs do not resize the guest filesystem and can destroy data.
 3. Add the entitlement through a functioning Xcode capability surface, then
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot

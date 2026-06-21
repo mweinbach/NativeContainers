@@ -10,6 +10,8 @@ final class VirtualMachineStorageReclamationModel {
   private(set) var isPreparing = false
   private(set) var isReclaiming = false
   private(set) var isCancelling = false
+  private(set) var reclaimSavedStates = true
+  private(set) var reclaimInterruptedResidue = true
 
   private let service: any VirtualMachineStorageReclamationManaging
   private let currentSource: @MainActor @Sendable () -> VirtualMachineStorageReclamationSource?
@@ -40,10 +42,36 @@ final class VirtualMachineStorageReclamationModel {
     self.errorMessage = errorMessage
     self.isPreparing = isPreparing
     self.didMutate = didMutate
+    if let request = plan?.request {
+      reclaimSavedStates = !request.savedStateMachineIDs.isEmpty
+      reclaimInterruptedResidue = request.reclaimInterruptedResidue
+    }
   }
 
   var isWorking: Bool {
     isPreparing || isReclaiming
+  }
+
+  var hasSelectedScope: Bool {
+    (reclaimSavedStates
+      && currentSource()?.measuredSavedStateMachineIDs.isEmpty == false)
+      || reclaimInterruptedResidue
+  }
+
+  var measuredSavedStateCount: Int {
+    currentSource()?.measuredSavedStateMachineIDs.count ?? 0
+  }
+
+  func setReclaimSavedStates(_ enabled: Bool) {
+    guard reclaimSavedStates != enabled else { return }
+    reclaimSavedStates = enabled
+    invalidateReview()
+  }
+
+  func setReclaimInterruptedResidue(_ enabled: Bool) {
+    guard reclaimInterruptedResidue != enabled else { return }
+    reclaimInterruptedResidue = enabled
+    invalidateReview()
   }
 
   func startPreparing() {
@@ -53,7 +81,12 @@ final class VirtualMachineStorageReclamationModel {
         .localizedDescription
       return
     }
-    let request = VirtualMachineStorageReclamationRequest(source: source)
+    let request = VirtualMachineStorageReclamationRequest(
+      source: source,
+      savedStateMachineIDs: reclaimSavedStates
+        ? source.measuredSavedStateMachineIDs : [],
+      reclaimInterruptedResidue: reclaimInterruptedResidue
+    )
     start { model in
       await model.prepare(request)
     }
@@ -98,6 +131,9 @@ final class VirtualMachineStorageReclamationModel {
         try await service
         .prepareVirtualMachineStorageReclamation(request)
       try Task.checkCancellation()
+      guard prepared.request == request else {
+        throw VirtualMachineStorageReclamationError.invalidPlan
+      }
       guard request.source == currentSource() else {
         throw VirtualMachineStorageReclamationError.staleSource
       }
@@ -169,7 +205,10 @@ final class VirtualMachineStorageReclamationModel {
     }
 
     if acceptedMutation {
-      await didMutate()
+      let didMutate = self.didMutate
+      await Task.detached(priority: .userInitiated) {
+        await didMutate()
+      }.value
     }
     return completedWithoutFailures
   }
