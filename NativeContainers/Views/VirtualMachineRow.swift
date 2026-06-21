@@ -169,7 +169,7 @@ struct VirtualMachineRow: View {
           isConfirmingStartFresh = true
         }
         .buttonStyle(.borderedProminent)
-        .disabled(availability != .available)
+        .disabled(availability != .available || !runtime.snapshot.canStartFresh)
       } else {
         Button(runtimeActionTitle) {
           Task { await runtime.start() }

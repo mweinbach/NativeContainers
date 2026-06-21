@@ -143,14 +143,17 @@ struct MacVirtualMachineRuntimeSnapshot: Equatable, Sendable {
     }
   }
   var canRequestStop: Bool { state == .running || state == .paused }
-  var canDiscardSavedState: Bool {
-    guard target == nil else { return false }
+  var canStartFresh: Bool {
+    guard target == nil, state == .stopped else { return false }
     return switch savedStateStatus {
     case .available, .incompatible:
       true
     case .unknown, .none:
       false
     }
+  }
+  var canDiscardSavedState: Bool {
+    canStartFresh
   }
 
   var canForceStop: Bool {

@@ -179,7 +179,7 @@ private struct MacVirtualMachineRuntimeControls: View {
       if snapshot.canStart {
         Button(startTitle, systemImage: "play.fill", action: start)
           .buttonStyle(.borderedProminent)
-      } else if snapshot.target == nil,
+      } else if snapshot.canStartFresh,
         case .incompatible = snapshot.savedStateStatus
       {
         Button("Start Fresh…", systemImage: "play.fill", action: confirmStartFresh)

@@ -472,6 +472,11 @@ struct MacVirtualMachineRuntimeServiceTests {
       fixture.service.snapshot(for: fixture.machineID).state
         == .discardingSavedState
     )
+    #expect(fixture.service.snapshot(for: fixture.machineID).canStartFresh == false)
+    #expect(
+      fixture.service.snapshot(for: fixture.machineID).canDiscardSavedState
+        == false
+    )
     await #expect(
       throws: MacVirtualMachineRuntimeError.operationInProgress(fixture.machineID)
     ) {
