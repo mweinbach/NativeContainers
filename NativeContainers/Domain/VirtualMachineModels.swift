@@ -61,6 +61,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var linuxConfiguration: LinuxVirtualMachineConfiguration? = nil
   var macOSGuestOperatingSystem: MacGuestOperatingSystemIdentity? = nil
   var macOSFirstBootState: MacVirtualMachineFirstBootState? = nil
+  var macOSDiskSnapshotConfiguration:
+    MacVirtualMachineDiskSnapshotConfiguration? = nil
 
   init(
     id: UUID = UUID(),
@@ -125,6 +127,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     linuxConfiguration = source.linuxConfiguration
     macOSGuestOperatingSystem = source.macOSGuestOperatingSystem
     macOSFirstBootState = source.macOSFirstBootState
+    macOSDiskSnapshotConfiguration = source.macOSDiskSnapshotConfiguration
   }
 
   var effectiveAudioConfiguration: MacVirtualMachineAudioConfiguration {
@@ -133,6 +136,12 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
 
   var effectiveNetworkConfiguration: MacVirtualMachineNetworkConfiguration {
     networkConfiguration ?? .nat
+  }
+
+  var effectiveMacOSDiskSnapshotConfiguration:
+    MacVirtualMachineDiskSnapshotConfiguration
+  {
+    macOSDiskSnapshotConfiguration ?? .empty
   }
 
   mutating func markInstallationStarted(
@@ -158,6 +167,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installationOperationID = nil
     installationFailure = nil
     macOSFirstBootState = .pending
+    macOSDiskSnapshotConfiguration = nil
     self.updatedAt = updatedAt
   }
 
@@ -216,6 +226,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.machineIdentifierPath = machineIdentifierPath
     macOSGuestOperatingSystem = operatingSystem
     macOSFirstBootState = nil
+    macOSDiskSnapshotConfiguration = nil
     installationOperationID = nil
     installationFailure = nil
     self.updatedAt = updatedAt
