@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -119,6 +120,24 @@ struct LiveSocktainerCompatibilitySmokeTests {
     )
   )
   func composeFixturePublishesCanonicalAppleTopologyAndCleansUp() async throws {
+    try await runComposeFixture(forceComposeDownFailure: false)
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_SOCKTAINER"
+      ] == "1",
+      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker and standalone Compose clients installed, and the pinned bridge binary available."
+    )
+  )
+  func failedComposeDownUsesAppleNativeForceCleanup() async throws {
+    try await runComposeFixture(forceComposeDownFailure: true)
+  }
+
+  private func runComposeFixture(
+    forceComposeDownFailure: Bool
+  ) async throws {
     let environment = ProcessInfo.processInfo.environment
     let binaryURL = URL(
       filePath:
@@ -174,7 +193,32 @@ struct LiveSocktainerCompatibilitySmokeTests {
       URL(filePath: "/usr/local/bin/docker-compose"),
       URL(filePath: "/opt/homebrew/bin/docker-compose"),
     ])
-    let composeURL = try #require(locator.locate(candidates: composeCandidates))
+    let installedComposeURL = try #require(locator.locate(candidates: composeCandidates))
+    let composeURL: URL
+    if forceComposeDownFailure {
+      composeURL = rootURL.appending(
+        path: "docker-compose-failing-down",
+        directoryHint: .notDirectory
+      )
+      let quotedExecutable = installedComposeURL.nativeContainersPOSIXPath
+        .replacingOccurrences(of: "'", with: "'\"'\"'")
+      let wrapper = """
+        #!/bin/sh
+        for argument in "$@"; do
+          if [ "$argument" = "down" ]; then
+            echo "intentional live teardown failure" >&2
+            exit 17
+          fi
+        done
+        exec '\(quotedExecutable)' "$@"
+        """
+      try wrapper.write(to: composeURL, atomically: true, encoding: .utf8)
+      guard chmod(composeURL.nativeContainersPOSIXPath, 0o700) == 0 else {
+        throw CocoaError(.fileWriteNoPermission)
+      }
+    } else {
+      composeURL = installedComposeURL
+    }
 
     do {
       try await process.start(executableURL: binaryURL)
@@ -202,7 +246,7 @@ struct LiveSocktainerCompatibilitySmokeTests {
       #expect(result.projectName == projectName)
       #expect(result.observedState == .allRunning)
       #expect(result.containerID == "\(projectName)-probe")
-      #expect(!result.usedFallbackCleanup)
+      #expect(result.usedFallbackCleanup == forceComposeDownFailure)
 
       try await process.stop()
       #expect(await process.status() == .stopped)
