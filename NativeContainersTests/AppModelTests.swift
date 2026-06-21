@@ -192,6 +192,35 @@ struct AppModelTests {
   }
 
   @Test
+  func provisioningLoadsFocusedAttachmentEnvironment() async throws {
+    let hostAccess = try ContainerHostAccessConfiguration(
+      domain: "host.container.internal",
+      redirectIPv4Address: "203.0.113.113"
+    )
+    let environment = ContainerAttachmentEnvironment(
+      publishedSocketRootPath: "/tmp/nativecontainers",
+      hostAccess: ContainerHostAccessCatalog(
+        configurations: [hostAccess],
+        warnings: []
+      )
+    )
+    let service = MockContainerService(
+      inventory: emptyInventory(),
+      attachmentEnvironment: environment
+    )
+    let appModel = AppModel(
+      containerService: service,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [])
+    )
+    let model = appModel.makeContainerProvisioningModel()
+
+    await model.loadAttachmentEnvironment()
+
+    #expect(model.attachmentEnvironment == environment)
+    #expect(await service.attachmentEnvironmentLoadCount == 1)
+  }
+
+  @Test
   func provisioningCreatesValidatedRequestAndRefreshesInventory() async throws {
     let service = MockContainerService(inventory: emptyInventory())
     let appModel = AppModel(
@@ -607,6 +636,7 @@ private actor MockContainerService: ContainerManaging {
   let inspection: ContainerInspection
   let loadError: (any Error)?
   let pullError: (any Error)?
+  let attachmentEnvironment: ContainerAttachmentEnvironment
   private(set) var startedContainerIDs: [String] = []
   private(set) var inspectedContainerIDs: [String] = []
   private(set) var createdRequests: [ContainerCreationRequest] = []
@@ -619,12 +649,17 @@ private actor MockContainerService: ContainerManaging {
   private(set) var loadCount = 0
   private(set) var sampleCount = 0
   private(set) var logLoadCount = 0
+  private(set) var attachmentEnvironmentLoadCount = 0
 
   init(
     inventory: ContainerInventory,
     subsequentInventories: [ContainerInventory] = [],
     loadError: (any Error)? = nil,
     pullError: (any Error)? = nil,
+    attachmentEnvironment: ContainerAttachmentEnvironment = ContainerAttachmentEnvironment(
+      publishedSocketRootPath: "",
+      hostAccess: .empty
+    ),
     inspection: ContainerInspection = ContainerInspection(
       diskUsageBytes: 0,
       statistics: nil,
@@ -636,7 +671,13 @@ private actor MockContainerService: ContainerManaging {
     inventories = [inventory] + subsequentInventories
     self.loadError = loadError
     self.pullError = pullError
+    self.attachmentEnvironment = attachmentEnvironment
     self.inspection = inspection
+  }
+
+  func loadContainerAttachmentEnvironment() async -> ContainerAttachmentEnvironment {
+    attachmentEnvironmentLoadCount += 1
+    return attachmentEnvironment
   }
 
   func loadInventory() async throws -> ContainerInventory {

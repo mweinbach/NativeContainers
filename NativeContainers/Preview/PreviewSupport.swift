@@ -72,7 +72,21 @@ extension AppModel {
           options: ["size": "536870912B", "journal": "ordered"],
           isAnonymous: false,
           usedByContainerIDs: ["postgres"]
-        )
+        ),
+        VolumeRecord(
+          id: "workspace",
+          name: "workspace",
+          driver: "local",
+          format: "ext4",
+          source: "/example/workspace",
+          createdAt: now.addingTimeInterval(-43_200),
+          sizeBytes: 1_073_741_824,
+          allocatedBytes: 12_582_912,
+          labels: ["com.example.purpose": "development"],
+          options: ["size": "1073741824B", "journal": "ordered"],
+          isAnonymous: false,
+          usedByContainerIDs: []
+        ),
       ],
       networks: [
         NetworkRecord(
@@ -188,6 +202,23 @@ private actor PreviewContainerService: ContainerManaging {
   }
 
   func loadInventory() async throws -> ContainerInventory { inventory }
+
+  func loadContainerAttachmentEnvironment() async -> ContainerAttachmentEnvironment {
+    ContainerAttachmentEnvironment(
+      publishedSocketRootPath:
+        "/Users/example/Library/Application Support/NativeContainers/PublishedSockets",
+      hostAccess: ContainerHostAccessCatalog(
+        configurations: [
+          try! ContainerHostAccessConfiguration(
+            domain: "host.container.internal",
+            redirectIPv4Address: "203.0.113.113"
+          )
+        ],
+        warnings: []
+      )
+    )
+  }
+
   func prepareImagePull(
     reference: String,
     platform: ImagePlatformRequest,
