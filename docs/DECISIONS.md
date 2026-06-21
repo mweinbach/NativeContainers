@@ -1559,3 +1559,28 @@ filesystem mutation, or process launch; those operations remain in async service
 methods. A factory must not recursively resolve its own holder. Deterministic
 tests prove zero construction before access, exactly one construction across
 concurrent resolvers, and shared activation across all three live facades.
+
+## ADR-056: Use system command groups and one route-backed navigation menu
+
+**Status:** Accepted — 2026-06-21
+
+NativeContainers uses SwiftUI's `SidebarCommands` and `ToolbarCommands` for
+standard macOS View-menu behavior. App-specific workspace navigation lives in a
+separate `NativeContainersCommands` composition value rather than the
+`App` declaration or custom key-event monitoring. Command-1 through Command-9
+map in visible sidebar order from Overview through macOS virtual machines;
+Settings continues to use the system-owned Command-comma scene command.
+
+Every navigation menu item asks `AppModel.canNavigate` before enabling. That
+method delegates to the existing `WorkspaceNavigationModel` with the active
+reviewed-build lock, so sidebar clicks, Quick Open, notification routing, and
+keyboard commands share one authority. No command mutates selection directly,
+and no new global event monitor or AppKit responder override exists.
+
+The app target emits Swift localization strings and prefers String Catalogs in
+both Xcode and `project.yml`. Xcode maintains the English source inventory.
+Alternate accessibility input labels are attached only to controls whose icon
+or common spoken name may differ from their visible label; runtime resource
+names remain valid Voice Control input. Shipping non-English translations and
+workflow-wide VoiceOver/Full Keyboard Access QA remain separate gates rather
+than being inferred from catalog extraction.

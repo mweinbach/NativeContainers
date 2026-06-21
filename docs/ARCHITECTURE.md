@@ -714,6 +714,23 @@ Feature views take narrow values. AppKit bridges are intentionally narrow:
 `VZVirtualMachineView` for VM display. SwiftUI remains the source of truth for
 selection and lifecycle commands.
 
+The main scene installs one focused `NativeContainersCommands` value rather
+than embedding menu construction in the app declaration. Apple's
+`SidebarCommands` and `ToolbarCommands` own standard View-menu behavior.
+An app-specific Navigate menu maps Command-1 through Command-9 onto the same
+`WorkspaceRoute` and `AppModel.canNavigate` boundary used by the sidebar and
+Quick Open, so a reviewed build disables every conflicting menu command instead
+of creating a keyboard escape around the navigation lock. Settings remains the
+system-provided Command-comma scene command.
+
+SwiftUI string extraction is enabled for the app target and persisted in the
+XcodeGen source configuration. The English `Localizable.xcstrings` catalog is
+the source inventory; literal SwiftUI labels remain deferred localization
+resources, while runtime resource identities remain verbatim user/runtime data.
+Toolbar actions publish alternate accessibility input labels for Voice Control
+and Full Keyboard Access, and Quick Open resource buttons publish the visible
+resource name as an input label.
+
 The menu-bar control is a `MenuBarExtra` scene over that same app model, not a
 second control plane. It reads the already sorted Apple inventory, keeps only
 per-row transient button state, and routes Start, graceful Stop, Restart, and

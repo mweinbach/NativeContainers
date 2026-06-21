@@ -1111,6 +1111,30 @@ Updated: 2026-06-21.
   process; console output contained only the existing macOS 27 beta
   SetStore/CoreSpotlight donation-service error.
 
+## Native commands and localization-readiness checkpoint
+
+- The main scene now installs a focused `NativeContainersCommands` value.
+  Apple's sidebar and toolbar command groups supply standard View-menu items,
+  while a Navigate menu exposes Command-1 through Command-9 in visible sidebar
+  order. Settings retains the system-owned Command-comma behavior.
+- Menu-item enablement goes through `AppModel.canNavigate` and the existing
+  workspace route authority. A reviewed build therefore keeps every conflicting
+  sidebar, Quick Open, and keyboard route disabled while Builds remains active.
+- Quick Open and Refresh publish alternate Voice Control/Full Keyboard Access
+  input labels; Quick Open result buttons publish each visible runtime resource
+  name. Swift source-string extraction and String Catalog preference are enabled
+  in Xcode and `project.yml`. The refreshed English catalog contains 1,225
+  source keys, up from 363 before full extraction.
+- The focused command-metadata and reviewed-build-lock run passes 2/2.
+  Build-for-testing succeeds, and the RootView Xcode Preview renders without a
+  visual regression. The full plan and runtime menu click-through remain
+  unclaimed for this checkpoint because the Xcode MCP transport closed after a
+  successful app launch.
+- The target's USB capability setting reports enabled, but an app-context
+  entitlement probe still returns false. Xcode's entitlement action rejects the
+  macOS 27 key, so NativeContainers keeps the existing fail-closed USB service
+  and no manual entitlement-file workaround was made.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are

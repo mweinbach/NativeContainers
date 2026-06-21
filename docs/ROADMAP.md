@@ -233,7 +233,11 @@ must leave a usable, test-backed product slice.
 - [x] Bounded stopped-only macOS disk snapshots through bundle-local
       DiskImageKit overlay stacks, with transactional manifest commits,
       restore-to-prune semantics, saved-state invalidation, and native controls.
-- [ ] Accessibility, localization, keyboard navigation, and command menus.
+- [x] Native sidebar/toolbar command groups, Command-1 through Command-9
+      workspace navigation, Voice Control input labels, and automatic
+      source-language String Catalog extraction.
+- [ ] Reviewed non-English translations and full VoiceOver/Full Keyboard
+      Access QA across every management workflow.
 - [ ] Signed/notarized packaging, updater, migration, crash diagnostics.
 - [ ] Performance benchmarks for cold start, warm start, I/O, network, build,
       and idle resource use.
