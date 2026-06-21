@@ -86,6 +86,11 @@
 		1F9D2B3F2FE77B840076F5B9 /* ImageBuildHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B3E2FE77B840076F5B9 /* ImageBuildHistoryView.swift */; };
 		1F9D2B412FE77BE10076F5B9 /* ImageBuildHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B402FE77BE10076F5B9 /* ImageBuildHistoryTests.swift */; };
 		1F9D2B432FE77DDF0076F5B9 /* PrivateImageBuildHistoryDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B422FE77DDF0076F5B9 /* PrivateImageBuildHistoryDirectory.swift */; };
+		1F9D2B452FE789750076F5B9 /* PrivateBuildDirectoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B442FE789750076F5B9 /* PrivateBuildDirectoryStore.swift */; };
+		1F9D2B462FE789750076F5B9 /* PrivateBuildDirectoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B442FE789750076F5B9 /* PrivateBuildDirectoryStore.swift */; };
+		1F9D2B482FE78A460076F5B9 /* ImageBuildOutputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B472FE78A460076F5B9 /* ImageBuildOutputService.swift */; };
+		1F9D2B4A2FE78B6F0076F5B9 /* ImageBuildOutputSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B492FE78B6F0076F5B9 /* ImageBuildOutputSection.swift */; };
+		1F9D2B4C2FE78C270076F5B9 /* ImageBuildOutputServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2B4B2FE78C270076F5B9 /* ImageBuildOutputServiceTests.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -284,6 +289,10 @@
 		1F9D2B3E2FE77B840076F5B9 /* ImageBuildHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildHistoryView.swift; sourceTree = "<group>"; };
 		1F9D2B402FE77BE10076F5B9 /* ImageBuildHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildHistoryTests.swift; sourceTree = "<group>"; };
 		1F9D2B422FE77DDF0076F5B9 /* PrivateImageBuildHistoryDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateImageBuildHistoryDirectory.swift; sourceTree = "<group>"; };
+		1F9D2B442FE789750076F5B9 /* PrivateBuildDirectoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateBuildDirectoryStore.swift; sourceTree = "<group>"; };
+		1F9D2B472FE78A460076F5B9 /* ImageBuildOutputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildOutputService.swift; sourceTree = "<group>"; };
+		1F9D2B492FE78B6F0076F5B9 /* ImageBuildOutputSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildOutputSection.swift; sourceTree = "<group>"; };
+		1F9D2B4B2FE78C270076F5B9 /* ImageBuildOutputServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildOutputServiceTests.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -442,6 +451,7 @@
 				1F9D2B282FE771A70076F5B9 /* ContainerBuilderManagementView.swift */,
 				1F9D2B302FE775060076F5B9 /* ImageBuildSecretsSection.swift */,
 				1F9D2B3E2FE77B840076F5B9 /* ImageBuildHistoryView.swift */,
+				1F9D2B492FE78B6F0076F5B9 /* ImageBuildOutputSection.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -502,6 +512,7 @@
 				1F9D2B242FE7713F0076F5B9 /* ContainerBuilderManagementTests.swift */,
 				1F9D2B322FE7755D0076F5B9 /* ImageBuildSecretServiceTests.swift */,
 				1F9D2B402FE77BE10076F5B9 /* ImageBuildHistoryTests.swift */,
+				1F9D2B4B2FE78C270076F5B9 /* ImageBuildOutputServiceTests.swift */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -551,6 +562,7 @@
 				1F9D2B382FE77A9A0076F5B9 /* ImageBuildHistoryStore.swift */,
 				1F9D2B3A2FE77AA90076F5B9 /* RecordingImageBuildService.swift */,
 				1F9D2B422FE77DDF0076F5B9 /* PrivateImageBuildHistoryDirectory.swift */,
+				1F9D2B472FE78A460076F5B9 /* ImageBuildOutputService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -567,6 +579,7 @@
 				1F9D2B182FE770060076F5B9 /* ContainerBuilderManagementModels.swift */,
 				1F9D2B1B2FE770390076F5B9 /* ContainerBuilderSnapshotAdapter.swift */,
 				1F9D2B2D2FE774B00076F5B9 /* BuildSecretWorkerTransport.swift */,
+				1F9D2B442FE789750076F5B9 /* PrivateBuildDirectoryStore.swift */,
 			);
 			path = NativeContainersShared;
 			sourceTree = "<group>";
@@ -829,6 +842,7 @@
 				19E20564B7D56C32F75FE527 /* RestoreImageDownloadServiceTests.swift in Sources */,
 				1F9D2B0D2FE769C60076F5B9 /* AppleContainerHostAccessServiceTests.swift in Sources */,
 				1F9D2AE92FE7618B0076F5B9 /* AppleXPCRequestClientTests.swift in Sources */,
+				1F9D2B4C2FE78C270076F5B9 /* ImageBuildOutputServiceTests.swift in Sources */,
 				C2D873B7A226B8884FCBD738 /* SecureRegularFileValidatorTests.swift in Sources */,
 				28033CCAC546F43031537AAF /* VirtualMachineLibraryTests.swift in Sources */,
 				1F9D2B412FE77BE10076F5B9 /* ImageBuildHistoryTests.swift in Sources */,
@@ -916,6 +930,7 @@
 				1F9D2B1D2FE770390076F5B9 /* ContainerBuilderSnapshotAdapter.swift in Sources */,
 				1F9D2AEB2FE764AD0076F5B9 /* AppleContainerLifecycleService.swift in Sources */,
 				3520842AEB27B251F26E94E5 /* OverviewView.swift in Sources */,
+				1F9D2B452FE789750076F5B9 /* PrivateBuildDirectoryStore.swift in Sources */,
 				515EDFD55BB4EFF79D4B9003 /* PreviewSupport.swift in Sources */,
 				CFB51BBFC7DA4F81E784E745 /* PrivateBuildArtifactStore.swift in Sources */,
 				2CEB095A2F3E92AB8DD58DF8 /* RegistryManaging.swift in Sources */,
@@ -928,6 +943,7 @@
 				4C866FE48A250D91907E0D23 /* RestoreImageDownloadModels.swift in Sources */,
 				1F9D2AF72FE765700076F5B9 /* AppleContainerCreationService.swift in Sources */,
 				BEF88012C7F13A21B4B2C57E /* RestoreImageDownloadService.swift in Sources */,
+				1F9D2B482FE78A460076F5B9 /* ImageBuildOutputService.swift in Sources */,
 				1F9D2B292FE771A70076F5B9 /* ContainerBuilderManagementView.swift in Sources */,
 				72D23C0E9992E41005DDACDC /* RootView.swift in Sources */,
 				2607934497FE5507A6C92B7E /* RuntimeMutationCoordinator.swift in Sources */,
@@ -939,6 +955,7 @@
 				544A5C0316B516173A705366 /* SidebarView.swift in Sources */,
 				5BF5FFC00ABD566B235306A7 /* VirtualMachineConsoleView.swift in Sources */,
 				62BCFBEE6E078D471BA3AE65 /* VirtualMachineLibrary.swift in Sources */,
+				1F9D2B4A2FE78B6F0076F5B9 /* ImageBuildOutputSection.swift in Sources */,
 				4DBEA60A3A33B0528C68106A /* VirtualMachineModels.swift in Sources */,
 				1F9D2AFB2FE765F10076F5B9 /* AppleContainerProgressRelay.swift in Sources */,
 				1F9D2B3D2FE77B6B0076F5B9 /* ImageBuildHistoryModel.swift in Sources */,
@@ -959,6 +976,7 @@
 				1F9D2B2E2FE774B00076F5B9 /* BuildSecretWorkerTransport.swift in Sources */,
 				1F9D2B1C2FE770390076F5B9 /* ContainerBuilderSnapshotAdapter.swift in Sources */,
 				0C0EC45318446366943EFAD9 /* ContainerBuilderController.swift in Sources */,
+				1F9D2B462FE789750076F5B9 /* PrivateBuildDirectoryStore.swift in Sources */,
 				1C6BF4082FCFF853F80291AA /* ContainerBuilderSafetyPolicy.swift in Sources */,
 				1F9D2B1A2FE770060076F5B9 /* ContainerBuilderManagementModels.swift in Sources */,
 				08989CA0B5D2F7CD78E68088 /* NativeContainersBuildWorker.swift in Sources */,

@@ -218,7 +218,7 @@ struct ImageBuildServiceTests {
       archiveLoadResult: ImageBuildArchiveLoadResult(
         images: [
           ImageBuildStoredImage(
-            reference: artifact.stagingReference,
+            reference: artifact.stagingReference!,
             digest: "sha256:built"
           )
         ],
@@ -287,13 +287,13 @@ struct ImageBuildServiceTests {
         "worker.build",
         "artifact.validate",
         "store.tagState:\(plan.tags[0].reference)",
-        "store.tagState:\(artifact.stagingReference)",
+        "store.tagState:\(artifact.stagingReference!)",
         "artifact.revalidate",
         "store.load",
         "store.verify:\(ContainerBuildPlatform.current.description)",
         "store.tagState:\(plan.tags[0].reference)",
         "store.tag:\(plan.tags[0].reference)",
-        "store.remove:\(artifact.stagingReference)",
+        "store.remove:\(artifact.stagingReference!)",
         "context.discard",
         "artifact.remove",
       ]
@@ -302,6 +302,108 @@ struct ImageBuildServiceTests {
     #expect(await progress.values.map(\.phase).contains(.verifyingPlatforms))
     #expect(await progress.values.map(\.phase).contains(.taggingImage))
     #expect(await progress.values.last?.phase == .completed)
+  }
+
+  @Test
+  func ociArchiveBuildRoutesThroughOutputServiceWithoutMutatingImageStore() async throws {
+    let staged = makeStagedBuildContext()
+    let destination = URL(
+      filePath: "/tmp/nativecontainers-output-tests/reviewed-image.oci.tar",
+      directoryHint: .notDirectory
+    )
+    let selection = ImageBuildOutputSelection(
+      kind: .ociArchive,
+      destinationURL: destination
+    )
+    let outputPlan = ImageBuildOutputPlan(
+      reviewID: UUID(),
+      kind: .ociArchive,
+      destinationURL: destination,
+      existingDestinationIdentity: nil
+    )
+    let completion = ImageBuildCompletion.ociArchive(
+      destination: destination,
+      sha256: String(repeating: "a", count: 64),
+      byteCount: 4_096
+    )
+    let artifact = ContainerBuildWorkerResult(
+      buildID: staged.id,
+      artifact: ContainerBuildWorkerArtifact(
+        kind: .ociArchive,
+        path: fixedArtifactPath(for: staged.id),
+        sha256: String(repeating: "a", count: 64),
+        byteCount: 4_096,
+        entryCount: nil
+      ),
+      stagingReference: nil,
+      platforms: [.current],
+      durationMilliseconds: 1_250
+    )
+    let contextStager = TestBuildContextStager(staged: staged)
+    let imageStore = TestImageBuildStore(
+      resolvedTags: [
+        ContainerBuildTagExpectation(
+          reference: "registry.example/nativecontainers/app:latest",
+          existingDigest: "sha256:local"
+        )
+      ]
+    )
+    let worker = TestContainerBuildWorker(buildResultOverride: artifact)
+    let artifactManager = TestImageBuildArtifactManager()
+    let outputManager = TestImageBuildOutputManager(
+      preparedPlan: outputPlan,
+      completion: completion
+    )
+    let service = AppleContainerBuildService(
+      contextStager: contextStager,
+      worker: worker,
+      imageStore: imageStore,
+      artifactManager: artifactManager,
+      outputManager: outputManager,
+      runtimeMutationCoordinator: RuntimeMutationCoordinator(),
+      buildExecutionCoordinator: RuntimeMutationCoordinator()
+    )
+    let selectionProgress = ImageBuildProgressRecorder()
+    let request = makeImageBuildRequest(output: selection)
+
+    let plan = try await service.prepareBuild(request) { update in
+      await selectionProgress.record(update)
+    }
+    #expect(plan.output == outputPlan)
+    #expect(
+      plan.tags == [
+        ContainerBuildTagExpectation(
+          reference: "registry.example/nativecontainers/app:latest",
+          existingDigest: nil
+        )
+      ])
+    #expect(await outputManager.preparedSelections == [selection])
+
+    let result = try await service.build(plan, authorization: .none) { update in
+      await selectionProgress.record(update)
+    }
+
+    #expect(result.output == completion)
+    #expect(result.imageDigest == nil)
+    #expect(result.tags.isEmpty)
+    let requests = await worker.requests
+    #expect(requests.count == 2)
+    #expect(requests[1].build?.outputKind == .ociArchive)
+    #expect(requests[1].build?.tags == plan.tags)
+    #expect(await imageStore.tagStateRequests.isEmpty)
+    #expect(await imageStore.loadedArchives.isEmpty)
+    #expect(await imageStore.verifiedPlatforms.isEmpty)
+    #expect(await imageStore.appliedTags.isEmpty)
+    #expect(await imageStore.removedReferences.isEmpty)
+    #expect(await outputManager.publishedResults == [artifact])
+    #expect(await outputManager.publishedIdentities.count == 1)
+    #expect(await outputManager.publishedPlans == [outputPlan])
+    #expect(await outputManager.publishedAuthorizations == [.none])
+    #expect(await outputManager.discardedPlans == [outputPlan])
+    #expect(await contextStager.discardedContexts == [staged])
+    #expect(await artifactManager.removedBuildIDs == [staged.id])
+    #expect(await selectionProgress.values.map(\.phase).contains(.exportingArtifact))
+    #expect(await selectionProgress.values.last?.phase == .completed)
   }
 
   @Test
@@ -616,7 +718,7 @@ struct ImageBuildServiceTests {
       tagStates: matchingTagStates(for: plan, includesPostImportValidation: false),
       archiveLoadResult: ImageBuildArchiveLoadResult(
         images: [
-          ImageBuildStoredImage(reference: artifact.stagingReference, digest: "sha256:built")
+          ImageBuildStoredImage(reference: artifact.stagingReference!, digest: "sha256:built")
         ],
         rejectedMembers: []
       ),
@@ -653,7 +755,7 @@ struct ImageBuildServiceTests {
     let plan = makeImageBuildPlan()
     let artifact = makeWorkerResult(for: plan)
     let imported = ImageBuildStoredImage(
-      reference: artifact.stagingReference,
+      reference: artifact.stagingReference!,
       digest: "sha256:built"
     )
     let contextStager = TestBuildContextStager(staged: makeStagedBuildContext(id: plan.id))
@@ -701,7 +803,7 @@ struct ImageBuildServiceTests {
     let plan = makeImageBuildPlan()
     let artifact = makeWorkerResult(for: plan)
     let recovered = ImageBuildStoredImage(
-      reference: artifact.stagingReference,
+      reference: artifact.stagingReference!,
       digest: "sha256:built"
     )
     let imageStore = TestImageBuildStore(
@@ -787,7 +889,7 @@ struct ImageBuildServiceTests {
       tagStates: matchingTagStates(for: plan),
       archiveLoadResult: ImageBuildArchiveLoadResult(
         images: [
-          ImageBuildStoredImage(reference: artifact.stagingReference, digest: "sha256:built")
+          ImageBuildStoredImage(reference: artifact.stagingReference!, digest: "sha256:built")
         ],
         rejectedMembers: []
       ),
@@ -937,6 +1039,47 @@ struct ImageBuildServiceTests {
   }
 
   @Test
+  func modelDoesNotRefreshImageInventoryForFilesystemOutput() async {
+    let destination = URL(
+      filePath: "/tmp/nativecontainers-output-tests/rootfs.tar",
+      directoryHint: .notDirectory
+    )
+    let outputPlan = ImageBuildOutputPlan(
+      reviewID: UUID(),
+      kind: .rootFilesystemArchive,
+      destinationURL: destination,
+      existingDestinationIdentity: nil
+    )
+    let plan = makeImageBuildPlan(tags: [], output: outputPlan)
+    let expected = ImageBuildResult(
+      buildID: plan.id,
+      output: .rootFilesystemArchive(
+        destination: destination,
+        sha256: String(repeating: "f", count: 64),
+        byteCount: 2_048
+      ),
+      platforms: plan.platforms,
+      durationMilliseconds: 1_250,
+      logTail: "native build complete"
+    )
+    let service = TestImageBuilding(
+      preparedPlan: plan,
+      outcome: .success(expected)
+    )
+    let refreshes = ImageBuildRefreshRecorder()
+    let model = ImageBuildModel(service: service) {
+      await refreshes.record()
+    }
+
+    let succeeded = await model.execute(plan, authorization: .none)
+
+    #expect(succeeded)
+    #expect(model.result == expected)
+    #expect(model.plan == nil)
+    #expect(await refreshes.count == 0)
+  }
+
+  @Test
   func modelRefreshesInventoryAndClearsPlanAfterCancellation() async {
     let plan = makeImageBuildPlan()
     let service = TestImageBuilding(preparedPlan: plan, outcome: .cancelled)
@@ -953,7 +1096,7 @@ struct ImageBuildServiceTests {
     #expect(model.plan == nil)
     #expect(!model.isBuilding)
     #expect(model.errorMessage?.contains("cancelled") == true)
-    #expect(model.errorMessage?.contains("image state was refreshed") == true)
+    #expect(model.errorMessage?.contains("before a final output was promised") == true)
     #expect(await refreshes.count == 1)
   }
 
@@ -1073,7 +1216,8 @@ private func makeImageBuildRequest(
   noCache: Bool = false,
   pullLatest: Bool = true,
   builderCPUCount: Int? = nil,
-  builderMemoryMiB: Int? = nil
+  builderMemoryMiB: Int? = nil,
+  output: ImageBuildOutputSelection = .imageStore
 ) -> ImageBuildRequest {
   ImageBuildRequest(
     contextDirectory: contextDirectory,
@@ -1087,7 +1231,8 @@ private func makeImageBuildRequest(
     noCache: noCache,
     pullLatest: pullLatest,
     builderCPUCount: builderCPUCount,
-    builderMemoryMiB: builderMemoryMiB
+    builderMemoryMiB: builderMemoryMiB,
+    output: output
   )
 }
 
@@ -1095,7 +1240,8 @@ private func makeImageBuildPlan(
   id: UUID = UUID(uuidString: "12345678-1234-1234-1234-123456789ABC")!,
   existingDigest: String? = nil,
   tags: [ContainerBuildTagExpectation]? = nil,
-  secrets: [ImageBuildSecretReview] = []
+  secrets: [ImageBuildSecretReview] = [],
+  output: ImageBuildOutputPlan = .imageStore
 ) -> ImageBuildPlan {
   let stagedRoot = URL(
     filePath: "/tmp/nativecontainers-build-tests/\(id.uuidString.lowercased())/context",
@@ -1133,6 +1279,7 @@ private func makeImageBuildPlan(
     pullLatest: true,
     builderCPUCount: 4,
     builderMemoryMiB: 4_096,
+    output: output,
     generatedAt: Date(timeIntervalSince1970: 1_000)
   )
 }
@@ -1538,34 +1685,81 @@ private actor TestImageBuildArtifactManager: ImageBuildArtifactManaging {
 
   func validateArtifact(
     _ artifact: ContainerBuildWorkerResult
-  ) async throws -> SecureRegularFileIdentity {
+  ) async throws -> ImageBuildArtifactIdentity {
     validations.append(TestArtifactValidation(artifact: artifact))
     await log?.record("artifact.validate")
     if let validationError { throw validationError }
-    return SecureRegularFileIdentity(
-      device: 1,
-      inode: 2,
-      size: artifact.archiveByteCount,
-      permissions: 0o400,
-      owner: 501,
-      linkCount: 1,
-      modificationSeconds: 3,
-      modificationNanoseconds: 4
+    return .regularFile(
+      SecureRegularFileIdentity(
+        device: 1,
+        inode: 2,
+        size: artifact.artifact.byteCount,
+        permissions: 0o400,
+        owner: 501,
+        linkCount: 1,
+        modificationSeconds: 3,
+        modificationNanoseconds: 4
+      )
     )
   }
 
   func revalidateArtifact(
     _ artifact: ContainerBuildWorkerResult,
-    expectedIdentity: SecureRegularFileIdentity
+    expectedIdentity: ImageBuildArtifactIdentity
   ) async throws {
     revalidations.append(TestArtifactValidation(artifact: artifact))
     await log?.record("artifact.revalidate")
-    #expect(expectedIdentity.size == artifact.archiveByteCount)
+    guard case .regularFile(let identity) = expectedIdentity else {
+      Issue.record("Expected a regular file artifact")
+      return
+    }
+    #expect(identity.size == artifact.artifact.byteCount)
   }
 
   func removeArtifacts(buildID: UUID) async {
     removedBuildIDs.append(buildID)
     await log?.record("artifact.remove")
+  }
+}
+
+private actor TestImageBuildOutputManager: ImageBuildOutputManaging {
+  private let preparedPlan: ImageBuildOutputPlan
+  private let completion: ImageBuildCompletion
+  private(set) var preparedSelections: [ImageBuildOutputSelection] = []
+  private(set) var publishedResults: [ContainerBuildWorkerResult] = []
+  private(set) var publishedIdentities: [ImageBuildArtifactIdentity] = []
+  private(set) var publishedPlans: [ImageBuildOutputPlan] = []
+  private(set) var publishedAuthorizations: [ImageBuildAuthorization] = []
+  private(set) var discardedPlans: [ImageBuildOutputPlan] = []
+
+  init(
+    preparedPlan: ImageBuildOutputPlan,
+    completion: ImageBuildCompletion
+  ) {
+    self.preparedPlan = preparedPlan
+    self.completion = completion
+  }
+
+  func prepare(_ selection: ImageBuildOutputSelection) async throws -> ImageBuildOutputPlan {
+    preparedSelections.append(selection)
+    return preparedPlan
+  }
+
+  func publish(
+    _ result: ContainerBuildWorkerResult,
+    artifactIdentity: ImageBuildArtifactIdentity,
+    plan: ImageBuildOutputPlan,
+    authorization: ImageBuildAuthorization
+  ) async throws -> ImageBuildCompletion {
+    publishedResults.append(result)
+    publishedIdentities.append(artifactIdentity)
+    publishedPlans.append(plan)
+    publishedAuthorizations.append(authorization)
+    return completion
+  }
+
+  func discard(_ plan: ImageBuildOutputPlan) async {
+    discardedPlans.append(plan)
   }
 }
 

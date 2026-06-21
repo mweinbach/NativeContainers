@@ -1,5 +1,93 @@
 import Foundation
 
+extension ImageBuildOutputKind {
+  var title: LocalizedStringResource {
+    switch self {
+    case .imageStore:
+      "Apple Image Store"
+    case .ociArchive:
+      "OCI Image Archive"
+    case .rootFilesystemArchive:
+      "Root Filesystem Tar"
+    case .rootFilesystemDirectory:
+      "Root Filesystem Folder"
+    }
+  }
+
+  var systemImage: String {
+    switch self {
+    case .imageStore:
+      "shippingbox"
+    case .ociArchive:
+      "archivebox"
+    case .rootFilesystemArchive:
+      "doc.zipper"
+    case .rootFilesystemDirectory:
+      "folder"
+    }
+  }
+
+  var requiresDestination: Bool {
+    self != .imageStore
+  }
+
+  var isRootFilesystem: Bool {
+    self == .rootFilesystemArchive || self == .rootFilesystemDirectory
+  }
+}
+
+struct ImageBuildOutputSelection: Equatable, Sendable {
+  let kind: ImageBuildOutputKind
+  let destinationURL: URL?
+
+  static let imageStore = ImageBuildOutputSelection(
+    kind: .imageStore,
+    destinationURL: nil
+  )
+}
+
+struct ImageBuildOutputPlan: Equatable, Sendable {
+  static let imageStore = ImageBuildOutputPlan(
+    reviewID: nil,
+    kind: .imageStore,
+    destinationURL: nil,
+    existingDestinationIdentity: nil
+  )
+
+  let reviewID: UUID?
+  let kind: ImageBuildOutputKind
+  let destinationURL: URL?
+  let existingDestinationIdentity: SecureRegularFileIdentity?
+
+  var replacesExistingDestination: Bool {
+    existingDestinationIdentity != nil
+  }
+
+  var destinationDisplayName: String? {
+    destinationURL?.lastPathComponent
+  }
+}
+
+enum ImageBuildCompletion: Equatable, Sendable {
+  case imageStore(digest: String, tags: [String])
+  case ociArchive(destination: URL, sha256: String, byteCount: Int64)
+  case rootFilesystemArchive(destination: URL, sha256: String, byteCount: Int64)
+  case rootFilesystemDirectory(destination: URL, byteCount: Int64, entryCount: Int)
+
+  var kind: ImageBuildOutputKind {
+    switch self {
+    case .imageStore:
+      .imageStore
+    case .ociArchive:
+      .ociArchive
+    case .rootFilesystemArchive:
+      .rootFilesystemArchive
+    case .rootFilesystemDirectory:
+      .rootFilesystemDirectory
+    }
+  }
+}
+
 struct ImageBuildRequest: Equatable, Sendable {
   let contextDirectory: URL
   let dockerfile: URL?
@@ -13,6 +101,37 @@ struct ImageBuildRequest: Equatable, Sendable {
   let pullLatest: Bool
   let builderCPUCount: Int?
   let builderMemoryMiB: Int?
+  let output: ImageBuildOutputSelection
+
+  init(
+    contextDirectory: URL,
+    dockerfile: URL?,
+    secrets: [ImageBuildSecretSelection],
+    tags: [String],
+    platforms: [ContainerBuildPlatform],
+    buildArguments: [String],
+    labels: [String],
+    targetStage: String,
+    noCache: Bool,
+    pullLatest: Bool,
+    builderCPUCount: Int?,
+    builderMemoryMiB: Int?,
+    output: ImageBuildOutputSelection = .imageStore
+  ) {
+    self.contextDirectory = contextDirectory
+    self.dockerfile = dockerfile
+    self.secrets = secrets
+    self.tags = tags
+    self.platforms = platforms
+    self.buildArguments = buildArguments
+    self.labels = labels
+    self.targetStage = targetStage
+    self.noCache = noCache
+    self.pullLatest = pullLatest
+    self.builderCPUCount = builderCPUCount
+    self.builderMemoryMiB = builderMemoryMiB
+    self.output = output
+  }
 }
 
 struct ImageBuildPlan: Equatable, Sendable, Identifiable {
@@ -35,6 +154,7 @@ struct ImageBuildPlan: Equatable, Sendable, Identifiable {
   let pullLatest: Bool
   let builderCPUCount: Int?
   let builderMemoryMiB: Int?
+  let output: ImageBuildOutputPlan
   let generatedAt: Date
 
   var replacesExistingTags: Bool {
@@ -55,21 +175,75 @@ struct ImageBuildAuthorization: Equatable, Sendable {
   let allowsTagReplacement: Bool
   let allowsRecreateStoppedBuilder: Bool
   let allowsStopRunningBuilder: Bool
+  let allowsOutputReplacement: Bool
+
+  init(
+    allowsTagReplacement: Bool,
+    allowsRecreateStoppedBuilder: Bool,
+    allowsStopRunningBuilder: Bool,
+    allowsOutputReplacement: Bool = false
+  ) {
+    self.allowsTagReplacement = allowsTagReplacement
+    self.allowsRecreateStoppedBuilder = allowsRecreateStoppedBuilder
+    self.allowsStopRunningBuilder = allowsStopRunningBuilder
+    self.allowsOutputReplacement = allowsOutputReplacement
+  }
 
   static let none = ImageBuildAuthorization(
     allowsTagReplacement: false,
     allowsRecreateStoppedBuilder: false,
-    allowsStopRunningBuilder: false
+    allowsStopRunningBuilder: false,
+    allowsOutputReplacement: false
   )
 }
 
 struct ImageBuildResult: Equatable, Sendable {
   let buildID: UUID
-  let imageDigest: String
-  let tags: [String]
+  let output: ImageBuildCompletion
   let platforms: [ContainerBuildPlatform]
   let durationMilliseconds: Int64
   let logTail: String
+
+  var imageDigest: String? {
+    guard case .imageStore(let digest, _) = output else { return nil }
+    return digest
+  }
+
+  var tags: [String] {
+    guard case .imageStore(_, let tags) = output else { return [] }
+    return tags
+  }
+
+  init(
+    buildID: UUID,
+    output: ImageBuildCompletion,
+    platforms: [ContainerBuildPlatform],
+    durationMilliseconds: Int64,
+    logTail: String
+  ) {
+    self.buildID = buildID
+    self.output = output
+    self.platforms = platforms
+    self.durationMilliseconds = durationMilliseconds
+    self.logTail = logTail
+  }
+
+  init(
+    buildID: UUID,
+    imageDigest: String,
+    tags: [String],
+    platforms: [ContainerBuildPlatform],
+    durationMilliseconds: Int64,
+    logTail: String
+  ) {
+    self.init(
+      buildID: buildID,
+      output: .imageStore(digest: imageDigest, tags: tags),
+      platforms: platforms,
+      durationMilliseconds: durationMilliseconds,
+      logTail: logTail
+    )
+  }
 }
 
 struct ImageBuildProgress: Equatable, Sendable {
@@ -126,6 +300,9 @@ struct ImageBuildImportPartialCompletionError: LocalizedError, Equatable, Sendab
 enum ImageBuildError: LocalizedError, Equatable, Sendable {
   case emptyTags
   case duplicateTags
+  case archiveReferenceCount
+  case unexpectedTags
+  case rootFilesystemSinglePlatform
   case emptyPlatforms
   case duplicatePlatforms
   case unsupportedPlatform(String)
@@ -149,7 +326,13 @@ enum ImageBuildError: LocalizedError, Equatable, Sendable {
     case .emptyTags:
       "Enter at least one output image tag."
     case .duplicateTags:
-      "Output image tags must be unique."
+      "Output image references must be unique."
+    case .archiveReferenceCount:
+      "Enter exactly one logical image reference for the OCI archive."
+    case .unexpectedTags:
+      "Root filesystem outputs do not accept final image tags."
+    case .rootFilesystemSinglePlatform:
+      "Root filesystem archive and directory outputs require exactly one platform."
     case .emptyPlatforms:
       "Choose at least one exact output platform."
     case .duplicatePlatforms:

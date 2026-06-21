@@ -92,9 +92,11 @@ struct ContainerBuildWorkerRunner {
       stagingRoot: inputs.context.deletingLastPathComponent()
     )
     try await contextStager.validate(stagedContext)
-    let stagingReference = stagingReference(for: request.buildID)
-    try await revalidateTagExpectations(request, systemConfiguration: systemConfiguration)
-    try await requireStagingReferenceAvailable(stagingReference, buildID: request.buildID)
+    let internalReference = stagingReference(for: request.buildID)
+    if request.outputKind == .imageStore {
+      try await revalidateTagExpectations(request, systemConfiguration: systemConfiguration)
+      try await requireStagingReferenceAvailable(internalReference, buildID: request.buildID)
+    }
 
     try await writer.send(.progress(.connectingBuilder, message: "Connecting to BuildKit"))
     let socket = try await controller.dialReviewedBuilder(reviewedBuilder)
@@ -107,9 +109,12 @@ struct ContainerBuildWorkerRunner {
     _ = try await builder.info()
 
     let health = try await ClientHealthCheck.ping(timeout: .seconds(10))
-    let exportDirectory = health.appRoot
-      .appendingPathComponent(ContainerBuilderController.resourceDirectoryName)
-      .appendingPathComponent(request.buildID.uuidString.lowercased())
+    let sharedExportRoot = health.appRoot.appendingPathComponent(
+      ContainerBuilderController.resourceDirectoryName
+    )
+    let exportDirectory = sharedExportRoot.appendingPathComponent(
+      request.buildID.uuidString.lowercased()
+    )
     guard !FileManager.default.fileExists(atPath: exportDirectory.path(percentEncoded: false))
     else {
       throw ContainerBuildWorkerError.make(
@@ -125,13 +130,41 @@ struct ContainerBuildWorkerRunner {
     defer {
       try? FileManager.default.removeItem(at: exportDirectory)
     }
-    let archiveURL = exportDirectory.appendingPathComponent("out.tar")
+
+    let exporterType: String
+    let artifactKind: ContainerBuildWorkerArtifactKind
+    let expectedOutput: URL
+    let buildMessage: String
+    switch request.outputKind {
+    case .imageStore, .ociArchive:
+      exporterType = "oci"
+      artifactKind = .ociArchive
+      expectedOutput = exportDirectory.appendingPathComponent("out.tar")
+      buildMessage = "Building OCI image"
+    case .rootFilesystemArchive:
+      exporterType = "tar"
+      artifactKind = .rootFilesystemArchive
+      expectedOutput = exportDirectory.appendingPathComponent("out.tar")
+      buildMessage = "Building root filesystem archive"
+    case .rootFilesystemDirectory:
+      exporterType = "local"
+      artifactKind = .rootFilesystemDirectory
+      expectedOutput = exportDirectory.appendingPathComponent("local")
+      buildMessage = "Building root filesystem directory"
+    }
+
+    let buildTags: [String]
+    if request.outputKind == .ociArchive {
+      buildTags = request.tags.map(\.reference)
+    } else {
+      buildTags = [internalReference]
+    }
     let platforms = try request.platforms.map { try Platform(from: $0.description) }
     let export = Builder.BuildExport(
-      type: "oci",
-      destination: archiveURL,
+      type: exporterType,
+      destination: expectedOutput,
       additionalFields: [:],
-      rawValue: "type=oci"
+      rawValue: "type=\(exporterType)"
     )
     let configuration = Builder.BuildConfig(
       buildID: request.buildID.uuidString.lowercased(),
@@ -145,7 +178,7 @@ struct ContainerBuildWorkerRunner {
       noCache: request.noCache,
       platforms: platforms,
       terminal: nil,
-      tags: [stagingReference],
+      tags: buildTags,
       target: request.targetStage,
       quiet: !secrets.isEmpty,
       exports: [export],
@@ -157,60 +190,62 @@ struct ContainerBuildWorkerRunner {
 
     try Task.checkCancellation()
     try await contextStager.validate(stagedContext)
-    try await writer.send(.progress(.building, message: "Building OCI image"))
+    try await writer.send(.progress(.building, message: buildMessage))
     try await builder.build(configuration)
     try Task.checkCancellation()
     try await contextStager.validate(stagedContext)
-    try await revalidateTagExpectations(request, systemConfiguration: systemConfiguration)
-    try await requireStagingReferenceAvailable(stagingReference, buildID: request.buildID)
+    if request.outputKind == .imageStore {
+      try await revalidateTagExpectations(request, systemConfiguration: systemConfiguration)
+      try await requireStagingReferenceAvailable(internalReference, buildID: request.buildID)
+    }
 
     try await writer.send(
-      .progress(.exportingArtifact, message: "Verifying the isolated OCI build artifact")
+      .progress(.exportingArtifact, message: "Isolating the reviewed build output")
     )
+    let artifact: ContainerBuildWorkerArtifact
     do {
-      _ = try SecureRegularFileValidator.validate(
-        rootDirectory: health.appRoot.appendingPathComponent(
-          ContainerBuilderController.resourceDirectoryName
-        ),
-        directoryName: request.buildID.uuidString.lowercased(),
-        fileName: archiveURL.lastPathComponent
-      )
-    } catch let error as SecureRegularFileValidationError {
-      let code: String
-      switch error {
-      case .missing:
-        code = "missing-export"
-      case .invalidComponent, .unsafeDirectory, .unsafeFile:
-        code = "unsafe-export"
+      switch artifactKind {
+      case .ociArchive, .rootFilesystemArchive:
+        let privateArtifact = try PrivateBuildArtifactStore().persist(
+          sourceRootDirectory: sharedExportRoot,
+          sourceDirectoryName: request.buildID.uuidString.lowercased(),
+          buildID: request.buildID
+        )
+        artifact = ContainerBuildWorkerArtifact(
+          kind: artifactKind,
+          path: privateArtifact.url.path(percentEncoded: false),
+          sha256: privateArtifact.sha256,
+          byteCount: privateArtifact.byteCount,
+          entryCount: nil
+        )
+
+      case .rootFilesystemDirectory:
+        let privateArtifact = try PrivateBuildDirectoryStore().persist(
+          sourceRootDirectory: sharedExportRoot,
+          sourceDirectoryName: request.buildID.uuidString.lowercased(),
+          buildID: request.buildID
+        )
+        artifact = ContainerBuildWorkerArtifact(
+          kind: artifactKind,
+          path: privateArtifact.url.path(percentEncoded: false),
+          sha256: privateArtifact.sha256,
+          byteCount: privateArtifact.byteCount,
+          entryCount: privateArtifact.entryCount
+        )
       }
-      throw ContainerBuildWorkerError.make(
-        code: code,
-        message: "BuildKit did not produce a private, regular OCI archive.",
-        buildID: request.buildID
-      )
-    }
-    let privateArtifact: PrivateBuildArtifact
-    do {
-      privateArtifact = try PrivateBuildArtifactStore().persist(
-        sourceRootDirectory: health.appRoot.appendingPathComponent(
-          ContainerBuilderController.resourceDirectoryName
-        ),
-        sourceDirectoryName: request.buildID.uuidString.lowercased(),
-        buildID: request.buildID
-      )
+    } catch is CancellationError {
+      throw CancellationError()
     } catch {
       throw ContainerBuildWorkerError.make(
         code: "artifact-isolation-failed",
-        message: "Could not isolate and bind the OCI archive outside the builder mount.",
+        message: "Could not isolate and bind the build output outside the builder mount.",
         buildID: request.buildID
       )
     }
     return ContainerBuildWorkerResult(
       buildID: request.buildID,
-      archivePath: privateArtifact.url.path(percentEncoded: false),
-      archiveSHA256: privateArtifact.sha256,
-      archiveByteCount: privateArtifact.byteCount,
-      stagingReference: stagingReference,
+      artifact: artifact,
+      stagingReference: request.outputKind == .imageStore ? internalReference : nil,
       platforms: request.platforms,
       durationMilliseconds: Int64(Date().timeIntervalSince(startedAt) * 1_000)
     )
@@ -309,12 +344,31 @@ struct ContainerBuildWorkerRunner {
       dockerignore = nil
     }
 
-    guard !request.tags.isEmpty else {
-      throw ContainerBuildWorkerError.make(
-        code: "tags",
-        message: "At least one output image tag is required.",
-        buildID: request.buildID
-      )
+    switch request.outputKind {
+    case .imageStore:
+      guard !request.tags.isEmpty else {
+        throw ContainerBuildWorkerError.make(
+          code: "tags",
+          message: "At least one output image tag is required.",
+          buildID: request.buildID
+        )
+      }
+    case .ociArchive:
+      guard request.tags.count == 1, request.tags[0].existingDigest == nil else {
+        throw ContainerBuildWorkerError.make(
+          code: "archive-reference",
+          message: "An OCI archive requires exactly one reviewed logical image reference.",
+          buildID: request.buildID
+        )
+      }
+    case .rootFilesystemArchive, .rootFilesystemDirectory:
+      guard request.tags.isEmpty else {
+        throw ContainerBuildWorkerError.make(
+          code: "unexpected-tags",
+          message: "Root filesystem outputs do not accept final image tags.",
+          buildID: request.buildID
+        )
+      }
     }
     guard !request.platforms.isEmpty else {
       throw ContainerBuildWorkerError.make(
@@ -323,10 +377,21 @@ struct ContainerBuildWorkerRunner {
         buildID: request.buildID
       )
     }
+    if request.outputKind == .rootFilesystemArchive
+      || request.outputKind == .rootFilesystemDirectory
+    {
+      guard request.platforms.count == 1 else {
+        throw ContainerBuildWorkerError.make(
+          code: "output-platforms",
+          message: "Root filesystem outputs require exactly one platform.",
+          buildID: request.buildID
+        )
+      }
+    }
     guard Set(request.tags.map(\.reference)).count == request.tags.count else {
       throw ContainerBuildWorkerError.make(
         code: "duplicate-tags",
-        message: "Output image tags must be unique.",
+        message: "Output image references must be unique.",
         buildID: request.buildID
       )
     }
@@ -350,7 +415,10 @@ struct ContainerBuildWorkerRunner {
         )
       }
       try requireUserManaged(tag.reference, configuration: systemConfiguration)
-      if tag.replacesExistingReference, !request.allowsTagReplacement {
+      if request.outputKind == .imageStore,
+        tag.replacesExistingReference,
+        !request.allowsTagReplacement
+      {
         throw ContainerBuildWorkerError.make(
           code: "tag-replacement",
           message: "Replacing local tag “\(tag.reference)” was not authorized.",

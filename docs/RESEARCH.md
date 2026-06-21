@@ -251,12 +251,38 @@ release and isolating it behind an adapter are both deliberate.
   connection, and close that socket on drift. If a create attempt fails while a
   running or uncertain builder exists, cleanup must leave it intact because it
   may belong to another `container` process.
-- OCI is the only initial app output. The archive carries one unique internal
-  staging tag; the app applies one or more reviewed final tags after import.
-  Apple’s public 1.0.0 build configuration also models `tar` and `local`
-  exports, but the app has not yet added their destination and overwrite safety
-  contract. Docker/registry exporters and SSH forwarding remain later parity
-  work.
+- Apple 1.0.0's
+  [`Builder.BuildExport.destination`](https://github.com/apple/container/blob/1.0.0/Sources/ContainerBuild/Builder.swift)
+  is host orchestration state; it is not serialized into the shim request. The
+  shim writes OCI and tar
+  exports to `<appRoot>/builder/<buildID>/out.tar` and local exports to
+  `<appRoot>/builder/<buildID>/local`. The app therefore keeps reviewed user
+  destinations entirely on the host side of worker protocol v4.
+- Image-store and OCI-image-archive outputs both use `type=oci`. The former
+  carries a unique internal staging tag and is imported, snapshot-verified, and
+  retagged; the latter carries exactly one reviewed image reference and is
+  published as an OCI archive without image-store mutation. `type=tar` and
+  `type=local` are root-filesystem outputs, not OCI images, and accept no final
+  image tags in the app.
+- Root-filesystem tar and local-folder outputs are limited to one platform until
+  a pinned-runtime probe proves broader semantics. Apple's pinned CLI fixtures
+  separately exercise
+  [`tar`](https://github.com/apple/container/blob/1.0.0/Tests/CLITests/Subcommands/Build/CLIBuilderTarExportTest.swift)
+  and
+  [`local`](https://github.com/apple/container/blob/1.0.0/Tests/CLITests/Subcommands/Build/CLIBuilderLocalOutputTest.swift)
+  export. File outputs are sealed into the private artifact store. Local output
+  is sealed into a separate private directory store that rejects
+  devices/FIFOs/sockets, preserves regular-file modes and relative symlinks,
+  and fingerprints the complete tree before host publication.
+- Destination review pins the resolved owner-controlled parent descriptor.
+  Existing archive files must be owner-controlled, single-link regular files
+  and require explicit replacement authorization; folder outputs must be new.
+  Publication copies to a hidden sibling, checks cancellation and identities,
+  atomically renames, and reports post-commit fsync failure as retained partial
+  completion. Live exporter verification remains a gated follow-up; the safety
+  and protocol contracts are covered deterministically.
+- Docker/registry exporters, SSH forwarding, and raw BuildKit cache strings
+  remain later parity work.
 - The public build configuration accepts raw BuildKit CSV strings for cache
   import/export, but Apple’s CLI hides both flags, the builder source still
   marks cache-to/from as TODO, and upstream has no cache contract tests. Local

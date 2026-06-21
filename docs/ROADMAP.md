@@ -57,7 +57,9 @@ must leave a usable, test-backed product slice.
       retained logs or secret values.
 - [x] Stable Build workspace services with navigation guards and visible cancel,
       TERM-to-KILL, and immediate Force Stop kill points.
-- [ ] SSH forwarding, cache import/export, and alternate outputs.
+- [x] Typed image-store, OCI archive, root-filesystem tar, and root-filesystem
+      folder outputs behind reviewed destination and publication services.
+- [ ] SSH forwarding and typed, app-owned cache import/export profiles.
 - [ ] Version-pinned Socktainer service and product-specific Docker context.
 - [ ] Compose parser and lifecycle coordinator, with conformance fixtures.
 - [ ] Automatic project detection and per-project status.

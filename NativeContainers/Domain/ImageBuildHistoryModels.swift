@@ -18,8 +18,11 @@ enum ImageBuildHistoryFailureKind: String, Codable, Equatable, Sendable {
   case secretReview
   case builder
   case artifact
+  case destinationReview
+  case publication
   case partialFinalization
   case partialImport
+  case partialExport
   case unknown
 }
 
@@ -37,6 +40,7 @@ struct ImageBuildHistoryRecord: Codable, Equatable, Sendable, Identifiable {
   let contextDisplayName: String
   let contextFingerprint: String
   let dockerfileSHA256: String
+  let outputKind: ImageBuildOutputKind
   let requestedTags: [String]
   let completedTags: [String]
   let platforms: [ContainerBuildPlatform]
@@ -69,6 +73,7 @@ struct ImageBuildHistoryRecord: Codable, Equatable, Sendable, Identifiable {
       contextDisplayName: contextDisplayName,
       contextFingerprint: contextFingerprint,
       dockerfileSHA256: dockerfileSHA256,
+      outputKind: outputKind,
       requestedTags: requestedTags,
       completedTags: completedTags,
       platforms: platforms,
@@ -100,6 +105,7 @@ extension ImageBuildHistoryRecord {
     case contextDisplayName
     case contextFingerprint
     case dockerfileSHA256
+    case outputKind
     case requestedTags
     case completedTags
     case platforms
@@ -135,6 +141,11 @@ extension ImageBuildHistoryRecord {
       String.self,
       forKey: .dockerfileSHA256
     )
+    outputKind =
+      try container.decodeIfPresent(
+        ImageBuildOutputKind.self,
+        forKey: .outputKind
+      ) ?? .imageStore
     requestedTags = try container.decode([String].self, forKey: .requestedTags)
     completedTags = try container.decode([String].self, forKey: .completedTags)
     platforms = try container.decode(

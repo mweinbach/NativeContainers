@@ -70,16 +70,22 @@ final class ImageBuildModel {
       ) { update in
         await self.receive(update)
       }
-      await didMutate()
+      if reviewedPlan.output.kind == .imageStore {
+        await didMutate()
+      }
       return true
     } catch is CancellationError {
       errorMessage =
-        "The build was cancelled. No final tag was promised; image state was refreshed."
-      await didMutate()
+        "The build was cancelled before a final output was promised. Any already committed output is retained."
+      if reviewedPlan.output.kind == .imageStore {
+        await didMutate()
+      }
       return false
     } catch {
       errorMessage = error.localizedDescription
-      await didMutate()
+      if reviewedPlan.output.kind == .imageStore {
+        await didMutate()
+      }
       return false
     }
   }

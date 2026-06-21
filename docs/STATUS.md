@@ -7,8 +7,8 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 271 test declarations. The current full
-  app-hosted Xcode run passed all 262 deterministic tests, with nine destructive
+- The suite currently contains 281 test declarations. The current full
+  app-hosted Xcode run passed all 272 deterministic tests, with nine destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes build-history privacy/durability, short-pipe framing, builder mount
   normalization, and strict path-component-containment regressions. Existing
@@ -187,9 +187,10 @@ Updated: 2026-06-20.
   stale digests, exact platform absence, infrastructure references, partial
   pull publication, verified unpack outcomes, and serialization across actor
   suspension points.
-- The Builds destination reviews a private local context, canonical tag state,
-  exact target platforms, builder resources, build arguments, labels, target
-  stage, cache policy, and pull policy before execution.
+- The Builds destination reviews a private local context, typed output,
+  destination (when applicable), canonical image reference, exact target
+  platforms, builder resources, build arguments, labels, target stage, cache
+  policy, and pull policy before execution.
 - A signed embedded one-shot worker owns Apple’s public
   `ContainerBuild.Builder` lifetime. Exact builder descriptor, digest, DNS,
   creation identity, and dial state are revalidated; running or uncertain
@@ -198,11 +199,27 @@ Updated: 2026-06-20.
   modes, and bind metadata plus content in a SHA-256 fingerprint checked before
   and after solve. Canceled staging and queued builds remove partial private
   contexts promptly.
-- OCI exports are copied out of the guest-visible builder directory into a
+- Worker protocol v4 carries a typed output kind and typed artifact metadata,
+  but never a user destination. Image-store and OCI-archive builds use Apple's
+  OCI exporter, root-filesystem archives use `tar`, and root-filesystem folders
+  use `local`; root-filesystem outputs are deliberately single-platform.
+- File exports are copied out of the guest-visible builder directory into a
   descriptor-validated mode-0400 host artifact with a bound byte count and
-  SHA-256. Import revalidates its identity, reconciles ambiguous XPC import/tag
-  replies, reports durable partial completion, and removes both artifact
-  locations independently of task cancellation.
+  SHA-256. Local-directory exports are independently copied into an app-private
+  tree that rejects special files, preserves regular-file modes and relative
+  symlinks, and binds paths, types, modes, link targets, and contents into a
+  SHA-256 tree fingerprint.
+- A focused `ImageBuildOutputManaging` service owns destination review and
+  publication. It pins an owner-controlled parent directory by descriptor,
+  requires explicit authorization to replace the exact reviewed regular file,
+  requires folder outputs to be new, revalidates the private artifact, copies
+  into a hidden sibling with cancellation checks, and commits with an atomic
+  rename. A failure after the rename is reported as retained partial completion
+  instead of deleting a possibly durable output.
+- Image-store import still revalidates artifact identity, reconciles ambiguous
+  XPC import/tag replies, reports durable partial completion, and removes both
+  artifact locations independently of task cancellation. Alternate outputs do
+  not mutate or refresh Apple's image store.
 - A live Xcode probe exercised the app’s embedded signed worker against Apple’s
   1.0.0 services: it staged a Dockerfile context, reused the shared BuildKit
   container, exported and imported OCI, verified the arm64 snapshot, applied a
@@ -234,7 +251,7 @@ Updated: 2026-06-20.
   files outside the build context by open descriptor and full identity; plans
   retain only ID, privacy-sensitive path, and byte count. Context staging rejects
   every pinned device/inode, closing hard-link races. After the builder is ready,
-  the vault revalidates and consumes each descriptor once, then protocol v3
+  the vault revalidates and consumes each descriptor once, then protocol v4
   streams bounded binary and empty values beside—never inside—the Codable control
   request. App-side leases are released when that pipe write commits. Secret
   builds force Apple’s quiet mode, drain and discard worker stderr, sanitize
@@ -259,7 +276,8 @@ Updated: 2026-06-20.
   and removals durably sync the directory, every newly created ancestor is
   synced from its first existing parent, bounded enumeration fails closed on
   floods, and mode-0700/0600 boundaries also strip and sync inherited macOS
-  ACLs. Persisted data excludes full paths, option values, secret IDs and paths,
+  ACLs. History records retain the typed output kind but no output destination;
+  persisted data excludes full paths, option values, secret IDs and paths,
   worker logs, and arbitrary error text.
 - The Build workspace keeps one app-level image-build model and builder model.
   A reviewed plan or active operation locks both its segmented picker and the
@@ -269,7 +287,7 @@ Updated: 2026-06-20.
   explicit immediate KILL path.
 - The History preview renders successfully in Xcode after replacing the macOS
   `List` path that crashed the current SDK’s outline diff with a stable
-  `ScrollView`/`LazyVStack` presentation. The full 271-test Xcode run and a
+  `ScrollView`/`LazyVStack` presentation. The full 281-test Xcode run and a
   warning-free build-for-testing pass are green.
 
 ## Known configuration issue
@@ -285,10 +303,11 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add typed `tar`/local alternate outputs, then gate any app-owned local cache
-   profile behind a live two-build reuse/reset probe. Keep raw cache strings,
-   remote credentials, SSH forwarding, and cache-only prune out of the UI until
-   the pinned native API exposes a verifiable contract.
+1. Run gated live probes for OCI archive, root-filesystem tar, and local-folder
+   export against Apple 1.0.0, including cancellation cleanup. Then gate any
+   app-owned local cache profile behind a separate two-build reuse/reset probe.
+   Keep raw cache strings, remote credentials, SSH forwarding, and cache-only
+   prune out of the UI until the pinned native API exposes a verifiable contract.
 2. Package a signed and notarized privileged helper if automated host-access
    mutation is still desired after the explicit command handoff is exercised.
 3. Add the entitlement through a functioning Xcode capability surface, then

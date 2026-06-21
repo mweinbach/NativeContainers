@@ -6,7 +6,7 @@ enum ContainerBuildWorkerOperation: String, Codable, Equatable, Sendable {
 }
 
 struct ContainerBuildWorkerRequest: Codable, Equatable, Sendable {
-  static let currentProtocolVersion = 3
+  static let currentProtocolVersion = 4
 
   let protocolVersion: Int
   let operation: ContainerBuildWorkerOperation
@@ -40,8 +40,16 @@ struct ContainerBuilderConfiguration: Codable, Equatable, Sendable {
   )
 }
 
+enum ImageBuildOutputKind: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+  case imageStore
+  case ociArchive
+  case rootFilesystemArchive
+  case rootFilesystemDirectory
+}
+
 struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
   let buildID: UUID
+  let outputKind: ImageBuildOutputKind
   let contextPath: String
   let dockerfilePath: String
   let dockerfileSHA256: String
@@ -57,6 +65,44 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
   let pullLatest: Bool
   let secretIDs: [String]
   let allowsTagReplacement: Bool
+
+  init(
+    buildID: UUID,
+    outputKind: ImageBuildOutputKind = .imageStore,
+    contextPath: String,
+    dockerfilePath: String,
+    dockerfileSHA256: String,
+    contextFingerprint: String,
+    dockerignorePath: String?,
+    dockerignoreSHA256: String?,
+    tags: [ContainerBuildTagExpectation],
+    platforms: [ContainerBuildPlatform],
+    buildArguments: [String],
+    labels: [String],
+    targetStage: String,
+    noCache: Bool,
+    pullLatest: Bool,
+    secretIDs: [String],
+    allowsTagReplacement: Bool
+  ) {
+    self.buildID = buildID
+    self.outputKind = outputKind
+    self.contextPath = contextPath
+    self.dockerfilePath = dockerfilePath
+    self.dockerfileSHA256 = dockerfileSHA256
+    self.contextFingerprint = contextFingerprint
+    self.dockerignorePath = dockerignorePath
+    self.dockerignoreSHA256 = dockerignoreSHA256
+    self.tags = tags
+    self.platforms = platforms
+    self.buildArguments = buildArguments
+    self.labels = labels
+    self.targetStage = targetStage
+    self.noCache = noCache
+    self.pullLatest = pullLatest
+    self.secretIDs = secretIDs
+    self.allowsTagReplacement = allowsTagReplacement
+  }
 }
 
 enum ContainerBuildPathBoundary {
@@ -189,14 +235,68 @@ struct ContainerBuildWorkerEvent: Codable, Equatable, Sendable {
   }
 }
 
+enum ContainerBuildWorkerArtifactKind: String, Codable, Equatable, Sendable {
+  case ociArchive
+  case rootFilesystemArchive
+  case rootFilesystemDirectory
+}
+
+struct ContainerBuildWorkerArtifact: Codable, Equatable, Sendable {
+  let kind: ContainerBuildWorkerArtifactKind
+  let path: String
+  let sha256: String
+  let byteCount: Int64
+  let entryCount: Int?
+}
+
 struct ContainerBuildWorkerResult: Codable, Equatable, Sendable {
   let buildID: UUID
-  let archivePath: String
-  let archiveSHA256: String
-  let archiveByteCount: Int64
-  let stagingReference: String
+  let artifact: ContainerBuildWorkerArtifact
+  let stagingReference: String?
   let platforms: [ContainerBuildPlatform]
   let durationMilliseconds: Int64
+
+  var archivePath: String { artifact.path }
+  var archiveSHA256: String { artifact.sha256 }
+  var archiveByteCount: Int64 { artifact.byteCount }
+
+  init(
+    buildID: UUID,
+    artifact: ContainerBuildWorkerArtifact,
+    stagingReference: String?,
+    platforms: [ContainerBuildPlatform],
+    durationMilliseconds: Int64
+  ) {
+    self.buildID = buildID
+    self.artifact = artifact
+    self.stagingReference = stagingReference
+    self.platforms = platforms
+    self.durationMilliseconds = durationMilliseconds
+  }
+
+  init(
+    buildID: UUID,
+    archivePath: String,
+    archiveSHA256: String,
+    archiveByteCount: Int64,
+    stagingReference: String,
+    platforms: [ContainerBuildPlatform],
+    durationMilliseconds: Int64
+  ) {
+    self.init(
+      buildID: buildID,
+      artifact: ContainerBuildWorkerArtifact(
+        kind: .ociArchive,
+        path: archivePath,
+        sha256: archiveSHA256,
+        byteCount: archiveByteCount,
+        entryCount: nil
+      ),
+      stagingReference: stagingReference,
+      platforms: platforms,
+      durationMilliseconds: durationMilliseconds
+    )
+  }
 }
 
 struct ContainerBuildWorkerFailure: Codable, Equatable, Sendable {

@@ -36,9 +36,10 @@ reviewed named-volume and ordered-network attachments, private Unix-socket
 publishing, read-only host-access discovery,
 Apple Keychain-backed registry login management, reviewed native pull/push
 transfers, reviewed Dockerfile/Containerfile builds through Apple’s public
-BuildKit APIs, one-shot reviewed file-backed build secrets, reviewed
-shared-builder Stop/Force Stop/cache reset, private persistent build history,
-and macOS restore-image preparation.
+BuildKit APIs with image-store, OCI-archive, root-filesystem tar, and folder
+outputs, one-shot reviewed file-backed build secrets, reviewed shared-builder
+Stop/Force Stop/cache reset, private persistent build history, and macOS
+restore-image preparation.
 
 The app is composed from narrow injectable service facets. Inventory, container
 creation and lifecycle, inspection, command tools, terminal sessions, image

@@ -105,6 +105,7 @@ struct RecordingImageBuildService: ImageBuilding, Sendable {
       contextDisplayName: Self.contextDisplayName(for: plan.sourceContextDirectory),
       contextFingerprint: plan.contextFingerprint,
       dockerfileSHA256: plan.dockerfileSHA256,
+      outputKind: plan.output.kind,
       requestedTags: plan.tags.map(\.reference),
       completedTags: [],
       platforms: plan.platforms,
@@ -133,6 +134,9 @@ struct RecordingImageBuildService: ImageBuilding, Sendable {
     retainedImages: [ImageBuildHistoryRetainedImage],
     failureKind: ImageBuildHistoryFailureKind
   ) {
+    if error is ImageBuildOutputPartialCompletionError {
+      return (.partiallySucceeded, nil, [], [], .partialExport)
+    }
     if let partial = error as? ImageBuildPartialCompletionError {
       return (
         .partiallySucceeded,
@@ -165,6 +169,18 @@ struct RecordingImageBuildService: ImageBuilding, Sendable {
     if error is ContainerBuildWorkerProcessError {
       return (.failed, nil, [], [], .builder)
     }
+    if let error = error as? ImageBuildOutputError {
+      let kind: ImageBuildHistoryFailureKind
+      switch error {
+      case .destinationRequired, .invalidDestinationName, .unsafeDestinationParent,
+        .destinationMustBeNew, .destinationChanged,
+        .outputReplacementRequiresConfirmation, .reviewUnavailable:
+        kind = .destinationReview
+      case .artifactKindMismatch, .publicationFailed:
+        kind = .publication
+      }
+      return (.failed, nil, [], [], kind)
+    }
     if let error = error as? ImageBuildError {
       return (.failed, nil, [], [], failureKind(for: error))
     }
@@ -184,7 +200,8 @@ struct RecordingImageBuildService: ImageBuilding, Sendable {
       .artifact
     case .secretBuildFailed:
       .builder
-    case .emptyTags, .duplicateTags, .emptyPlatforms, .duplicatePlatforms,
+    case .emptyTags, .duplicateTags, .archiveReferenceCount, .unexpectedTags,
+      .rootFilesystemSinglePlatform, .emptyPlatforms, .duplicatePlatforms,
       .unsupportedPlatform, .invalidKeyValue, .invalidBuilderCPUCount,
       .invalidBuilderMemory:
       .context

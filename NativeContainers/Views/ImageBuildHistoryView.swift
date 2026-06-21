@@ -165,13 +165,18 @@ private struct ImageBuildHistoryRow: View {
             .foregroundStyle(record.status.tint)
         }
 
-        Label(
-          record.requestedTags.joined(separator: ", "),
-          systemImage: "tag"
-        )
-        .font(.subheadline)
-        .lineLimit(2)
-        .privacySensitive()
+        Label(record.outputKind.title, systemImage: record.outputKind.systemImage)
+          .font(.subheadline)
+
+        if !record.requestedTags.isEmpty {
+          Label(
+            record.requestedTags.joined(separator: ", "),
+            systemImage: "tag"
+          )
+          .font(.subheadline)
+          .lineLimit(2)
+          .privacySensitive()
+        }
 
         if record.status == .partiallySucceeded {
           Label {
@@ -305,10 +310,16 @@ extension ImageBuildHistoryFailureKind {
       "The native builder or its worker did not complete."
     case .artifact:
       "The built artifact did not pass validation."
+    case .destinationReview:
+      "The reviewed output destination changed or was not authorized."
+    case .publication:
+      "The private artifact could not be committed to its reviewed destination."
     case .partialFinalization:
       "The image was imported, but final tags were only partly applied."
     case .partialImport:
       "At least one image was imported before artifact validation failed."
+    case .partialExport:
+      "The output committed, but durability confirmation was incomplete."
     case .unknown:
       "The build did not complete."
     }
@@ -325,6 +336,7 @@ extension ImageBuildHistoryFailureKind {
         contextDisplayName: "sample-api",
         contextFingerprint: "context-fingerprint",
         dockerfileSHA256: "dockerfile-sha256",
+        outputKind: .imageStore,
         requestedTags: ["sample-api:latest"],
         completedTags: ["sample-api:latest"],
         platforms: [.current],
@@ -349,6 +361,7 @@ extension ImageBuildHistoryFailureKind {
         contextDisplayName: "worker",
         contextFingerprint: "context-fingerprint",
         dockerfileSHA256: "dockerfile-sha256",
+        outputKind: .imageStore,
         requestedTags: ["worker:review"],
         completedTags: [],
         platforms: [.amd64],

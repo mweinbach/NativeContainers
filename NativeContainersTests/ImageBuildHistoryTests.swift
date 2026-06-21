@@ -104,7 +104,7 @@ struct ImageBuildHistoryTests {
   }
 
   @Test
-  func storeDefaultsRetainedImagesForExistingSchemaOneRecords() async throws {
+  func storeDefaultsNewFieldsForExistingSchemaOneRecords() async throws {
     let fixture = try ImageBuildHistoryFixture()
     defer { fixture.remove() }
     let launchID = UUID()
@@ -119,6 +119,7 @@ struct ImageBuildHistoryTests {
     )
     var payload = try #require(envelope["record"] as? [String: Any])
     payload.removeValue(forKey: "retainedImages")
+    payload.removeValue(forKey: "outputKind")
     envelope["record"] = payload
     try JSONSerialization.data(withJSONObject: envelope).write(to: recordURL)
     #expect(Darwin.chmod(recordURL.path(percentEncoded: false), 0o600) == 0)
@@ -126,6 +127,7 @@ struct ImageBuildHistoryTests {
     let snapshot = try await store.load()
 
     #expect(snapshot.records == [record])
+    #expect(snapshot.records.first?.outputKind == .imageStore)
     #expect(snapshot.rejectedRecordCount == 0)
   }
 
@@ -640,6 +642,10 @@ struct ImageBuildHistoryTests {
     let fixture = try ImageBuildHistoryFixture()
     defer { fixture.remove() }
     let launchID = UUID()
+    let outputDestination = URL(
+      filePath: "/tmp/OUTPUT-PATH-SENTINEL/reviewed-image.oci.tar",
+      directoryHint: .notDirectory
+    )
     let plan = makeHistoryBuildPlan(
       sourceContextDirectory: URL(
         filePath: "/tmp/FULL-PATH-SECRET-SENTINEL/safe-context",
@@ -653,9 +659,24 @@ struct ImageBuildHistoryTests {
         )
       ],
       buildArguments: ["TOKEN=BUILD-VALUE-SENTINEL"],
-      labels: ["secret.label=LABEL-VALUE-SENTINEL"]
+      labels: ["secret.label=LABEL-VALUE-SENTINEL"],
+      output: ImageBuildOutputPlan(
+        reviewID: UUID(),
+        kind: .ociArchive,
+        destinationURL: outputDestination,
+        existingDestinationIdentity: nil
+      )
     )
-    let base = TestHistoryImageBuilder(plan: plan, behavior: .succeed)
+    let base = TestHistoryImageBuilder(
+      plan: plan,
+      behavior: .succeedOutput(
+        .ociArchive(
+          destination: outputDestination,
+          sha256: String(repeating: "c", count: 64),
+          byteCount: 4_096
+        )
+      )
+    )
     let store = ImageBuildHistoryStore(rootURL: fixture.rootURL, launchID: launchID)
     let recorder = RecordingImageBuildService(
       base: base,
@@ -675,6 +696,7 @@ struct ImageBuildHistoryTests {
     #expect(record.buildArgumentKeys == ["TOKEN"])
     #expect(record.labelKeys == ["secret.label"])
     #expect(record.secretCount == 1)
+    #expect(record.outputKind == .ociArchive)
 
     let data = try Data(contentsOf: fixture.recordURL(id: record.id))
     let raw = String(decoding: data, as: UTF8.self)
@@ -683,6 +705,7 @@ struct ImageBuildHistoryTests {
     #expect(!raw.contains("LABEL-VALUE-SENTINEL"))
     #expect(!raw.contains("SECRET-ID-SENTINEL"))
     #expect(!raw.contains("SECRET-PATH-SENTINEL"))
+    #expect(!raw.contains("OUTPUT-PATH-SENTINEL"))
   }
 
   @Test
@@ -952,6 +975,7 @@ private struct ImageBuildHistoryFixture {
 
 private enum TestHistoryBuildBehavior: Sendable {
   case succeed
+  case succeedOutput(ImageBuildCompletion)
   case partial(ImageBuildPartialCompletionError)
   case partialImport(ImageBuildImportPartialCompletionError)
   case secretFailure
@@ -986,6 +1010,14 @@ private actor TestHistoryImageBuilder: ImageBuilding {
         buildID: plan.id,
         imageDigest: "sha256:built",
         tags: plan.tags.map(\.reference),
+        platforms: plan.platforms,
+        durationMilliseconds: 500,
+        logTail: "BUILD-LOG-SENTINEL"
+      )
+    case .succeedOutput(let output):
+      ImageBuildResult(
+        buildID: plan.id,
+        output: output,
         platforms: plan.platforms,
         durationMilliseconds: 500,
         logTail: "BUILD-LOG-SENTINEL"
@@ -1231,6 +1263,7 @@ private func makeHistoryRecord(
     contextDisplayName: "sample-context",
     contextFingerprint: String(repeating: "c", count: 64),
     dockerfileSHA256: String(repeating: "d", count: 64),
+    outputKind: .imageStore,
     requestedTags: ["sample:latest"],
     completedTags: status == .succeeded ? ["sample:latest"] : [],
     platforms: [.current],
@@ -1277,7 +1310,8 @@ private func makeHistoryBuildPlan(
   ),
   secrets: [ImageBuildSecretReview] = [],
   buildArguments: [String] = ["CONFIGURATION=release"],
-  labels: [String] = ["org.example.owner=nativecontainers"]
+  labels: [String] = ["org.example.owner=nativecontainers"],
+  output: ImageBuildOutputPlan = .imageStore
 ) -> ImageBuildPlan {
   let id = UUID()
   let stagedRoot = URL(
@@ -1309,6 +1343,7 @@ private func makeHistoryBuildPlan(
     pullLatest: true,
     builderCPUCount: nil,
     builderMemoryMiB: nil,
+    output: output,
     generatedAt: Date(timeIntervalSince1970: 1_000)
   )
 }

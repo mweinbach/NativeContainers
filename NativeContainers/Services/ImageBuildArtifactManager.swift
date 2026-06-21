@@ -2,19 +2,25 @@ import ContainerAPIClient
 import Darwin
 import Foundation
 
+enum ImageBuildArtifactIdentity: Equatable, Sendable {
+  case regularFile(SecureRegularFileIdentity)
+  case directory(PrivateBuildDirectoryIdentity)
+}
+
 protocol ImageBuildArtifactManaging: Sendable {
   func validateArtifact(
-    _ artifact: ContainerBuildWorkerResult
-  ) async throws -> SecureRegularFileIdentity
+    _ result: ContainerBuildWorkerResult
+  ) async throws -> ImageBuildArtifactIdentity
   func revalidateArtifact(
-    _ artifact: ContainerBuildWorkerResult,
-    expectedIdentity: SecureRegularFileIdentity
+    _ result: ContainerBuildWorkerResult,
+    expectedIdentity: ImageBuildArtifactIdentity
   ) async throws
   func removeArtifacts(buildID: UUID) async
 }
 
 struct AppleImageBuildArtifactManager: ImageBuildArtifactManaging {
-  private let store: PrivateBuildArtifactStore
+  private let fileStore: PrivateBuildArtifactStore
+  private let directoryStore: PrivateBuildDirectoryStore
   private let sharedExportRoot: @Sendable () async throws -> URL
 
   init(
@@ -24,63 +30,125 @@ struct AppleImageBuildArtifactManager: ImageBuildArtifactManaging {
       return health.appRoot.appending(path: "builder", directoryHint: .isDirectory)
     }
   ) {
-    store = PrivateBuildArtifactStore(rootDirectory: rootDirectory)
+    fileStore = PrivateBuildArtifactStore(rootDirectory: rootDirectory)
+    directoryStore = PrivateBuildDirectoryStore(rootDirectory: rootDirectory)
     self.sharedExportRoot = sharedExportRoot
   }
 
   func validateArtifact(
-    _ artifact: ContainerBuildWorkerResult
-  ) async throws -> SecureRegularFileIdentity {
-    let expected = store.artifactURL(buildID: artifact.buildID)
-    let actual = URL(filePath: artifact.archivePath).standardizedFileURL
-    guard actual == expected else { throw ImageBuildError.workerArtifactMismatch }
-    do {
-      return try store.validate(
-        PrivateBuildArtifact(
-          url: actual,
-          sha256: artifact.archiveSHA256,
-          byteCount: artifact.archiveByteCount
-        ),
-        buildID: artifact.buildID
-      )
-    } catch let error as SecureRegularFileValidationError {
-      if case .missing = error {
-        throw ImageBuildError.missingArtifact(actual.path(percentEncoded: false))
+    _ result: ContainerBuildWorkerResult
+  ) async throws -> ImageBuildArtifactIdentity {
+    let artifact = result.artifact
+    switch artifact.kind {
+    case .ociArchive, .rootFilesystemArchive:
+      let expected = fileStore.artifactURL(buildID: result.buildID)
+      let actual = URL(filePath: artifact.path).standardizedFileURL
+      guard actual == expected, artifact.entryCount == nil else {
+        throw ImageBuildError.workerArtifactMismatch
       }
-      throw ImageBuildError.unsafeArtifact(actual.path(percentEncoded: false))
-    } catch {
-      throw ImageBuildError.unsafeArtifact(actual.path(percentEncoded: false))
+      do {
+        let identity = try fileStore.validate(
+          PrivateBuildArtifact(
+            url: actual,
+            sha256: artifact.sha256,
+            byteCount: artifact.byteCount
+          ),
+          buildID: result.buildID
+        )
+        return .regularFile(identity)
+      } catch let error as SecureRegularFileValidationError {
+        if case .missing = error {
+          throw ImageBuildError.missingArtifact(actual.path(percentEncoded: false))
+        }
+        throw ImageBuildError.unsafeArtifact(actual.path(percentEncoded: false))
+      } catch let error as PrivateBuildArtifactStoreError {
+        if case .ioFailure(_, _, let code) = error, code == ENOENT {
+          throw ImageBuildError.missingArtifact(actual.path(percentEncoded: false))
+        }
+        throw ImageBuildError.unsafeArtifact(actual.path(percentEncoded: false))
+      } catch {
+        throw ImageBuildError.unsafeArtifact(actual.path(percentEncoded: false))
+      }
+
+    case .rootFilesystemDirectory:
+      let expected = directoryStore.artifactURL(buildID: result.buildID)
+      let actual = URL(filePath: artifact.path).standardizedFileURL
+      guard
+        actual == expected,
+        let entryCount = artifact.entryCount,
+        entryCount >= 0
+      else {
+        throw ImageBuildError.workerArtifactMismatch
+      }
+      do {
+        let identity = try directoryStore.validate(
+          PrivateBuildDirectoryArtifact(
+            url: actual,
+            sha256: artifact.sha256,
+            byteCount: artifact.byteCount,
+            entryCount: entryCount
+          ),
+          buildID: result.buildID
+        )
+        return .directory(identity)
+      } catch let error as PrivateBuildDirectoryStoreError {
+        if case .ioFailure(_, _, let code) = error, code == ENOENT {
+          throw ImageBuildError.missingArtifact(actual.path(percentEncoded: false))
+        }
+        throw ImageBuildError.unsafeArtifact(actual.path(percentEncoded: false))
+      } catch {
+        throw ImageBuildError.unsafeArtifact(actual.path(percentEncoded: false))
+      }
     }
   }
 
   func revalidateArtifact(
-    _ artifact: ContainerBuildWorkerResult,
-    expectedIdentity: SecureRegularFileIdentity
+    _ result: ContainerBuildWorkerResult,
+    expectedIdentity: ImageBuildArtifactIdentity
   ) async throws {
-    let actual = URL(filePath: artifact.archivePath).standardizedFileURL
+    let artifact = result.artifact
     do {
-      try store.revalidate(
-        PrivateBuildArtifact(
-          url: actual,
-          sha256: artifact.archiveSHA256,
-          byteCount: artifact.archiveByteCount
-        ),
-        buildID: artifact.buildID,
-        expectedIdentity: expectedIdentity
-      )
-    } catch let error as SecureRegularFileValidationError {
-      if case .missing = error {
-        throw ImageBuildError.missingArtifact(actual.path(percentEncoded: false))
+      switch (artifact.kind, expectedIdentity) {
+      case (.ociArchive, .regularFile(let identity)),
+        (.rootFilesystemArchive, .regularFile(let identity)):
+        try fileStore.revalidate(
+          PrivateBuildArtifact(
+            url: URL(filePath: artifact.path).standardizedFileURL,
+            sha256: artifact.sha256,
+            byteCount: artifact.byteCount
+          ),
+          buildID: result.buildID,
+          expectedIdentity: identity
+        )
+
+      case (.rootFilesystemDirectory, .directory(let identity)):
+        guard let entryCount = artifact.entryCount else {
+          throw ImageBuildError.workerArtifactMismatch
+        }
+        try directoryStore.revalidate(
+          PrivateBuildDirectoryArtifact(
+            url: URL(filePath: artifact.path).standardizedFileURL,
+            sha256: artifact.sha256,
+            byteCount: artifact.byteCount,
+            entryCount: entryCount
+          ),
+          buildID: result.buildID,
+          expectedIdentity: identity
+        )
+
+      default:
+        throw ImageBuildError.workerArtifactMismatch
       }
-      throw ImageBuildError.unsafeArtifact(actual.path(percentEncoded: false))
+    } catch let error as ImageBuildError {
+      throw error
     } catch {
-      throw ImageBuildError.unsafeArtifact(actual.path(percentEncoded: false))
+      throw ImageBuildError.unsafeArtifact(artifact.path)
     }
   }
 
   func removeArtifacts(buildID: UUID) async {
-    let cleanup = Task.detached(priority: .utility) { [store, sharedExportRoot] in
-      try? store.remove(buildID: buildID)
+    let cleanup = Task.detached(priority: .utility) { [fileStore, sharedExportRoot] in
+      try? fileStore.remove(buildID: buildID)
       guard let root = try? await sharedExportRoot() else { return }
       let directory = root.standardizedFileURL.appending(
         path: buildID.uuidString.lowercased(),

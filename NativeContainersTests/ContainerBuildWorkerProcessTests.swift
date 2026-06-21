@@ -25,6 +25,87 @@ struct ContainerBuildWorkerFrameCodecTests {
   }
 
   @Test
+  func protocolVersionFourRoundTripsTypedOutputsWithoutHostDestinations() throws {
+    let buildID = UUID()
+    let build = ContainerBuildWorkerBuildRequest(
+      buildID: buildID,
+      outputKind: .rootFilesystemDirectory,
+      contextPath: "/private/context",
+      dockerfilePath: "/private/context/Dockerfile",
+      dockerfileSHA256: String(repeating: "a", count: 64),
+      contextFingerprint: String(repeating: "b", count: 64),
+      dockerignorePath: nil,
+      dockerignoreSHA256: nil,
+      tags: [],
+      platforms: [.current],
+      buildArguments: [],
+      labels: [],
+      targetStage: "",
+      noCache: false,
+      pullLatest: true,
+      secretIDs: [],
+      allowsTagReplacement: false
+    )
+    let request = ContainerBuildWorkerRequest(operation: .build, build: build)
+    let encodedRequest = try JSONEncoder().encode(request)
+    let decodedRequest = try JSONDecoder().decode(
+      ContainerBuildWorkerRequest.self,
+      from: encodedRequest
+    )
+    let requestJSON = try #require(
+      JSONSerialization.jsonObject(with: encodedRequest) as? [String: Any]
+    )
+    let buildJSON = try #require(requestJSON["build"] as? [String: Any])
+
+    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 4)
+    #expect(decodedRequest == request)
+    #expect(buildJSON["outputKind"] as? String == "rootFilesystemDirectory")
+    #expect(buildJSON["destination"] == nil)
+    #expect(buildJSON["destinationPath"] == nil)
+
+    let artifacts = [
+      ContainerBuildWorkerArtifact(
+        kind: .ociArchive,
+        path: "/private/artifacts/out.tar",
+        sha256: String(repeating: "c", count: 64),
+        byteCount: 42,
+        entryCount: nil
+      ),
+      ContainerBuildWorkerArtifact(
+        kind: .rootFilesystemArchive,
+        path: "/private/artifacts/rootfs.tar",
+        sha256: String(repeating: "d", count: 64),
+        byteCount: 84,
+        entryCount: nil
+      ),
+      ContainerBuildWorkerArtifact(
+        kind: .rootFilesystemDirectory,
+        path: "/private/artifacts/rootfs",
+        sha256: String(repeating: "e", count: 64),
+        byteCount: 126,
+        entryCount: 7
+      ),
+    ]
+
+    for artifact in artifacts {
+      let result = ContainerBuildWorkerResult(
+        buildID: buildID,
+        artifact: artifact,
+        stagingReference: nil,
+        platforms: [.current],
+        durationMilliseconds: 500
+      )
+      let event = ContainerBuildWorkerEvent.completed(result)
+      let encodedEvent = try JSONEncoder().encode(event)
+      let decodedEvent = try JSONDecoder().decode(
+        ContainerBuildWorkerEvent.self,
+        from: encodedEvent
+      )
+      #expect(decodedEvent == event)
+    }
+  }
+
+  @Test
   func rejectsZeroAndOversizedFramesFromTheirHeaders() throws {
     var zeroDecoder = ContainerBuildWorkerFrameDecoder<FrameFixture>()
     #expect(throws: ContainerBuildWorkerFrameError.emptyFrame) {

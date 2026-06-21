@@ -6,6 +6,7 @@ actor AppleContainerBuildService: ImageBuilding {
   private let worker: any ContainerBuildWorkerRunning
   private let imageStore: any ImageBuildStoring
   private let artifactManager: any ImageBuildArtifactManaging
+  private let outputManager: any ImageBuildOutputManaging
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator
   private let buildExecutionCoordinator: RuntimeMutationCoordinator
 
@@ -15,6 +16,7 @@ actor AppleContainerBuildService: ImageBuilding {
     worker: any ContainerBuildWorkerRunning = ContainerBuildWorkerProcess(),
     imageStore: any ImageBuildStoring = AppleImageBuildStore(),
     artifactManager: any ImageBuildArtifactManaging = AppleImageBuildArtifactManager(),
+    outputManager: any ImageBuildOutputManaging = AppleImageBuildOutputService(),
     runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared,
     buildExecutionCoordinator: RuntimeMutationCoordinator = .imageBuilds
   ) {
@@ -23,6 +25,7 @@ actor AppleContainerBuildService: ImageBuilding {
     self.worker = worker
     self.imageStore = imageStore
     self.artifactManager = artifactManager
+    self.outputManager = outputManager
     self.runtimeMutationCoordinator = runtimeMutationCoordinator
     self.buildExecutionCoordinator = buildExecutionCoordinator
   }
@@ -32,11 +35,25 @@ actor AppleContainerBuildService: ImageBuilding {
     progress: @escaping ImageBuildProgressHandler
   ) async throws -> ImageBuildPlan {
     try validate(request)
-    let tags = try await imageStore.resolveTagExpectations(request.tags)
     let secretReviewID = request.secrets.isEmpty ? nil : UUID()
     var stagedContext: StagedBuildContext?
+    var outputPlan: ImageBuildOutputPlan?
 
     do {
+      let preparedOutput = try await outputManager.prepare(request.output)
+      outputPlan = preparedOutput
+      let tags: [ContainerBuildTagExpectation]
+      switch request.output.kind {
+      case .imageStore:
+        tags = try await imageStore.resolveTagExpectations(request.tags)
+      case .ociArchive:
+        tags = try await imageStore.resolveTagExpectations(request.tags).map {
+          ContainerBuildTagExpectation(reference: $0.reference, existingDigest: nil)
+        }
+      case .rootFilesystemArchive, .rootFilesystemDirectory:
+        tags = []
+      }
+
       let secretPreparation: ImageBuildSecretPreparation
       if let secretReviewID {
         await progress(
@@ -102,6 +119,7 @@ actor AppleContainerBuildService: ImageBuilding {
         pullLatest: request.pullLatest,
         builderCPUCount: request.builderCPUCount,
         builderMemoryMiB: request.builderMemoryMiB,
+        output: preparedOutput,
         generatedAt: Date()
       )
     } catch {
@@ -110,6 +128,9 @@ actor AppleContainerBuildService: ImageBuilding {
       }
       if let stagedContext {
         try? await contextStager.discard(stagedContext)
+      }
+      if let outputPlan {
+        await outputManager.discard(outputPlan)
       }
       throw error
     }
@@ -148,6 +169,7 @@ actor AppleContainerBuildService: ImageBuilding {
     if let secretReviewID = plan.secretReviewID {
       await secretManager.discard(reviewID: secretReviewID)
     }
+    await outputManager.discard(plan.output)
     try? await contextStager.discard(stagedContext(from: plan))
   }
 
@@ -158,7 +180,9 @@ actor AppleContainerBuildService: ImageBuilding {
   ) async throws -> ImageBuildResult {
     let staged = stagedContext(from: plan)
     try await contextStager.validate(staged)
-    try await validateTagState(plan: plan, authorization: authorization)
+    if plan.output.kind == .imageStore {
+      try await validateTagState(plan: plan, authorization: authorization)
+    }
     try Task.checkCancellation()
 
     let reviewedBuilder = ContainerBuilderConfiguration(
@@ -209,16 +233,46 @@ actor AppleContainerBuildService: ImageBuilding {
       logTail = ContainerBuildWorkerDiagnostics.suppressedMessage
     }
 
-    return try await runtimeMutationCoordinator.perform { [self] in
-      try await finalize(
-        workerResult,
-        artifactIdentity: artifactIdentity,
-        plan: plan,
-        authorization: authorization,
-        logTail: logTail,
-        progress: progress
-      )
+    if plan.output.kind == .imageStore {
+      return try await runtimeMutationCoordinator.perform { [self] in
+        try await finalizeImageStore(
+          workerResult,
+          artifactIdentity: artifactIdentity,
+          plan: plan,
+          authorization: authorization,
+          logTail: logTail,
+          progress: progress
+        )
+      }
     }
+
+    await progress(
+      ImageBuildProgress(
+        phase: .exportingArtifact,
+        message: "Committing the reviewed output destination",
+        logTail: logTail
+      )
+    )
+    let completion = try await outputManager.publish(
+      workerResult,
+      artifactIdentity: artifactIdentity,
+      plan: plan.output,
+      authorization: authorization
+    )
+    await progress(
+      ImageBuildProgress(
+        phase: .completed,
+        message: "Build output committed",
+        logTail: logTail
+      )
+    )
+    return ImageBuildResult(
+      buildID: plan.id,
+      output: completion,
+      platforms: plan.platforms,
+      durationMilliseconds: workerResult.durationMilliseconds,
+      logTail: logTail
+    )
   }
 
   private func runReviewedBuildWorker(
@@ -254,6 +308,7 @@ actor AppleContainerBuildService: ImageBuilding {
 
     let buildRequest = ContainerBuildWorkerBuildRequest(
       buildID: plan.id,
+      outputKind: plan.output.kind,
       contextPath: plan.stagedContextDirectory.path(percentEncoded: false),
       dockerfilePath: plan.stagedDockerfile.path(percentEncoded: false),
       dockerfileSHA256: plan.dockerfileSHA256,
@@ -296,18 +351,25 @@ actor AppleContainerBuildService: ImageBuilding {
     }
   }
 
-  private func finalize(
+  private func finalizeImageStore(
     _ artifact: ContainerBuildWorkerResult,
-    artifactIdentity: SecureRegularFileIdentity,
+    artifactIdentity: ImageBuildArtifactIdentity,
     plan: ImageBuildPlan,
     authorization: ImageBuildAuthorization,
     logTail: String,
     progress: @escaping ImageBuildProgressHandler
   ) async throws -> ImageBuildResult {
+    guard
+      artifact.artifact.kind == .ociArchive,
+      case .regularFile = artifactIdentity,
+      let stagingReference = artifact.stagingReference
+    else {
+      throw ImageBuildError.workerArtifactMismatch
+    }
     try await validateTagState(plan: plan, authorization: authorization)
-    let stagingState = try await imageStore.tagState(for: [artifact.stagingReference])
-    guard stagingState.currentDigests[artifact.stagingReference] == nil else {
-      throw ImageBuildError.stagingReferenceChanged(artifact.stagingReference)
+    let stagingState = try await imageStore.tagState(for: [stagingReference])
+    guard stagingState.currentDigests[stagingReference] == nil else {
+      throw ImageBuildError.stagingReferenceChanged(stagingReference)
     }
     try Task.checkCancellation()
     await progress(
@@ -322,8 +384,8 @@ actor AppleContainerBuildService: ImageBuilding {
       expectedIdentity: artifactIdentity
     )
     let loaded = try await imageStore.loadArchive(
-      at: URL(filePath: artifact.archivePath),
-      expectedReference: artifact.stagingReference
+      at: URL(filePath: artifact.artifact.path),
+      expectedReference: stagingReference
     )
     if let failureMessage = loaded.reconciledFailureMessage {
       throw ImageBuildImportPartialCompletionError(
@@ -349,7 +411,7 @@ actor AppleContainerBuildService: ImageBuilding {
         buildID: plan.id
       )
     }
-    guard image.reference == artifact.stagingReference else {
+    guard image.reference == stagingReference else {
       try throwPostImportFailure(
         ImageBuildError.workerArtifactMismatch,
         loaded: loaded,
@@ -417,8 +479,10 @@ actor AppleContainerBuildService: ImageBuilding {
     )
     return ImageBuildResult(
       buildID: plan.id,
-      imageDigest: image.digest,
-      tags: plan.tags.map(\.reference),
+      output: .imageStore(
+        digest: image.digest,
+        tags: plan.tags.map(\.reference)
+      ),
       platforms: plan.platforms,
       durationMilliseconds: artifact.durationMilliseconds,
       logTail: logTail
@@ -457,13 +521,36 @@ actor AppleContainerBuildService: ImageBuilding {
     _ artifact: ContainerBuildWorkerResult,
     for plan: ImageBuildPlan
   ) throws {
+    let expectedKind: ContainerBuildWorkerArtifactKind
+    switch plan.output.kind {
+    case .imageStore, .ociArchive:
+      expectedKind = .ociArchive
+    case .rootFilesystemArchive:
+      expectedKind = .rootFilesystemArchive
+    case .rootFilesystemDirectory:
+      expectedKind = .rootFilesystemDirectory
+    }
+    let expectedStagingReference =
+      plan.output.kind == .imageStore ? Self.stagingReference(for: plan.id) : nil
+    let validEntryCount =
+      expectedKind == .rootFilesystemDirectory
+      ? (artifact.artifact.entryCount.map { $0 >= 0 } ?? false)
+      : artifact.artifact.entryCount == nil
+    let validByteCount =
+      expectedKind == .rootFilesystemDirectory
+      ? artifact.artifact.byteCount >= 0
+      : artifact.artifact.byteCount > 0
+
     guard
       artifact.buildID == plan.id,
       artifact.platforms == plan.platforms,
-      artifact.stagingReference == Self.stagingReference(for: plan.id),
-      artifact.archiveByteCount > 0,
-      artifact.archiveSHA256.count == 64,
-      artifact.archiveSHA256.utf8.allSatisfy({
+      artifact.stagingReference == expectedStagingReference,
+      artifact.artifact.kind == expectedKind,
+      !artifact.artifact.path.isEmpty,
+      validByteCount,
+      validEntryCount,
+      artifact.artifact.sha256.count == 64,
+      artifact.artifact.sha256.utf8.allSatisfy({
         (48...57).contains($0) || (97...102).contains($0)
       })
     else {
@@ -475,6 +562,7 @@ actor AppleContainerBuildService: ImageBuilding {
     if let secretReviewID = plan.secretReviewID {
       await secretManager.discard(reviewID: secretReviewID)
     }
+    await outputManager.discard(plan.output)
     try? await contextStager.discard(stagedContext(from: plan))
     await artifactManager.removeArtifacts(buildID: plan.id)
   }
@@ -498,7 +586,17 @@ actor AppleContainerBuildService: ImageBuilding {
         contextDirectory: request.contextDirectory
       )
     }
-    guard !request.tags.isEmpty else { throw ImageBuildError.emptyTags }
+    switch request.output.kind {
+    case .imageStore:
+      guard !request.tags.isEmpty else { throw ImageBuildError.emptyTags }
+    case .ociArchive:
+      guard request.tags.count == 1 else { throw ImageBuildError.archiveReferenceCount }
+    case .rootFilesystemArchive, .rootFilesystemDirectory:
+      guard request.tags.isEmpty else { throw ImageBuildError.unexpectedTags }
+      guard request.platforms.count == 1 else {
+        throw ImageBuildError.rootFilesystemSinglePlatform
+      }
+    }
     guard !request.platforms.isEmpty else { throw ImageBuildError.emptyPlatforms }
     guard Set(request.platforms).count == request.platforms.count else {
       throw ImageBuildError.duplicatePlatforms

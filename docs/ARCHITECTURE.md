@@ -187,20 +187,31 @@ nonblocking type checks, ACL removal, file and directory synchronization, and
 crash-temp scavenging. History persists only the context display name,
 fingerprints and hashes, tags, platforms, option keys and flags, secret count,
 timestamps, typed status, digest or retained partial-import references/digests,
-and typed failure category. Full paths, argument and label values, secret IDs
-and paths, logs, and error text never cross this persistence boundary.
+typed output kind, and typed failure category. Output destinations, full paths,
+argument and label values, secret IDs and paths, logs, and error text never
+cross this persistence boundary.
 
 Canonical Dockerfile and ignore paths are checked as strict descendants by
 path component, not textual prefix. This accepts directory URLs normalized with
 or without a trailing separator while rejecting the context itself and sibling
 paths that merely share its name prefix.
 
-The guest-visible export is descriptor-validated, copied into a host-private
-mode-0400 artifact, and bound to its byte count and SHA-256. The app revalidates
-that identity immediately before import, reconciles ambiguous import/tag XPC
-failures by re-listing committed state, verifies snapshots, and tags under the
-same mutation coordinator as image CRUD. Build execution is cancellation-aware
-single-flight, while the long solve stays outside the global mutation lock.
+The worker returns a typed artifact, never a user destination. Guest-visible
+file exports are descriptor-validated, copied into a host-private mode-0400
+artifact, and bound to byte count and SHA-256. Local-directory exports cross a
+separate private tree store that rejects special files, preserves modes and
+symlinks, and fingerprints names, kinds, modes, link targets, and contents. A
+focused output service pins the reviewed host parent, revalidates destination
+and artifact identities, copies to a hidden sibling with cancellation points,
+and commits atomically. Existing files require explicit authorization and a
+post-swap identity check; directory outputs must be new. Post-commit failures
+retain and report the output rather than deleting it.
+
+Image-store builds additionally revalidate before import, reconcile ambiguous
+import/tag XPC failures by re-listing committed state, verify snapshots, and tag
+under the same mutation coordinator as image CRUD. Alternate outputs never
+mutate the image store. Build execution is cancellation-aware single-flight,
+while the long solve stays outside the global mutation lock.
 
 Builder maintenance crosses a separate `ContainerBuilderManaging` service
 boundary. Read-only inspection reports stable runtime state and whole-bundle
@@ -213,7 +224,8 @@ reconciliation runs in a fresh uncancelled task. Deletion additionally requires
 both inventory and the exact builder bundle path to be absent; the service never
 manually removes an orphaned bundle or the separate builder-export directory.
 
-Worker protocol v3 reserves stdout for capped length-prefixed control frames.
+Worker protocol v4 reserves stdout for capped length-prefixed control frames
+and adds typed output requests and artifact results without host destinations.
 Its exact-length stdin decoder reads one metadata-only JSON request followed by
 a bounded binary secret envelope and final commit marker, then leaves stdin open
 as the parent-lifetime lease; secret bytes never enter Codable state, argv,
