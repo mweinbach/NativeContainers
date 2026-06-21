@@ -3,6 +3,7 @@ import Foundation
 
 struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
+  let composeTopology: any ComposeTopologyDeriving
   let containerLifecycle: any ContainerLifecycleManaging
   let containerCreator: any ContainerCreating
   let containerInspector: any ContainerInspecting
@@ -33,6 +34,7 @@ struct AppServices: Sendable {
 
   init(
     inventory: any ContainerInventoryLoading,
+    composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     containerLifecycle: any ContainerLifecycleManaging,
     containerCreator: any ContainerCreating,
     containerInspector: any ContainerInspecting,
@@ -68,6 +70,7 @@ struct AppServices: Sendable {
     restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService()
   ) {
     self.inventory = inventory
+    self.composeTopology = composeTopology
     self.containerLifecycle = containerLifecycle
     self.containerCreator = containerCreator
     self.containerInspector = containerInspector
@@ -99,6 +102,7 @@ struct AppServices: Sendable {
 
   init(
     containerService: any ContainerManaging,
+    composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
     machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
     machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
@@ -123,6 +127,7 @@ struct AppServices: Sendable {
     restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService()
   ) {
     inventory = containerService
+    self.composeTopology = composeTopology
     containerLifecycle = containerService
     containerCreator = containerService
     containerInspector = containerService
@@ -268,6 +273,7 @@ enum AppCompositionRoot {
     )
     return AppServices(
       inventory: inventoryService,
+      composeTopology: ComposeTopologyService(),
       containerLifecycle: lifecycleService,
       containerCreator: creationService,
       containerInspector: inspectionService,

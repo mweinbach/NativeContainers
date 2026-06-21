@@ -59,7 +59,11 @@ struct AppModelTests {
           startedAt: Date(timeIntervalSince1970: 2),
           cpuCount: 2,
           memoryBytes: VirtualMachineResources.bytesPerGiB,
-          ports: []
+          ports: [],
+          labels: [
+            ComposeLabelKey.project: "store",
+            ComposeLabelKey.service: "web",
+          ]
         )
       ],
       images: [],
@@ -75,7 +79,10 @@ struct AppModelTests {
           assignedIPv4Subnet: "192.168.64.0/24",
           ipv4Gateway: "192.168.64.1",
           assignedIPv6Subnet: nil,
-          labels: ["com.apple.container.resource.role": "builtin"],
+          labels: [
+            "com.apple.container.resource.role": "builtin",
+            ComposeLabelKey.project: "store",
+          ],
           plugin: "container-network-vmnet",
           options: [:],
           isBuiltin: true,
@@ -99,6 +106,9 @@ struct AppModelTests {
     #expect(model.systemInfo == inventory.system)
     #expect(model.containers == inventory.containers)
     #expect(model.networks == inventory.networks)
+    #expect(model.composeProjects.map(\.name) == ["store"])
+    #expect(model.composeProjects.first?.services.map(\.name) == ["web"])
+    #expect(model.composeProjects.first?.networks.map(\.id) == ["default"])
     #expect(model.virtualMachines == [manifest])
     #expect(model.errorMessage == nil)
     #expect(model.lastRefresh != nil)
@@ -622,7 +632,11 @@ struct AppModelTests {
           startedAt: nil,
           cpuCount: 1,
           memoryBytes: 512 * 1_024 * 1_024,
-          ports: []
+          ports: [],
+          labels: [
+            ComposeLabelKey.project: "stale-project",
+            ComposeLabelKey.service: "app",
+          ]
         )
       ],
       images: [
@@ -646,12 +660,14 @@ struct AppModelTests {
       virtualMachineLibrary: MockVirtualMachineLibrary(manifests: []),
       initialInventory: initial
     )
+    #expect(model.composeProjects.map(\.name) == ["stale-project"])
 
     await model.refresh()
 
     #expect(model.systemInfo == nil)
     #expect(model.containers.isEmpty)
     #expect(model.images.isEmpty)
+    #expect(model.composeProjects.isEmpty)
     #expect(model.errorMessage?.contains("offline") == true)
   }
 

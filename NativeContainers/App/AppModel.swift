@@ -19,12 +19,15 @@ final class AppModel {
   private(set) var volumes: [VolumeRecord] = []
   private(set) var networks: [NetworkRecord] = []
   private(set) var linuxMachines: [LinuxMachineRecord] = []
+  private(set) var composeTopology = ComposeTopologySnapshot.empty
   private(set) var virtualMachines: [VirtualMachineManifest] = []
   private(set) var isRefreshing = false
   private(set) var lastRefresh: Date?
   private(set) var errorMessage: String?
 
   private let services: AppServices
+
+  var composeProjects: [ComposeProjectRecord] { composeTopology.projects }
 
   @ObservationIgnored
   private lazy var imageBuildWorkspaceModel = ImageBuildModel(
@@ -66,6 +69,7 @@ final class AppModel {
     self.services = services
     self.workspaceNavigation = workspaceNavigation
     if let initialInventory {
+      composeTopology = services.composeTopology.derive(from: initialInventory)
       systemInfo = initialInventory.system
       containers = initialInventory.containers
       images = initialInventory.images
@@ -184,6 +188,7 @@ final class AppModel {
 
     do {
       let inventory = try await services.inventory.loadInventory()
+      let topology = services.composeTopology.derive(from: inventory)
       didLoadContainerInventory = true
       systemInfo = inventory.system
       containers = inventory.containers
@@ -191,6 +196,7 @@ final class AppModel {
       volumes = inventory.volumes
       networks = inventory.networks
       linuxMachines = inventory.machines
+      composeTopology = topology
     } catch is CancellationError {
       return
     } catch {
@@ -200,6 +206,7 @@ final class AppModel {
       volumes = []
       networks = []
       linuxMachines = []
+      composeTopology = .empty
       messages.append("Apple container services: \(error.localizedDescription)")
     }
 
