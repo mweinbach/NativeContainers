@@ -1,6 +1,7 @@
 import Foundation
 
 enum ComposeLabelKey {
+  static let prefix = "com.docker.compose."
   static let project = "com.docker.compose.project"
   static let service = "com.docker.compose.service"
   static let volume = "com.docker.compose.volume"
@@ -14,10 +15,23 @@ enum ComposeLabelKey {
 
 struct ComposeContainerInstance: Equatable, Sendable, Identifiable {
   let container: ContainerRecord
-  let replicaNumber: Int?
-  let isOneOff: Bool
+  let replicaNumberLabel: ObservedOptionalLabel<Int>
+  let oneOffLabel: ObservedOptionalLabel<Bool>
 
   var id: String { container.id }
+  var replicaNumber: Int? { replicaNumberLabel.value }
+  var isOneOff: Bool { oneOffLabel.value ?? false }
+}
+
+enum ObservedOptionalLabel<Value: Equatable & Sendable>: Equatable, Sendable {
+  case absent
+  case valid(Value)
+  case invalid(rawValue: String)
+
+  var value: Value? {
+    guard case .valid(let value) = self else { return nil }
+    return value
+  }
 }
 
 struct ComposeServiceRecord: Equatable, Sendable, Identifiable {
@@ -32,6 +46,20 @@ struct ComposeServiceRecord: Equatable, Sendable, Identifiable {
   var imageReferences: [String] {
     Array(Set(instances.map(\.container.imageReference))).sorted(by: composeStringOrder)
   }
+}
+
+struct ComposeVolumeObservation: Equatable, Sendable, Identifiable {
+  let logicalName: String
+  let volume: VolumeRecord
+
+  var id: String { volume.id }
+}
+
+struct ComposeNetworkObservation: Equatable, Sendable, Identifiable {
+  let logicalName: String
+  let network: NetworkRecord
+
+  var id: String { network.id }
 }
 
 struct ComposeProjectMetadata: Equatable, Sendable {
@@ -68,8 +96,11 @@ enum ComposeTopologyResourceKind: Int, Equatable, Sendable {
 enum ComposeTopologyNoticeKind: String, Equatable, Sendable {
   case invalidProjectName
   case invalidLogicalName
+  case invalidOptionalLabel
   case missingResourceLabel
+  case anonymousVolume
   case builtinNetwork
+  case consumerProjectMismatch
 }
 
 struct ComposeTopologyNotice: Equatable, Sendable, Identifiable {
@@ -78,18 +109,50 @@ struct ComposeTopologyNotice: Equatable, Sendable, Identifiable {
   let resourceID: String
   let projectLabel: String
   let expectedLabelKey: String?
+  let observedValue: String?
+  let relatedProjectNames: [String]
+
+  init(
+    kind: ComposeTopologyNoticeKind,
+    resourceKind: ComposeTopologyResourceKind,
+    resourceID: String,
+    projectLabel: String,
+    expectedLabelKey: String?,
+    observedValue: String? = nil,
+    relatedProjectNames: [String] = []
+  ) {
+    self.kind = kind
+    self.resourceKind = resourceKind
+    self.resourceID = resourceID
+    self.projectLabel = projectLabel
+    self.expectedLabelKey = expectedLabelKey
+    self.observedValue = observedValue
+    self.relatedProjectNames = relatedProjectNames
+  }
 
   var id: String {
-    "\(resourceKind.rawValue):\(resourceID):\(kind.rawValue):\(expectedLabelKey ?? "")"
+    "\(resourceKind.rawValue):\(resourceID):\(kind.rawValue):\(expectedLabelKey ?? ""):\(observedValue ?? ""):\(relatedProjectNames.joined(separator: ","))"
   }
+}
+
+struct ComposeContainerAssociation: Equatable, Sendable {
+  let projectName: String
+  let serviceName: String
+  let replicaNumber: ObservedOptionalLabel<Int>
+  let oneOff: ObservedOptionalLabel<Bool>
+}
+
+struct ComposeResourceAssociation: Equatable, Sendable {
+  let projectName: String
+  let logicalName: String
 }
 
 struct ComposeProjectRecord: Equatable, Sendable, Identifiable {
   let name: String
   let services: [ComposeServiceRecord]
   let unclassifiedContainers: [ComposeContainerInstance]
-  let volumes: [VolumeRecord]
-  let networks: [NetworkRecord]
+  let volumes: [ComposeVolumeObservation]
+  let networks: [ComposeNetworkObservation]
   let metadata: ComposeProjectMetadata
 
   var id: String { name }
@@ -123,34 +186,48 @@ struct ComposeProjectRecord: Equatable, Sendable, Identifiable {
 struct ComposeTopologySnapshot: Equatable, Sendable {
   let projects: [ComposeProjectRecord]
   let notices: [ComposeTopologyNotice]
-  let projectNameByContainerID: [String: String]
-  let serviceNameByContainerID: [String: String]
-  let projectNameByVolumeID: [String: String]
-  let projectNameByNetworkID: [String: String]
+  let containerAssociationsByID: [String: ComposeContainerAssociation]
+  let volumeAssociationsByID: [String: ComposeResourceAssociation]
+  let networkAssociationsByID: [String: ComposeResourceAssociation]
 
   static let empty = ComposeTopologySnapshot(
     projects: [],
     notices: [],
-    projectNameByContainerID: [:],
-    serviceNameByContainerID: [:],
-    projectNameByVolumeID: [:],
-    projectNameByNetworkID: [:]
+    containerAssociationsByID: [:],
+    volumeAssociationsByID: [:],
+    networkAssociationsByID: [:]
   )
+
+  var projectNameByContainerID: [String: String] {
+    containerAssociationsByID.mapValues(\.projectName)
+  }
+
+  var serviceNameByContainerID: [String: String] {
+    containerAssociationsByID.mapValues(\.serviceName)
+  }
+
+  var projectNameByVolumeID: [String: String] {
+    volumeAssociationsByID.mapValues(\.projectName)
+  }
+
+  var projectNameByNetworkID: [String: String] {
+    networkAssociationsByID.mapValues(\.projectName)
+  }
 
   func project(named name: String) -> ComposeProjectRecord? {
     projects.first(where: { $0.name == name })
   }
 
   func project(containingContainerID id: String) -> ComposeProjectRecord? {
-    projectNameByContainerID[id].flatMap(project(named:))
+    containerAssociationsByID[id].map(\.projectName).flatMap(project(named:))
   }
 
   func project(containingVolumeID id: String) -> ComposeProjectRecord? {
-    projectNameByVolumeID[id].flatMap(project(named:))
+    volumeAssociationsByID[id].map(\.projectName).flatMap(project(named:))
   }
 
   func project(containingNetworkID id: String) -> ComposeProjectRecord? {
-    projectNameByNetworkID[id].flatMap(project(named:))
+    networkAssociationsByID[id].map(\.projectName).flatMap(project(named:))
   }
 }
 

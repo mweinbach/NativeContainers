@@ -212,11 +212,11 @@ struct ContainerInspectorView: View {
           onCopyFiles: { isShowingFileTransfer = true }
         )
 
-        if let projectName = appModel.composeTopology.projectNameByContainerID[container.id] {
+        if let association = appModel.composeTopology.containerAssociationsByID[container.id] {
           ComposeMembershipBanner(
-            projectName: projectName,
-            serviceName: appModel.composeTopology.serviceNameByContainerID[container.id],
-            onOpen: { appModel.navigate(to: .composeProject(projectName)) }
+            projectName: association.projectName,
+            memberName: association.serviceName,
+            onOpen: { appModel.navigate(to: .composeProject(association.projectName)) }
           )
         }
 

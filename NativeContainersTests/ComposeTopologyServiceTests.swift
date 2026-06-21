@@ -39,8 +39,22 @@ struct ComposeTopologyServiceTests {
         ),
         makeContainer(id: "unclassified", project: "shop", state: .unknown),
       ],
-      volumes: [makeVolume(id: "data-id", name: "shop-data", project: "shop")],
-      networks: [makeNetwork(id: "network-id", name: "shop-default", project: "shop")]
+      volumes: [
+        makeVolume(
+          id: "data-id",
+          name: "my-app-data",
+          project: "shop",
+          logicalName: "db-data"
+        )
+      ],
+      networks: [
+        makeNetwork(
+          id: "network-id",
+          name: "my-app-network",
+          project: "shop",
+          logicalName: "default"
+        )
+      ]
     )
 
     let topology = service.derive(from: inventory)
@@ -57,6 +71,10 @@ struct ComposeTopologyServiceTests {
     #expect(project.observedState == .partiallyRunning)
     #expect(project.volumes.map(\.id) == ["data-id"])
     #expect(project.networks.map(\.id) == ["network-id"])
+    #expect(project.volumes.first?.logicalName == "db-data")
+    #expect(project.volumes.first?.volume.name == "my-app-data")
+    #expect(project.networks.first?.logicalName == "default")
+    #expect(project.networks.first?.network.name == "my-app-network")
     #expect(project.metadata.workingDirectories == ["/Users/example/shop"])
     #expect(project.metadata.configFileValues == ["/Users/example/shop/compose.yaml"])
     #expect(project.metadata.composeVersions == ["2.38.1"])
@@ -66,6 +84,9 @@ struct ComposeTopologyServiceTests {
     #expect(topology.serviceNameByContainerID["unclassified"] == nil)
     #expect(topology.projectNameByVolumeID["data-id"] == "shop")
     #expect(topology.projectNameByNetworkID["network-id"] == "shop")
+    #expect(topology.containerAssociationsByID["web-1"]?.serviceName == "web")
+    #expect(topology.volumeAssociationsByID["data-id"]?.logicalName == "db-data")
+    #expect(topology.networkAssociationsByID["network-id"]?.logicalName == "default")
     #expect(topology.project(containingContainerID: "migrate")?.name == "shop")
   }
 
@@ -89,6 +110,12 @@ struct ComposeTopologyServiceTests {
             ComposeLabelKey.workingDirectory: "/untrusted-volume-path",
             ComposeLabelKey.version: "5.1.4",
           ]
+        ),
+        makeVolume(
+          id: "anonymous-volume",
+          name: "anonymous",
+          project: "resources",
+          isAnonymous: true
         ),
         makeVolume(
           id: "invalid-volume",
@@ -144,10 +171,20 @@ struct ComposeTopologyServiceTests {
     #expect(topology.projectNameByContainerID["spaced-project"] == nil)
     #expect(
       topology.project(named: "team")?.unclassifiedContainers.map(\.id) == ["invalid-service"])
-    #expect(topology.notices.count == 7)
+    #expect(topology.notices.count == 9)
+    #expect(
+      topology.notices.contains {
+        $0.kind == .invalidProjectName && $0.resourceID == "empty-project"
+      }
+    )
     #expect(
       topology.notices.contains {
         $0.kind == .invalidProjectName && $0.resourceID == "spaced-project"
+      }
+    )
+    #expect(
+      topology.notices.contains {
+        $0.kind == .anonymousVolume && $0.resourceID == "anonymous-volume"
       }
     )
     #expect(
@@ -189,6 +226,115 @@ struct ComposeTopologyServiceTests {
           && $0.resourceID == "project-only-network"
           && $0.expectedLabelKey == ComposeLabelKey.network
       }
+    )
+  }
+
+  @Test
+  func preservesInvalidOptionalContainerLabelsAsEvidence() throws {
+    let topology = service.derive(
+      from: makeInventory(containers: [
+        makeContainer(
+          id: "web-1",
+          project: "app",
+          service: "web",
+          replicaNumber: "0",
+          oneOff: "sometimes",
+          state: .running
+        )
+      ])
+    )
+    let instance = try #require(topology.projects.first?.services.first?.instances.first)
+    let association = try #require(topology.containerAssociationsByID["web-1"])
+
+    #expect(instance.replicaNumberLabel == .invalid(rawValue: "0"))
+    #expect(instance.oneOffLabel == .invalid(rawValue: "sometimes"))
+    #expect(instance.replicaNumber == nil)
+    #expect(!instance.isOneOff)
+    #expect(association.replicaNumber == .invalid(rawValue: "0"))
+    #expect(association.oneOff == .invalid(rawValue: "sometimes"))
+    #expect(
+      topology.notices.filter { $0.kind == .invalidOptionalLabel }.map(\.expectedLabelKey)
+        == [ComposeLabelKey.containerNumber, ComposeLabelKey.oneOff]
+    )
+  }
+
+  @Test
+  func presentEmptyLogicalNamesRemainInvalidEvidenceRatherThanMissing() {
+    let topology = service.derive(
+      from: makeInventory(
+        containers: [makeContainer(id: "container", project: "app", service: "")],
+        volumes: [
+          makeVolume(id: "volume", name: "runtime-volume", project: "app", logicalName: "")
+        ],
+        networks: [
+          makeNetwork(id: "network", name: "runtime-network", project: "app", logicalName: "")
+        ]
+      )
+    )
+
+    #expect(topology.projects.isEmpty)
+    #expect(topology.notices.count == 3)
+    #expect(topology.notices.allSatisfy { $0.kind == .invalidLogicalName })
+    #expect(topology.notices.allSatisfy { $0.observedValue == "" })
+  }
+
+  @Test
+  func validatesProjectNamesWithoutTrimmingOrNormalizing() {
+    let invalidNames = ["", " Team ", "UPPER", "-leading", "_leading", "équipe"]
+    let invalidContainers = invalidNames.enumerated().map { index, project in
+      makeContainer(id: "invalid-\(index)", project: project, service: "web")
+    }
+    let topology = service.derive(
+      from: makeInventory(
+        containers: invalidContainers + [
+          makeContainer(id: "digit", project: "1app", service: "web"),
+          makeContainer(id: "punctuation", project: "app-one_two", service: "web"),
+        ]
+      )
+    )
+
+    #expect(topology.projects.map(\.name) == ["1app", "app-one_two"])
+    #expect(topology.notices.filter { $0.kind == .invalidProjectName }.count == 6)
+  }
+
+  @Test
+  func reportsCrossProjectConsumersWithoutReassigningResources() {
+    let topology = service.derive(
+      from: makeInventory(
+        containers: [
+          makeContainer(id: "a-web", project: "a", service: "web"),
+          makeContainer(id: "b-web", project: "b", service: "web"),
+        ],
+        volumes: [
+          makeVolume(
+            id: "a-volume",
+            name: "a-volume-runtime",
+            project: "a",
+            logicalName: "data",
+            usedByContainerIDs: ["b-web", "unknown"]
+          )
+        ],
+        networks: [
+          makeNetwork(
+            id: "a-network",
+            name: "a-network-runtime",
+            project: "a",
+            logicalName: "default",
+            usedByContainerIDs: ["a-web", "b-web"]
+          )
+        ]
+      )
+    )
+
+    #expect(topology.volumeAssociationsByID["a-volume"]?.projectName == "a")
+    #expect(topology.networkAssociationsByID["a-network"]?.projectName == "a")
+    #expect(
+      topology.notices.filter { $0.kind == .consumerProjectMismatch }.map(\.resourceID)
+        == ["a-volume", "a-network"]
+    )
+    #expect(
+      topology.notices.filter { $0.kind == .consumerProjectMismatch }
+        .allSatisfy { $0.relatedProjectNames == ["b"] }
     )
   }
 
@@ -314,13 +460,16 @@ private func makeVolume(
   id: String,
   name: String,
   project: String,
+  logicalName: String? = nil,
   includeResourceLabel: Bool = true,
-  extraLabels: [String: String] = [:]
+  extraLabels: [String: String] = [:],
+  isAnonymous: Bool = false,
+  usedByContainerIDs: [String] = []
 ) -> VolumeRecord {
   var labels = extraLabels
   labels[ComposeLabelKey.project] = project
   if includeResourceLabel {
-    labels[ComposeLabelKey.volume] = name
+    labels[ComposeLabelKey.volume] = logicalName ?? name
   }
   return VolumeRecord(
     id: id,
@@ -333,8 +482,8 @@ private func makeVolume(
     allocatedBytes: nil,
     labels: labels,
     options: [:],
-    isAnonymous: false,
-    usedByContainerIDs: []
+    isAnonymous: isAnonymous,
+    usedByContainerIDs: usedByContainerIDs
   )
 }
 
@@ -342,14 +491,16 @@ private func makeNetwork(
   id: String,
   name: String,
   project: String,
+  logicalName: String? = nil,
   includeResourceLabel: Bool = true,
   isBuiltin: Bool = false,
-  extraLabels: [String: String] = [:]
+  extraLabels: [String: String] = [:],
+  usedByContainerIDs: [String] = []
 ) -> NetworkRecord {
   var labels = extraLabels
   labels[ComposeLabelKey.project] = project
   if includeResourceLabel {
-    labels[ComposeLabelKey.network] = name
+    labels[ComposeLabelKey.network] = logicalName ?? name
   }
   return NetworkRecord(
     id: id,
@@ -365,6 +516,6 @@ private func makeNetwork(
     plugin: "container-network-vmnet",
     options: [:],
     isBuiltin: isBuiltin,
-    usedByContainerIDs: []
+    usedByContainerIDs: usedByContainerIDs
   )
 }

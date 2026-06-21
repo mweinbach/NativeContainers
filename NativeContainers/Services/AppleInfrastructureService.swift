@@ -164,7 +164,10 @@ struct AppleInfrastructureService: InfrastructureManaging, BuiltinNetworkProvidi
     let volumes = try await loadCurrentVolumeRecords()
     let candidates =
       volumes
-      .filter { $0.usedByContainerIDs.isEmpty }
+      .filter {
+        $0.usedByContainerIDs.isEmpty
+          && !$0.labels.keys.contains(where: { $0.hasPrefix(ComposeLabelKey.prefix) })
+      }
       .map {
         VolumeDeletionPlan(
           volume: $0,

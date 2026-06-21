@@ -69,7 +69,10 @@ struct NetworksView: View {
             NetworkInspector(
               network: network,
               isOperationActive: operations.isWorking || operationTask != nil,
-              composeProjectName: appModel.composeTopology.projectNameByNetworkID[network.id],
+              composeProjectName: appModel.composeTopology.networkAssociationsByID[network.id]?
+                .projectName,
+              composeLogicalName: appModel.composeTopology.networkAssociationsByID[network.id]?
+                .logicalName,
               onOpenComposeProject: { projectName in
                 appModel.navigate(to: .composeProject(projectName))
               },
@@ -265,6 +268,7 @@ struct NetworkInspector: View {
   let network: NetworkRecord
   let isOperationActive: Bool
   let composeProjectName: String?
+  let composeLogicalName: String?
   let onOpenComposeProject: (String) -> Void
   let onDelete: () -> Void
 
@@ -282,7 +286,7 @@ struct NetworkInspector: View {
         if let composeProjectName {
           ComposeMembershipBanner(
             projectName: composeProjectName,
-            serviceName: nil,
+            memberName: composeLogicalName,
             onOpen: { onOpenComposeProject(composeProjectName) }
           )
         }

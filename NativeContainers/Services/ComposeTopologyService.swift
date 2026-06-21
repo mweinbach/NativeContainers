@@ -10,7 +10,7 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
     var notices: [ComposeTopologyNotice] = []
 
     for container in inventory.containers {
-      guard let projectName = labelValue(ComposeLabelKey.project, in: container.labels) else {
+      guard let projectName = container.labels[ComposeLabelKey.project] else {
         continue
       }
       guard isValidProjectName(projectName) else {
@@ -24,11 +24,33 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
         continue
       }
 
+      let replicaNumberLabel = replicaNumber(in: container.labels)
+      let oneOffLabel = oneOffValue(in: container.labels)
       let instance = ComposeContainerInstance(
         container: container,
-        replicaNumber: replicaNumber(in: container.labels),
-        isOneOff: oneOffValue(in: container.labels)
+        replicaNumberLabel: replicaNumberLabel,
+        oneOffLabel: oneOffLabel
       )
+      if case .invalid(let rawValue) = replicaNumberLabel {
+        notices.append(
+          invalidOptionalLabelNotice(
+            resourceID: container.id,
+            projectLabel: projectName,
+            expectedLabelKey: ComposeLabelKey.containerNumber,
+            rawValue: rawValue
+          )
+        )
+      }
+      if case .invalid(let rawValue) = oneOffLabel {
+        notices.append(
+          invalidOptionalLabelNotice(
+            resourceID: container.id,
+            projectLabel: projectName,
+            expectedLabelKey: ComposeLabelKey.oneOff,
+            rawValue: rawValue
+          )
+        )
+      }
       var project = accumulators[projectName, default: ProjectAccumulator()]
 
       if let serviceName = labelValue(ComposeLabelKey.service, in: container.labels),
@@ -37,13 +59,14 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
         project.collectContainerMetadata(from: container.labels)
         project.instancesByService[serviceName, default: []].append(instance)
       } else {
-        if let serviceName = labelValue(ComposeLabelKey.service, in: container.labels) {
+        if let serviceName = container.labels[ComposeLabelKey.service] {
           notices.append(
             invalidLogicalNameNotice(
               resourceKind: .container,
               resourceID: container.id,
               projectLabel: projectName,
-              expectedLabelKey: ComposeLabelKey.service
+              expectedLabelKey: ComposeLabelKey.service,
+              rawValue: serviceName
             )
           )
         } else {
@@ -62,7 +85,7 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
     }
 
     for volume in inventory.volumes {
-      guard let projectName = labelValue(ComposeLabelKey.project, in: volume.labels) else {
+      guard let projectName = volume.labels[ComposeLabelKey.project] else {
         continue
       }
       guard isValidProjectName(projectName) else {
@@ -75,7 +98,7 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
         )
         continue
       }
-      guard let logicalName = labelValue(ComposeLabelKey.volume, in: volume.labels) else {
+      guard let logicalName = volume.labels[ComposeLabelKey.volume] else {
         notices.append(
           missingResourceLabelNotice(
             resourceKind: .volume,
@@ -92,19 +115,34 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
             resourceKind: .volume,
             resourceID: volume.id,
             projectLabel: projectName,
-            expectedLabelKey: ComposeLabelKey.volume
+            expectedLabelKey: ComposeLabelKey.volume,
+            rawValue: logicalName
+          )
+        )
+        continue
+      }
+      guard !volume.isAnonymous else {
+        notices.append(
+          ComposeTopologyNotice(
+            kind: .anonymousVolume,
+            resourceKind: .volume,
+            resourceID: volume.id,
+            projectLabel: projectName,
+            expectedLabelKey: nil
           )
         )
         continue
       }
       var project = accumulators[projectName, default: ProjectAccumulator()]
-      project.volumes.append(volume)
+      project.volumes.append(
+        ComposeVolumeObservation(logicalName: logicalName, volume: volume)
+      )
       project.collectVersion(from: volume.labels)
       accumulators[projectName] = project
     }
 
     for network in inventory.networks {
-      guard let projectName = labelValue(ComposeLabelKey.project, in: network.labels) else {
+      guard let projectName = network.labels[ComposeLabelKey.project] else {
         continue
       }
       guard isValidProjectName(projectName) else {
@@ -117,7 +155,7 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
         )
         continue
       }
-      guard let logicalName = labelValue(ComposeLabelKey.network, in: network.labels) else {
+      guard let logicalName = network.labels[ComposeLabelKey.network] else {
         notices.append(
           missingResourceLabelNotice(
             resourceKind: .network,
@@ -134,7 +172,8 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
             resourceKind: .network,
             resourceID: network.id,
             projectLabel: projectName,
-            expectedLabelKey: ComposeLabelKey.network
+            expectedLabelKey: ComposeLabelKey.network,
+            rawValue: logicalName
           )
         )
         continue
@@ -152,7 +191,9 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
         continue
       }
       var project = accumulators[projectName, default: ProjectAccumulator()]
-      project.networks.append(network)
+      project.networks.append(
+        ComposeNetworkObservation(logicalName: logicalName, network: network)
+      )
       project.collectVersion(from: network.labels)
       accumulators[projectName] = project
     }
@@ -163,6 +204,8 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
       return project(name: name, from: accumulator)
     }
     .sorted { composeStringOrder($0.name, $1.name) }
+
+    notices.append(contentsOf: consumerConflictNotices(in: projects))
 
     return snapshot(
       from: projects,
@@ -200,33 +243,41 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
     from projects: [ComposeProjectRecord],
     notices: [ComposeTopologyNotice]
   ) -> ComposeTopologySnapshot {
-    var projectNameByContainerID: [String: String] = [:]
-    var serviceNameByContainerID: [String: String] = [:]
-    var projectNameByVolumeID: [String: String] = [:]
-    var projectNameByNetworkID: [String: String] = [:]
+    var containerAssociationsByID: [String: ComposeContainerAssociation] = [:]
+    var volumeAssociationsByID: [String: ComposeResourceAssociation] = [:]
+    var networkAssociationsByID: [String: ComposeResourceAssociation] = [:]
 
     for project in projects {
       for service in project.services {
         for instance in service.instances {
-          projectNameByContainerID[instance.id] = project.name
-          serviceNameByContainerID[instance.id] = service.name
+          containerAssociationsByID[instance.id] = ComposeContainerAssociation(
+            projectName: project.name,
+            serviceName: service.name,
+            replicaNumber: instance.replicaNumberLabel,
+            oneOff: instance.oneOffLabel
+          )
         }
       }
-      for volume in project.volumes {
-        projectNameByVolumeID[volume.id] = project.name
+      for observation in project.volumes {
+        volumeAssociationsByID[observation.id] = ComposeResourceAssociation(
+          projectName: project.name,
+          logicalName: observation.logicalName
+        )
       }
-      for network in project.networks {
-        projectNameByNetworkID[network.id] = project.name
+      for observation in project.networks {
+        networkAssociationsByID[observation.id] = ComposeResourceAssociation(
+          projectName: project.name,
+          logicalName: observation.logicalName
+        )
       }
     }
 
     return ComposeTopologySnapshot(
       projects: projects,
       notices: notices,
-      projectNameByContainerID: projectNameByContainerID,
-      serviceNameByContainerID: serviceNameByContainerID,
-      projectNameByVolumeID: projectNameByVolumeID,
-      projectNameByNetworkID: projectNameByNetworkID
+      containerAssociationsByID: containerAssociationsByID,
+      volumeAssociationsByID: volumeAssociationsByID,
+      networkAssociationsByID: networkAssociationsByID
     )
   }
 
@@ -300,31 +351,102 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
     resourceKind: ComposeTopologyResourceKind,
     resourceID: String,
     projectLabel: String,
-    expectedLabelKey: String
+    expectedLabelKey: String,
+    rawValue: String
   ) -> ComposeTopologyNotice {
     ComposeTopologyNotice(
       kind: .invalidLogicalName,
       resourceKind: resourceKind,
       resourceID: resourceID,
       projectLabel: projectLabel,
-      expectedLabelKey: expectedLabelKey
+      expectedLabelKey: expectedLabelKey,
+      observedValue: rawValue
     )
   }
 
-  private func replicaNumber(in labels: [String: String]) -> Int? {
-    guard
-      let value = labelValue(ComposeLabelKey.containerNumber, in: labels),
-      let number = Int(value),
-      number > 0
-    else {
-      return nil
-    }
-    return number
+  private func invalidOptionalLabelNotice(
+    resourceID: String,
+    projectLabel: String,
+    expectedLabelKey: String,
+    rawValue: String
+  ) -> ComposeTopologyNotice {
+    ComposeTopologyNotice(
+      kind: .invalidOptionalLabel,
+      resourceKind: .container,
+      resourceID: resourceID,
+      projectLabel: projectLabel,
+      expectedLabelKey: expectedLabelKey,
+      observedValue: rawValue
+    )
   }
 
-  private func oneOffValue(in labels: [String: String]) -> Bool {
-    guard let value = labelValue(ComposeLabelKey.oneOff, in: labels) else { return false }
-    return value == "1" || value.caseInsensitiveCompare("true") == .orderedSame
+  private func replicaNumber(in labels: [String: String]) -> ObservedOptionalLabel<Int> {
+    guard let value = labels[ComposeLabelKey.containerNumber] else { return .absent }
+    guard let number = Int(value), number > 0 else { return .invalid(rawValue: value) }
+    return .valid(number)
+  }
+
+  private func oneOffValue(in labels: [String: String]) -> ObservedOptionalLabel<Bool> {
+    guard let value = labels[ComposeLabelKey.oneOff] else { return .absent }
+    if value == "1" || value.caseInsensitiveCompare("true") == .orderedSame {
+      return .valid(true)
+    }
+    if value == "0" || value.caseInsensitiveCompare("false") == .orderedSame {
+      return .valid(false)
+    }
+    return .invalid(rawValue: value)
+  }
+
+  private func consumerConflictNotices(
+    in projects: [ComposeProjectRecord]
+  ) -> [ComposeTopologyNotice] {
+    let containerProjects = Dictionary(
+      uniqueKeysWithValues: projects.flatMap { project in
+        project.containers.map { ($0.id, project.name) }
+      }
+    )
+    var notices: [ComposeTopologyNotice] = []
+
+    for project in projects {
+      for observation in project.volumes {
+        let conflictingProjects = Set(
+          observation.volume.usedByContainerIDs.compactMap { containerProjects[$0] }
+            .filter { $0 != project.name }
+        ).sorted(by: composeStringOrder)
+        if !conflictingProjects.isEmpty {
+          notices.append(
+            ComposeTopologyNotice(
+              kind: .consumerProjectMismatch,
+              resourceKind: .volume,
+              resourceID: observation.id,
+              projectLabel: project.name,
+              expectedLabelKey: nil,
+              relatedProjectNames: conflictingProjects
+            )
+          )
+        }
+      }
+
+      for observation in project.networks {
+        let conflictingProjects = Set(
+          observation.network.usedByContainerIDs.compactMap { containerProjects[$0] }
+            .filter { $0 != project.name }
+        ).sorted(by: composeStringOrder)
+        if !conflictingProjects.isEmpty {
+          notices.append(
+            ComposeTopologyNotice(
+              kind: .consumerProjectMismatch,
+              resourceKind: .network,
+              resourceID: observation.id,
+              projectLabel: project.name,
+              expectedLabelKey: nil,
+              relatedProjectNames: conflictingProjects
+            )
+          )
+        }
+      }
+    }
+    return notices
   }
 
   private func instanceOrder(
@@ -343,16 +465,22 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
     }
   }
 
-  private func volumeOrder(_ lhs: VolumeRecord, _ rhs: VolumeRecord) -> Bool {
-    if lhs.name != rhs.name {
-      return composeStringOrder(lhs.name, rhs.name)
+  private func volumeOrder(
+    _ lhs: ComposeVolumeObservation,
+    _ rhs: ComposeVolumeObservation
+  ) -> Bool {
+    if lhs.logicalName != rhs.logicalName {
+      return composeStringOrder(lhs.logicalName, rhs.logicalName)
     }
     return composeStringOrder(lhs.id, rhs.id)
   }
 
-  private func networkOrder(_ lhs: NetworkRecord, _ rhs: NetworkRecord) -> Bool {
-    if lhs.name != rhs.name {
-      return composeStringOrder(lhs.name, rhs.name)
+  private func networkOrder(
+    _ lhs: ComposeNetworkObservation,
+    _ rhs: ComposeNetworkObservation
+  ) -> Bool {
+    if lhs.logicalName != rhs.logicalName {
+      return composeStringOrder(lhs.logicalName, rhs.logicalName)
     }
     return composeStringOrder(lhs.id, rhs.id)
   }
@@ -371,8 +499,8 @@ struct ComposeTopologyService: ComposeTopologyDeriving {
 private struct ProjectAccumulator {
   var instancesByService: [String: [ComposeContainerInstance]] = [:]
   var unclassifiedContainers: [ComposeContainerInstance] = []
-  var volumes: [VolumeRecord] = []
-  var networks: [NetworkRecord] = []
+  var volumes: [ComposeVolumeObservation] = []
+  var networks: [ComposeNetworkObservation] = []
   var workingDirectories: Set<String> = []
   var configFileValues: Set<String> = []
   var composeVersions: Set<String> = []

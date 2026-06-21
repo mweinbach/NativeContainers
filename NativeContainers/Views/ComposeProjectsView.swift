@@ -208,12 +208,29 @@ private struct ComposeTopologyNoticesBanner: View {
   let notices: [ComposeTopologyNotice]
 
   var body: some View {
-    Label {
-      Text(
-        "\(notices.count) inventory \(notices.count == 1 ? "resource was" : "resources were") excluded because the Compose label evidence was incomplete, invalid, or identified an Apple built-in network."
-      )
-    } icon: {
-      Image(systemName: "exclamationmark.triangle.fill")
+    DisclosureGroup {
+      VStack(alignment: .leading, spacing: 8) {
+        ForEach(notices) { notice in
+          VStack(alignment: .leading, spacing: 2) {
+            Text("\(resourceTitle(notice.resourceKind)) · \(notice.resourceID)")
+              .font(.caption.weight(.semibold))
+              .textSelection(.enabled)
+            Text(detail(notice))
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .textSelection(.enabled)
+          }
+        }
+      }
+      .padding(.top, 8)
+    } label: {
+      Label {
+        Text(
+          "\(notices.count) topology evidence \(notices.count == 1 ? "notice was" : "notices were") recorded for incomplete or invalid labels, excluded special resources, or cross-project consumers."
+        )
+      } icon: {
+        Image(systemName: "exclamationmark.triangle.fill")
+      }
     }
     .font(.callout)
     .foregroundStyle(.orange)
@@ -221,11 +238,38 @@ private struct ComposeTopologyNoticesBanner: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
   }
+
+  private func resourceTitle(_ kind: ComposeTopologyResourceKind) -> String {
+    switch kind {
+    case .container: "Container"
+    case .volume: "Volume"
+    case .network: "Network"
+    }
+  }
+
+  private func detail(_ notice: ComposeTopologyNotice) -> String {
+    switch notice.kind {
+    case .invalidProjectName:
+      "Invalid project label: \(notice.projectLabel.isEmpty ? "<empty>" : notice.projectLabel)"
+    case .invalidLogicalName:
+      "Invalid value “\(notice.observedValue ?? "")” for \(notice.expectedLabelKey ?? "canonical logical-name label")."
+    case .invalidOptionalLabel:
+      "Invalid optional value “\(notice.observedValue ?? "")” for \(notice.expectedLabelKey ?? "Compose label")."
+    case .missingResourceLabel:
+      "Missing \(notice.expectedLabelKey ?? "required canonical label")."
+    case .anonymousVolume:
+      "Anonymous volumes are not canonical named Compose project resources."
+    case .builtinNetwork:
+      "Apple’s built-in network is not a Compose project resource."
+    case .consumerProjectMismatch:
+      "Also referenced by canonical project(s): \(notice.relatedProjectNames.formatted())."
+    }
+  }
 }
 
 struct ComposeMembershipBanner: View {
   let projectName: String
-  let serviceName: String?
+  let memberName: String?
   let onOpen: () -> Void
 
   var body: some View {
@@ -240,10 +284,10 @@ struct ComposeMembershipBanner: View {
           HStack(spacing: 6) {
             Text(projectName)
               .font(.callout.weight(.semibold))
-            if let serviceName {
+            if let memberName {
               Text("·")
                 .foregroundStyle(.tertiary)
-              Text(serviceName)
+              Text(memberName)
                 .font(.callout.monospaced())
                 .foregroundStyle(.secondary)
             }
@@ -393,30 +437,32 @@ private struct ComposeProjectResourcesSection: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("Canonical project resources")
+      Text("Resources with canonical labels")
         .font(.title2.bold())
 
       VStack(spacing: 0) {
-        ForEach(project.volumes) { volume in
+        ForEach(project.volumes) { observation in
           ComposeResourceLink(
-            title: volume.name,
-            detail: "\(volume.driver) · \(volume.format)",
+            title: observation.logicalName,
+            detail: volumeDetail(observation),
             systemImage: "externaldrive.fill",
             tint: .orange,
-            onOpen: { model.navigate(to: .volume(volume.id)) }
+            onOpen: { model.navigate(to: .volume(observation.id)) }
           )
-          Divider()
+          if observation.id != project.volumes.last?.id || !project.networks.isEmpty {
+            Divider()
+          }
         }
 
-        ForEach(project.networks) { network in
+        ForEach(project.networks) { observation in
           ComposeResourceLink(
-            title: network.name,
-            detail: network.assignedIPv4Subnet,
+            title: observation.logicalName,
+            detail: networkDetail(observation),
             systemImage: "network",
             tint: .teal,
-            onOpen: { model.navigate(to: .network(network.id)) }
+            onOpen: { model.navigate(to: .network(observation.id)) }
           )
-          if network.id != project.networks.last?.id {
+          if observation.id != project.networks.last?.id {
             Divider()
           }
         }
@@ -424,6 +470,22 @@ private struct ComposeProjectResourcesSection: View {
       .padding(.horizontal, 14)
       .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
     }
+  }
+
+  private func volumeDetail(_ observation: ComposeVolumeObservation) -> String {
+    let volume = observation.volume
+    if observation.logicalName == volume.name {
+      return "\(volume.driver) · \(volume.format)"
+    }
+    return "Runtime \(volume.name) · \(volume.driver) · \(volume.format)"
+  }
+
+  private func networkDetail(_ observation: ComposeNetworkObservation) -> String {
+    let network = observation.network
+    if observation.logicalName == network.name {
+      return network.assignedIPv4Subnet
+    }
+    return "Runtime \(network.name) · \(network.assignedIPv4Subnet)"
   }
 }
 

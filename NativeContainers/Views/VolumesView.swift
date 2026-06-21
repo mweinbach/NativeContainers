@@ -68,7 +68,10 @@ struct VolumesView: View {
             VolumeInspector(
               volume: volume,
               isOperationActive: operations.isWorking || operationTask != nil,
-              composeProjectName: appModel.composeTopology.projectNameByVolumeID[volume.id],
+              composeProjectName: appModel.composeTopology.volumeAssociationsByID[volume.id]?
+                .projectName,
+              composeLogicalName: appModel.composeTopology.volumeAssociationsByID[volume.id]?
+                .logicalName,
               onOpenComposeProject: { projectName in
                 appModel.navigate(to: .composeProject(projectName))
               },
@@ -262,6 +265,7 @@ struct VolumeInspector: View {
   let volume: VolumeRecord
   let isOperationActive: Bool
   let composeProjectName: String?
+  let composeLogicalName: String?
   let onOpenComposeProject: (String) -> Void
   let onDelete: () -> Void
 
@@ -277,7 +281,7 @@ struct VolumeInspector: View {
         if let composeProjectName {
           ComposeMembershipBanner(
             projectName: composeProjectName,
-            serviceName: nil,
+            memberName: composeLogicalName,
             onOpen: { onOpenComposeProject(composeProjectName) }
           )
         }

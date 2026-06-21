@@ -37,8 +37,10 @@ struct WorkspaceResourceCatalog: WorkspaceResourceCataloging {
             project.services.map(\.name).joined(separator: " "),
             project.containers.map(\.id).joined(separator: " "),
             project.containers.map(\.container.imageReference).joined(separator: " "),
-            project.volumes.flatMap { [$0.id, $0.name] }.joined(separator: " "),
-            project.networks.flatMap { [$0.id, $0.name] }.joined(separator: " "),
+            project.volumes.flatMap { [$0.id, $0.logicalName, $0.volume.name] }
+              .joined(separator: " "),
+            project.networks.flatMap { [$0.id, $0.logicalName, $0.network.name] }
+              .joined(separator: " "),
           ]
         )
       }

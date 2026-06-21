@@ -95,6 +95,44 @@ struct AppleInfrastructureServiceTests {
   }
 
   @Test
+  func volumePrunePreservesComposeLabeledNamedVolumes() async throws {
+    let composeVolume = VolumeConfiguration(
+      name: "app-data-runtime",
+      driver: "local",
+      source: "/tmp/app-data-runtime.img",
+      creationDate: Date(timeIntervalSince1970: 1),
+      labels: [
+        ComposeLabelKey.project: "app",
+        ComposeLabelKey.volume: "data",
+      ],
+      options: ["size": "67108864B"],
+      sizeInBytes: 64 * VolumeCreateRequest.bytesPerMiB
+    )
+    let scratchVolume = VolumeConfiguration(
+      name: "scratch",
+      driver: "local",
+      source: "/tmp/scratch.img",
+      creationDate: Date(timeIntervalSince1970: 2),
+      labels: [:],
+      options: ["size": "67108864B"],
+      sizeInBytes: 64 * VolumeCreateRequest.bytesPerMiB
+    )
+    let transport = InfrastructureTransportDouble(
+      createOutcome: .success,
+      initialVolumes: [composeVolume, scratchVolume]
+    )
+    let service = AppleInfrastructureService(
+      infrastructureClient: transport,
+      containerReader: EmptyContainerSnapshotReader(),
+      runtimeMutationCoordinator: RuntimeMutationCoordinator()
+    )
+
+    let plan = try await service.prepareVolumePrune()
+
+    #expect(plan.candidates.map(\.volume.name) == ["scratch"])
+  }
+
+  @Test
   func timeoutAfterCommittedVolumeCreateReconcilesAsSuccess() async throws {
     let transport = InfrastructureTransportDouble(createOutcome: .timeoutAfterCommit)
     let service = AppleInfrastructureService(
