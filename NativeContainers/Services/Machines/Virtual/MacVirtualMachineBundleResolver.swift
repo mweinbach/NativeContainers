@@ -11,13 +11,13 @@ protocol MacVirtualMachineBundleResolving: Sendable {
   ) throws -> URL
 }
 
-struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unchecked Sendable {
+struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, Sendable {
   private let rootURL: URL
-  private let fileManager: FileManager
+  private let artifactResolver: VirtualMachineBundleArtifactResolver
 
   init(rootURL: URL, fileManager: FileManager = .default) {
     self.rootURL = rootURL.standardizedFileURL
-    self.fileManager = fileManager
+    artifactResolver = VirtualMachineBundleArtifactResolver(fileManager: fileManager)
   }
 
   func resolve(_ manifest: VirtualMachineManifest) throws -> PreparedMacVirtualMachine {
@@ -29,7 +29,11 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unche
     guard restoreImageURL.isFileURL else {
       throw MacVirtualMachineInstallationError.invalidRestoreImage(restoreImageURL)
     }
-    try requireRegularFile(restoreImageURL, name: restoreImageURL.lastPathComponent)
+    try requireRegularArtifact(
+      restoreImageURL,
+      name: restoreImageURL.lastPathComponent,
+      in: restoreImageURL.deletingLastPathComponent()
+    )
 
     return PreparedMacVirtualMachine(
       manifest: manifest,
@@ -53,7 +57,7 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unche
       .appendingPathExtension(VirtualMachineLibrary.bundleExtension)
       .standardizedFileURL
 
-    try requireDirectory(bundleURL)
+    try requireBundleDirectory(bundleURL)
 
     let diskImageURL = try resolveArtifact(
       manifest.diskImagePath,
@@ -88,6 +92,24 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unche
     )
   }
 
+  func resolveArtifact(
+    _ path: String,
+    named name: String,
+    in bundleURL: URL,
+    writable: Bool = false
+  ) throws -> URL {
+    do {
+      return try artifactResolver.resolve(
+        path,
+        named: name,
+        in: bundleURL,
+        writable: writable
+      )
+    } catch let error as VirtualMachineBundleArtifactResolutionError {
+      throw map(error)
+    }
+  }
+
   private func resolveRequiredArtifact(
     _ path: String?,
     named name: String,
@@ -100,64 +122,34 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unche
     return try resolveArtifact(path, named: name, in: bundleURL, writable: writable)
   }
 
-  func resolveArtifact(
-    _ path: String,
-    named name: String,
-    in bundleURL: URL,
-    writable: Bool = false
-  ) throws -> URL {
-    let pathComponents = NSString(string: path).pathComponents
-    guard !NSString(string: path).isAbsolutePath,
-      !pathComponents.isEmpty,
-      !pathComponents.contains(".."),
-      pathComponents.allSatisfy({ $0 != "/" && $0 != "." })
-    else {
-      throw MacVirtualMachineInstallationError.invalidArtifact(name)
-    }
-
-    let candidate = bundleURL.appending(path: path).standardizedFileURL
-    guard isStrictDescendant(candidate, of: bundleURL) else {
-      throw MacVirtualMachineInstallationError.invalidArtifact(name)
-    }
-
-    try requireRegularFile(candidate, name: name)
-    let resolvedCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
-    let resolvedBundle = bundleURL.resolvingSymlinksInPath().standardizedFileURL
-    guard isStrictDescendant(resolvedCandidate, of: resolvedBundle) else {
-      throw MacVirtualMachineInstallationError.invalidArtifact(name)
-    }
-    if writable, !fileManager.isWritableFile(atPath: candidate.path) {
-      throw MacVirtualMachineInstallationError.invalidArtifact(name)
-    }
-    return candidate
-  }
-
-  private func requireDirectory(_ url: URL) throws {
-    let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-    guard values.isDirectory == true, values.isSymbolicLink != true else {
-      throw MacVirtualMachineInstallationError.invalidBundle(
-        "the expected bundle directory is missing or symbolic"
-      )
-    }
-  }
-
-  private func requireRegularFile(_ url: URL, name: String) throws {
+  private func requireBundleDirectory(_ bundleURL: URL) throws {
     do {
-      let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-      guard values.isRegularFile == true, values.isSymbolicLink != true else {
-        throw MacVirtualMachineInstallationError.invalidArtifact(name)
-      }
-    } catch let error as MacVirtualMachineInstallationError {
-      throw error
-    } catch {
-      throw MacVirtualMachineInstallationError.invalidArtifact(name)
+      try artifactResolver.requireBundleDirectory(bundleURL)
+    } catch let error as VirtualMachineBundleArtifactResolutionError {
+      throw map(error)
     }
   }
 
-  private func isStrictDescendant(_ candidate: URL, of directory: URL) -> Bool {
-    let directoryComponents = directory.standardizedFileURL.pathComponents
-    let candidateComponents = candidate.standardizedFileURL.pathComponents
-    guard candidateComponents.count > directoryComponents.count else { return false }
-    return candidateComponents.prefix(directoryComponents.count).elementsEqual(directoryComponents)
+  private func requireRegularArtifact(_ url: URL, name: String, in directory: URL) throws {
+    do {
+      _ = try artifactResolver.resolve(
+        url.lastPathComponent,
+        named: name,
+        in: directory
+      )
+    } catch let error as VirtualMachineBundleArtifactResolutionError {
+      throw map(error)
+    }
+  }
+
+  private func map(
+    _ error: VirtualMachineBundleArtifactResolutionError
+  ) -> MacVirtualMachineInstallationError {
+    switch error {
+    case .invalidBundle(let reason):
+      .invalidBundle(reason)
+    case .invalidArtifact(let name):
+      .invalidArtifact(name)
+    }
   }
 }
