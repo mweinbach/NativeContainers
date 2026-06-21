@@ -102,12 +102,14 @@ identity boundary for move, clone, backup, and delete operations.
 
 **Status:** Accepted — 2026-06-20
 
-Interactive shells use Apple’s `ContainerClient.createProcess` directly with
-`ProcessConfiguration.terminal` enabled. The app passes stdin and stdout file
-descriptors across the same XPC boundary as Apple’s CLI, starts and resizes the
-returned `ClientProcess`, forwards raw input and signals, and owns deterministic
-hangup-to-kill shutdown. It does not launch `container exec`, allocate a second
-PTY in the GUI, or decode output into lines before rendering.
+Interactive shells use the same public container process routes as Apple’s
+client with `ProcessConfiguration.terminal` enabled, but cross them through the
+app’s cancellation-closeable, bounded `AppleContainerProcessXPCClient`. The app
+passes stdin and stdout file descriptors across the same XPC boundary as
+Apple’s CLI, starts and resizes the returned runtime-process handle, forwards
+raw input and signals, and owns deterministic hangup-to-kill shutdown. It does
+not launch `container exec`, allocate a second PTY in the GUI, or decode output
+into lines before rendering.
 
 SwiftTerm 1.13.0 is pinned as the replaceable VT renderer. It supplies the
 AppKit terminal view, input method integration, selection, scrollback, escape
@@ -115,10 +117,10 @@ sequence handling, and terminal protocol replies. The app-specific adapter
 blocks guest-originated OSC 52 clipboard writes and only opens HTTP(S) links.
 Transport types do not import SwiftTerm.
 
-The Apple package graph is also pinned directly to Containerization 0.33.3 for
-the public terminal-size type, exactly matching `apple/container` 1.0.0. This
-avoids dependency skew while keeping terminal process ownership inside Apple’s
-service client.
+The Apple package graph remains pinned to versions matching
+`apple/container` 1.0.0. The app carries a small validated terminal-size value
+and sends the pinned process route’s width/height fields directly, avoiding
+dependency skew without accepting the high-level client’s unbounded XPC waits.
 
 Pipe output uses `poll` followed by one POSIX `read`. Foundation’s bounded file
 read can wait for the requested byte count or EOF on a blocking descriptor,
@@ -490,8 +492,10 @@ workflows, and the inventory service re-inspects uninitialized list snapshots
 because Apple’s persisted list can lag the first-boot marker.
 
 Machine XPC operations use a fresh connection with a 35-second close watchdog.
-The first-boot process has independent 10-second create/start, 35-second wait,
-and 2-second KILL bounds. Caller cancellation closes the in-flight connection;
+The first-boot process has independent 10-second create/start and 2-second KILL
+bounds; its cancellation-closeable wait is governed by the 30-second setup
+waiter rather than a second transport deadline. Caller cancellation closes the
+in-flight connection;
 after durable creation, failure or cancellation reconciles identity, attempts a
 graceful stop, escalates to the verified backing container’s KILL point, and
 confirms the terminal state. Explicit Force Stop requires a target-bound
@@ -505,3 +509,44 @@ machine deletion. The app revalidates the
 complete creation identity immediately before delete and confirms absence
 afterward, but it does not claim atomic protection from an external same-name
 replacement between those calls.
+
+## ADR-023: Separate Linux-machine readiness from reusable runtime processes
+
+**Status:** Accepted — 2026-06-21
+
+Machine commands and terminals do not enlarge the creation/lifecycle service.
+They cross dedicated `MachineCommandRunning` and `MachineTerminalOpening`
+facets. `AppleLinuxMachineProcessTargetResolver` first requires a stable
+creation identity, invokes the existing idempotent start/provision workflow,
+then re-inspects the complete identity and captures the fresh backing-container
+ID created by that boot. A stopped machine is therefore started before use and
+remains running afterward, matching Apple's persistent-machine contract; a
+command is never replayed when creation or start outcome is uncertain.
+
+The backing container's ordinary init configuration is not safe for this
+workflow because it would bypass machine user setup and commonly run as root.
+`LinuxMachineProcessConfigurationFactory` instead mirrors the pinned Apple 1.0
+`machine run` path: `/sbin.machine/init -s`, the persisted host-mapped UID/GID,
+machine home as the GUI-safe default working directory, and only a default PATH
+plus explicitly entered environment values. The one-shot UI deliberately
+models a shell command, not exact argv, because Apple's wrapper ultimately
+executes the discovered guest shell with `-c`. Interactive sessions use
+`-s` without a command so the guest's configured user shell is discovered.
+
+Container and machine tools share `AppleRuntimeCommandExecutor`,
+`AppleContainerTerminalSession`, and `AppleContainerProcessXPCClient`; only
+target resolution and process configuration differ. The process client uses a
+fresh bounded connection for create/start and signal/resize, duplicates file
+descriptors before the pinned XPC wrapper consumes them, and leaves wait
+connections without a false lifetime deadline while preserving
+cancellation-triggered close. Commands concurrently drain bounded stdout/stderr tails, and
+timeout or cancellation sends KILL only to the fixed process ID and confirms
+exit. Terminal close sends hangup, waits briefly, then escalates to KILL. A
+create reply loss receives one best-effort KILL against the same process ID;
+the app never generates a replacement ID or retries a possibly non-idempotent
+command.
+
+Apple container 1.0's high-level process client encodes signals as integers,
+while its server decodes signal strings. The focused transport follows the
+server contract and regression-tests the exact field representation rather
+than inheriting that mismatched high-level path.

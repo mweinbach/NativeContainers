@@ -21,7 +21,7 @@ called out rather than papered over.
 | Docker Compose | Docker CLI through compatibility service | M2 | Compatibility matrix required |
 | Registry credentials | Apple Keychain client | M1 | Login/list/logout live; stored secrets never leave Keychain |
 | Rosetta `linux/amd64` applications | Apple Containerization | M1 | ARM Linux guest; not an x86 VM |
-| Persistent Linux dev machines | Bounded machine/process XPC transports + focused workflow and inventory services | M3 | Native create, first-boot provisioning, start, graceful stop, identity-pinned KILL, stopped-only delete, CPU/memory, and reviewed home mounts are live; Apple 1.0 deletion is ID-only and terminal/config editing remain future work |
+| Persistent Linux dev machines | Bounded machine/process XPC transports + focused lifecycle, process-target, command, terminal, and inventory services | M3 | Native create, first-boot provisioning, start, graceful stop, identity-pinned KILL, stopped-only delete, CPU/memory, reviewed home mounts, mapped-user shell commands, and interactive PTY are live; Apple 1.0 deletion is ID-only, configuration editing remains future work, and boot forwards host `SSH_AUTH_SOCK` when present even with no home mount |
 | Shared-kernel/project density | Experimental `LinuxPod` | M5 | Opt-in only after upstream stabilization |
 | Kubernetes | k3s in a dedicated Linux machine | M5 | Separate lifecycle and storage plan |
 | macOS restore/install | `VZMacOSRestoreImage` / `VZMacOSInstaller` | M4 | Download/preparation live; install awaits entitlement |

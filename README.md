@@ -42,14 +42,17 @@ Stop/Force Stop/cache reset, private persistent build history, and macOS
 restore-image preparation. Persistent Linux machines now have native
 create/start/stop/Force Stop/delete controls, cancellable first-boot user
 provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
-memory, and reviewed home-directory configuration.
+memory, and reviewed home-directory configuration. The same machines now expose
+a native login-shell terminal and bounded one-shot shell commands; stopped
+machines auto-start and provision before either workflow.
 
 The app is composed from narrow injectable service facets. Inventory, container
 creation and lifecycle, inspection, command tools, terminal sessions, image
 management, infrastructure, attachment resolution, private socket workspace,
 host-access discovery, build-secret review/consumption, shared-builder
 management, build-history recording and persistence, machine lifecycle, bounded
-XPC transport, machine image preparation, and owned-resource recovery are
+XPC/process transport, machine image preparation, machine process-target
+resolution, machine commands/terminals, and owned-resource recovery are
 independent services. A
 dedicated machine-management service owns machine creation and lifecycle rather
 than routing those operations through the container compatibility facade.
@@ -68,8 +71,9 @@ reversible live provisioning, Linux-machine lifecycle, attachment, PTY, and
 image-reference smokes, set `NATIVECONTAINERS_LIVE_TESTS=1` for the test action.
 They create uniquely named
 Alpine resources, verify native lifecycle, reviewed volume/network/Unix-socket
-attachments, interactive-terminal, and image tag/inspect/delete behavior, and
-delete every uniquely created test resource.
+attachments, container and machine interactive terminals, machine command
+timeout/KILL recovery, and image tag/inspect/delete behavior, and delete every
+uniquely created test resource.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when

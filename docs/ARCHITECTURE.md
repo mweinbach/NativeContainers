@@ -70,15 +70,20 @@ stopped containers. Execution uses the shared runtime mutation coordinator,
 re-fetches immediately before mutation, and treats built-in networks and new
 references as hard stops. Apple remains the final atomic in-use authority.
 
-Persistent Linux machines cross separate `MachineCreating` and
-`MachineLifecycleManaging` facets. `AppleMachineManagementService` owns the
+Persistent Linux machines cross separate `MachineCreating`,
+`MachineLifecycleManaging`, `MachineCommandRunning`, and
+`MachineTerminalOpening` facets. `AppleMachineManagementService` owns the
 reviewed workflow and shared mutation lease, while
 `AppleMachineRuntimeClient` contains Apple package types,
 `AppleMachineImagePreparationService` prepares standard OCI-rootfs machines
 through public image fetch/unpack APIs without the CLI-oriented flags helper,
 `AppleMachineXPCTransport` bounds machine requests with fresh watchdog-closed
-connections, and `AppleContainerProcessXPCClient` independently bounds setup
-process create/start/wait/signal calls. Creation is cancellable; once durable
+connections. `AppleLinuxMachineProcessTargetResolver` invokes readiness and
+then re-inspects the complete stable machine identity to capture its fresh
+per-boot backing-container ID. `AppleLinuxMachineProcessService` constructs
+Apple's `/sbin.machine/init -s` configuration with the persisted mapped user
+and machine home, then delegates commands and terminals to shared runtime
+process/session services. Creation is cancellable; once durable
 state exists, failure or cancellation attempts a graceful stop and then KILLs
 only the revalidated backing container. Force Stop requires explicit
 authorization and confirms exit. Delete revalidates the complete creation
@@ -112,10 +117,13 @@ Creation can require one reviewed configured-on-disk identity, but the GUI does
 not execute `sudo`, claim PF is currently loaded, or broaden privileges. A
 future mutating helper remains a separately signed and notarized service.
 
-Infrastructure and Linux-machine XPC requests use fresh connections with
-cancellation-triggered close and operation-specific close watchdogs. Machine
-requests cap at 35 seconds; first-boot process create/start, wait, and signal
-use separate 10-, 35-, and 2-second bounds. A timeout never implies rollback:
+Infrastructure, Linux-machine, and runtime-process XPC requests use fresh
+connections with cancellation-triggered close and operation-specific close
+watchdogs. Machine requests cap at 35 seconds; process create/start uses a
+ten-second bound and signal/resize uses two seconds. Process wait connections
+have no fixed lifetime deadline so valid shells can remain open, but task
+cancellation closes them; setup and one-shot command services impose their own
+deadlines and confirmed KILL behavior. A timeout never implies rollback:
 mutations reconcile live state before reporting an outcome. A focused image
 service performs public fetch and unpack operations before any machine exists.
 Apple 1.0 delete calls accept only a name, not an expected revision, so
@@ -137,7 +145,8 @@ the complete runtime adapter. `AppleRuntimeInventoryService`,
 `AppleContainerHostAccessService`,
 `AppleContainerLifecycleService`, `AppleContainerInspectionService`,
 `AppleContainerToolService`, `AppleContainerTerminalService`,
-`AppleImageService`, `AppleMachineLifecycleService`,
+`AppleRuntimeCommandExecutor`, `AppleImageService`,
+`AppleMachineManagementService`, `AppleLinuxMachineProcessService`,
 `AppleOwnedContainerRecoveryService`, and `AppleXPCRequestClient` own their
 focused vertical slices. The legacy `AppleContainerService` is a forwarding-only
 compatibility facade and owns no runtime behavior.
@@ -157,10 +166,10 @@ the full reviewed metadata immediately before save/delete. Transport is not a
 Keychain attribute, so every transfer resolves it separately and must reconfirm
 plain-text HTTP.
 
-Interactive terminals remain in this lane. The app asks
-`ContainerClient.createProcess` for a terminal-mode child, passes pipe file
-descriptors through Apple’s XPC boundary, and streams the resulting bytes into
-SwiftTerm. Transport and rendering are separate: the service owns process,
+Interactive terminals remain in this lane. The app asks the bounded
+`AppleContainerProcessXPCClient` for a terminal-mode child, transfers duplicated
+pipe descriptors through Apple’s XPC boundary, and streams the resulting bytes
+into SwiftTerm. Transport and rendering are separate: the service owns process,
 descriptor, signal, resize, retention, and cancellation semantics; the AppKit
 surface owns VT parsing, drawing, keyboard input, selection, and terminal
 protocol replies.

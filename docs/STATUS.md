@@ -1,14 +1,14 @@
 # Current status
 
-Updated: 2026-06-20.
+Updated: 2026-06-21.
 
 ## Verified
 
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 315 test declarations. The current full
-  app-hosted Xcode run passed all 305 deterministic tests, with ten destructive
+- The suite currently contains 328 test declarations. The current full
+  app-hosted Xcode run passed all 318 deterministic tests, with ten destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes Linux-machine recovery/XPC/inventory coverage, build-history
   privacy/durability, short-pipe framing, builder mount normalization, and
@@ -18,8 +18,9 @@ Updated: 2026-06-20.
   hard-gated to a disposable localhost registry and is never run against public
   services.
 - The app launches through Xcode and stops cleanly.
-- The SwiftUI overview, split container inspector, Linux-machine list, and
-  Linux-machine creation form render successfully in Xcode Preview in light mode.
+- The SwiftUI overview, split container inspector, Linux-machine list,
+  Linux-machine creation form, and machine command runner render successfully
+  in Xcode Preview in light mode.
 - A live Xcode snippet called `AppleContainerService.loadInventory()` against
   the installed XPC services and returned the 1.0.0 server plus live container,
   image, volume, network, and machine counts.
@@ -76,16 +77,29 @@ Updated: 2026-06-20.
   retries with bounded backoff, and verifies that it is absent; an unverifiable
   cleanup is surfaced instead of being silently ignored.
 - Persistent Linux machines now use separate inventory, workflow, machine-XPC,
-  and first-boot process-XPC services. Machine requests use fresh
-  watchdog-closed connections, setup process create/start/wait/KILL calls have
-  independent hard bounds, cancellation after durable creation automatically
+  process-target, command, terminal, and process-XPC services. Machine requests
+  use fresh watchdog-closed connections. Process create/start calls have
+  ten-second bounds, signal/resize calls have two-second bounds, and long-lived
+  wait calls have no false shell-lifetime deadline but remain cancellation-
+  closeable. Caller-level setup and command waiters own their own deadlines and
+  confirmed KILL escalation. Cancellation after durable creation automatically
   attempts graceful stop then verified backing-container KILL, and explicit
   Force Stop remains available for running or stuck-stopping machines. Every
   terminal mutation is reconciled before success is reported.
 - A live app-hosted Xcode smoke fetched Alpine through the focused preparation
-  service, created and first-boot provisioned a uniquely named persistent
-  machine, verified it running and initialized, stopped it, deleted it, and
-  confirmed no machine remained.
+  service, created a stopped persistent machine, auto-started and first-boot
+  provisioned it through the command service, verified mapped UID/home/Linux
+  output, exercised the native PTY, timed out and KILLed a hung command, proved
+  the machine remained usable, stopped it, deleted it, and confirmed no machine
+  remained.
+- Linux-machine tools require a stable creation identity, invoke lifecycle
+  readiness, then re-inspect and pin the fresh per-boot backing-container ID.
+  Commands and terminals execute `/sbin.machine/init -s` as the persisted
+  host-mapped user, default to the machine home, and inherit only the pinned
+  PATH plus explicit UI environment entries. Stopped machines expose clear
+  Start & Run / Start & Open actions and remain running after successful use.
+  Apple 1.0 boot still forwards a present host `SSH_AUTH_SOCK` independently
+  of the selected home mount, so “None” is not documented as full isolation.
 - Linux-machine inventory re-inspects stale uninitialized list snapshots, and
   destructive actions pin the creation identity. Apple 1.0 still exposes an
   ID-only delete route, so the narrow external same-name replacement race is
@@ -127,8 +141,8 @@ Updated: 2026-06-20.
   selection, case-insensitive line filtering, match counts, and native text-file
   export. Lifecycle controls include five-second graceful stop, restart, and
   explicit force stop.
-- The native exec sheet runs non-interactive commands through
-  `ContainerClient.createProcess`, concurrently drains stdout/stderr into
+- The native exec sheet runs non-interactive commands through the focused,
+  bounded process-XPC transport, concurrently drains stdout/stderr into
   independently bounded 1 MiB tails, enforces cancellation and timeouts by
   killing the child process, and reports exit status and duration.
 - Bidirectional file transfer uses Apple’s `copyIn`/`copyOut` clients with native
@@ -137,8 +151,9 @@ Updated: 2026-06-20.
 - A live Xcode snippet started a disposable Alpine container, captured exec
   output, copied a file in, read it inside, copied it back out, verified the
   round trip, and cleaned all container and host artifacts.
-- Running containers now expose an interactive terminal backed directly by
-  `ContainerClient.createProcess` with terminal mode enabled. Raw bytes flow
+- Running containers and persistent Linux machines now expose interactive
+  terminals backed by the focused process-XPC transport with terminal mode
+  enabled. Raw bytes flow
   through bounded, lossless backpressure into a pinned SwiftTerm 1.13.0 AppKit
   surface; input, resize, Control-C/Control-D, explicit signals, title, working
   directory, scrollback, copy, and paste are wired without a CLI subprocess.

@@ -75,8 +75,11 @@ must leave a usable, test-backed product slice.
       revalidated stopped-only deletion of Apple container machines.
 - [x] CPU, memory, and reviewed none/read-only/read-write home-mount
       configuration.
-- [ ] Disk, kernel, Rosetta, and nested-virtualization configuration.
-- [ ] Terminal access and command runner.
+- [ ] Disk, kernel, Rosetta, and nested-virtualization configuration after a
+      verified runtime upgrade; pinned Apple 1.0 machine config does not expose
+      these controls.
+- [x] Native login-shell terminal and bounded shell-command runner with
+      stopped-machine auto-start, mapped-user execution, and explicit KILL.
 - [ ] Persistent machine snapshots/backups where the Apple runtime supports it.
 - [ ] Optional general-purpose GUI Linux VMs through Virtualization.framework.
 

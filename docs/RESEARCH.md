@@ -100,8 +100,9 @@ release and isolating it behind an adapter are both deliberate.
 - Apple’s own `container exec` creates a `ProcessIO`, passes stdin/stdout pipe
   handles to `ContainerClient.createProcess`, enables terminal mode, starts the
   process, closes the app’s child-side descriptor copies, applies the current
-  terminal size, and forwards signals. The app follows that public-client
-  lifecycle instead of wrapping the CLI.
+  terminal size, and forwards signals. The app follows that process lifecycle
+  through its bounded, cancellation-closeable XPC adapter instead of wrapping
+  the CLI or inheriting the high-level client’s unbounded sends.
 - A terminal transport must preserve arbitrary bytes; UTF-8 decoding, ANSI/VT
   parsing, and terminal replies belong in the emulator. A bounded-one async
   stream therefore retries backpressured chunks rather than accepting
