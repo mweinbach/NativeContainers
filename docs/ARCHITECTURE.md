@@ -66,6 +66,32 @@ stopped containers. Execution uses the shared runtime mutation coordinator,
 re-fetches immediately before mutation, and treats built-in networks and new
 references as hard stops. Apple remains the final atomic in-use authority.
 
+Container creation attachments cross a separate `ContainerAttachmentManaging`
+facet. The SwiftUI draft freezes complete volume and network configuration
+identities, ordered network selection, normalized guest mount paths, and logical
+Unix-socket publications. `AppleContainerAttachmentService` re-lists current
+infrastructure and every container configuration under creation's mutation
+lease, rejects stale or newly used volumes, preserves the reviewed primary
+network, and constructs Apple's mount/network/socket values directly. Empty
+legacy requests still resolve Apple's current built-in network, while the UI
+always reviews that choice explicitly.
+
+`ApplePublishedSocketWorkspace` is the only service allowed to turn a logical
+socket publication into a host path. It uses an operation-labeled, mode-0700
+directory under `/private/tmp/nativecontainers-<uid>`, atomically creates and
+`lstat`-validates every directory, enforces a conservative macOS Unix-socket
+path limit, refuses occupied leaves, and revalidates the exact lexical boundary
+before every start. A missing private directory can be safely reconstructed
+from the persisted operation identity; stop removes the socket and failed
+creation or container deletion removes only that operation directory.
+
+Apple's host alias is global resolver and packet-filter state, not a container
+configuration field. `AppleContainerHostAccessService` therefore performs
+read-only discovery of exact root-owned resolver, `pf.conf`, and anchor files.
+Creation can require one reviewed configured-on-disk identity, but the GUI does
+not execute `sudo`, claim PF is currently loaded, or broaden privileges. A
+future mutating helper remains a separately signed and notarized service.
+
 Infrastructure XPC requests use a fresh connection with cancellation-triggered
 close and a 60-second close watchdog. A timeout never implies rollback: create
 and delete reconcile live state and the operation label before reporting an
@@ -84,6 +110,8 @@ runtime mutation coordinator across container, infrastructure, and image-build
 mutations. `AppModel` depends on named narrow facets through `AppServices`, not
 the complete runtime adapter. `AppleRuntimeInventoryService`,
 `AppleInfrastructureService`, `AppleContainerCreationService`,
+`AppleContainerAttachmentService`, `ApplePublishedSocketWorkspace`,
+`AppleContainerHostAccessService`,
 `AppleContainerLifecycleService`, `AppleContainerInspectionService`,
 `AppleContainerToolService`, `AppleContainerTerminalService`,
 `AppleImageService`, `AppleMachineLifecycleService`,
@@ -211,6 +239,9 @@ selection and lifecycle commands.
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before
   mutation.
+- Named attachments are revalidated after review. Published sockets can only
+  occupy a private operation directory, are checked before each start, and are
+  removed on stop/delete or owned creation rollback.
 - Credentials stay in Keychain through Apple’s registry client facilities.
 - No container or VM is deleted without a confirmation that names the affected
   disks and snapshots.

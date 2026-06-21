@@ -11,8 +11,9 @@ must leave a usable, test-backed product slice.
 - [x] Live inventories for containers, images, volumes, and Linux machines.
 - [x] Stable domain models and mockable service protocols.
 - [x] Extract inventory, creation, lifecycle, inspection/tooling, terminal,
-      image, volume/network/browser, machine, XPC, and owned-resource recovery
-      logic into focused services behind an explicit composition root.
+      attachment, image, volume/network/browser, machine, XPC, and
+      owned-resource recovery logic into focused services behind an explicit
+      composition root.
 - [x] Persistent VM bundle library with schema versioning and atomic writes.
 - [x] SwiftUI management shell with useful empty/error/loading states.
 - [x] Diagnostics screen records runtime and package versions.
@@ -36,7 +37,11 @@ must leave a usable, test-backed product slice.
 - [x] Reviewed volume and network create/inspect/delete/prune flows.
 - [x] TCP/UDP host-port publishing on Apple’s built-in network and DNS.
 - [x] Explicit HTTP/HTTPS open-in-browser for revalidated TCP host publications.
-- [ ] Socket publishing and privileged host-access helpers.
+- [x] Reviewed named-volume/network attachment selection and private
+      operation-scoped Unix-socket publishing.
+- [x] Read-only host-access discovery with an explicit privileged setup-command
+      handoff.
+- [ ] Signed and notarized privileged helper for optional host-access mutation.
 - [x] Registry login/list/logout through Apple’s shared Keychain domain.
 
 ## M2 — Developer workflow and Docker compatibility

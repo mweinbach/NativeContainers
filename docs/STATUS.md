@@ -7,8 +7,8 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 194 test declarations. The current full
-  app-hosted Xcode run passed all 187 deterministic tests, with seven destructive
+- The suite currently contains 216 test declarations. The current full
+  app-hosted Xcode run passed all 208 deterministic tests, with eight destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes the short-pipe framing, builder mount normalization, and strict
   path-component-containment regressions. Existing opt-in tests pass against
@@ -49,6 +49,24 @@ Updated: 2026-06-20.
 - Named-network inventory and management show NAT/host-only mode, requested and
   assigned subnets, gateway, plugin metadata, built-in state, and configured
   consumers. Built-in or newly used networks fail closed at execution.
+- Container creation is now composed from focused identity, resource, process,
+  port, storage, network, Unix-socket, host-access, and lifecycle sections. The
+  draft freezes exact reviewed volume/network identities and ordered network
+  attachment state before it reaches the creation service.
+- `AppleContainerAttachmentService` re-fetches reviewed volumes, networks, and
+  container consumers under creation's runtime mutation lease. It rejects
+  replacement or newly used volumes, preserves primary-network ordering, and
+  constructs mounts, attachments, and socket publications directly without
+  invoking Apple's CLI-oriented auto-create parser paths.
+- Published Unix sockets are confined to a mode-0700, current-user operation
+  workspace under `/private/tmp/nativecontainers-<uid>`. Directory creation is
+  `mkdir`/`lstat` based, arbitrary or occupied leaves fail closed, the portable
+  host socket path limit is enforced, every start revalidates the exact path,
+  and failed creation or deletion removes only the operation-owned directory.
+- Host access is an explicit global prerequisite rather than fake per-container
+  configuration. The app only discovers exact, safe resolver/PF pairs and
+  presents Apple's fixed `sudo container system dns create` handoff; it never
+  mutates privileged state or claims that configured-on-disk PF state is active.
 - Infrastructure XPC waits own cancellable connections with a 60-second close
   watchdog. Reconciliation and inventory refresh continue in fresh,
   cancellation-independent tasks. Container creation cancellation sends
@@ -56,10 +74,10 @@ Updated: 2026-06-20.
   retries with bounded backoff, and verifies that it is absent; an unverifiable
   cleanup is surfaced instead of being silently ignored.
 - The runtime integration now has an explicit composition root and narrow
-  inventory, creation, lifecycle, inspection, tooling, terminal, image, volume,
-  network, browser, and machine facets. Every runtime capability has a focused
-  service; the 304-line legacy `AppleContainerService` contains forwarding only
-  for callers that still need the complete API.
+  inventory, creation, attachment, lifecycle, inspection, tooling, terminal,
+  image, volume, network, browser, and machine facets. Every runtime capability
+  has a focused service; the legacy `AppleContainerService` contains forwarding
+  only for callers that still need the complete API.
 - Command timeout arbitration publishes a timeout outcome before issuing
   `KILL`, so a signal-induced process exit cannot race the timeout into a false
   success. Caller cancellation also triggers cancellation-independent `KILL`.
@@ -79,6 +97,11 @@ Updated: 2026-06-20.
 - A live Xcode test-host smoke created a stopped Alpine container through the
   app’s direct Swift service, verified its state/resources, deleted it, and
   verified cleanup.
+- A live Xcode runtime pass created a named volume and custom NAT network,
+  attached both to a stopped Alpine container with a published Unix socket,
+  started it, observed the host socket in the private workspace, force-stopped
+  it through `KILL`, verified socket removal, and deleted the container,
+  operation directory, network, and volume with no probe resources remaining.
 - Running-container inspectors now sample statistics every two seconds, retain
   a bounded 60-sample in-memory history, calculate allocation-normalized CPU
   usage, and can pause live work immediately through structured task
@@ -202,10 +225,10 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add named-volume/network attachment selection plus Unix-socket publishing
-   and privileged host-access helpers.
-2. Add explicit builder-cache management plus build secrets, SSH forwarding,
+1. Add explicit builder-cache management plus build secrets, SSH forwarding,
    cache import/export, history, and alternate outputs.
+2. Package a signed and notarized privileged helper if automated host-access
+   mutation is still desired after the explicit command handoff is exercised.
 3. Add the entitlement through a functioning Xcode capability surface, then
    implement and live-verify macOS installation and VM lifecycle.
 4. Spike a pinned Socktainer process and a product-specific Docker context.

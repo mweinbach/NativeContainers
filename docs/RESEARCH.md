@@ -65,6 +65,36 @@ Verified architecture:
 The package remains an actively evolving open-source surface. Pinning an exact
 release and isolating it behind an adapter are both deliberate.
 
+## Container attachments and host access
+
+- A named volume or network is not safe to retain by display name alone. The
+  creation review freezes its complete intrinsic identity, then re-lists
+  volumes, networks, and all container consumers immediately before creating
+  the container. A volume that changed or gained any consumer fails closed.
+- `PublishSocket` means container-to-host publication. The pinned runtime maps
+  its container path to `UnixSocketConfiguration.source`, its host path to the
+  destination, and uses direction `.outOf`.
+- Apple's CLI parser is not a safe GUI boundary for sockets: it creates parent
+  directories and deletes an existing non-socket host leaf. The runtime relay
+  also binds with `unlinkExisting: true` at every start and removes the host
+  socket on stop. The app constructs `PublishSocket` directly and confines that
+  unlink behavior to an operation-owned private directory.
+- A 124-byte socket path beneath Application Support persisted in the container
+  configuration but did not materialize a host listener in the live pinned
+  runtime. Moving the workspace to a protected short `/private/tmp` root
+  produced a 79-byte path that appeared on start and disappeared after `KILL`.
+  The app therefore enforces the portable Darwin `sockaddr_un` boundary of
+  fewer than 104 UTF-8 bytes even though the pinned helper accepts longer input.
+- `container system dns create <domain> --localhost <IPv4>` writes a resolver
+  entry, updates `/etc/pf.conf` and `com.apple.container`'s PF anchor, reloads
+  PF, and signals mDNSResponder. The pinned package publishes no equivalent DNS
+  XPC mutation route; this is global host state, not per-container networking.
+- An unprivileged process can validate exact safe files but cannot prove the PF
+  anchor is loaded in the kernel. The UI labels discovered aliases as
+  configured on disk and offers the fixed setup command. Automated mutation
+  requires a separately packaged, signed, notarized, narrowly authorized
+  helper rather than privilege inside the GUI.
+
 ## Interactive terminal
 
 - Apple’s own `container exec` creates a `ProcessIO`, passes stdin/stdout pipe

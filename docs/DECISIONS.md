@@ -340,3 +340,30 @@ recovery are separate services. `AppleContainerService` remains a
 forwarding-only compatibility facade. This preserves complete-API call sites
 and one global mutation order while allowing deterministic timeout,
 cancellation, reconciliation, malformed-reply, routing, and cleanup tests.
+
+## ADR-018: Review attachments and confine published sockets
+
+**Status:** Accepted — 2026-06-20
+
+Container creation records complete volume and network configuration identities
+rather than mutable names alone. Resolution re-lists infrastructure and all
+container configurations under the creation mutation lease, rejects stale or
+newly used volumes, preserves reviewed network order, and constructs Apple's
+mount, attachment, and `PublishSocket` values directly. The app never uses the
+CLI parser paths that can auto-create storage or remove an arbitrary host leaf.
+
+Apple's runtime opens published host sockets with `unlinkExisting` and removes
+them on stop. Host destinations are therefore generated only beneath a
+current-user, mode-0700 operation directory at
+`/private/tmp/nativecontainers-<uid>/<operation UUID>`. Creation uses atomic
+`mkdir` plus `lstat`, socket names and lexical parents are validated before
+every start, occupied leaves are never replaced by the app, and the host path
+is capped below 104 UTF-8 bytes. Missing private directories may be recreated
+from the persisted operation label; rollback and delete remove only that exact
+operation directory.
+
+Host access remains global privileged resolver/PF state. The unprivileged app
+only recognizes exact root-owned, non-writable resolver and packet-filter files
+and exposes Apple's fixed setup command. It does not run `sudo` or report PF as
+active from disk state alone. Any future mutation path must be a separately
+signed and notarized helper with a narrow authorization contract.

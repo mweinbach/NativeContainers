@@ -10,6 +10,8 @@ called out rather than papered over.
 | Container lifecycle | `ContainerClient` | M1 | Foundation start/stop/delete is wired |
 | Exec, logs, copy, inspect, stats | `ContainerClient` + SwiftTerm | M1 | Non-interactive exec and native interactive PTY are live |
 | Volumes and named networks | Apple services | M1 | Reviewed create/delete/prune, capacity versus allocated usage, built-in protection, and configured-container use checks are live; Apple 1.0 has no conditional delete token |
+| Container storage/network/socket attachments | Focused attachment service + Apple configuration types | M1 | Exact reviewed named-volume identities, ordered networks, and private operation-scoped Unix sockets are live and revalidated before mutation/start |
+| Container-to-host alias | Read-only resolver/PF discovery | Partial | Exact configured-on-disk state can be selected and a fixed privileged command is shown; the GUI does not mutate or claim active PF state, and a signed helper remains future work |
 | Direct container IP and published ports | Apple vmnet/socket forwarders | M1 | Dedicated IPs and TCP/UDP ranges are inventoried; TCP host publications offer explicit revalidated HTTP/HTTPS opening; no exact shared host loopback |
 | Docker CLI and Engine API | Socktainer compatibility service | M2 | Partial API v1.51 today |
 | Docker Compose | Docker CLI through compatibility service | M2 | Compatibility matrix required |

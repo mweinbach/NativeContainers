@@ -32,13 +32,16 @@ Foundation work is underway. See:
 The current foundation includes native container lifecycle and inspection,
 exec/copy and interactive PTY workflows, safe OCI image management, reviewed
 volume/network lifecycle, explicit HTTP/HTTPS opening for published TCP ports,
+reviewed named-volume and ordered-network attachments, private Unix-socket
+publishing, read-only host-access discovery,
 Apple Keychain-backed registry login management, reviewed native pull/push
 transfers, reviewed Dockerfile/Containerfile builds through Apple’s public
 BuildKit APIs, and macOS restore-image preparation.
 
 The app is composed from narrow injectable service facets. Inventory, container
 creation and lifecycle, inspection, command tools, terminal sessions, image
-management, infrastructure, machine lifecycle, bounded XPC transport, and
+management, infrastructure, attachment resolution, private socket workspace,
+host-access discovery, machine lifecycle, bounded XPC transport, and
 owned-resource recovery are independent services. A forwarding-only
 compatibility facade preserves callers that still need the complete API.
 
@@ -52,10 +55,11 @@ bundles are intentionally not part of this repository’s development workflow;
 see [AGENTS.md](AGENTS.md).
 
 The deterministic suite runs without mutating the local runtime. To run the
-reversible live provisioning, PTY, and image-reference smokes, set
+reversible live provisioning, attachment, PTY, and image-reference smokes, set
 `NATIVECONTAINERS_LIVE_TESTS=1` for the test action. They create uniquely named
-Alpine resources, verify native lifecycle, interactive-terminal, and image
-tag/inspect/delete behavior, and delete every uniquely created test resource.
+Alpine resources, verify native lifecycle, reviewed volume/network/Unix-socket
+attachments, interactive-terminal, and image tag/inspect/delete behavior, and
+delete every uniquely created test resource.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when
