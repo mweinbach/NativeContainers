@@ -83,6 +83,44 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
       try await operation.value
     }
 
+    func start(provisioning request: MacGuestProvisioningRequest?) async throws {
+      guard let request else {
+        try await start()
+        return
+      }
+      guard #available(macOS 27.0, *) else {
+        throw MacGuestProvisioningError.hostUnsupported
+      }
+      guard virtualMachine.canStart else {
+        throw MacVirtualMachineRuntimeError.operationUnavailable("start")
+      }
+
+      let guestOptions = VZMacGuestProvisioningOptions()
+      guestOptions.fullName = request.fullName
+      guestOptions.username = request.username
+      guestOptions.password = request.password
+      guestOptions.logsInAutomatically = request.logsInAutomatically
+      guestOptions.enablesRemoteLogin = request.enablesRemoteLogin
+
+      let startOptions = VZMacOSVirtualMachineStartOptions()
+      try startOptions.setGuestProvisioning(guestOptions)
+
+      let virtualMachine = virtualMachine
+      let operation = Task { @MainActor in
+        try await withCheckedThrowingContinuation {
+          (continuation: CheckedContinuation<Void, any Error>) in
+          virtualMachine.start(options: startOptions) { error in
+            if let error {
+              continuation.resume(throwing: error)
+            } else {
+              continuation.resume()
+            }
+          }
+        }
+      }
+      try await operation.value
+    }
+
     func saveState(to url: URL) async throws {
       try requireSaveRestoreSupport()
       guard virtualMachine.state == .paused else {

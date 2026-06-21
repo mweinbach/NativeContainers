@@ -520,7 +520,10 @@ enum AppCompositionRoot {
       engine: AppleMacVirtualMachineRuntimeEngine(
         configurationFactory: virtualMachineConfigurationFactory
       ),
-      savedStateService: virtualMachineSavedState
+      savedStateService: virtualMachineSavedState,
+      firstBootService: MacVirtualMachineFirstBootService(
+        persistence: virtualMachineLibrary
+      )
     )
     let linuxVirtualMachineRuntime = LinuxVirtualMachineRuntimeService(
       leasingStore: virtualMachineLibrary,

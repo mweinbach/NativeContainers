@@ -20,6 +20,7 @@ protocol MacVirtualMachineRuntimeEngineSession: AnyObject {
   var eventHandler: MacVirtualMachineRuntimeEventHandler? { get set }
 
   func start() async throws
+  func start(provisioning: MacGuestProvisioningRequest?) async throws
   func saveState(to url: URL) async throws
   func restoreState(from url: URL) async throws
   func pause() async throws
@@ -30,6 +31,13 @@ protocol MacVirtualMachineRuntimeEngineSession: AnyObject {
 }
 
 extension MacVirtualMachineRuntimeEngineSession {
+  func start(provisioning: MacGuestProvisioningRequest?) async throws {
+    guard provisioning == nil else {
+      throw MacGuestProvisioningError.firstBootUnavailable
+    }
+    try await start()
+  }
+
   func close() {}
 }
 
@@ -41,6 +49,7 @@ protocol MacVirtualMachineRuntimeManaging: Sendable {
 
   func refreshSavedState(id: UUID) async
   func start(id: UUID) async throws
+  func start(id: UUID, provisioning: MacGuestProvisioningRequest?) async throws
   func startFresh(id: UUID) async throws
   func pause(target: MacVirtualMachineRuntimeTarget) async throws
   func resume(target: MacVirtualMachineRuntimeTarget) async throws
@@ -48,6 +57,15 @@ protocol MacVirtualMachineRuntimeManaging: Sendable {
   func requestStop(target: MacVirtualMachineRuntimeTarget) throws
   func forceStop(target: MacVirtualMachineRuntimeTarget) async throws
   func discardSavedState(id: UUID) async throws
+}
+
+extension MacVirtualMachineRuntimeManaging {
+  func start(id: UUID, provisioning: MacGuestProvisioningRequest?) async throws {
+    guard provisioning == nil else {
+      throw MacGuestProvisioningError.firstBootUnavailable
+    }
+    try await start(id: id)
+  }
 }
 
 @MainActor

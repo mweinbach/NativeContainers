@@ -32,6 +32,8 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   private let leasingStore: any MacVirtualMachineRuntimeLeasing
   private let engine: any MacVirtualMachineRuntimeEngine
   private let savedStateService: any MacVirtualMachineSavedStateManaging
+  private let firstBootService: any MacVirtualMachineFirstBootManaging
+  private let provisioningPolicy: MacGuestProvisioningPolicy
   private let shutdownPolicy: MacVirtualMachineShutdownPolicy
   private let observations = MacVirtualMachineRuntimeObservations()
   private let shutdownFallbacks: MacVirtualMachineShutdownFallbackRegistry
@@ -42,6 +44,9 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     leasingStore: any MacVirtualMachineRuntimeLeasing,
     engine: any MacVirtualMachineRuntimeEngine,
     savedStateService: any MacVirtualMachineSavedStateManaging,
+    firstBootService: any MacVirtualMachineFirstBootManaging =
+      UntrackedMacVirtualMachineFirstBootService(),
+    provisioningPolicy: MacGuestProvisioningPolicy = MacGuestProvisioningPolicy(),
     shutdownPolicy: MacVirtualMachineShutdownPolicy = .standard,
     shutdownScheduler: any MacVirtualMachineShutdownScheduling =
       ContinuousClockMacVirtualMachineShutdownScheduler()
@@ -49,6 +54,8 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     self.leasingStore = leasingStore
     self.engine = engine
     self.savedStateService = savedStateService
+    self.firstBootService = firstBootService
+    self.provisioningPolicy = provisioningPolicy
     self.shutdownPolicy = shutdownPolicy
     self.shutdownFallbacks = MacVirtualMachineShutdownFallbackRegistry(
       timeout: shutdownPolicy.gracefulStopTimeout,
@@ -107,11 +114,30 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   }
 
   func start(id: UUID) async throws {
-    try await launch(id: id, discardingCheckpoint: false)
+    try await launch(
+      id: id,
+      discardingCheckpoint: false,
+      provisioning: nil
+    )
+  }
+
+  func start(
+    id: UUID,
+    provisioning: MacGuestProvisioningRequest?
+  ) async throws {
+    try await launch(
+      id: id,
+      discardingCheckpoint: false,
+      provisioning: provisioning
+    )
   }
 
   func startFresh(id: UUID) async throws {
-    try await launch(id: id, discardingCheckpoint: true)
+    try await launch(
+      id: id,
+      discardingCheckpoint: true,
+      provisioning: nil
+    )
   }
 
   func pause(target: MacVirtualMachineRuntimeTarget) async throws {
@@ -469,7 +495,11 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     }
   }
 
-  private func launch(id: UUID, discardingCheckpoint: Bool) async throws {
+  private func launch(
+    id: UUID,
+    discardingCheckpoint: Bool,
+    provisioning: MacGuestProvisioningRequest?
+  ) async throws {
     guard sessions[id] == nil else {
       throw MacVirtualMachineRuntimeError.duplicateSession(id)
     }
@@ -497,12 +527,38 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
         throw MacVirtualMachineSavedStateError.incompatible(id, reason)
       }
 
+      let resumesSavedState = savedStateStatus.summary != nil
+      if provisioning != nil {
+        try provisioningPolicy.validate(
+          manifest: lease.machine.manifest,
+          resumesSavedState: resumesSavedState
+        )
+      }
+
       let session = try engine.makeSession(for: lease.machine, target: lease.target)
       if case .available = savedStateStatus,
         case .unsupported(let reason) = session.saveRestoreSupport
       {
+        session.close()
         throw MacVirtualMachineSavedStateError.incompatible(id, reason)
       }
+
+      let firstBootAttempt: MacVirtualMachineFirstBootAttempt?
+      if resumesSavedState {
+        firstBootAttempt = nil
+      } else {
+        do {
+          firstBootAttempt = try await firstBootService.begin(for: lease)
+        } catch {
+          session.close()
+          throw error
+        }
+        if provisioning != nil, firstBootAttempt == nil {
+          session.close()
+          throw MacGuestProvisioningError.firstBootUnavailable
+        }
+      }
+
       session.eventHandler = { [weak self] event in
         self?.receive(event, from: lease.target)
       }
@@ -527,7 +583,12 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
           token: token
         )
       } else {
-        try await startCold(record: sessions[id]!, token: token)
+        try await startCold(
+          record: sessions[id]!,
+          token: token,
+          provisioning: provisioning,
+          firstBootAttempt: firstBootAttempt
+        )
       }
     } catch {
       pendingLease?.release()
@@ -550,10 +611,31 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     }
   }
 
-  private func startCold(record: SessionRecord, token: UUID) async throws {
+  private func startCold(
+    record: SessionRecord,
+    token: UUID,
+    provisioning: MacGuestProvisioningRequest?,
+    firstBootAttempt: MacVirtualMachineFirstBootAttempt?
+  ) async throws {
     let target = record.lease.target
+    var didStart = false
     do {
-      try await record.session.start()
+      try await record.session.start(provisioning: provisioning)
+      didStart = true
+
+      var firstBootWarning: String?
+      if let firstBootAttempt {
+        do {
+          try await firstBootService.complete(
+            firstBootAttempt,
+            for: record.lease
+          )
+        } catch {
+          firstBootWarning =
+            "The VM started, but its first-boot state could not be recorded: \(error.localizedDescription)"
+        }
+      }
+
       guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
         return
       }
@@ -570,10 +652,25 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
         machineID: target.machineID,
         target: target,
         state: .running,
-        savedStateStatus: MacVirtualMachineSavedStateStatus.none
+        savedStateStatus: MacVirtualMachineSavedStateStatus.none,
+        errorMessage: firstBootWarning
       )
     } catch {
-      let operationError = error
+      var operationError: any Error = error
+      if !didStart, let firstBootAttempt {
+        do {
+          try await firstBootService.cancel(
+            firstBootAttempt,
+            for: record.lease
+          )
+        } catch {
+          operationError = MacVirtualMachineFirstBootError.rollbackFailed(
+            start: operationError.localizedDescription,
+            rollback: error.localizedDescription
+          )
+        }
+      }
+
       let forceStopped: Bool
       do {
         forceStopped = try await finishIfForceStopWasQueued(

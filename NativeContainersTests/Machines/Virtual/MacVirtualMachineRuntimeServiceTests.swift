@@ -607,6 +607,101 @@ struct MacVirtualMachineRuntimeServiceTests {
     #expect(snapshot.savedStateStatus == .none)
     #expect(fixture.releaseRecorder.count == 1)
   }
+
+  @Test
+  func eligibleFirstBootForwardsProvisioningAndCommitsTheAttempt() async throws {
+    let machine = try makeRuntimeServiceMachine(
+      operatingSystem: MacGuestOperatingSystemIdentity(
+        buildVersion: "TEST",
+        majorVersion: 27,
+        minorVersion: 0,
+        patchVersion: 0
+      ),
+      firstBootState: .pending
+    )
+    let releaseRecorder = RuntimeServiceReleaseRecorder()
+    let engine = RuntimeServiceEngine()
+    let firstBootService = RuntimeServiceFirstBootService()
+    let service = MacVirtualMachineRuntimeService(
+      leasingStore: RuntimeServiceLeaseStore(
+        machine: machine,
+        releaseRecorder: releaseRecorder
+      ),
+      engine: engine,
+      savedStateService: RuntimeServiceSavedStateService(),
+      firstBootService: firstBootService,
+      provisioningPolicy: MacGuestProvisioningPolicy(
+        hostSupportsProvisioning: true
+      )
+    )
+    let request = try MacGuestProvisioningRequest(
+      fullName: "Ada Lovelace",
+      username: "ada",
+      password: "analytical-engine",
+      logsInAutomatically: true,
+      enablesRemoteLogin: true
+    )
+
+    try await service.start(
+      id: machine.manifest.id,
+      provisioning: request
+    )
+
+    #expect(engine.sessions[0].provisioningRequest == request)
+    #expect(await firstBootService.beginCount == 1)
+    #expect(await firstBootService.completeCount == 1)
+    #expect(await firstBootService.cancelCount == 0)
+    #expect(service.snapshot(for: machine.manifest.id).state == .running)
+    #expect(releaseRecorder.count == 0)
+  }
+
+  @Test
+  func failedProvisionedStartRestoresFirstBootEligibility() async throws {
+    let machine = try makeRuntimeServiceMachine(
+      operatingSystem: MacGuestOperatingSystemIdentity(
+        buildVersion: "TEST",
+        majorVersion: 27,
+        minorVersion: 0,
+        patchVersion: 0
+      ),
+      firstBootState: .pending
+    )
+    let releaseRecorder = RuntimeServiceReleaseRecorder()
+    let engine = RuntimeServiceEngine(startError: .expected)
+    let firstBootService = RuntimeServiceFirstBootService()
+    let service = MacVirtualMachineRuntimeService(
+      leasingStore: RuntimeServiceLeaseStore(
+        machine: machine,
+        releaseRecorder: releaseRecorder
+      ),
+      engine: engine,
+      savedStateService: RuntimeServiceSavedStateService(),
+      firstBootService: firstBootService,
+      provisioningPolicy: MacGuestProvisioningPolicy(
+        hostSupportsProvisioning: true
+      )
+    )
+    let request = try MacGuestProvisioningRequest(
+      fullName: "Grace Hopper",
+      username: "grace",
+      password: "compiler",
+      logsInAutomatically: false,
+      enablesRemoteLogin: false
+    )
+
+    await #expect(throws: RuntimeServiceTestError.expected) {
+      try await service.start(
+        id: machine.manifest.id,
+        provisioning: request
+      )
+    }
+
+    #expect(await firstBootService.beginCount == 1)
+    #expect(await firstBootService.completeCount == 0)
+    #expect(await firstBootService.cancelCount == 1)
+    #expect(service.snapshot(for: machine.manifest.id).state == .stopped)
+    #expect(releaseRecorder.count == 1)
+  }
 }
 
 @MainActor
@@ -836,6 +931,38 @@ private actor RuntimeServiceLeaseStore: MacVirtualMachineRuntimeLeasing {
   }
 }
 
+private actor RuntimeServiceFirstBootService: MacVirtualMachineFirstBootManaging {
+  private(set) var beginCount = 0
+  private(set) var completeCount = 0
+  private(set) var cancelCount = 0
+
+  func begin(
+    for lease: MacVirtualMachineRuntimeLease
+  ) async throws -> MacVirtualMachineFirstBootAttempt? {
+    guard lease.machine.manifest.macOSFirstBootState == .pending else {
+      return nil
+    }
+    beginCount += 1
+    return MacVirtualMachineFirstBootAttempt(target: lease.target)
+  }
+
+  func complete(
+    _ attempt: MacVirtualMachineFirstBootAttempt,
+    for lease: MacVirtualMachineRuntimeLease
+  ) async throws {
+    #expect(attempt.target == lease.target)
+    completeCount += 1
+  }
+
+  func cancel(
+    _ attempt: MacVirtualMachineFirstBootAttempt,
+    for lease: MacVirtualMachineRuntimeLease
+  ) async throws {
+    #expect(attempt.target == lease.target)
+    cancelCount += 1
+  }
+}
+
 private final class RuntimeServiceReleaseRecorder: @unchecked Sendable {
   private let lock = NSLock()
   private var storedCount = 0
@@ -850,15 +977,18 @@ private final class RuntimeServiceReleaseRecorder: @unchecked Sendable {
 @MainActor
 private final class RuntimeServiceEngine: MacVirtualMachineRuntimeEngine {
   private let startWaits: Bool
+  private let startError: RuntimeServiceTestError?
   private let resumeError: RuntimeServiceTestError?
   private(set) var sessions: [RuntimeServiceSession] = []
   private var firstSessionStartWaiters: [CheckedContinuation<Void, Never>] = []
 
   init(
     startWaits: Bool = false,
+    startError: RuntimeServiceTestError? = nil,
     resumeError: RuntimeServiceTestError? = nil
   ) {
     self.startWaits = startWaits
+    self.startError = startError
     self.resumeError = resumeError
   }
 
@@ -869,6 +999,7 @@ private final class RuntimeServiceEngine: MacVirtualMachineRuntimeEngine {
     let session = RuntimeServiceSession(
       target: target,
       startWaits: startWaits,
+      startError: startError,
       resumeError: resumeError
     ) { [weak self] in
       guard let self else { return }
@@ -897,6 +1028,7 @@ private final class RuntimeServiceSession: MacVirtualMachineRuntimeEngineSession
   var eventHandler: MacVirtualMachineRuntimeEventHandler?
   var forceStopError: RuntimeServiceTestError?
   private(set) var didStart = false
+  private(set) var provisioningRequest: MacGuestProvisioningRequest?
   private(set) var pauseCount = 0
   private(set) var resumeCount = 0
   private(set) var requestStopCount = 0
@@ -904,6 +1036,7 @@ private final class RuntimeServiceSession: MacVirtualMachineRuntimeEngineSession
   private(set) var closeCount = 0
 
   private let startWaits: Bool
+  private let startError: RuntimeServiceTestError?
   private let resumeError: RuntimeServiceTestError?
   private let didBeginStart: () -> Void
   private var startContinuation: CheckedContinuation<Void, Never>?
@@ -911,11 +1044,13 @@ private final class RuntimeServiceSession: MacVirtualMachineRuntimeEngineSession
   init(
     target: MacVirtualMachineRuntimeTarget,
     startWaits: Bool,
+    startError: RuntimeServiceTestError?,
     resumeError: RuntimeServiceTestError?,
     didBeginStart: @escaping () -> Void
   ) {
     self.target = target
     self.startWaits = startWaits
+    self.startError = startError
     self.resumeError = resumeError
     self.didBeginStart = didBeginStart
   }
@@ -923,11 +1058,17 @@ private final class RuntimeServiceSession: MacVirtualMachineRuntimeEngineSession
   func start() async throws {
     didStart = true
     didBeginStart()
+    if let startError { throw startError }
     if startWaits {
       await withCheckedContinuation { continuation in
         startContinuation = continuation
       }
     }
+  }
+
+  func start(provisioning request: MacGuestProvisioningRequest?) async throws {
+    provisioningRequest = request
+    try await start()
   }
 
   func saveState(to url: URL) async throws {}
@@ -971,20 +1112,25 @@ private enum RuntimeServiceTestError: LocalizedError, Equatable {
   var errorDescription: String? { "Expected runtime service failure." }
 }
 
-private func makeRuntimeServiceMachine() throws -> ResolvedMacVirtualMachine {
+private func makeRuntimeServiceMachine(
+  operatingSystem: MacGuestOperatingSystemIdentity? = nil,
+  firstBootState: MacVirtualMachineFirstBootState? = nil
+) throws -> ResolvedMacVirtualMachine {
   let identifier = UUID()
   let resources = try VirtualMachineResources(
     cpuCount: 4,
     memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
     diskBytes: 64 * VirtualMachineResources.bytesPerGiB
   )
-  let manifest = try VirtualMachineManifest(
+  var manifest = try VirtualMachineManifest(
     id: identifier,
     name: "Runtime Service",
     guest: .macOS,
     installState: .stopped,
     resources: resources
   )
+  manifest.macOSGuestOperatingSystem = operatingSystem
+  manifest.macOSFirstBootState = firstBootState
   let bundle = URL(filePath: "/tmp/\(identifier.uuidString).nativevm", directoryHint: .isDirectory)
   return ResolvedMacVirtualMachine(
     manifest: manifest,

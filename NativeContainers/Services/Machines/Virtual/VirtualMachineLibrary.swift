@@ -82,6 +82,7 @@ actor VirtualMachineLibrary:
   VirtualMachineRestoreImageReferenceStoring,
   MacVirtualMachineInstallationStoring,
   MacVirtualMachineRuntimeLeasing,
+  MacVirtualMachineFirstBootPersisting,
   LinuxVirtualMachineRuntimeLeasing,
   LinuxVirtualMachineInstallationCompleting,
   MacVirtualMachineSharedDirectoryPersisting,
@@ -249,6 +250,30 @@ actor VirtualMachineLibrary:
           bundleURL: bundleStore.bundleURL(for: $0.id)
         )
       }
+    )
+  }
+
+  func transitionMacOSFirstBootState(
+    from expectedState: MacVirtualMachineFirstBootState,
+    to newState: MacVirtualMachineFirstBootState,
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try installationManifest(id: lease.target.machineID)
+    guard manifest.macOSFirstBootState == expectedState else {
+      throw MacVirtualMachineFirstBootError.invalidTransition(
+        expected: expectedState,
+        actual: manifest.macOSFirstBootState
+      )
+    }
+
+    manifest.macOSFirstBootState = newState
+    manifest.updatedAt = Date()
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
     )
   }
 

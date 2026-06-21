@@ -86,6 +86,7 @@ enum MacGuestProvisioningError: LocalizedError, Equatable, Sendable {
   case emptyUsername
   case emptyPassword
   case hostUnsupported
+  case guestVersionUnknown
   case guestUnsupported(String)
   case firstBootUnavailable
   case savedStateConflict
@@ -100,6 +101,8 @@ enum MacGuestProvisioningError: LocalizedError, Equatable, Sendable {
       "Enter a password for the guest account."
     case .hostUnsupported:
       "Automated macOS guest setup requires macOS 27 or later on the host."
+    case .guestVersionUnknown:
+      "Automated guest setup is unavailable because this virtual machine’s macOS version is unknown."
     case .guestUnsupported(let version):
       "Automated guest setup requires macOS 27 or later; this guest is macOS \(version)."
     case .firstBootUnavailable:
