@@ -815,6 +815,24 @@ Updated: 2026-06-21.
   or errors. Launch emitted only the existing macOS 27 beta SetStore donation
   noise.
 
+- Compose create-missing Up is now implemented as a separate non-recreation
+  lane. Canonical full/active models fail closed on an explicit supported-key
+  allowlist. Execution writes a digest-named immutable overlay beneath a stable
+  private project directory, converts every reviewed resource to an exact
+  external reference, and proves unchanged Compose service hashes before any
+  Apple mutation. Missing managed networks and volumes are created natively
+  with operation-scoped ownership; stopped replicas in the reviewed contiguous
+  prefix start by exact ID before Compose 5.1.4 runs `--no-recreate` for the
+  missing suffix. Planner and postcondition services independently require exact
+  named-volume/network attachments. Sparse replica sets, scale-down,
+  configuration/image drift, custom resource labels, and all recreation remain
+  blocked. The focused overlay/workspace/planner/executor/resource proof passed
+  12 tests. Xcode MCP then completed the full plan in eight bounded, ordered
+  suite shards: 735 outcomes passed, the 19 explicit live-environment gates
+  skipped, and no outcome failed or remained unrun. Xcode currently discovers
+  749 test declarations; five parameterized cases expand the execution to 754
+  outcomes. Build-for-testing also passed.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
@@ -827,7 +845,7 @@ available for that destructive integration pass.
 1. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.
-2. Build the deterministic Compose external-resource overlay, stable metadata
-   paths, replica-prefix guard, attachment verification, and supported-key
-   allowlist needed for safe create-missing Up. Keep recreation blocked until
-   the pinned bridge implements rename and network attachment routes.
+2. Live-verify a second reviewed Up that grows a real pinned Socktainer project
+   from a contiguous replica prefix, including stable metadata and exact Apple
+   attachment observations. Keep recreation blocked until the pinned bridge
+   implements rename and network attachment routes.

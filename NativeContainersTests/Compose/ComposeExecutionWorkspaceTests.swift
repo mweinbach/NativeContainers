@@ -8,7 +8,7 @@ import Testing
 @Suite(.serialized)
 struct ComposeExecutionWorkspaceTests {
   @Test
-  func stagesReviewedBytesPrivatelyAndRemovesOnlyTheLeasedIdentity() throws {
+  func storesReviewedBytesAtAStablePrivateImmutablePath() throws {
     let fixture = try ComposeExecutionWorkspaceFixture()
     defer { fixture.remove() }
     let workspace = FileComposeExecutionWorkspace(rootURL: fixture.rootURL)
@@ -17,6 +17,7 @@ struct ComposeExecutionWorkspaceTests {
 
     let lease = try workspace.prepare(
       operationID: UUID(),
+      projectName: "sample",
       canonicalConfiguration: bytes,
       expectedSHA256: digest
     )
@@ -30,9 +31,18 @@ struct ComposeExecutionWorkspaceTests {
     #expect(fileMetadata.st_mode & mode_t(0o777) == mode_t(0o600))
     #expect(fileMetadata.st_nlink == 1)
 
-    try workspace.remove(lease)
+    try workspace.release(lease)
+    let secondLease = try workspace.prepare(
+      operationID: UUID(),
+      projectName: "sample",
+      canonicalConfiguration: bytes,
+      expectedSHA256: digest
+    )
 
-    #expect(!FileManager.default.fileExists(atPath: lease.directoryURL.path))
+    #expect(secondLease.directoryURL == lease.directoryURL)
+    #expect(secondLease.configurationURL == lease.configurationURL)
+    #expect(secondLease.fileIdentity == lease.fileIdentity)
+    #expect(FileManager.default.fileExists(atPath: lease.configurationURL.path))
   }
 
   @Test
@@ -44,6 +54,7 @@ struct ComposeExecutionWorkspaceTests {
     #expect(throws: ComposeProjectLifecycleError.self) {
       _ = try workspace.prepare(
         operationID: UUID(),
+        projectName: "sample",
         canonicalConfiguration: Data("changed".utf8),
         expectedSHA256: String(repeating: "0", count: 64)
       )
@@ -54,7 +65,7 @@ struct ComposeExecutionWorkspaceTests {
   }
 
   @Test
-  func refusesToDeleteAConfigurationReplacedAfterLeaseCreation() throws {
+  func refusesToReleaseAConfigurationReplacedAfterLeaseCreation() throws {
     let fixture = try ComposeExecutionWorkspaceFixture()
     defer { fixture.remove() }
     let workspace = FileComposeExecutionWorkspace(rootURL: fixture.rootURL)
@@ -62,6 +73,7 @@ struct ComposeExecutionWorkspaceTests {
     let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
     let lease = try workspace.prepare(
       operationID: UUID(),
+      projectName: "sample",
       canonicalConfiguration: bytes,
       expectedSHA256: digest
     )
@@ -71,7 +83,7 @@ struct ComposeExecutionWorkspaceTests {
     #expect(Darwin.chmod(lease.configurationURL.path, mode_t(0o600)) == 0)
 
     #expect(throws: ComposeProjectLifecycleError.self) {
-      try workspace.remove(lease)
+      try workspace.release(lease)
     }
     #expect(FileManager.default.fileExists(atPath: lease.configurationURL.path))
   }
@@ -97,6 +109,7 @@ struct ComposeExecutionWorkspaceTests {
     #expect(throws: ComposeProjectLifecycleError.self) {
       _ = try workspace.prepare(
         operationID: UUID(),
+        projectName: "sample",
         canonicalConfiguration: bytes,
         expectedSHA256: digest
       )

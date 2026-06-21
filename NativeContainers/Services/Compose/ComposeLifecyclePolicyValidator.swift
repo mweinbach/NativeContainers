@@ -35,6 +35,15 @@ struct ComposeLifecyclePolicyValidator: Sendable {
         )
       )
     }
+    for service in desired.activeServices where service.replicaCount == 0 {
+      issues.append(
+        ComposeLifecycleIssue.blocker(
+          .executionPolicy,
+          subject: service.name,
+          message: "Up does not execute zero-replica services."
+        )
+      )
+    }
     if options.pullPolicy == .never {
       let localReferences = Set(inventory.images.map(\.reference))
       for service in desired.activeServices
@@ -51,64 +60,6 @@ struct ComposeLifecyclePolicyValidator: Sendable {
     }
   }
 
-  func appendUpModeIssues(
-    options: ComposeProjectReviewOptions,
-    containerActions: [ComposeProjectContainerAction],
-    volumeActions: [ComposeProjectVolumeAction],
-    networkActions: [ComposeProjectNetworkAction],
-    issues: inout [ComposeProjectReviewIssue]
-  ) {
-    guard options.action == .up else { return }
-    let hasExistingContainers = containerActions.contains {
-      $0.operation == .converge
-    }
-    let createsContainers = containerActions.contains { $0.operation == .create }
-    let reusesManagedResources =
-      volumeActions.contains {
-        $0.operation == .reuseManaged
-      }
-      || networkActions.contains {
-        $0.operation == .reuseManaged
-      }
-    let createsManagedResources =
-      volumeActions.contains {
-        $0.operation == .createManaged
-      }
-      || networkActions.contains {
-        $0.operation == .createManaged
-      }
-
-    if hasExistingContainers, createsContainers {
-      issues.append(
-        ComposeLifecycleIssue.blocker(
-          .executionPolicy,
-          subject: options.projectName,
-          message:
-            "Create-missing Up remains disabled because the pinned compatibility bridge cannot safely rename a replacement after partial reconciliation."
-        )
-      )
-    }
-    if hasExistingContainers, createsManagedResources {
-      issues.append(
-        ComposeLifecycleIssue.blocker(
-          .executionPolicy,
-          subject: options.projectName,
-          message:
-            "Native existing-project Up requires every active managed network and volume to already exist with its reviewed identity."
-        )
-      )
-    }
-    if !hasExistingContainers, reusesManagedResources {
-      issues.append(
-        ComposeLifecycleIssue.blocker(
-          .executionPolicy,
-          subject: options.projectName,
-          message:
-            "Command-based fresh Up will not reconcile a pre-existing managed network or volume without a frozen desired configuration identity."
-        )
-      )
-    }
-  }
 }
 
 enum ComposeLifecycleIssue {

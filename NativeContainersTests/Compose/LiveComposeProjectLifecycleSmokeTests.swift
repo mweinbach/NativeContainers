@@ -41,7 +41,7 @@ struct LiveComposeProjectLifecycleSmokeTests {
     }
 
     let rootURL = URL(filePath: "/tmp", directoryHint: .isDirectory).appending(
-      path: "nc-lc-(UUID().uuidString.lowercased().prefix(8))",
+      path: "nc-lc-\(UUID().uuidString.lowercased().prefix(8))",
       directoryHint: .isDirectory
     )
     try FileManager.default.createDirectory(
@@ -53,7 +53,7 @@ struct LiveComposeProjectLifecycleSmokeTests {
       throw LiveComposeLifecycleSmokeError("The private fixture root could not be secured.")
     }
 
-    let projectName = "ncwire-(UUID().uuidString.lowercased().prefix(8))"
+    let projectName = "ncwire-\(UUID().uuidString.lowercased().prefix(8))"
     let socketURL =
       rootURL
       .appending(path: ".socktainer", directoryHint: .isDirectory)
@@ -174,7 +174,10 @@ struct LiveComposeProjectLifecycleSmokeTests {
       let frozenIdentity = ComposeProjectContainerIdentity(runningContainer)
       try requireLiveAttachments(in: runningInventory, fixture: fixture)
       try await requireEmptyJournal(journal)
-      try requireEmptyExecutionWorkspace(executionRootURL)
+      try requireStableExecutionWorkspace(
+        executionRootURL,
+        projectName: projectName
+      )
 
       let stopPlan = try await lifecycle.review(
         directoryURL: rootURL,
@@ -269,7 +272,7 @@ struct LiveComposeProjectLifecycleSmokeTests {
 
     if let operationFailure, let cleanupFailure {
       throw LiveComposeLifecycleSmokeError(
-        "Lifecycle failed: (operationFailure) Cleanup failed: (cleanupFailure)"
+        "Lifecycle failed: \(operationFailure) Cleanup failed: \(cleanupFailure)"
       )
     }
     if let operationFailure {
@@ -298,7 +301,7 @@ private func liveLifecycleComposeYAML(
   services:
     probe:
       image: docker.io/library/alpine:3.20
-      container_name: (fixture.containerName)
+      container_name: \(fixture.containerName)
       command: ["sh", "-c", "trap 'exit 0' TERM INT; while true; do sleep 1; done"]
       volumes:
         - data:/fixture
@@ -306,10 +309,10 @@ private func liveLifecycleComposeYAML(
         - default
   volumes:
     data:
-      name: (fixture.volumeName)
+      name: \(fixture.volumeName)
   networks:
     default:
-      name: (fixture.networkName)
+      name: \(fixture.networkName)
   """
 }
 
@@ -317,7 +320,7 @@ private func requireExecutable(_ plan: ComposeProjectPlan) throws {
   guard plan.canExecute else {
     let reasons = plan.blockers.map(\.message).joined(separator: " ")
     throw LiveComposeLifecycleSmokeError(
-      "Reviewed (plan.options.action.rawValue) was blocked. (reasons)"
+      "Reviewed \(plan.options.action.rawValue) was blocked. \(reasons)"
     )
   }
 }
@@ -377,17 +380,35 @@ private func requireEmptyJournal(
   }
 }
 
-private func requireEmptyExecutionWorkspace(_ rootURL: URL) throws {
-  guard FileManager.default.fileExists(atPath: rootURL.nativeContainersPOSIXPath) else {
-    return
-  }
+private func requireStableExecutionWorkspace(
+  _ rootURL: URL,
+  projectName: String
+) throws {
+  let projectURL = rootURL.appending(
+    path: projectName,
+    directoryHint: .isDirectory
+  )
+  var directoryMetadata = stat()
   guard
-    try FileManager.default.contentsOfDirectory(
-      atPath: rootURL.nativeContainersPOSIXPath
-    ).isEmpty
+    Darwin.lstat(projectURL.nativeContainersPOSIXPath, &directoryMetadata) == 0,
+    directoryMetadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR),
+    directoryMetadata.st_uid == Darwin.geteuid(),
+    directoryMetadata.st_mode & mode_t(0o077) == 0
   else {
     throw LiveComposeLifecycleSmokeError(
-      "A successful Up left a staged execution operation directory."
+      "A successful Up did not retain its private stable project directory."
+    )
+  }
+  let files = try FileManager.default.contentsOfDirectory(
+    atPath: projectURL.nativeContainersPOSIXPath)
+  guard
+    files.count == 1,
+    let fileName = files.first,
+    fileName.hasPrefix("compose-"),
+    fileName.hasSuffix(".json")
+  else {
+    throw LiveComposeLifecycleSmokeError(
+      "A successful Up did not retain exactly one immutable canonical configuration."
     )
   }
 }
@@ -409,7 +430,7 @@ private func waitForLiveFixture(
     }
   }
   throw LiveComposeLifecycleSmokeError(
-    "The lifecycle state did not converge in Apple inventory. Last container count: (lastInventory?.containers.count ?? 0)."
+    "The lifecycle state did not converge in Apple inventory. Last container count: \(lastInventory?.containers.count ?? 0)."
   )
 }
 
@@ -498,7 +519,7 @@ private func cleanLiveLifecycleFixture(
   do {
     try await process.forceStop()
   } catch {
-    failures.append("Socktainer stop: (error.localizedDescription)")
+    failures.append("Socktainer stop: \(error.localizedDescription)")
   }
   if FileManager.default.fileExists(atPath: socketURL.nativeContainersPOSIXPath) {
     failures.append("Socktainer socket remained after cleanup.")
@@ -508,7 +529,7 @@ private func cleanLiveLifecycleFixture(
     do {
       try FileManager.default.removeItem(at: rootURL)
     } catch {
-      failures.append("Workspace removal: (error.localizedDescription)")
+      failures.append("Workspace removal: \(error.localizedDescription)")
     }
   }
   return failures.isEmpty ? nil : failures.joined(separator: " ")

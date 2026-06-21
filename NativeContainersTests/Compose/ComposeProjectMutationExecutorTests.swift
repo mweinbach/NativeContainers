@@ -1,4 +1,6 @@
 import ContainerResource
+import ContainerizationExtras
+import CryptoKit
 import Foundation
 import Testing
 
@@ -137,18 +139,24 @@ struct ComposeProjectMutationExecutorTests {
   }
 
   @Test
-  func commandFailureStillRemovesPrivateFreshUpWorkspaceAndLeavesJournalPending() async throws {
+  func commandFailureRevalidatesStableFreshUpWorkspaceAndLeavesJournalPending() async throws {
     let state = ComposeMutationState(snapshots: [])
     let journal = MutationJournalDouble()
     let workspace = MutationWorkspaceDouble()
-    let command = MutationCommandDouble(
-      result: HostCommandResult(
+    let command = MutationCommandDouble(results: [
+      HostCommandResult(
+        exitCode: 0,
+        standardOutput: "web \(String(repeating: "c", count: 64))\n",
+        standardError: "",
+        outputWasTruncated: false
+      ),
+      HostCommandResult(
         exitCode: 1,
         standardOutput: "",
         standardError: "daemon unavailable",
         outputWasTruncated: false
-      )
-    )
+      ),
+    ])
     let executor = AppleComposeProjectMutationExecutor(
       runtimeMutationCoordinator: RuntimeMutationCoordinator(),
       containers: MutationContainerTransport(state: state),
@@ -163,14 +171,18 @@ struct ComposeProjectMutationExecutorTests {
         pollInterval: .zero
       )
     )
-    let plan = mutationPlan(action: .up, records: [])
+    let plan = mutationPlan(
+      action: .up,
+      records: [],
+      createReplicas: ["web": 1]
+    )
 
     await #expect(throws: ComposeProjectLifecycleError.self) {
       _ = try await executor.execute(mutationRequest(plan))
     }
 
-    #expect(workspace.prepareCount == 1)
-    #expect(workspace.removeCount == 1)
+    #expect(workspace.prepareCount == 2)
+    #expect(workspace.releaseCount == 2)
     #expect(await command.arguments.first?.prefix(2) == ["--context", "nativecontainers"])
     #expect(await journal.phases == [.executing])
   }
@@ -201,6 +213,96 @@ struct ComposeProjectMutationExecutorTests {
     #expect(await state.startIDs == ["web-1"])
     #expect(await command.arguments.isEmpty)
     #expect(await journal.completedStepTokens.last == ["container-0001"])
+  }
+
+  @Test
+  func createMissingUpStartsTheReviewedPrefixBeforeCreatingTheNextReplica() async throws {
+    let existing = mutationContainer(
+      id: "web-1",
+      service: "web",
+      replica: 1,
+      state: .stopped
+    )
+    let state = ComposeMutationState(snapshots: [mutationSnapshot(existing)])
+    let journal = MutationJournalDouble()
+    let workspace = MutationWorkspaceDouble()
+    let command = SuccessfulCreateMissingCommandDouble(state: state)
+    let executor = AppleComposeProjectMutationExecutor(
+      runtimeMutationCoordinator: RuntimeMutationCoordinator(),
+      containers: MutationContainerTransport(state: state),
+      infrastructure: MutationInfrastructureTransport(state: state),
+      inventory: MutationInventoryLoader(state: state),
+      commandExecutor: command,
+      executionWorkspace: workspace,
+      journal: journal,
+      sleeper: ImmediateMutationSleeper(),
+      timing: ComposeMutationTiming(
+        gracefulPollAttempts: 1,
+        confirmationPollAttempts: 1,
+        pollInterval: .zero
+      )
+    )
+    let plan = mutationPlan(
+      action: .up,
+      records: [existing],
+      createReplicas: ["web": 2]
+    )
+
+    _ = try await executor.execute(mutationRequest(plan))
+
+    #expect(await state.startIDs == ["web-1"])
+    #expect(Set(await state.currentRecords.map(\.id)) == ["web-1", "web-2"])
+    #expect(
+      await journal.completedStepTokens.last
+        == ["container-0001", "compose-up-0001"]
+    )
+  }
+
+  @Test
+  func nativeResourceCreationUsesFrozenComposeOwnership() async throws {
+    let state = ComposeMutationState(snapshots: [])
+    let service = ComposeResourceActionService(
+      infrastructure: MutationInfrastructureTransport(state: state),
+      inventory: MutationInventoryLoader(state: state)
+    )
+    let operationID = UUID()
+    let context = ComposeResourceCreationContext(
+      projectName: "sample",
+      composeVersion: "5.1.4",
+      operationID: operationID
+    )
+    try await service.create(
+      ComposeProjectNetworkAction(
+        stepID: .network(1),
+        operation: .createManaged,
+        logicalName: "default",
+        runtimeName: "sample_default",
+        expectedIdentity: nil
+      ),
+      context: context
+    )
+    try await service.create(
+      ComposeProjectVolumeAction(
+        stepID: .volume(1),
+        operation: .createManaged,
+        logicalName: "data",
+        runtimeName: "sample_data",
+        expectedIdentity: nil
+      ),
+      context: context
+    )
+
+    let inventory = await state.inventory()
+    #expect(inventory.networks.first?.labels[ComposeLabelKey.network] == "default")
+    #expect(inventory.volumes.first?.labels[ComposeLabelKey.volume] == "data")
+    #expect(
+      inventory.networks.first?.labels[ResourceOperationLabel.key]
+        == operationID.uuidString
+    )
+    #expect(
+      inventory.volumes.first?.labels[ResourceOperationLabel.key]
+        == operationID.uuidString
+    )
   }
 
   @Test
@@ -435,6 +537,71 @@ private actor ComposeMutationState {
     networks.removeAll { $0.id == id }
   }
 
+  func append(_ snapshot: ComposeRuntimeContainerSnapshot) {
+    snapshots.append(snapshot)
+  }
+
+  func createVolume(
+    name: String,
+    driver: String,
+    options: [String: String],
+    labels: [String: String]
+  ) -> VolumeConfiguration {
+    let configuration = VolumeConfiguration(
+      name: name,
+      driver: driver,
+      source: "/tmp/\(name).img",
+      creationDate: Date(timeIntervalSince1970: 1_000),
+      labels: labels,
+      options: options
+    )
+    volumes.append(
+      VolumeRecord(
+        id: configuration.id,
+        name: configuration.name,
+        driver: configuration.driver,
+        format: configuration.format,
+        source: configuration.source,
+        createdAt: configuration.creationDate,
+        sizeBytes: configuration.sizeInBytes,
+        allocatedBytes: nil,
+        labels: configuration.labels,
+        options: configuration.options,
+        isAnonymous: false,
+        usedByContainerIDs: []
+      )
+    )
+    return configuration
+  }
+
+  func createNetwork(_ configuration: NetworkConfiguration) throws -> NetworkResource {
+    let status = NetworkStatus(
+      ipv4Subnet: try CIDRv4("10.44.0.0/24"),
+      ipv4Gateway: try IPv4Address("10.44.0.1"),
+      ipv6Subnet: nil
+    )
+    let resource = NetworkResource(configuration: configuration, status: status)
+    networks.append(
+      NetworkRecord(
+        id: resource.id,
+        name: resource.name,
+        mode: .nat,
+        createdAt: resource.creationDate,
+        configuredIPv4Subnet: nil,
+        configuredIPv6Subnet: nil,
+        assignedIPv4Subnet: String(describing: status.ipv4Subnet),
+        ipv4Gateway: String(describing: status.ipv4Gateway),
+        assignedIPv6Subnet: nil,
+        labels: resource.labels.dictionary,
+        plugin: configuration.plugin,
+        options: configuration.options,
+        isBuiltin: false,
+        usedByContainerIDs: []
+      )
+    )
+    return resource
+  }
+
   func inventory() -> ContainerInventory {
     inventoryCount += 1
     if let replacementVolumeAfterInventoryCount,
@@ -528,7 +695,12 @@ private struct MutationInfrastructureTransport: AppleInfrastructureTransport {
     driverOptions: [String: String],
     labels: [String: String]
   ) async throws -> VolumeConfiguration {
-    throw MutationInfrastructureError.unexpectedCall
+    await state.createVolume(
+      name: name,
+      driver: driver,
+      options: driverOptions,
+      labels: labels
+    )
   }
 
   func deleteVolume(name: String) async throws {
@@ -546,7 +718,7 @@ private struct MutationInfrastructureTransport: AppleInfrastructureTransport {
   func createNetwork(
     configuration: NetworkConfiguration
   ) async throws -> NetworkResource {
-    throw MutationInfrastructureError.unexpectedCall
+    try await state.createNetwork(configuration)
   }
 
   func deleteNetwork(id: String) async throws {
@@ -590,11 +762,15 @@ private actor MutationJournalDouble: ComposeOperationJournaling {
 }
 
 private actor MutationCommandDouble: HostCommandExecuting {
-  let result: HostCommandResult
+  private var results: [HostCommandResult]
   private(set) var arguments: [[String]] = []
 
   init(result: HostCommandResult) {
-    self.result = result
+    results = [result]
+  }
+
+  init(results: [HostCommandResult]) {
+    self.results = results
   }
 
   func execute(
@@ -604,7 +780,49 @@ private actor MutationCommandDouble: HostCommandExecuting {
     timeout: Duration
   ) async throws -> HostCommandResult {
     self.arguments.append(arguments)
-    return result
+    guard !results.isEmpty else { throw MutationInfrastructureError.unexpectedCall }
+    if results.count == 1 { return results[0] }
+    return results.removeFirst()
+  }
+}
+
+private actor SuccessfulCreateMissingCommandDouble: HostCommandExecuting {
+  let state: ComposeMutationState
+
+  init(state: ComposeMutationState) {
+    self.state = state
+  }
+
+  func execute(
+    executableURL: URL,
+    arguments: [String],
+    environment: [String: String]?,
+    timeout: Duration
+  ) async throws -> HostCommandResult {
+    if arguments.contains("config") {
+      return HostCommandResult(
+        exitCode: 0,
+        standardOutput: "web \(String(repeating: "c", count: 64))\n",
+        standardError: "",
+        outputWasTruncated: false
+      )
+    }
+    await state.append(
+      mutationSnapshot(
+        mutationContainer(
+          id: "web-2",
+          service: "web",
+          replica: 2,
+          state: .running
+        )
+      )
+    )
+    return HostCommandResult(
+      exitCode: 0,
+      standardOutput: "",
+      standardError: "",
+      outputWasTruncated: false
+    )
   }
 }
 
@@ -612,10 +830,11 @@ private final class MutationWorkspaceDouble: ComposeExecutionWorkspaceManaging,
   @unchecked Sendable
 {
   private(set) var prepareCount = 0
-  private(set) var removeCount = 0
+  private(set) var releaseCount = 0
 
   func prepare(
     operationID: UUID,
+    projectName: String,
     canonicalConfiguration: Data,
     expectedSHA256: String
   ) throws -> ComposeExecutionConfigurationLease {
@@ -634,8 +853,8 @@ private final class MutationWorkspaceDouble: ComposeExecutionWorkspaceManaging,
     )
   }
 
-  func remove(_ lease: ComposeExecutionConfigurationLease) throws {
-    removeCount += 1
+  func release(_ lease: ComposeExecutionConfigurationLease) throws {
+    releaseCount += 1
   }
 }
 
@@ -643,7 +862,9 @@ private func mutationRequest(_ plan: ComposeProjectPlan) -> ComposeProjectMutati
   ComposeProjectMutationRequest(
     plan: plan,
     operationID: UUID(),
-    canonicalConfiguration: Data(#"{"name":"sample","services":{}}"#.utf8),
+    canonicalConfiguration: mutationCanonicalConfiguration(
+      serviceNames: plan.desiredState.declaredServiceNames
+    ),
     composeExecutableURL: URL(filePath: "/tmp/docker-compose"),
     commandEnvironment: ComposeCommandEnvironment(processEnvironment: [:])
   )
@@ -654,6 +875,7 @@ private func mutationPlan(
   records: [ContainerRecord],
   dependencies: [String: [String]] = ["web": []],
   killStuckContainers: Bool = true,
+  createReplicas: [String: Int] = [:],
   orphanIDs: Set<String> = [],
   volumes: [VolumeRecord] = [],
   networks: [NetworkRecord] = [],
@@ -664,15 +886,17 @@ private func mutationPlan(
     Set(
       records.filter { !orphanIDs.contains($0.id) }.compactMap {
         $0.labels[ComposeLabelKey.service]
-      })
+      } + Array(createReplicas.keys)
+    )
   ).sorted()
   let activeServices = serviceNames.map { service in
     ComposeDesiredService(
       name: service,
       imageReference: "example/web:latest",
-      replicaCount: records.filter {
-        $0.labels[ComposeLabelKey.service] == service
-      }.count,
+      replicaCount: createReplicas[service]
+        ?? records.count(where: {
+          $0.labels[ComposeLabelKey.service] == service
+        }),
       profiles: [],
       dependencyNames: dependencies[service, default: []],
       configurationHash: String(repeating: "c", count: 64),
@@ -704,7 +928,7 @@ private func mutationPlan(
     if lhsReplica != rhsReplica { return lhsReplica < rhsReplica }
     return lhs.id < rhs.id
   }
-  let containerActions = orderedRecords.enumerated().map { offset, record in
+  var containerActions = orderedRecords.enumerated().map { offset, record in
     let operation: ComposeProjectContainerOperation =
       switch action {
       case .up: .converge
@@ -722,6 +946,29 @@ private func mutationPlan(
         imageDigest: "sha256:image"
       )
     )
+  }
+  if action == .up {
+    for service in serviceOrder {
+      let desiredCount = createReplicas[service] ?? 0
+      let existingReplicas: Set<Int> = Set(
+        records.compactMap { record -> Int? in
+          guard record.labels[ComposeLabelKey.service] == service else { return nil }
+          return Int(record.labels[ComposeLabelKey.containerNumber] ?? "")
+        }
+      )
+      guard desiredCount > 0 else { continue }
+      for replica in 1...desiredCount where !existingReplicas.contains(replica) {
+        containerActions.append(
+          ComposeProjectContainerAction(
+            stepID: .container(containerActions.count + 1),
+            operation: .create,
+            serviceName: service,
+            replicaNumber: replica,
+            expectedIdentity: nil
+          )
+        )
+      }
+    }
   }
   let volumeActions: [ComposeProjectVolumeAction] = volumes.enumerated().compactMap {
     offset, volume in
@@ -796,7 +1043,9 @@ private func mutationPlan(
         )
       }
     ),
-    fullConfigurationSHA256: String(repeating: "f", count: 64),
+    fullConfigurationSHA256: mutationSHA256(
+      mutationCanonicalConfiguration(serviceNames: serviceNames)
+    ),
     activeConfigurationSHA256: String(repeating: "e", count: 64),
     composeReleaseVersion: "test",
     composeBinarySHA256: String(repeating: "d", count: 64),
@@ -823,6 +1072,25 @@ private func mutationPlan(
     },
     preservedResources: []
   )
+}
+
+private func mutationCanonicalConfiguration(serviceNames: [String]) -> Data {
+  let services = Dictionary(
+    uniqueKeysWithValues: serviceNames.map {
+      ($0, ["image": "example/web:latest"])
+    }
+  )
+  return try! JSONSerialization.data(
+    withJSONObject: [
+      "name": "sample",
+      "services": services,
+    ],
+    options: [.sortedKeys, .withoutEscapingSlashes]
+  )
+}
+
+private func mutationSHA256(_ data: Data) -> String {
+  SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
 }
 
 private func mutationContainer(

@@ -76,7 +76,7 @@ struct DockerCompatibilitySettingsSection: View {
           .textSelection(.enabled)
 
         Text(
-          "Compatibility is optional and partial: Socktainer exposes part of Docker Engine API v1.51. Reviewed fresh Up and exact-ID Start, Stop, and declared-service Down now use crash-safe journaling; unsupported Compose features remain blocked."
+          "Compatibility is optional and partial: Socktainer exposes part of Docker Engine API v1.51. Reviewed fresh/create-missing Up and exact-ID Start, Stop, and declared-service Down use crash-safe journaling; unsupported Compose features and recreation remain blocked."
         )
         .font(.caption)
         .foregroundStyle(.secondary)

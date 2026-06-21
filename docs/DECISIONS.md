@@ -1189,3 +1189,33 @@ differ. It does not claim a public compact primitive, guaranteed reclamation, or
 guest-filesystem shrink. Migration and rewrite share one app-scoped maintenance
 model so runtime, transfer, discard, and shared-folder controls observe the same
 busy state.
+
+## ADR-043: Create missing Compose replicas without authorizing recreation
+
+**Status:** Accepted — 2026-06-21
+
+Create-missing Up is distinct from Compose recreation. The planner accepts only
+existing replica labels that form the exact contiguous prefix `1...n`, rejects
+extra replicas and all configuration/image drift, and records one command token
+for the missing suffix. Existing containers must already have the exact reviewed
+named-volume and network attachments.
+
+Before any runtime mutation, NativeContainers parses the reviewed canonical JSON
+through an explicit supported-key allowlist. A deterministic execution overlay
+replaces every volume and network declaration with `external: true` plus its
+frozen runtime name. The pinned Compose client recomputes every service hash from
+that overlay; any difference from review aborts before mutation. The overlay is
+stored as a mode-0600, single-link, digest-named immutable file below a stable
+owner-private per-project directory, so Compose's working-directory and
+config-file labels remain stable across repeated Up operations.
+
+Managed resources that are absent are created through Apple resource APIs with
+project, logical-resource, Compose-version, and operation labels, then immediately
+reconciled through Apple inventory. NativeContainers starts stopped containers in
+the reviewed prefix by exact ID and invokes Compose 5.1.4 with `--no-recreate` to
+create only the suffix. Final inventory must prove the exact replica set, image
+digest/config hash, resource identities, and per-container attachments.
+
+This lane does not permit scale-down or replacement. Socktainer 1.0.0 still lacks
+the rename and network connect/disconnect routes required by Compose's replacement
+flow, so all recreation remains a blocker.

@@ -5,6 +5,15 @@ protocol ComposePostconditionVerifying: Sendable {
 }
 
 struct ComposePostconditionVerifier: ComposePostconditionVerifying {
+  private let attachmentVerifier: ComposeContainerAttachmentVerifier
+
+  init(
+    attachmentVerifier: ComposeContainerAttachmentVerifier =
+      ComposeContainerAttachmentVerifier()
+  ) {
+    self.attachmentVerifier = attachmentVerifier
+  }
+
   func verify(
     plan: ComposeProjectPlan,
     inventory: ContainerInventory
@@ -129,6 +138,14 @@ struct ComposePostconditionVerifier: ComposePostconditionVerifying {
         instances.allSatisfy({
           service.configurationHash == nil
             || $0.labels[ComposeLabelKey.configHash] == service.configurationHash
+        }),
+        instances.allSatisfy({
+          attachmentVerifier.hasExactAttachments(
+            containerID: $0.id,
+            service: service,
+            desiredState: plan.desiredState,
+            inventory: inventory
+          )
         })
       else {
         throw ComposeProjectLifecycleError.postconditionNotMet(

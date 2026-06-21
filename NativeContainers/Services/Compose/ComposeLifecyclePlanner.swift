@@ -90,13 +90,6 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
       )
     }
 
-    policyValidator.appendUpModeIssues(
-      options: options,
-      containerActions: containerActions,
-      volumeActions: volumeActions,
-      networkActions: networkActions,
-      issues: &issues
-    )
     resourcePlanner.preserveUndeclaredProjectResources(
       desired: desired,
       inventory: inventory,

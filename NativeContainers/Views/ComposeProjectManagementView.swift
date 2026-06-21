@@ -193,7 +193,7 @@ struct ComposeProjectManagementView: View {
           )
         }
         Text(
-          "Fresh Up, exact-count native Up, exact-ID Start and Stop, plus reviewed declared/orphan/network/volume Down actions are executable when review has no blockers. Create-missing and recreation remain blocked. External resources are always lookup-only."
+          "Fresh and create-missing Up, exact-ID Start and Stop, plus reviewed declared/orphan/network/volume Down actions are executable when review has no blockers. Recreation remains blocked. External resources are always lookup-only."
         )
         .font(.caption)
         .foregroundStyle(.secondary)

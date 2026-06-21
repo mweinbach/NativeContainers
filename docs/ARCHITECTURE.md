@@ -406,16 +406,21 @@ the journal and shared runtime lock. `ComposeContainerActionService`,
 `ComposePostconditionVerifier` own the independently testable mutation and proof
 boundaries.
 
-Fresh Up executes the pinned private Compose client from a descriptor-checked
-canonical workspace. Existing-project Up is narrower: when every reviewed
-replica already exists with matching config, reference, actual digest, and
-resource identities, NativeContainers starts the exact stopped IDs directly and
-preserves running IDs. Mixed create/reuse convergence is blocked. Compose 5.1.4
-still scales down and reconciles managed resources under `--no-recreate`, and
-its replacement flow deletes the old container before a rename that Socktainer
-1.0.0 does not implement. A future create-missing path therefore needs a
-deterministic overlay that converts frozen resources to exact external
-references and proves unchanged service hashes.
+Fresh and create-missing Up execute the pinned private Compose client from an
+immutable, digest-named configuration beneath a stable private per-project
+directory. Before runtime mutation, a deterministic overlay converts every
+reviewed volume and network to an exact external reference, reruns Compose's
+service-hash proof, and requires the hashes to match the reviewed source model.
+NativeContainers creates missing managed resources through Apple APIs, starts
+the exact reviewed contiguous replica prefix, then uses `--no-recreate` only to
+create the missing suffix. Existing and final attachments are checked against
+Apple inventory. Unknown canonical keys, non-prefix replica sets, and resource
+identity drift fail closed.
+
+Compose 5.1.4 still has a replacement flow that deletes the old container before
+a rename that Socktainer 1.0.0 does not implement. Configuration/image drift and
+other recreation remain blocked; create-missing never authorizes replacement or
+scale-down.
 
 Crash recovery journals contain only opaque ordered step tokens. Schema v3
 requires every completed token to be the next reviewed step and requires all

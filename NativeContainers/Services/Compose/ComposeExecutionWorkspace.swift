@@ -25,11 +25,12 @@ struct ComposeExecutionConfigurationLease: Equatable, Sendable {
 protocol ComposeExecutionWorkspaceManaging: Sendable {
   func prepare(
     operationID: UUID,
+    projectName: String,
     canonicalConfiguration: Data,
     expectedSHA256: String
   ) throws -> ComposeExecutionConfigurationLease
 
-  func remove(_ lease: ComposeExecutionConfigurationLease) throws
+  func release(_ lease: ComposeExecutionConfigurationLease) throws
 }
 
 struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
@@ -59,157 +60,114 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
         path: "Compose",
         directoryHint: .isDirectory
       )
-      let executionDirectory = composeDirectory.appending(
-        path: "Execution",
+      let projectsDirectory = composeDirectory.appending(
+        path: "Projects",
         directoryHint: .isDirectory
       )
-      self.rootURL = executionDirectory
+      self.rootURL = projectsDirectory
       protectedDirectories = [
         applicationSupport,
         appDirectory,
         composeDirectory,
-        executionDirectory,
+        projectsDirectory,
       ]
     }
   }
 
   func prepare(
     operationID: UUID,
+    projectName: String,
     canonicalConfiguration: Data,
     expectedSHA256: String
   ) throws -> ComposeExecutionConfigurationLease {
     guard
+      isValidComposeProjectName(projectName),
+      isLowercaseSHA256(expectedSHA256),
       !canonicalConfiguration.isEmpty,
       canonicalConfiguration.count <= Self.maximumConfigurationBytes,
       sha256(canonicalConfiguration) == expectedSHA256
     else {
       throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The canonical configuration bytes did not match the reviewed digest."
+        "The execution project or canonical configuration did not match its reviewed identity."
       )
     }
 
     try ensurePrivateDirectories()
-    let operationDirectory = rootURL.appending(
-      path: operationID.uuidString.lowercased(),
+    _ = try validateDirectory(rootURL, requiresOwnerOnlyAccess: true)
+    let projectDirectory = rootURL.appending(
+      path: projectName,
       directoryHint: .isDirectory
     )
-    guard
-      Darwin.mkdir(operationDirectory.nativeContainersPOSIXPath, mode_t(0o700)) == 0
-    else {
+    var createdProjectDirectory = false
+    if Darwin.mkdir(projectDirectory.nativeContainersPOSIXPath, mode_t(0o700)) == 0 {
+      createdProjectDirectory = true
+    } else if errno != EEXIST {
       throw ComposeProjectLifecycleError.workspaceUnsafe(
-        errno == EEXIST
-          ? "An execution workspace already exists for this operation."
-          : "The operation directory could not be created (errno \(errno))."
+        "The stable project directory could not be created (errno \(errno))."
       )
     }
 
-    let directoryIdentity = try validateDirectory(operationDirectory)
+    let directoryIdentity: ComposeExecutionConfigurationLease.DirectoryIdentity
+    do {
+      directoryIdentity = try validateDirectory(
+        projectDirectory,
+        requiresOwnerOnlyAccess: true
+      )
+    } catch {
+      if createdProjectDirectory {
+        _ = Darwin.rmdir(projectDirectory.nativeContainersPOSIXPath)
+      }
+      throw error
+    }
+
     let directoryDescriptor = Darwin.open(
-      operationDirectory.nativeContainersPOSIXPath,
+      projectDirectory.nativeContainersPOSIXPath,
       O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
     )
     guard directoryDescriptor >= 0 else {
-      try? removeEmptyDirectory(operationDirectory, identity: directoryIdentity)
+      if createdProjectDirectory {
+        _ = Darwin.rmdir(projectDirectory.nativeContainersPOSIXPath)
+      }
       throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The operation directory could not be opened safely."
+        "The stable project directory could not be opened safely."
       )
     }
     defer { Darwin.close(directoryDescriptor) }
 
-    var createdFileIdentity: ComposeExecutionConfigurationLease.FileIdentity?
-    var completed = false
-    defer {
-      if !completed {
-        if let createdFileIdentity {
-          try? removeFile(
-            named: "compose.json",
-            expectedIdentity: createdFileIdentity,
-            directoryDescriptor: directoryDescriptor
-          )
-        }
-        try? removeEmptyDirectory(operationDirectory, identity: directoryIdentity)
-      }
-    }
-
-    let configurationURL = operationDirectory.appending(
-      path: "compose.json",
-      directoryHint: .notDirectory
+    let fileName = "compose-\(expectedSHA256).json"
+    let fileIdentity = try openOrCreateConfiguration(
+      named: fileName,
+      data: canonicalConfiguration,
+      expectedSHA256: expectedSHA256,
+      directoryDescriptor: directoryDescriptor
     )
-    let descriptor = Darwin.openat(
-      directoryDescriptor,
-      "compose.json",
-      O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
-      mode_t(0o600)
-    )
-    guard descriptor >= 0 else {
+    guard Darwin.fsync(directoryDescriptor) == 0 else {
       throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The canonical configuration file could not be created (errno \(errno))."
+        "The stable project directory could not be synchronized."
       )
     }
-    var descriptorIsOpen = true
-    defer {
-      if descriptorIsOpen {
-        Darwin.close(descriptor)
-      }
-    }
 
-    do {
-      try writeAll(canonicalConfiguration, descriptor: descriptor)
-      guard Darwin.fchmod(descriptor, mode_t(0o600)) == 0 else {
-        throw ComposeProjectLifecycleError.workspaceUnsafe(
-          "The canonical configuration permissions could not be restricted."
-        )
-      }
-      if Darwin.fcntl(descriptor, F_FULLFSYNC) != 0, Darwin.fsync(descriptor) != 0 {
-        throw ComposeProjectLifecycleError.workspaceUnsafe(
-          "The canonical configuration could not be synchronized."
-        )
-      }
-
-      var metadata = stat()
-      guard Darwin.fstat(descriptor, &metadata) == 0 else {
-        throw ComposeProjectLifecycleError.workspaceUnsafe(
-          "The canonical configuration identity could not be inspected."
-        )
-      }
-      let fileIdentity = try validateRegularFile(
-        metadata,
-        expectedByteCount: canonicalConfiguration.count,
-        expectedSHA256: expectedSHA256,
-        descriptor: descriptor
-      )
-      createdFileIdentity = fileIdentity
-      guard Darwin.close(descriptor) == 0 else {
-        descriptorIsOpen = false
-        throw ComposeProjectLifecycleError.workspaceUnsafe(
-          "The canonical configuration file could not be closed safely."
-        )
-      }
-      descriptorIsOpen = false
-
-      guard Darwin.fsync(directoryDescriptor) == 0 else {
-        throw ComposeProjectLifecycleError.workspaceUnsafe(
-          "The operation directory could not be synchronized."
-        )
-      }
-
-      completed = true
-      return ComposeExecutionConfigurationLease(
-        operationID: operationID,
-        directoryURL: operationDirectory,
-        configurationURL: configurationURL,
-        directoryIdentity: directoryIdentity,
-        fileIdentity: fileIdentity
-      )
-    } catch {
-      throw error
-    }
+    return ComposeExecutionConfigurationLease(
+      operationID: operationID,
+      directoryURL: projectDirectory,
+      configurationURL: projectDirectory.appending(
+        path: fileName,
+        directoryHint: .notDirectory
+      ),
+      directoryIdentity: directoryIdentity,
+      fileIdentity: fileIdentity
+    )
   }
 
-  func remove(_ lease: ComposeExecutionConfigurationLease) throws {
-    guard try validateDirectory(lease.directoryURL) == lease.directoryIdentity else {
+  func release(_ lease: ComposeExecutionConfigurationLease) throws {
+    guard
+      try validateDirectory(
+        lease.directoryURL,
+        requiresOwnerOnlyAccess: true
+      ) == lease.directoryIdentity
+    else {
       throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The execution directory identity changed before cleanup."
+        "The stable project directory identity changed during execution."
       )
     }
 
@@ -219,32 +177,131 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
     )
     guard directoryDescriptor >= 0 else {
       throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The execution directory could not be opened before cleanup."
+        "The stable project directory could not be reopened safely."
       )
     }
     defer { Darwin.close(directoryDescriptor) }
 
-    var directoryMetadata = stat()
-    guard
-      Darwin.fstat(directoryDescriptor, &directoryMetadata) == 0,
-      directoryIdentity(directoryMetadata) == lease.directoryIdentity
-    else {
-      throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The execution directory identity changed while cleanup began."
-      )
-    }
-
-    try removeFile(
-      named: "compose.json",
-      expectedIdentity: lease.fileIdentity,
-      directoryDescriptor: directoryDescriptor
+    let descriptor = Darwin.openat(
+      directoryDescriptor,
+      lease.configurationURL.lastPathComponent,
+      O_RDONLY | O_NOFOLLOW | O_CLOEXEC
     )
-    guard Darwin.fsync(directoryDescriptor) == 0 else {
+    guard descriptor >= 0 else {
       throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The operation directory cleanup could not be synchronized."
+        "The immutable execution configuration is missing."
       )
     }
-    try removeEmptyDirectory(lease.directoryURL, identity: lease.directoryIdentity)
+    defer { Darwin.close(descriptor) }
+
+    var metadata = stat()
+    guard Darwin.fstat(descriptor, &metadata) == 0 else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The immutable execution configuration could not be inspected."
+      )
+    }
+    let current = try validateRegularFile(
+      metadata,
+      expectedByteCount: Int(lease.fileIdentity.byteCount),
+      expectedSHA256: lease.fileIdentity.sha256,
+      descriptor: descriptor
+    )
+    guard current == lease.fileIdentity else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The immutable execution configuration identity changed during execution."
+      )
+    }
+  }
+
+  private func openOrCreateConfiguration(
+    named fileName: String,
+    data: Data,
+    expectedSHA256: String,
+    directoryDescriptor: Int32
+  ) throws -> ComposeExecutionConfigurationLease.FileIdentity {
+    let descriptor = Darwin.openat(
+      directoryDescriptor,
+      fileName,
+      O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+      mode_t(0o600)
+    )
+    if descriptor < 0 {
+      guard errno == EEXIST else {
+        throw ComposeProjectLifecycleError.workspaceUnsafe(
+          "The immutable execution configuration could not be created (errno \(errno))."
+        )
+      }
+      return try openExistingConfiguration(
+        named: fileName,
+        data: data,
+        expectedSHA256: expectedSHA256,
+        directoryDescriptor: directoryDescriptor
+      )
+    }
+    defer { Darwin.close(descriptor) }
+
+    do {
+      try writeAll(data, descriptor: descriptor)
+      guard
+        Darwin.fchmod(descriptor, mode_t(0o600)) == 0,
+        Darwin.fcntl(descriptor, F_FULLFSYNC) == 0 || Darwin.fsync(descriptor) == 0
+      else {
+        throw ComposeProjectLifecycleError.workspaceUnsafe(
+          "The immutable execution configuration could not be secured and synchronized."
+        )
+      }
+      return try fileIdentity(
+        descriptor: descriptor,
+        expectedByteCount: data.count,
+        expectedSHA256: expectedSHA256
+      )
+    } catch {
+      _ = Darwin.unlinkat(directoryDescriptor, fileName, 0)
+      throw error
+    }
+  }
+
+  private func openExistingConfiguration(
+    named fileName: String,
+    data: Data,
+    expectedSHA256: String,
+    directoryDescriptor: Int32
+  ) throws -> ComposeExecutionConfigurationLease.FileIdentity {
+    let descriptor = Darwin.openat(
+      directoryDescriptor,
+      fileName,
+      O_RDONLY | O_NOFOLLOW | O_CLOEXEC
+    )
+    guard descriptor >= 0 else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The existing immutable execution configuration could not be opened safely."
+      )
+    }
+    defer { Darwin.close(descriptor) }
+    return try fileIdentity(
+      descriptor: descriptor,
+      expectedByteCount: data.count,
+      expectedSHA256: expectedSHA256
+    )
+  }
+
+  private func fileIdentity(
+    descriptor: Int32,
+    expectedByteCount: Int,
+    expectedSHA256: String
+  ) throws -> ComposeExecutionConfigurationLease.FileIdentity {
+    var metadata = stat()
+    guard Darwin.fstat(descriptor, &metadata) == 0 else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The immutable execution configuration identity could not be inspected."
+      )
+    }
+    return try validateRegularFile(
+      metadata,
+      expectedByteCount: expectedByteCount,
+      expectedSHA256: expectedSHA256,
+      descriptor: descriptor
+    )
   }
 
   private func ensurePrivateDirectories() throws {
@@ -270,7 +327,8 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
 
   private func validateDirectory(
     _ url: URL,
-    metadata providedMetadata: stat? = nil
+    metadata providedMetadata: stat? = nil,
+    requiresOwnerOnlyAccess: Bool = false
   ) throws -> ComposeExecutionConfigurationLease.DirectoryIdentity {
     var metadata = providedMetadata ?? stat()
     if providedMetadata == nil {
@@ -283,14 +341,16 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
     guard
       metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR),
       metadata.st_uid == Darwin.geteuid(),
-      metadata.st_mode & mode_t(S_IWGRP | S_IWOTH) == 0
+      metadata.st_mode & mode_t(S_IWGRP | S_IWOTH) == 0,
+      !requiresOwnerOnlyAccess || metadata.st_mode & mode_t(0o077) == 0
     else {
       throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "Every execution directory must be owner-controlled and not writable by other users."
+        "Every execution directory must be private and owner-controlled."
       )
     }
     return ComposeExecutionConfigurationLease.DirectoryIdentity(
-      device: UInt64(metadata.st_dev), inode: metadata.st_ino
+      device: UInt64(metadata.st_dev),
+      inode: metadata.st_ino
     )
   }
 
@@ -304,20 +364,17 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
       metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
       metadata.st_uid == Darwin.geteuid(),
       metadata.st_nlink == 1,
-      metadata.st_mode & mode_t(S_IWGRP | S_IWOTH) == 0,
+      metadata.st_mode & mode_t(0o077) == 0,
       metadata.st_size == Int64(expectedByteCount)
     else {
       throw ComposeProjectLifecycleError.workspaceUnsafe(
         "The canonical configuration is not a private single-link regular file."
       )
     }
-    let data = try readAll(
-      descriptor: descriptor,
-      expectedByteCount: expectedByteCount
-    )
+    let data = try readAll(descriptor: descriptor, expectedByteCount: expectedByteCount)
     guard sha256(data) == expectedSHA256 else {
       throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The canonical configuration changed while it was staged."
+        "The canonical configuration changed after it was reviewed."
       )
     }
     return ComposeExecutionConfigurationLease.FileIdentity(
@@ -325,72 +382,6 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
       inode: metadata.st_ino,
       byteCount: metadata.st_size,
       sha256: expectedSHA256
-    )
-  }
-
-  private func removeFile(
-    named name: String,
-    expectedIdentity: ComposeExecutionConfigurationLease.FileIdentity,
-    directoryDescriptor: Int32
-  ) throws {
-    let descriptor = Darwin.openat(
-      directoryDescriptor,
-      name,
-      O_RDONLY | O_NOFOLLOW | O_CLOEXEC
-    )
-    guard descriptor >= 0 else {
-      if errno == ENOENT { return }
-      throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The canonical configuration could not be opened before cleanup."
-      )
-    }
-    defer { Darwin.close(descriptor) }
-
-    var metadata = stat()
-    guard Darwin.fstat(descriptor, &metadata) == 0 else {
-      throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The canonical configuration identity could not be inspected before cleanup."
-      )
-    }
-    let current = try validateRegularFile(
-      metadata,
-      expectedByteCount: Int(expectedIdentity.byteCount),
-      expectedSHA256: expectedIdentity.sha256,
-      descriptor: descriptor
-    )
-    guard current == expectedIdentity else {
-      throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The canonical configuration identity changed before cleanup."
-      )
-    }
-    guard Darwin.unlinkat(directoryDescriptor, name, 0) == 0 else {
-      throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The canonical configuration could not be removed."
-      )
-    }
-  }
-
-  private func removeEmptyDirectory(
-    _ directoryURL: URL,
-    identity: ComposeExecutionConfigurationLease.DirectoryIdentity
-  ) throws {
-    guard try validateDirectory(directoryURL) == identity else {
-      throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The execution directory identity changed before removal."
-      )
-    }
-    guard Darwin.rmdir(directoryURL.nativeContainersPOSIXPath) == 0 else {
-      throw ComposeProjectLifecycleError.workspaceUnsafe(
-        "The execution directory could not be removed."
-      )
-    }
-  }
-
-  private func directoryIdentity(
-    _ metadata: stat
-  ) -> ComposeExecutionConfigurationLease.DirectoryIdentity {
-    ComposeExecutionConfigurationLease.DirectoryIdentity(
-      device: UInt64(metadata.st_dev), inode: metadata.st_ino
     )
   }
 
@@ -436,9 +427,7 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
           bytes.baseAddress!.advanced(by: offset),
           bytes.count - offset
         )
-        if count < 0, errno == EINTR {
-          continue
-        }
+        if count < 0, errno == EINTR { continue }
         guard count > 0 else {
           throw ComposeProjectLifecycleError.workspaceUnsafe(
             "The canonical configuration could not be written."
@@ -447,6 +436,13 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
         offset += count
       }
     }
+  }
+
+  private func isLowercaseSHA256(_ value: String) -> Bool {
+    value.count == 64
+      && value.utf8.allSatisfy {
+        ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102)
+      }
   }
 
   private func sha256(_ data: Data) -> String {

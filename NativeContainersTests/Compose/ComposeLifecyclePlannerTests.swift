@@ -199,7 +199,74 @@ struct ComposeLifecyclePlannerTests {
   }
 
   @Test
-  func createMissingUpIsTypedButBlockedUntilResourceOverlayIsSafe() {
+  func existingUpBlocksWhenReviewedAttachmentsDoNotMatchInventory() {
+    let base = desiredWebState(replicaCount: 1)
+    let desired = ComposeDesiredState(
+      projectName: base.projectName,
+      declaredServiceNames: base.declaredServiceNames,
+      serviceDependencies: base.serviceDependencies,
+      activeServices: [
+        ComposeDesiredService(
+          name: "web",
+          imageReference: "example/web:latest",
+          replicaCount: 1,
+          profiles: [],
+          dependencyNames: [],
+          configurationHash: String(repeating: "a", count: 64),
+          volumeNames: ["data"],
+          networkNames: ["default"],
+          publishedPortCount: 0
+        )
+      ],
+      volumes: [
+        ComposeDesiredResource(
+          kind: .volume,
+          logicalName: "data",
+          runtimeName: "demo_data",
+          isExternal: false,
+          isActive: true
+        )
+      ],
+      networks: [
+        ComposeDesiredResource(
+          kind: .network,
+          logicalName: "default",
+          runtimeName: "demo_default",
+          isExternal: false,
+          isActive: true
+        )
+      ]
+    )
+    let existing = container(
+      id: "web-1",
+      service: "web",
+      state: .stopped,
+      imageDigest: "sha256:web"
+    )
+    let plan = planner.plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      inventory: makeInventory(
+        containers: [existing],
+        volumes: [volume(name: "demo_data", logicalName: "data", consumers: [])],
+        networks: [
+          network(name: "demo_default", logicalName: "default", consumers: [])
+        ],
+        images: [image(reference: "example/web:latest", digest: "sha256:web")]
+      )
+    )
+
+    #expect(
+      plan.blockers.contains {
+        $0.code == .observedProjectDrift && $0.subject == "web-1"
+      }
+    )
+  }
+
+  @Test
+  func createMissingUpIsExecutableForAContiguousReviewedPrefix() {
     let desired = desiredWebState(replicaCount: 2)
     let existing = container(
       id: "web-1",
@@ -220,8 +287,8 @@ struct ComposeLifecyclePlannerTests {
     )
 
     #expect(plan.containerActions.map(\.operation) == [.converge, .create])
-    #expect(plan.blockers.contains { $0.code == .executionPolicy })
-    #expect(!plan.canExecute)
+    #expect(plan.executionStepTokens == ["container-0001", "compose-up-0001"])
+    #expect(plan.canExecute)
   }
 
   @Test

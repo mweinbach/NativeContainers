@@ -3,10 +3,6 @@ import Foundation
 struct ComposeProjectActionStepID: Equatable, Hashable, RawRepresentable, Sendable {
   let rawValue: String
 
-  init(rawValue: String) {
-    self.rawValue = rawValue
-  }
-
   static func composeUp() -> Self {
     Self(rawValue: "compose-up-0001")
   }
@@ -144,10 +140,14 @@ extension ComposeProjectPlan {
 
   var executionStepTokens: [String] {
     if options.action == .up {
+      var tokens =
+        networkActions.filter { $0.operation == .createManaged }.map(\.stepID.rawValue)
+        + volumeActions.filter { $0.operation == .createManaged }.map(\.stepID.rawValue)
+        + containerActions.filter { $0.operation == .converge }.map(\.stepID.rawValue)
       if containerActions.contains(where: { $0.operation == .create }) {
-        return [ComposeProjectActionStepID.composeUp().rawValue]
+        tokens.append(ComposeProjectActionStepID.composeUp().rawValue)
       }
-      return containerActions.map(\.stepID.rawValue)
+      return tokens
     }
     return containerActions.map(\.stepID.rawValue)
       + networkActions.map(\.stepID.rawValue)

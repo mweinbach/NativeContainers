@@ -1,6 +1,15 @@
 import Foundation
 
 struct ComposeContainerLifecyclePlanner: Sendable {
+  private let attachmentVerifier: ComposeContainerAttachmentVerifier
+
+  init(
+    attachmentVerifier: ComposeContainerAttachmentVerifier =
+      ComposeContainerAttachmentVerifier()
+  ) {
+    self.attachmentVerifier = attachmentVerifier
+  }
+
   func planActions(
     desired: ComposeDesiredState,
     options: ComposeProjectReviewOptions,
@@ -117,6 +126,21 @@ struct ComposeContainerLifecyclePlanner: Sendable {
           issues: &issues
         )
         for instance in orderedInstances {
+          if !attachmentVerifier.hasExactAttachments(
+            containerID: instance.record.id,
+            service: service,
+            desiredState: desired,
+            inventory: inventory
+          ) {
+            issues.append(
+              ComposeLifecycleIssue.blocker(
+                .observedProjectDrift,
+                subject: instance.record.id,
+                message:
+                  "The existing container does not have the exact reviewed volume and network attachments."
+              )
+            )
+          }
           validateExistingContainer(
             instance.record,
             service: service,

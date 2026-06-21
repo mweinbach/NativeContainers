@@ -94,9 +94,10 @@ must leave a usable, test-backed product slice.
 - [x] Add journal schema v3 opaque step membership/order checks, manual-only v2
       recovery compatibility, and a doubly gated real Up/Stop/Start/Down lifecycle
       probe with detached exact-identity cleanup.
-- [ ] Add a deterministic external-resource execution overlay and supported-key
-      allowlist before enabling create-missing Up. Keep Compose recreation blocked
-      while Socktainer 1.0.0 lacks rename and network connect/disconnect routes.
+- [x] Add a deterministic external-resource execution overlay, immutable stable
+      metadata paths, supported-key allowlist, attachment proofs, and contiguous
+      replica-prefix guard; enable create-missing Up while keeping recreation
+      blocked on Socktainer 1.0.0.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [ ] SSH agent forwarding and safe host-directory sharing.

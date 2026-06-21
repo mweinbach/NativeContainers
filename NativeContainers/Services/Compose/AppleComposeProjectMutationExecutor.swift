@@ -128,25 +128,74 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
     _ request: ComposeProjectMutationRequest,
     completedStepTokens: inout [String]
   ) async throws {
-    if request.plan.containerActions.contains(where: { $0.operation == .converge }) {
-      try await executeContainerActions(
-        request.plan.containerActions,
-        expected: { $0 == .converge },
-        request: request,
-        completedStepTokens: &completedStepTokens
-      )
-      return
-    }
-
-    guard request.plan.containerActions.allSatisfy({ $0.operation == .create }) else {
+    try validateUpResourceActions(request.plan)
+    guard
+      request.plan.containerActions.allSatisfy({
+        $0.operation == .converge || $0.operation == .create
+      })
+    else {
       throw ComposeProjectLifecycleError.observedStateChanged
     }
+
+    let createActions = request.plan.containerActions.filter { $0.operation == .create }
+    if !createActions.isEmpty {
+      try await upCommandService.validate(request)
+    }
+
+    let resourceContext = ComposeResourceCreationContext(
+      projectName: request.plan.options.projectName,
+      composeVersion: request.plan.composeReleaseVersion,
+      operationID: request.operationID
+    )
+    for action in request.plan.networkActions where action.operation == .createManaged {
+      try await resourceActionService.create(action, context: resourceContext)
+      completedStepTokens.append(action.stepID.rawValue)
+      try await recordExecutingProgress(
+        operationID: request.operationID,
+        stepTokens: completedStepTokens
+      )
+    }
+    for action in request.plan.volumeActions where action.operation == .createManaged {
+      try await resourceActionService.create(action, context: resourceContext)
+      completedStepTokens.append(action.stepID.rawValue)
+      try await recordExecutingProgress(
+        operationID: request.operationID,
+        stepTokens: completedStepTokens
+      )
+    }
+
+    try await executeContainerActions(
+      request.plan.containerActions.filter { $0.operation == .converge },
+      expected: { $0 == .converge },
+      request: request,
+      completedStepTokens: &completedStepTokens
+    )
+
+    guard !createActions.isEmpty else { return }
+    try Task.checkCancellation()
     try await upCommandService.execute(request)
     completedStepTokens.append(ComposeProjectActionStepID.composeUp().rawValue)
     try await recordExecutingProgress(
       operationID: request.operationID,
       stepTokens: completedStepTokens
     )
+  }
+
+  private func validateUpResourceActions(_ plan: ComposeProjectPlan) throws {
+    guard
+      plan.networkActions.allSatisfy({
+        $0.operation == .createManaged
+          || $0.operation == .reuseManaged
+          || $0.operation == .useExternal
+      }),
+      plan.volumeActions.allSatisfy({
+        $0.operation == .createManaged
+          || $0.operation == .reuseManaged
+          || $0.operation == .useExternal
+      })
+    else {
+      throw ComposeProjectLifecycleError.observedStateChanged
+    }
   }
 
   private func executeDown(
