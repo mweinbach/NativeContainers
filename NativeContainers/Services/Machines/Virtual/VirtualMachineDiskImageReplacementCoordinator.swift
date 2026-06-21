@@ -83,6 +83,11 @@ final class VirtualMachineDiskImageReplacementCoordinator:
       operation.sourceFormat,
       actual: lease.machine.manifest.effectiveDiskImageFormat
     )
+    guard !lease.machine.manifest
+      .effectiveMacOSDiskSnapshotConfiguration.hasSnapshots
+    else {
+      throw VirtualMachineDiskImageReplacementError.stackedImageUnsupported
+    }
     guard try await savedStates.inspect(for: lease) == .none else {
       throw VirtualMachineDiskImageReplacementError.savedStateMustBeDiscarded
     }

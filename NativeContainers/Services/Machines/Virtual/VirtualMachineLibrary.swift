@@ -89,6 +89,7 @@ actor VirtualMachineLibrary:
   LinuxVirtualMachineSharedDirectoryPersisting,
   MacVirtualMachineAudioConfigurationPersisting,
   MacVirtualMachineNetworkConfigurationPersisting,
+  MacVirtualMachineDiskSnapshotPersisting,
   VirtualMachineDiskImageReplacementStoring
 {
   static let bundleExtension = "nativevm"
@@ -341,6 +342,51 @@ actor VirtualMachineLibrary:
     return updated
   }
 
+  func macOSDiskSnapshotConfiguration(
+    id: UUID
+  ) throws -> MacVirtualMachineDiskSnapshotConfiguration {
+    try installationManifest(id: id)
+      .effectiveMacOSDiskSnapshotConfiguration
+  }
+
+  func commitMacOSDiskSnapshotConfiguration(
+    _ configuration: MacVirtualMachineDiskSnapshotConfiguration,
+    replacing expected: MacVirtualMachineDiskSnapshotConfiguration,
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineManifest {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try installationManifest(id: lease.target.machineID)
+    let current = manifest.effectiveMacOSDiskSnapshotConfiguration
+
+    guard current == expected,
+      lease.machine.manifest.effectiveMacOSDiskSnapshotConfiguration
+        == expected,
+      expected.revision < UInt64.max,
+      configuration.revision == expected.revision + 1
+    else {
+      throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    for (index, layer) in configuration.layers.enumerated() {
+      _ = try macVirtualMachineBundleResolver.resolveArtifact(
+        layer.relativePath,
+        named: "macOSDiskSnapshotConfiguration.layers[\(index)]",
+        in: bundleURL,
+        writable: index == configuration.layers.indices.last
+      )
+    }
+
+    manifest.macOSDiskSnapshotConfiguration = configuration
+    manifest.updatedAt = Date()
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
+    )
+    return manifest
+  }
+
   func macOSSharedDirectoryConfiguration(
     id: UUID
   ) throws -> MacVirtualMachineSharedDirectoryConfiguration {
@@ -472,7 +518,9 @@ actor VirtualMachineLibrary:
     let bundleURL = try requireConfigurationMutationLease(lease)
     var manifest = try installationManifest(id: lease.target.machineID)
 
-    guard manifest.diskImagePath == commit.sourcePath,
+    guard !manifest.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots,
+      !lease.machine.manifest.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots,
+      manifest.diskImagePath == commit.sourcePath,
       manifest.effectiveDiskImageFormat == commit.sourceFormat,
       lease.machine.manifest.diskImagePath == commit.sourcePath,
       lease.machine.manifest.effectiveDiskImageFormat == commit.sourceFormat,

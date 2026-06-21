@@ -250,6 +250,15 @@ struct MacVirtualMachineDiskSnapshotMutation: Equatable, Sendable {
   let retiredLayers: [MacVirtualMachineDiskSnapshotLayer]
 }
 
+struct MacVirtualMachineDiskSnapshotOperationResult: Equatable, Sendable {
+  let manifest: VirtualMachineManifest
+  let cleanupWarning: String?
+
+  var configuration: MacVirtualMachineDiskSnapshotConfiguration {
+    manifest.effectiveMacOSDiskSnapshotConfiguration
+  }
+}
+
 enum MacVirtualMachineDiskSnapshotError:
   LocalizedError,
   Equatable,
@@ -265,6 +274,7 @@ enum MacVirtualMachineDiskSnapshotError:
   case savedStateMustBeDiscarded
   case layerCreationFailed(String)
   case unsafeArtifact(String)
+  case operationAndCleanupFailed(operation: String, cleanup: String)
   case committedCleanupPending(String)
 
   var errorDescription: String? {
@@ -289,6 +299,8 @@ enum MacVirtualMachineDiskSnapshotError:
       "The disk snapshot layer could not be created: \(reason)"
     case .unsafeArtifact(let reason):
       "The disk snapshot operation stopped because an artifact was unsafe: \(reason)"
+    case .operationAndCleanupFailed(let operation, let cleanup):
+      "Disk snapshot creation failed (\(operation)), and its layer cleanup also failed (\(cleanup))."
     case .committedCleanupPending(let reason):
       "The snapshot was restored, but newer layer cleanup is pending: \(reason)"
     }

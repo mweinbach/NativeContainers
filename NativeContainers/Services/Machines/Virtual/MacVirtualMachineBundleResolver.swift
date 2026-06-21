@@ -65,6 +65,16 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, Sendab
       in: bundleURL,
       writable: true
     )
+    let snapshotLayers =
+      manifest.effectiveMacOSDiskSnapshotConfiguration.layers
+    let diskSnapshotLayerURLs = try snapshotLayers.enumerated().map { index, layer in
+      try resolveArtifact(
+        layer.relativePath,
+        named: "macOSDiskSnapshotConfiguration.layers[\(index)]",
+        in: bundleURL,
+        writable: index == snapshotLayers.indices.last
+      )
+    }
     let auxiliaryStorageURL = try resolveRequiredArtifact(
       manifest.auxiliaryStoragePath,
       named: "auxiliaryStoragePath",
@@ -86,6 +96,7 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, Sendab
       manifest: manifest,
       bundleURL: bundleURL,
       diskImageURL: diskImageURL,
+      diskSnapshotLayerURLs: diskSnapshotLayerURLs,
       auxiliaryStorageURL: auxiliaryStorageURL,
       hardwareModelURL: hardwareModelURL,
       machineIdentifierURL: machineIdentifierURL

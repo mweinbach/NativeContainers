@@ -4,6 +4,7 @@ struct ResolvedMacVirtualMachine: Equatable, Sendable {
   let manifest: VirtualMachineManifest
   let bundleURL: URL
   let diskImageURL: URL
+  let diskSnapshotLayerURLs: [URL]
   let auxiliaryStorageURL: URL
   let hardwareModelURL: URL
   let machineIdentifierURL: URL
@@ -13,6 +14,7 @@ struct ResolvedMacVirtualMachine: Equatable, Sendable {
     manifest: VirtualMachineManifest,
     bundleURL: URL,
     diskImageURL: URL,
+    diskSnapshotLayerURLs: [URL] = [],
     auxiliaryStorageURL: URL,
     hardwareModelURL: URL,
     machineIdentifierURL: URL,
@@ -21,6 +23,7 @@ struct ResolvedMacVirtualMachine: Equatable, Sendable {
     self.manifest = manifest
     self.bundleURL = bundleURL
     self.diskImageURL = diskImageURL
+    self.diskSnapshotLayerURLs = diskSnapshotLayerURLs
     self.auxiliaryStorageURL = auxiliaryStorageURL
     self.hardwareModelURL = hardwareModelURL
     self.machineIdentifierURL = machineIdentifierURL
