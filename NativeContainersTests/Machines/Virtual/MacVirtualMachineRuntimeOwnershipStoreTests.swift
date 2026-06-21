@@ -113,9 +113,17 @@ private struct RuntimeOwnershipArtifactPreparer: MacPlatformArtifactPreparing {
     restoreImageURL: URL,
     resources: VirtualMachineResources,
     destination: MacPlatformArtifactURLs
-  ) async throws {
+  ) async throws -> MacPlatformPreparationResult {
     try Data([1]).write(to: destination.auxiliaryStorage)
     try Data([2]).write(to: destination.hardwareModel)
     try Data([3]).write(to: destination.machineIdentifier)
+    return MacPlatformPreparationResult(
+      operatingSystem: MacGuestOperatingSystemIdentity(
+        buildVersion: "TEST",
+        majorVersion: 27,
+        minorVersion: 0,
+        patchVersion: 0
+      )
+    )
   }
 }

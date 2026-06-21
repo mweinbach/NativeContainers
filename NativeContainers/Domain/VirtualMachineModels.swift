@@ -59,6 +59,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var audioConfiguration: MacVirtualMachineAudioConfiguration? = nil
   var networkConfiguration: MacVirtualMachineNetworkConfiguration? = nil
   var linuxConfiguration: LinuxVirtualMachineConfiguration? = nil
+  var macOSGuestOperatingSystem: MacGuestOperatingSystemIdentity? = nil
+  var macOSFirstBootState: MacVirtualMachineFirstBootState? = nil
 
   init(
     id: UUID = UUID(),
@@ -121,6 +123,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     audioConfiguration = nil
     networkConfiguration = source.networkConfiguration
     linuxConfiguration = source.linuxConfiguration
+    macOSGuestOperatingSystem = source.macOSGuestOperatingSystem
+    macOSFirstBootState = source.macOSFirstBootState
   }
 
   var effectiveAudioConfiguration: MacVirtualMachineAudioConfiguration {
@@ -153,6 +157,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     restoreImageURL = nil
     installationOperationID = nil
     installationFailure = nil
+    macOSFirstBootState = .pending
     self.updatedAt = updatedAt
   }
 
@@ -201,6 +206,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     auxiliaryStoragePath: String,
     hardwareModelPath: String,
     machineIdentifierPath: String,
+    operatingSystem: MacGuestOperatingSystemIdentity? = nil,
     updatedAt: Date = Date()
   ) {
     installState = .readyToInstall
@@ -208,6 +214,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.auxiliaryStoragePath = auxiliaryStoragePath
     self.hardwareModelPath = hardwareModelPath
     self.machineIdentifierPath = machineIdentifierPath
+    macOSGuestOperatingSystem = operatingSystem
+    macOSFirstBootState = nil
     installationOperationID = nil
     installationFailure = nil
     self.updatedAt = updatedAt

@@ -43,7 +43,7 @@ protocol MacPlatformArtifactPreparing: Sendable {
     restoreImageURL: URL,
     resources: VirtualMachineResources,
     destination: MacPlatformArtifactURLs
-  ) async throws
+  ) async throws -> MacPlatformPreparationResult
 }
 
 struct MacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
@@ -51,7 +51,7 @@ struct MacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
     restoreImageURL: URL,
     resources: VirtualMachineResources,
     destination: MacPlatformArtifactURLs
-  ) async throws {
+  ) async throws -> MacPlatformPreparationResult {
     #if arch(arm64)
       let restoreImage = try await VZMacOSRestoreImage.image(from: restoreImageURL)
       guard restoreImage.isSupported else {
@@ -88,6 +88,12 @@ struct MacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
         creatingStorageAt: destination.auxiliaryStorage,
         hardwareModel: hardwareModel,
         options: []
+      )
+      return MacPlatformPreparationResult(
+        operatingSystem: MacGuestOperatingSystemIdentity(
+          buildVersion: restoreImage.buildVersion,
+          operatingSystemVersion: restoreImage.operatingSystemVersion
+        )
       )
     #else
       throw MacPlatformArtifactError.requiresAppleSilicon

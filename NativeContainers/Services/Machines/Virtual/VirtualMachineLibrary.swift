@@ -574,7 +574,7 @@ actor VirtualMachineLibrary:
         at: stagingDirectory,
         withIntermediateDirectories: false
       )
-      try await macPlatformArtifactPreparer.prepare(
+      let preparation = try await macPlatformArtifactPreparer.prepare(
         restoreImageURL: restoreImageURL,
         resources: manifest.resources,
         destination: stagingArtifacts
@@ -588,7 +588,8 @@ actor VirtualMachineLibrary:
         restoreImageURL: restoreImageURL,
         auxiliaryStoragePath: MacPlatformArtifactURLs.auxiliaryStorageManifestPath,
         hardwareModelPath: MacPlatformArtifactURLs.hardwareModelManifestPath,
-        machineIdentifierPath: MacPlatformArtifactURLs.machineIdentifierManifestPath
+        machineIdentifierPath: MacPlatformArtifactURLs.machineIdentifierManifestPath,
+        operatingSystem: preparation.operatingSystem
       )
       try bundleStore.write(
         manifest,

@@ -225,6 +225,16 @@ struct VirtualMachineLibraryTests {
     #expect(
       prepared.machineIdentifierPath == MacPlatformArtifactURLs.machineIdentifierManifestPath
     )
+    #expect(
+      prepared.macOSGuestOperatingSystem
+        == MacGuestOperatingSystemIdentity(
+          buildVersion: "TEST",
+          majorVersion: 27,
+          minorVersion: 0,
+          patchVersion: 0
+        )
+    )
+    #expect(prepared.macOSFirstBootState == nil)
     #expect(prepared.updatedAt >= draft.updatedAt)
     #expect(reloaded == [prepared])
 
@@ -427,6 +437,8 @@ struct VirtualMachineLibraryTests {
     #expect(loaded.effectiveAudioConfiguration == .disconnected)
     #expect(loaded.networkConfiguration == nil)
     #expect(loaded.effectiveNetworkConfiguration == .nat)
+    #expect(loaded.macOSGuestOperatingSystem == nil)
+    #expect(loaded.macOSFirstBootState == nil)
 
     let prepared = try await library.prepareMacVM(
       id: identifier,
@@ -741,7 +753,7 @@ private actor TestMacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
     restoreImageURL: URL,
     resources: VirtualMachineResources,
     destination: MacPlatformArtifactURLs
-  ) async throws {
+  ) async throws -> MacPlatformPreparationResult {
     recordedRestoreImageURL = restoreImageURL
     recordedResources = resources
 
@@ -754,6 +766,14 @@ private actor TestMacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
     if behavior != .omitMachineIdentifier {
       try Data("machine".utf8).write(to: destination.machineIdentifier)
     }
+    return MacPlatformPreparationResult(
+      operatingSystem: MacGuestOperatingSystemIdentity(
+        buildVersion: "TEST",
+        majorVersion: 27,
+        minorVersion: 0,
+        patchVersion: 0
+      )
+    )
   }
 }
 
@@ -766,7 +786,7 @@ private actor BlockingMacPlatformArtifactPreparer: MacPlatformArtifactPreparing 
     restoreImageURL: URL,
     resources: VirtualMachineResources,
     destination: MacPlatformArtifactURLs
-  ) async throws {
+  ) async throws -> MacPlatformPreparationResult {
     didStart = true
     let waiters = startWaiters
     startWaiters.removeAll()
@@ -779,6 +799,14 @@ private actor BlockingMacPlatformArtifactPreparer: MacPlatformArtifactPreparing 
     try Data("hardware".utf8).write(to: destination.hardwareModel)
     try Data("auxiliary".utf8).write(to: destination.auxiliaryStorage)
     try Data("machine".utf8).write(to: destination.machineIdentifier)
+    return MacPlatformPreparationResult(
+      operatingSystem: MacGuestOperatingSystemIdentity(
+        buildVersion: "TEST",
+        majorVersion: 27,
+        minorVersion: 0,
+        patchVersion: 0
+      )
+    )
   }
 
   func waitUntilStarted() async {

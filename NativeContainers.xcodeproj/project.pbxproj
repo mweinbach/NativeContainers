@@ -112,6 +112,7 @@
 		1F5E643F2FE893D100A430FF /* AppleLinuxMachineConfigurationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E643E2FE893D100A430FF /* AppleLinuxMachineConfigurationService.swift */; };
 		1F5E64412FE8944700A430FF /* LinuxMachineConfigurationEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64402FE8944700A430FF /* LinuxMachineConfigurationEditor.swift */; };
 		1F5E64432FE8949000A430FF /* AppleLinuxMachineConfigurationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64422FE8949000A430FF /* AppleLinuxMachineConfigurationServiceTests.swift */; };
+		1F5E64452FE8971600A430FF /* MacGuestProvisioningModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64442FE8971600A430FF /* MacGuestProvisioningModels.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -653,6 +654,7 @@
 		1F5E643E2FE893D100A430FF /* AppleLinuxMachineConfigurationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLinuxMachineConfigurationService.swift; sourceTree = "<group>"; };
 		1F5E64402FE8944700A430FF /* LinuxMachineConfigurationEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachineConfigurationEditor.swift; sourceTree = "<group>"; };
 		1F5E64422FE8949000A430FF /* AppleLinuxMachineConfigurationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLinuxMachineConfigurationServiceTests.swift; sourceTree = "<group>"; };
+		1F5E64442FE8971600A430FF /* MacGuestProvisioningModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacGuestProvisioningModels.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1207,6 +1209,7 @@
 				1F5E64042FE886E500A430FF /* LinuxVirtualMachineModels.swift */,
 				1F5E64142FE8890E00A430FF /* VirtualMachineRuntimeTarget.swift */,
 				1F5E64182FE8896C00A430FF /* LinuxVirtualMachineRuntimeModels.swift */,
+				1F5E64442FE8971600A430FF /* MacGuestProvisioningModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -2251,6 +2254,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6DF203F008ABAD5C4AB7903C /* AppModel.swift in Sources */,
+				1F5E64452FE8971600A430FF /* MacGuestProvisioningModels.swift in Sources */,
 				1F9D2AFD2FE765FB0076F5B9 /* AppleImageService.swift in Sources */,
 				1F9D2C202FE7D8FE0076F5B9 /* ImageBuildLifecycleService.swift in Sources */,
 				1F9D2BA42FE7AA240076F5B9 /* AppleMacVirtualMachineConfigurationFactory.swift in Sources */,
