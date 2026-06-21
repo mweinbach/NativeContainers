@@ -10,32 +10,34 @@ import SystemPackage
 import TerminalProgress
 
 actor AppleContainerService: ContainerManaging {
-  private static let maximumLogBytes = 512 * 1_024
-  private static let maximumCommandOutputBytes = 1_024 * 1_024
-
   private let containerClient: ContainerClient
-  private let machineClient: MachineClient
   private let inventoryService: AppleRuntimeInventoryService
   private let infrastructureService: AppleInfrastructureService
+  private let lifecycleService: AppleContainerLifecycleService
+  private let inspectionService: AppleContainerInspectionService
+  private let toolService: AppleContainerToolService
+  private let terminalService: AppleContainerTerminalService
+  private let machineLifecycleService: AppleMachineLifecycleService
   private let ownedContainerRecovery: AppleOwnedContainerRecoveryService
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator
-  private let terminalProcessLauncher: any ContainerTerminalProcessLaunching
 
   init(
-    terminalProcessLauncher: any ContainerTerminalProcessLaunching =
-      AppleContainerTerminalProcessLauncher(),
+    terminalProcessLauncher: (any ContainerTerminalProcessLaunching)? = nil,
     containerClient: ContainerClient = ContainerClient(),
     machineClient: MachineClient = MachineClient(),
     infrastructureClient: any AppleInfrastructureTransport = AppleInfrastructureClient(),
     containerCleanupClient: any AppleContainerCleanupTransport = AppleContainerCleanupClient(),
     inventoryService: AppleRuntimeInventoryService? = nil,
     infrastructureService: AppleInfrastructureService? = nil,
+    lifecycleService: AppleContainerLifecycleService? = nil,
+    inspectionService: AppleContainerInspectionService? = nil,
+    toolService: AppleContainerToolService? = nil,
+    terminalService: AppleContainerTerminalService? = nil,
+    machineLifecycleService: AppleMachineLifecycleService? = nil,
     ownedContainerRecovery: AppleOwnedContainerRecoveryService? = nil,
     runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared
   ) {
-    self.terminalProcessLauncher = terminalProcessLauncher
     self.containerClient = containerClient
-    self.machineClient = machineClient
     let containerReader = AppleContainerSnapshotReader(client: containerClient)
     self.inventoryService =
       inventoryService
@@ -51,6 +53,20 @@ actor AppleContainerService: ContainerManaging {
         containerReader: containerReader,
         runtimeMutationCoordinator: runtimeMutationCoordinator
       )
+    self.lifecycleService =
+      lifecycleService ?? AppleContainerLifecycleService(containerClient: containerClient)
+    self.inspectionService =
+      inspectionService ?? AppleContainerInspectionService(containerClient: containerClient)
+    self.toolService =
+      toolService ?? AppleContainerToolService(containerClient: containerClient)
+    self.terminalService =
+      terminalService
+      ?? AppleContainerTerminalService(
+        terminalProcessLauncher: terminalProcessLauncher
+          ?? AppleContainerTerminalProcessLauncher(containerClient: containerClient)
+      )
+    self.machineLifecycleService =
+      machineLifecycleService ?? AppleMachineLifecycleService(machineClient: machineClient)
     self.ownedContainerRecovery =
       ownedContainerRecovery
       ?? AppleOwnedContainerRecoveryService(
@@ -65,22 +81,7 @@ actor AppleContainerService: ContainerManaging {
   }
 
   func startContainer(id: String) async throws {
-    let snapshot = try await containerClient.get(id: id)
-    guard snapshot.status != .running else { return }
-
-    var environment: [String: String] = [:]
-    if snapshot.configuration.ssh,
-      let socket = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"]
-    {
-      environment["SSH_AUTH_SOCK"] = socket
-    }
-
-    let process = try await containerClient.bootstrap(
-      id: id,
-      stdio: [nil, nil, nil],
-      dynamicEnv: environment
-    )
-    try await process.start()
+    try await lifecycleService.startContainer(id: id)
   }
 
   func prepareImagePull(
@@ -912,320 +913,72 @@ actor AppleContainerService: ContainerManaging {
     try Task.checkCancellation()
     if request.startAfterCreation {
       await relay.emit(phase: .starting, message: "Starting container")
-      try await startContainer(id: request.name)
+      try await lifecycleService.startContainer(id: request.name)
     }
     try Task.checkCancellation()
     await relay.emit(phase: .completed, message: "Container ready")
   }
 
   func inspectContainer(id: String) async throws -> ContainerInspection {
-    let snapshot = try await containerClient.get(id: id)
-    async let diskUsageRequest = containerClient.diskUsage(id: id)
-    async let logsRequest = loadContainerLogs(id: id)
-
-    let statistics: ContainerStatistics?
-    if snapshot.status == .running {
-      let value = try await containerClient.stats(id: id)
-      statistics = ContainerStatistics(
-        memoryUsageBytes: value.memoryUsageBytes,
-        memoryLimitBytes: value.memoryLimitBytes,
-        cpuUsageMicroseconds: value.cpuUsageUsec,
-        networkReceivedBytes: value.networkRxBytes,
-        networkTransmittedBytes: value.networkTxBytes,
-        blockReadBytes: value.blockReadBytes,
-        blockWrittenBytes: value.blockWriteBytes,
-        processCount: value.numProcesses
-      )
-    } else {
-      statistics = nil
-    }
-
-    let (diskUsage, logs) = try await (diskUsageRequest, logsRequest)
-    return ContainerInspection(
-      diskUsageBytes: diskUsage,
-      statistics: statistics,
-      standardOutput: logs.standardOutput,
-      bootLog: logs.bootLog,
-      logsAreTruncated: logs.logsAreTruncated
-    )
+    try await inspectionService.inspectContainer(id: id)
   }
 
   func sampleContainer(id: String) async throws -> ContainerStatistics? {
-    let snapshot = try await containerClient.get(id: id)
-    guard snapshot.status == .running else { return nil }
-    let value = try await containerClient.stats(id: id)
-    return ContainerStatistics(
-      memoryUsageBytes: value.memoryUsageBytes,
-      memoryLimitBytes: value.memoryLimitBytes,
-      cpuUsageMicroseconds: value.cpuUsageUsec,
-      networkReceivedBytes: value.networkRxBytes,
-      networkTransmittedBytes: value.networkTxBytes,
-      blockReadBytes: value.blockReadBytes,
-      blockWrittenBytes: value.blockWriteBytes,
-      processCount: value.numProcesses
-    )
+    try await inspectionService.sampleContainer(id: id)
   }
 
   func loadContainerLogs(id: String) async throws -> ContainerLogsSnapshot {
-    let logs = try await readLogs(id: id)
-    return ContainerLogsSnapshot(
-      standardOutput: logs.standardOutput.text,
-      bootLog: logs.boot.text,
-      logsAreTruncated: logs.standardOutput.isTruncated || logs.boot.isTruncated
-    )
+    try await inspectionService.loadContainerLogs(id: id)
   }
 
   func stopContainer(id: String) async throws {
-    try await containerClient.stop(
-      id: id,
-      opts: ContainerStopOptions(timeoutInSeconds: 5, signal: nil)
-    )
+    try await lifecycleService.stopContainer(id: id)
   }
 
   func restartContainer(id: String) async throws {
-    let snapshot = try await containerClient.get(id: id)
-    if snapshot.status == .running {
-      try await stopContainer(id: id)
-    }
-    try await startContainer(id: id)
+    try await lifecycleService.restartContainer(id: id)
   }
 
   func forceStopContainer(id: String) async throws {
-    try await containerClient.kill(id: id, signal: "KILL")
+    try await lifecycleService.forceStopContainer(id: id)
   }
 
   func deleteContainer(id: String) async throws {
-    try await containerClient.delete(id: id)
+    try await lifecycleService.deleteContainer(id: id)
   }
 
   func executeCommand(
     in id: String,
     request: ContainerCommandRequest
   ) async throws -> ContainerCommandResult {
-    let snapshot = try await containerClient.get(id: id)
-    guard snapshot.status == .running else {
-      throw ContainerToolValidationError.containerNotRunning(id)
-    }
-
-    var configuration = snapshot.configuration.initProcess
-    configuration.executable = request.executable
-    configuration.arguments = request.arguments
-    configuration.terminal = false
-    configuration.environment = try Parser.allEnv(
-      imageEnvs: configuration.environment,
-      envFiles: [],
-      envs: request.environment.map(\.entry)
-    )
-    if let workingDirectory = request.workingDirectory {
-      configuration.workingDirectory = workingDirectory
-    }
-
-    let standardOutputPipe = Pipe()
-    let standardErrorPipe = Pipe()
-    let process = try await containerClient.createProcess(
-      containerId: id,
-      processId: UUID().uuidString.lowercased(),
-      configuration: configuration,
-      stdio: [nil, standardOutputPipe.fileHandleForWriting, standardErrorPipe.fileHandleForWriting]
-    )
-    let standardOutputTask = Task.detached(priority: .utility) {
-      try Self.readBoundedOutput(
-        from: standardOutputPipe.fileHandleForReading,
-        maximumBytes: Self.maximumCommandOutputBytes
-      )
-    }
-    let standardErrorTask = Task.detached(priority: .utility) {
-      try Self.readBoundedOutput(
-        from: standardErrorPipe.fileHandleForReading,
-        maximumBytes: Self.maximumCommandOutputBytes
-      )
-    }
-    let clock = ContinuousClock()
-    let startedAt = clock.now
-
-    do {
-      try await process.start()
-      try standardOutputPipe.fileHandleForWriting.close()
-      try standardErrorPipe.fileHandleForWriting.close()
-      let exitCode = try await Self.wait(
-        for: process,
-        timeoutSeconds: request.timeoutSeconds
-      )
-      let standardOutput = try await standardOutputTask.value
-      let standardError = try await standardErrorTask.value
-      try? standardOutputPipe.fileHandleForReading.close()
-      try? standardErrorPipe.fileHandleForReading.close()
-      return ContainerCommandResult(
-        exitCode: exitCode,
-        standardOutput: String(decoding: standardOutput.data, as: UTF8.self),
-        standardError: String(decoding: standardError.data, as: UTF8.self),
-        outputWasTruncated: standardOutput.isTruncated || standardError.isTruncated,
-        duration: startedAt.duration(to: clock.now)
-      )
-    } catch {
-      try? await process.kill(SIGKILL)
-      try? standardOutputPipe.fileHandleForWriting.close()
-      try? standardErrorPipe.fileHandleForWriting.close()
-      try? standardOutputPipe.fileHandleForReading.close()
-      try? standardErrorPipe.fileHandleForReading.close()
-      standardOutputTask.cancel()
-      standardErrorTask.cancel()
-      throw error
-    }
+    try await toolService.executeCommand(in: id, request: request)
   }
 
   func openTerminal(
     in id: String,
     request: ContainerTerminalRequest
   ) async throws -> any ContainerTerminalSession {
-    let id = id.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !id.isEmpty else {
-      throw ContainerTerminalError.invalidContainerIdentifier
-    }
-
-    let transport = PipeContainerTerminalTransport()
-    do {
-      let process = try await terminalProcessLauncher.makeProcess(
-        containerID: id,
-        request: request,
-        standardInput: transport.childStandardInput,
-        standardOutput: transport.childStandardOutput
-      )
-
-      let session = AppleContainerTerminalSession(
-        process: process,
-        transport: transport,
-        maximumRetainedOutputBytes: request.maximumRetainedOutputBytes
-      )
-      try await session.start(initialSize: request.initialSize)
-      return session
-    } catch {
-      transport.closeAll()
-      throw error
-    }
+    try await terminalService.openTerminal(in: id, request: request)
   }
 
   func copyIntoContainer(id: String, source: URL, destination: String) async throws {
-    guard FileManager.default.fileExists(atPath: source.path(percentEncoded: false)) else {
-      throw ContainerToolValidationError.invalidLocalURL
-    }
-    try await containerClient.copyIn(
-      id: id,
-      source: source.path(percentEncoded: false),
-      destination: destination,
-      createParents: true
-    )
+    try await toolService.copyIntoContainer(id: id, source: source, destination: destination)
   }
 
   func copyFromContainer(id: String, source: String, destination: URL) async throws {
-    var destination = destination.standardizedFileURL
-    var isDirectory: ObjCBool = false
-    if FileManager.default.fileExists(
-      atPath: destination.path(percentEncoded: false),
-      isDirectory: &isDirectory
-    ), isDirectory.boolValue {
-      destination.append(path: URL(filePath: source).lastPathComponent)
-    }
-    try await containerClient.copyOut(
-      id: id,
-      source: source,
-      destination: destination.path(percentEncoded: false),
-      createParents: true
-    )
+    try await toolService.copyFromContainer(id: id, source: source, destination: destination)
   }
 
   func startMachine(id: String) async throws {
-    _ = try await machineClient.boot(id: id)
+    try await machineLifecycleService.startMachine(id: id)
   }
 
   func stopMachine(id: String) async throws {
-    try await machineClient.stop(id: id)
+    try await machineLifecycleService.stopMachine(id: id)
   }
 
   func deleteMachine(id: String) async throws {
-    try await machineClient.delete(id: id)
-  }
-
-  private func readLogs(id: String) async throws -> (
-    standardOutput: (text: String, isTruncated: Bool),
-    boot: (text: String, isTruncated: Bool)
-  ) {
-    let handles = try await containerClient.logs(id: id)
-    defer {
-      for handle in handles {
-        try? handle.close()
-      }
-    }
-
-    guard handles.count >= 2 else {
-      return (("", false), ("", false))
-    }
-    return try (
-      Self.readTail(from: handles[0], maximumBytes: Self.maximumLogBytes),
-      Self.readTail(from: handles[1], maximumBytes: Self.maximumLogBytes)
-    )
-  }
-
-  private static func readTail(
-    from handle: FileHandle,
-    maximumBytes: Int
-  ) throws -> (text: String, isTruncated: Bool) {
-    let length = try handle.seekToEnd()
-    let maximumBytes = UInt64(maximumBytes)
-    let isTruncated = length > maximumBytes
-    try handle.seek(toOffset: isTruncated ? length - maximumBytes : 0)
-    let data = try handle.readToEnd() ?? Data()
-    return (String(decoding: data, as: UTF8.self), isTruncated)
-  }
-
-  private static func wait(
-    for process: any ClientProcess,
-    timeoutSeconds: Int
-  ) async throws -> Int32 {
-    try await withTaskCancellationHandler {
-      try await withThrowingTaskGroup(of: Int32.self) { group in
-        group.addTask {
-          try await process.wait()
-        }
-        group.addTask {
-          try await Task.sleep(for: .seconds(timeoutSeconds))
-          try? await process.kill(SIGKILL)
-          throw ContainerToolValidationError.commandTimedOut(timeoutSeconds)
-        }
-        defer { group.cancelAll() }
-        guard let result = try await group.next() else {
-          throw CancellationError()
-        }
-        return result
-      }
-    } onCancel: {
-      Task {
-        try? await process.kill(SIGKILL)
-      }
-    }
-  }
-
-  private static func readBoundedOutput(
-    from handle: FileHandle,
-    maximumBytes: Int
-  ) throws -> (data: Data, isTruncated: Bool) {
-    var result = Data()
-    var isTruncated = false
-    while !Task.isCancelled {
-      guard let chunk = try handle.read(upToCount: 64 * 1_024), !chunk.isEmpty else { break }
-      if chunk.count >= maximumBytes {
-        result = Data(chunk.suffix(maximumBytes))
-        isTruncated = true
-      } else {
-        let excess = result.count + chunk.count - maximumBytes
-        if excess > 0 {
-          result.removeFirst(excess)
-          isTruncated = true
-        }
-        result.append(chunk)
-      }
-    }
-    return (result, isTruncated)
+    try await machineLifecycleService.deleteMachine(id: id)
   }
 
   private func validatedImageReference(_ reference: String) throws -> String {

@@ -104,6 +104,15 @@ enum AppCompositionRoot {
       cleanupClient: cleanupClient,
       ownershipLabel: AppleContainerOwnership.creationOperationLabel
     )
+    let lifecycleService = AppleContainerLifecycleService(containerClient: containerClient)
+    let inspectionService = AppleContainerInspectionService(containerClient: containerClient)
+    let toolService = AppleContainerToolService(containerClient: containerClient)
+    let terminalService = AppleContainerTerminalService(
+      terminalProcessLauncher: AppleContainerTerminalProcessLauncher(
+        containerClient: containerClient
+      )
+    )
+    let machineLifecycleService = AppleMachineLifecycleService(machineClient: machineClient)
     let containerService = AppleContainerService(
       containerClient: containerClient,
       machineClient: machineClient,
@@ -111,18 +120,23 @@ enum AppCompositionRoot {
       containerCleanupClient: cleanupClient,
       inventoryService: inventoryService,
       infrastructureService: infrastructureService,
+      lifecycleService: lifecycleService,
+      inspectionService: inspectionService,
+      toolService: toolService,
+      terminalService: terminalService,
+      machineLifecycleService: machineLifecycleService,
       ownedContainerRecovery: recoveryService,
       runtimeMutationCoordinator: mutationCoordinator
     )
 
     return AppServices(
       inventory: inventoryService,
-      containerLifecycle: containerService,
+      containerLifecycle: lifecycleService,
       containerCreator: containerService,
-      containerInspector: containerService,
-      containerTools: containerService,
-      containerTerminal: containerService,
-      machineLifecycle: containerService,
+      containerInspector: inspectionService,
+      containerTools: toolService,
+      containerTerminal: terminalService,
+      machineLifecycle: machineLifecycleService,
       images: containerService,
       volumes: infrastructureService,
       networks: infrastructureService,
