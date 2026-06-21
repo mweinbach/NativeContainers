@@ -124,6 +124,7 @@
 		1F5E64572FE89B8A00A430FF /* MacVirtualMachineDiskSnapshotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64562FE89B8A00A430FF /* MacVirtualMachineDiskSnapshotService.swift */; };
 		1F5E64592FE89BCB00A430FF /* MacVirtualMachineDiskSnapshotServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64582FE89BCB00A430FF /* MacVirtualMachineDiskSnapshotServiceTests.swift */; };
 		1F5E645B2FE89BD800A430FF /* AppleMacVirtualMachineDiskSnapshotLayerStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E645A2FE89BD800A430FF /* AppleMacVirtualMachineDiskSnapshotLayerStoreTests.swift */; };
+		1F5E645D2FE89C6A00A430FF /* AppleVirtualMachineDiskSnapshotStackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E645C2FE89C6A00A430FF /* AppleVirtualMachineDiskSnapshotStackTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -677,6 +678,7 @@
 		1F5E64562FE89B8A00A430FF /* MacVirtualMachineDiskSnapshotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineDiskSnapshotService.swift; sourceTree = "<group>"; };
 		1F5E64582FE89BCB00A430FF /* MacVirtualMachineDiskSnapshotServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineDiskSnapshotServiceTests.swift; sourceTree = "<group>"; };
 		1F5E645A2FE89BD800A430FF /* AppleMacVirtualMachineDiskSnapshotLayerStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMacVirtualMachineDiskSnapshotLayerStoreTests.swift; sourceTree = "<group>"; };
+		1F5E645C2FE89C6A00A430FF /* AppleVirtualMachineDiskSnapshotStackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskSnapshotStackTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1779,6 +1781,7 @@
 				1F5E64522FE89AE400A430FF /* MacVirtualMachineDiskSnapshotModelsTests.swift */,
 				1F5E64582FE89BCB00A430FF /* MacVirtualMachineDiskSnapshotServiceTests.swift */,
 				1F5E645A2FE89BD800A430FF /* AppleMacVirtualMachineDiskSnapshotLayerStoreTests.swift */,
+				1F5E645C2FE89C6A00A430FF /* AppleVirtualMachineDiskSnapshotStackTests.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -2280,6 +2283,7 @@
 				1F5E64272FE88AAF00A430FF /* LinuxVirtualMachineRuntimeServiceTests.swift in Sources */,
 				1F9D2B412FE77BE10076F5B9 /* ImageBuildHistoryTests.swift in Sources */,
 				C2C2661B8E02F3B836209B2A /* VirtualMachineModelsTests.swift in Sources */,
+				1F5E645D2FE89C6A00A430FF /* AppleVirtualMachineDiskSnapshotStackTests.swift in Sources */,
 				1F5E63E92FE8806300A430FF /* MacVirtualMachineAudioModelsTests.swift in Sources */,
 				1F5E64432FE8949000A430FF /* AppleLinuxMachineConfigurationServiceTests.swift in Sources */,
 				1F9D2C082FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift in Sources */,

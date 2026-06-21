@@ -47,6 +47,7 @@ struct MacVirtualMachineConfigurationFingerprinter:
     let hardwareModelSHA256: String
     let machineIdentifierSHA256: String
     let diskIdentity: FileIdentity
+    let diskSnapshotLayerIdentities: [FileIdentity]
     let auxiliaryStorageIdentity: FileIdentity
   }
 
@@ -65,6 +66,9 @@ struct MacVirtualMachineConfigurationFingerprinter:
       hardwareModelSHA256: try digest(of: machine.hardwareModelURL),
       machineIdentifierSHA256: try digest(of: machine.machineIdentifierURL),
       diskIdentity: try identity(of: machine.diskImageURL),
+      diskSnapshotLayerIdentities: try machine.diskSnapshotLayerURLs.map(
+        identity(of:)
+      ),
       auxiliaryStorageIdentity: try identity(of: machine.auxiliaryStorageURL)
     )
     let encoder = JSONEncoder()

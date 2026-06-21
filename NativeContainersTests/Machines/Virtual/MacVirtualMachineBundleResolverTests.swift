@@ -37,6 +37,42 @@ struct MacVirtualMachineBundleResolverTests {
   }
 
   @Test
+  func resolvesSnapshotLayersInManifestOrder() throws {
+    let fixture = try MacBundleFixture(includesSnapshotLayer: true)
+    defer { fixture.remove() }
+
+    let resolved = try fixture.resolver.resolveRuntime(fixture.manifest)
+
+    #expect(resolved.diskSnapshotLayerURLs.count == 1)
+    #expect(
+      resolved.diskSnapshotLayerURLs[0]
+        == fixture.bundle.appending(
+          path: fixture.manifest
+            .effectiveMacOSDiskSnapshotConfiguration.layers[0].relativePath
+        )
+    )
+  }
+
+  @Test
+  func rejectsMissingSnapshotLayer() throws {
+    let fixture = try MacBundleFixture(includesSnapshotLayer: true)
+    defer { fixture.remove() }
+    let layer = fixture.manifest
+      .effectiveMacOSDiskSnapshotConfiguration.layers[0]
+    try FileManager.default.removeItem(
+      at: fixture.bundle.appending(path: layer.relativePath)
+    )
+
+    #expect(
+      throws: MacVirtualMachineInstallationError.invalidArtifact(
+        "macOSDiskSnapshotConfiguration.layers[0]"
+      )
+    ) {
+      try fixture.resolver.resolveRuntime(fixture.manifest)
+    }
+  }
+
+  @Test
   func rejectsPathTraversalBeforeReadingOutsideBundle() throws {
     let fixture = try MacBundleFixture(diskImagePath: "../Outside.img")
     defer { fixture.remove() }
@@ -68,7 +104,8 @@ private struct MacBundleFixture {
 
   init(
     diskImagePath: String = "Disk.img",
-    symbolicAuxiliaryStorage: Bool = false
+    symbolicAuxiliaryStorage: Bool = false,
+    includesSnapshotLayer: Bool = false
   ) throws {
     let fileManager = FileManager.default
     root = fileManager.temporaryDirectory.appending(
@@ -132,6 +169,22 @@ private struct MacBundleFixture {
       hardwareModelPath: MacPlatformArtifactURLs.hardwareModelManifestPath,
       machineIdentifierPath: MacPlatformArtifactURLs.machineIdentifierManifestPath
     )
+    if includesSnapshotLayer {
+      let mutation = try MacVirtualMachineDiskSnapshotConfiguration.empty
+        .creatingSnapshot(named: "Resolver Snapshot")
+      manifest.macOSDiskSnapshotConfiguration = mutation.configuration
+      let snapshotDirectory = bundle.appending(
+        path: MacVirtualMachineDiskSnapshotLayer.directoryName,
+        directoryHint: .isDirectory
+      )
+      try fileManager.createDirectory(
+        at: snapshotDirectory,
+        withIntermediateDirectories: false
+      )
+      try Data([5]).write(
+        to: bundle.appending(path: mutation.createdLayer.relativePath)
+      )
+    }
 
     self.manifest = manifest
     resolver = MacVirtualMachineBundleResolver(rootURL: root)

@@ -12,13 +12,16 @@ struct MacVirtualMachineSharedDirectoryDescriptor: Codable, Equatable, Sendable 
 struct MacVirtualMachineConfigurationDescriptor: Codable, Equatable, Sendable {
   static let legacyTopologyVersion = 1
   static let directorySharingTopologyVersion = 2
-  static let currentTopologyVersion = 3
+  static let audioTopologyVersion = 3
+  static let currentTopologyVersion = 4
 
   let topologyVersion: Int
   let cpuCount: Int
   let memoryBytes: UInt64
   let diskBytes: UInt64
   let diskImagePath: String
+  let diskSnapshotRevision: UInt64?
+  let diskSnapshotLayerPaths: [String]?
   let auxiliaryStoragePath: String
   let diskCachingMode: String
   let diskSynchronizationMode: String
@@ -75,12 +78,18 @@ struct MacVirtualMachineConfigurationDescriptorService:
       ["VirtioSound/HostOutput"]
       + (audioConfiguration.isMicrophoneEnabled
         ? ["VirtioSound/HostInput"] : [])
+    let diskSnapshots = machine.manifest
+      .effectiveMacOSDiskSnapshotConfiguration
     return MacVirtualMachineConfigurationDescriptor(
       topologyVersion: MacVirtualMachineConfigurationDescriptor.currentTopologyVersion,
       cpuCount: machine.manifest.resources.cpuCount,
       memoryBytes: machine.manifest.resources.memoryBytes,
       diskBytes: machine.manifest.resources.diskBytes,
       diskImagePath: machine.manifest.diskImagePath,
+      diskSnapshotRevision: diskSnapshots.hasSnapshots
+        ? diskSnapshots.revision : nil,
+      diskSnapshotLayerPaths: diskSnapshots.hasSnapshots
+        ? diskSnapshots.layers.map(\.relativePath) : nil,
       auxiliaryStoragePath: auxiliaryStoragePath,
       diskCachingMode: "automatic",
       diskSynchronizationMode: "full",

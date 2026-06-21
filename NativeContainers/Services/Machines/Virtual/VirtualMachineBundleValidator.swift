@@ -110,6 +110,10 @@ struct VirtualMachineBundleValidator {
       in: bundleURL,
       writable: true
     )
+    try validateDiskSnapshotArtifacts(
+      manifest.effectiveMacOSDiskSnapshotConfiguration,
+      in: bundleURL
+    )
     for (path, name, writable) in [
       (manifest.auxiliaryStoragePath, "auxiliaryStoragePath", true),
       (manifest.hardwareModelPath, "hardwareModelPath", false),
@@ -167,6 +171,48 @@ struct VirtualMachineBundleValidator {
       )
     }
     return identifierData
+  }
+
+  private func validateDiskSnapshotArtifacts(
+    _ configuration: MacVirtualMachineDiskSnapshotConfiguration,
+    in bundleURL: URL
+  ) throws {
+    let directoryURL = bundleURL.appending(
+      path: MacVirtualMachineDiskSnapshotLayer.directoryName,
+      directoryHint: .isDirectory
+    )
+    guard configuration.hasSnapshots else {
+      guard !fileManager.fileExists(atPath: directoryURL.path) else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "unreferenced disk snapshot data remains in the staged bundle"
+        )
+      }
+      return
+    }
+
+    for (index, layer) in configuration.layers.enumerated() {
+      _ = try resolver.resolveArtifact(
+        layer.relativePath,
+        named: "macOSDiskSnapshotConfiguration.layers[\(index)]",
+        in: bundleURL,
+        writable: index == configuration.layers.indices.last
+      )
+    }
+    let entries = try fileManager.contentsOfDirectory(
+      at: directoryURL,
+      includingPropertiesForKeys: nil,
+      options: []
+    )
+    let expectedNames = Set(
+      configuration.layers.map {
+        URL(filePath: $0.relativePath).lastPathComponent
+      }
+    )
+    guard Set(entries.map(\.lastPathComponent)) == expectedNames else {
+      throw VirtualMachineBundleError.invalidBundle(
+        "unreferenced disk snapshot data remains in the staged bundle"
+      )
+    }
   }
 
   private func machineIdentifierExists(_ candidate: Data) throws -> Bool {

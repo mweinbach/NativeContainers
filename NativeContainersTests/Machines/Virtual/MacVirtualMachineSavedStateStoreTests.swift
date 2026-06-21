@@ -306,6 +306,46 @@ struct MacVirtualMachineSavedStateStoreTests {
   }
 
   @Test
+  func diskSnapshotFingerprintTracksTopologyAndLayerIdentity() throws {
+    let fixture = try SavedStateStoreFixture()
+    defer { fixture.remove() }
+    let fingerprinter = MacVirtualMachineConfigurationFingerprinter()
+    let mutation = try MacVirtualMachineDiskSnapshotConfiguration.empty
+      .creatingSnapshot(named: "Checkpoint")
+    let directoryURL = fixture.machine.bundleURL.appending(
+      path: MacVirtualMachineDiskSnapshotLayer.directoryName,
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: directoryURL,
+      withIntermediateDirectories: false
+    )
+    let layerURL = fixture.machine.bundleURL.appending(
+      path: mutation.createdLayer.relativePath
+    )
+    try Data("layer-one".utf8).write(to: layerURL)
+    let snapshotMachine = fixture.machine.withDiskSnapshots(
+      mutation.configuration,
+      layerURLs: [layerURL]
+    )
+
+    let descriptor = try MacVirtualMachineConfigurationDescriptorService()
+      .descriptor(for: snapshotMachine)
+    let baseline = try fingerprinter.fingerprint(for: fixture.machine)
+    let original = try fingerprinter.fingerprint(for: snapshotMachine)
+    try Data("layer-two-is-different".utf8).write(to: layerURL)
+    let changed = try fingerprinter.fingerprint(for: snapshotMachine)
+
+    #expect(descriptor.diskSnapshotRevision == 1)
+    #expect(
+      descriptor.diskSnapshotLayerPaths
+        == [mutation.createdLayer.relativePath]
+    )
+    #expect(original != baseline)
+    #expect(changed != original)
+  }
+
+  @Test
   func sharingFingerprintTracksSemanticsButNotBookmarkRenewal() throws {
     let fixture = try SavedStateStoreFixture()
     defer { fixture.remove() }
@@ -358,6 +398,24 @@ struct MacVirtualMachineSavedStateStoreTests {
 }
 
 extension ResolvedMacVirtualMachine {
+  fileprivate func withDiskSnapshots(
+    _ configuration: MacVirtualMachineDiskSnapshotConfiguration,
+    layerURLs: [URL]
+  ) -> ResolvedMacVirtualMachine {
+    var manifest = manifest
+    manifest.macOSDiskSnapshotConfiguration = configuration
+    return ResolvedMacVirtualMachine(
+      manifest: manifest,
+      bundleURL: bundleURL,
+      diskImageURL: diskImageURL,
+      diskSnapshotLayerURLs: layerURLs,
+      auxiliaryStorageURL: auxiliaryStorageURL,
+      hardwareModelURL: hardwareModelURL,
+      machineIdentifierURL: machineIdentifierURL,
+      sharedDirectories: sharedDirectories
+    )
+  }
+
   fileprivate func withAudioConfiguration(
     _ configuration: MacVirtualMachineAudioConfiguration
   ) -> ResolvedMacVirtualMachine {
@@ -367,6 +425,7 @@ extension ResolvedMacVirtualMachine {
       manifest: manifest,
       bundleURL: bundleURL,
       diskImageURL: diskImageURL,
+      diskSnapshotLayerURLs: diskSnapshotLayerURLs,
       auxiliaryStorageURL: auxiliaryStorageURL,
       hardwareModelURL: hardwareModelURL,
       machineIdentifierURL: machineIdentifierURL,
@@ -381,6 +440,7 @@ extension ResolvedMacVirtualMachine {
       manifest: manifest,
       bundleURL: bundleURL,
       diskImageURL: diskImageURL,
+      diskSnapshotLayerURLs: diskSnapshotLayerURLs,
       auxiliaryStorageURL: auxiliaryStorageURL,
       hardwareModelURL: hardwareModelURL,
       machineIdentifierURL: machineIdentifierURL,
