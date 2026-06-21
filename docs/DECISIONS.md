@@ -969,3 +969,32 @@ deletion authorization. VM logical and allocated values are accounting signals,
 not a reclaimability promise: APFS may share clone extents without exposing
 unique physical ownership per bundle. Reclamation and sparse compaction remain
 separate reviewed mutations.
+
+## ADR-037: Reclaim only reviewed Apple-runtime identities
+
+**Status:** Accepted — 2026-06-21
+
+Apple's point-in-time reclaimable byte counts are context, not deletion
+authorization. A separate `StorageReclamationManaging` facade composes exact
+container, image, and volume plans from fresh live adapters and attaches the
+accounting capture/revision plus inventory revision as provenance. A newer
+measurement, inventory revision, scope change, or sheet dismissal discards an
+uncommitted review. Commit-time validation remains authoritative and does not
+use an elapsed-time TTL.
+
+Execution is deterministic: reviewed stopped containers, reviewed image
+references, then reviewed volumes. It never expands the plan after container
+deletion; newly unused dependencies require another Measure and Review loop.
+Stopped-container reclamation is opt-in and admits only configurations with a
+valid NativeContainers creation-operation UUID, stopped state, no Compose or
+Apple plugin/role metadata, a non-builder identifier, and an unchanged
+canonical full-configuration encoding. It uses non-force delete and verifies
+absence. Reclamation never stops, kills, force-deletes, or mutates a VM.
+
+Container and core-image adapters use bounded, cancellation-closing XPC
+requests. Cancellation is a checkpoint before the next candidate, not a
+rollback: an accepted mutation is reconciled in cancellation-independent work,
+and partial-completion errors retain confirmed removals and remaining exact
+identities. Image bytes are Apple's orphan-cleanup report; container and volume
+bytes are allocation measured before confirmed removal. Their aggregate is
+labeled estimated/reported removed bytes, never measured host free-space gain.

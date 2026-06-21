@@ -617,6 +617,23 @@ than sharing presentation state across an implied multi-window group.
   ordinary inventory refresh. Apple category sums are labeled as sums, while
   VM allocation is labeled filesystem-reported because APFS clone sharing does
   not expose unique per-bundle physical ownership.
+- Apple-runtime reclamation is a sibling mutation graph, not a method on the
+  accounting model. One aggregate service prepares and executes exact plans
+  through focused container, image, and volume ports. Planning records the
+  accounting capture/revision and inventory revision as provenance, while live
+  adapters independently discover candidates. Execution is serialized in the
+  fixed order containers, images, then volumes; it never adds resources made
+  eligible by an earlier removal. Containers are opt-in and limited to stopped,
+  UUID-owned NativeContainers configurations whose canonical full-configuration
+  seal still matches. Compose, builder, machine, Apple-role/plugin, active,
+  unknown, and unowned containers are excluded, and reclamation never invokes
+  Stop, KILL, force-delete, or VM mutation. Image and container requests use
+  fresh bounded cancellation-closing XPC connections; volume operations retain
+  the same bounded infrastructure client. Each accepted mutation is reconciled
+  independently of caller cancellation, and partial results preserve exact
+  removals before the next candidate is abandoned. After execution, ordinary
+  inventory and only the Apple accounting lane refresh; the unrelated VM
+  filesystem scan remains on demand.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before

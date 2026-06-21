@@ -703,6 +703,23 @@ Updated: 2026-06-21.
   tests skipped, with no failures. The deterministic loaded-state Preview also
   renders in light and dark appearances, build-for-testing succeeds, and the
   app launch/stop smoke leaves no NativeContainers process running.
+- Reviewed Apple-runtime reclamation is live behind separate container, image,
+  volume, aggregate, and app-model services. The review is sealed to the Apple
+  accounting and inventory revisions, lists every exact candidate, and requires
+  a second destructive confirmation. Images and volumes are selected by
+  default; stopped containers are opt-in and limited to exact UUID-owned app
+  configurations. Commit-time checks preserve active, changed, Compose,
+  builder, machine, Apple-managed, and unowned resources. Container deletion is
+  bounded and non-force; no reclamation path invokes Stop, KILL, force-delete,
+  or any VM mutation. Image deletion/GC now uses a bounded core-images adapter,
+  while cancellation checkpoints and cancellation-independent reconciliation
+  retain confirmed partial results. The full Xcode plan passes all 644 outcomes:
+  625 deterministic tests passed, 19 explicitly gated live tests skipped, and
+  no failures. Build-for-testing succeeds; the loaded review renders in light
+  and dark, the loaded Overview renders with its Apple-card action, and a fresh
+  app launch/stop leaves no NativeContainers process running. Launch emitted
+  only the existing macOS 27 beta `com.apple.linkd.autoShortcut` registration
+  noise.
 
 ## Known configuration issue
 
@@ -717,13 +734,11 @@ entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Build reviewed, candidate-specific storage reclamation services on top of
-   the new accounting snapshots. Revalidate every resource and identity at
-   commit time; keep Apple estimates informational until a mutation plan names
-   exactly what will be removed.
-2. Add stopped-only sparse VM compaction as a separate transactional service
+1. Add stopped-only sparse VM compaction as a separate transactional service
    with runtime/library leases, free-space checks, cancellation cleanup, atomic
    replacement, and post-operation logical/allocated verification.
+2. Add a separately reviewed VM saved-state/interrupted-residue reclaimer;
+   defer restore-image cache deletion until cache ownership leases are unified.
 3. Add the entitlement through a functioning Xcode capability surface, then
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot

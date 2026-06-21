@@ -152,6 +152,11 @@ must leave a usable, test-backed product slice.
       rejection, write-level cancellation, atomic publication, and partial
       recovery.
 - [ ] Safe disk-space reclamation.
+  - [x] Reviewed Apple-runtime container, image, and volume reclamation with
+        exact identities, bounded clients, non-force stopped-container delete,
+        cancellation checkpoints, and partial-result reconciliation.
+  - [ ] VM saved-state/residue reclamation and stopped-only sparse compaction;
+        cached restore images remain deferred until cache leases are unified.
 
 ## M5 — Optimization and polish
 
