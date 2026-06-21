@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 
@@ -71,6 +72,7 @@ struct ComposeProjectLifecycleServiceTests {
             desiredState: ComposeDesiredState(
               projectName: "demo",
               declaredServiceNames: [],
+              serviceDependencies: [:],
               activeServices: [],
               volumes: [],
               networks: []
@@ -82,6 +84,90 @@ struct ComposeProjectLifecycleServiceTests {
         )
       )
     }
+  }
+
+  @Test
+  func executeConsumesOpaqueReviewRevalidatesEveryBoundaryAndDiscardsFinishedJournal() async throws
+  {
+    let source = ComposeSourceAccessDouble()
+    let rendered = canonicalRendered(image: "nginx:1.27")
+    let renderer = ComposeRendererDouble(results: [rendered, rendered, rendered, rendered])
+    let inventory = ComposeInventoryDouble(inventory: emptyInventory)
+    let executionTool = ComposeExecutionToolDouble(
+      environment: renderer.commandEnvironment
+    )
+    let executor = LifecycleMutationExecutorDouble()
+    let journal = LifecycleJournalDouble()
+    let service = ComposeProjectLifecycleService(
+      sourceAccess: source,
+      configRenderer: renderer,
+      inventory: inventory,
+      executionTool: executionTool,
+      mutationExecutor: executor,
+      journal: journal
+    )
+    let plan = try await service.review(
+      directoryURL: URL(filePath: "/tmp/demo"),
+      options: ComposeProjectReviewOptions(
+        action: .up,
+        projectName: "demo",
+        pullPolicy: .missing
+      )
+    )
+    #expect(plan.canExecute)
+
+    let result = try await service.execute(plan)
+
+    #expect(result.action == .up)
+    #expect(await renderer.renderCount == 4)
+    #expect(await inventory.loadCount == 2)
+    #expect(await source.revalidationCount == 6)
+    #expect(await source.releaseCount == 2)
+    #expect(await executionTool.resolveCount == 1)
+    #expect(await executor.requests.count == 1)
+    #expect(await journal.persistedOperationIDs.count == 1)
+    #expect(await journal.discardedOperationIDs == journal.persistedOperationIDs)
+
+    await #expect(throws: ComposeProjectLifecycleError.stalePlan) {
+      _ = try await service.execute(plan)
+    }
+    #expect(await executor.requests.count == 1)
+  }
+
+  @Test
+  func executionDriftFailsBeforeJournalOrMutationAuthorityIsGranted() async throws {
+    let source = ComposeSourceAccessDouble()
+    let reviewed = canonicalRendered(image: "nginx:1.27")
+    let changed = canonicalRendered(image: "nginx:1.28")
+    let renderer = ComposeRendererDouble(results: [reviewed, reviewed, changed, changed])
+    let inventory = ComposeInventoryDouble(inventory: emptyInventory)
+    let executor = LifecycleMutationExecutorDouble()
+    let journal = LifecycleJournalDouble()
+    let service = ComposeProjectLifecycleService(
+      sourceAccess: source,
+      configRenderer: renderer,
+      inventory: inventory,
+      executionTool: ComposeExecutionToolDouble(
+        environment: renderer.commandEnvironment
+      ),
+      mutationExecutor: executor,
+      journal: journal
+    )
+    let plan = try await service.review(
+      directoryURL: URL(filePath: "/tmp/demo"),
+      options: ComposeProjectReviewOptions(
+        action: .up,
+        projectName: "demo",
+        pullPolicy: .missing
+      )
+    )
+
+    await #expect(throws: ComposeProjectLifecycleError.stalePlan) {
+      _ = try await service.execute(plan)
+    }
+
+    #expect(await executor.requests.isEmpty)
+    #expect(await journal.persistedOperationIDs.isEmpty)
   }
 
   private var emptyInventory: ContainerInventory {
@@ -126,12 +212,17 @@ struct ComposeProjectLifecycleServiceTests {
       {"name":"demo","services":{"web":{"image":"\(image)"}}}
       """.utf8
     )
+    let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     return ComposeRenderedConfiguration(
       fullConfiguration: data,
       activeConfiguration: data,
-      fullConfigurationSHA256: image,
-      activeConfigurationSHA256: image,
-      composeReleaseVersion: "5.1.4"
+      fullConfigurationSHA256: digest,
+      activeConfigurationSHA256: digest,
+      composeReleaseVersion: "5.1.4",
+      composeBinarySHA256: String(repeating: "b", count: 64),
+      composeSourceRevision: "source-revision",
+      environmentSHA256: ComposeCommandEnvironment(processEnvironment: [:]).sha256,
+      serviceConfigurationHashes: ["web": String(repeating: "a", count: 64)]
     )
   }
 }
@@ -174,6 +265,8 @@ private actor ComposeSourceAccessDouble: ComposeProjectSourceAccessing {
 }
 
 private actor ComposeRendererDouble: ComposeConfigRendering {
+  nonisolated let commandEnvironment = ComposeCommandEnvironment(processEnvironment: [:])
+
   private var results: [ComposeRenderedConfiguration]
   private(set) var renderCount = 0
 
@@ -204,5 +297,58 @@ private actor ComposeInventoryDouble: ContainerInventoryLoading {
   func loadInventory() async throws -> ContainerInventory {
     loadCount += 1
     return inventory
+  }
+}
+
+private actor ComposeExecutionToolDouble: ComposeExecutionToolResolving {
+  nonisolated let commandEnvironment: ComposeCommandEnvironment
+  private(set) var resolveCount = 0
+
+  init(environment: ComposeCommandEnvironment) {
+    commandEnvironment = environment
+  }
+
+  func verifiedExecutableURL() async throws -> URL {
+    resolveCount += 1
+    return URL(filePath: "/tmp/verified-docker-compose")
+  }
+}
+
+private actor LifecycleMutationExecutorDouble: ComposeProjectMutationExecuting {
+  private(set) var requests: [ComposeProjectMutationRequest] = []
+
+  func execute(
+    _ request: ComposeProjectMutationRequest
+  ) async throws -> ComposeProjectExecutionResult {
+    requests.append(request)
+    return ComposeProjectExecutionResult(
+      action: request.plan.options.action,
+      projectName: request.plan.options.projectName,
+      observedState: nil,
+      remainingContainerCount: 1,
+      remainingVolumeCount: 0,
+      remainingNetworkCount: 1
+    )
+  }
+}
+
+private actor LifecycleJournalDouble: ComposeOperationJournaling {
+  private(set) var persistedOperationIDs: [UUID] = []
+  private(set) var discardedOperationIDs: [UUID] = []
+
+  func persistPending(_ entry: ComposeOperationJournalEntry) async throws {
+    persistedOperationIDs.append(entry.operationID)
+  }
+
+  func updatePending(
+    operationID: UUID,
+    expectedPhase: ComposeOperationJournalPhase,
+    progress: ComposeOperationJournalProgress
+  ) async throws {}
+
+  func pendingRecoverySnapshots() async throws -> [ComposeOperationRecoverySnapshot] { [] }
+
+  func discardPendingAfterReview(operationID: UUID) async throws {
+    discardedOperationIDs.append(operationID)
   }
 }

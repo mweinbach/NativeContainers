@@ -293,9 +293,31 @@ enum AppCompositionRoot {
       dockerContext: DockerContextService(socketURL: socktainerProcess.socketURL)
     )
     let dockerComposeClient = DockerComposeClientInstallService()
+    let composeConfigService = DockerComposeConfigService(
+      composeClient: dockerComposeClient
+    )
+    let composeJournal = ComposeOperationJournal(
+      directoryURL: FileManager.default.urls(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask
+      )[0].appending(
+        path: "NativeContainers-Compose-Operations",
+        directoryHint: .isDirectory
+      )
+    )
+    let composeMutationExecutor = AppleComposeProjectMutationExecutor(
+      runtimeMutationCoordinator: mutationCoordinator,
+      containers: AppleComposeContainerMutationClient(client: containerClient),
+      infrastructure: infrastructureClient,
+      inventory: inventoryService,
+      journal: composeJournal
+    )
     let composeProjectLifecycle = ComposeProjectLifecycleService(
-      configRenderer: DockerComposeConfigService(composeClient: dockerComposeClient),
-      inventory: inventoryService
+      configRenderer: composeConfigService,
+      inventory: inventoryService,
+      executionTool: composeConfigService,
+      mutationExecutor: composeMutationExecutor,
+      journal: composeJournal
     )
     let imageBuildService = RecordingImageBuildService(
       base: AppleContainerBuildService(
