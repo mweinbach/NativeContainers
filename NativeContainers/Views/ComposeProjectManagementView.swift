@@ -219,7 +219,7 @@ struct ComposeProjectManagementView: View {
               Text("\(recovery.projectName) · \(recovery.action.rawValue.capitalized)")
                 .font(.headline)
               Text(
-                "Phase: \(recovery.phase.rawValue) · Containers \(recovery.completedContainerIDs.count)/\(recovery.affectedContainerCount) · Networks \(recovery.completedNetworkNames.count)/\(recovery.affectedNetworkCount)"
+                "Phase: \(recovery.phase.rawValue) · Steps \(recovery.completedStepTokens.count)/\(recovery.plannedStepTokens.count) · Journal v\(recovery.schemaVersion)"
               )
               .font(.caption.monospaced())
               .foregroundStyle(.secondary)
@@ -278,9 +278,9 @@ struct ComposeProjectManagementView: View {
         Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
           reviewRow("Declared services", plan.desiredState.declaredServiceNames.count.formatted())
           reviewRow("Active services", plan.desiredState.activeServices.count.formatted())
-          reviewRow("Affected containers", plan.affectedContainerIDs.count.formatted())
-          reviewRow("Affected volumes", plan.affectedVolumeNames.count.formatted())
-          reviewRow("Affected networks", plan.affectedNetworkNames.count.formatted())
+          reviewRow("Container actions", plan.containerActions.count.formatted())
+          reviewRow("Volume actions", plan.volumeActions.count.formatted())
+          reviewRow("Network actions", plan.networkActions.count.formatted())
           reviewRow("True orphans", plan.orphanContainerIDs.count.formatted())
           reviewRow("Source SHA-256", String(plan.source.fileIdentity.sha256.prefix(12)))
           reviewRow("Full model SHA-256", String(plan.fullConfigurationSHA256.prefix(12)))

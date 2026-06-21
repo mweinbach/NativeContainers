@@ -171,6 +171,169 @@ struct ComposeLifecyclePlannerTests {
     )
   }
 
+  @Test
+  func exactExistingUpUsesNativeConvergenceActions() {
+    let desired = desiredWebState(replicaCount: 1)
+    let existing = container(
+      id: "web-1",
+      service: "web",
+      state: .stopped,
+      imageDigest: "sha256:web"
+    )
+
+    let plan = planner.plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      inventory: makeInventory(
+        containers: [existing],
+        images: [image(reference: "example/web:latest", digest: "sha256:web")]
+      )
+    )
+
+    #expect(plan.canExecute)
+    #expect(plan.containerActions.map(\.operation) == [.converge])
+    #expect(plan.containerActions.first?.expectedIdentity?.id == "web-1")
+    #expect(plan.executionStepTokens == ["container-0001"])
+  }
+
+  @Test
+  func createMissingUpIsTypedButBlockedUntilResourceOverlayIsSafe() {
+    let desired = desiredWebState(replicaCount: 2)
+    let existing = container(
+      id: "web-1",
+      service: "web",
+      state: .stopped,
+      imageDigest: "sha256:web"
+    )
+
+    let plan = planner.plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      inventory: makeInventory(
+        containers: [existing],
+        images: [image(reference: "example/web:latest", digest: "sha256:web")]
+      )
+    )
+
+    #expect(plan.containerActions.map(\.operation) == [.converge, .create])
+    #expect(plan.blockers.contains { $0.code == .executionPolicy })
+    #expect(!plan.canExecute)
+  }
+
+  @Test
+  func downSeparatesDeclaredOrphanNetworkAndVolumeDeletionActions() {
+    let desired = ComposeDesiredState(
+      projectName: "demo",
+      declaredServiceNames: ["web"],
+      serviceDependencies: [:],
+      activeServices: [],
+      volumes: [
+        ComposeDesiredResource(
+          kind: .volume,
+          logicalName: "data",
+          runtimeName: "demo_data",
+          isExternal: false,
+          isActive: false
+        )
+      ],
+      networks: [
+        ComposeDesiredResource(
+          kind: .network,
+          logicalName: "default",
+          runtimeName: "demo_default",
+          isExternal: false,
+          isActive: false
+        )
+      ]
+    )
+    let inventory = makeInventory(
+      containers: [
+        container(id: "web-1", service: "web"),
+        container(id: "legacy-1", service: "legacy"),
+      ],
+      volumes: [
+        volume(
+          name: "demo_data",
+          logicalName: "data",
+          consumers: ["web-1", "legacy-1"]
+        )
+      ],
+      networks: [
+        network(
+          name: "demo_default",
+          logicalName: "default",
+          consumers: ["web-1", "legacy-1"]
+        )
+      ]
+    )
+
+    let plan = planner.plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(
+        action: .down,
+        projectName: "demo",
+        removeOrphans: true,
+        removeVolumes: true
+      ),
+      inventory: inventory
+    )
+
+    #expect(plan.canExecute)
+    #expect(plan.containerActions.map(\.operation) == [.removeDeclared, .removeOrphan])
+    #expect(plan.orphanContainerIDs == ["legacy-1"])
+    #expect(plan.networkActions.map(\.operation) == [.removeManaged])
+    #expect(plan.volumeActions.map(\.operation) == [.removeManaged])
+    #expect(
+      plan.executionStepTokens
+        == ["container-0001", "container-0002", "network-0001", "volume-0001"]
+    )
+  }
+
+  @Test
+  func duplicateReplicaLabelsBlockExactLifecycleExecution() {
+    let desired = desiredWebState(replicaCount: 2)
+    let containers = [
+      container(
+        id: "web-a",
+        service: "web",
+        replica: 1,
+        state: .stopped,
+        imageDigest: "sha256:web"
+      ),
+      container(
+        id: "web-b",
+        service: "web",
+        replica: 1,
+        state: .stopped,
+        imageDigest: "sha256:web"
+      ),
+    ]
+
+    let plan = planner.plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(action: .start, projectName: "demo"),
+      inventory: makeInventory(
+        containers: containers,
+        images: [image(reference: "example/web:latest", digest: "sha256:web")]
+      )
+    )
+
+    #expect(
+      plan.blockers.contains {
+        $0.code == .observedProjectDrift && $0.subject == "web"
+      }
+    )
+    #expect(!plan.canExecute)
+  }
+
   private var sourceSummary: ComposeProjectSourceSummary {
     ComposeProjectSourceSummary(
       directoryName: "demo",
@@ -204,6 +367,29 @@ struct ComposeLifecyclePlannerTests {
     )
   }
 
+  private func desiredWebState(replicaCount: Int) -> ComposeDesiredState {
+    ComposeDesiredState(
+      projectName: "demo",
+      declaredServiceNames: ["web"],
+      serviceDependencies: ["web": []],
+      activeServices: [
+        ComposeDesiredService(
+          name: "web",
+          imageReference: "example/web:latest",
+          replicaCount: replicaCount,
+          profiles: [],
+          dependencyNames: [],
+          configurationHash: String(repeating: "a", count: 64),
+          volumeNames: [],
+          networkNames: [],
+          publishedPortCount: 0
+        )
+      ],
+      volumes: [],
+      networks: []
+    )
+  }
+
   private func makeInventory(
     containers: [ContainerRecord] = [],
     volumes: [VolumeRecord] = [],
@@ -229,26 +415,42 @@ struct ComposeLifecyclePlannerTests {
   private func container(
     id: String,
     service: String,
-    oneOff: Bool = false
+    replica: Int? = 1,
+    oneOff: Bool = false,
+    state: RuntimeState = .running,
+    imageDigest: String? = nil
   ) -> ContainerRecord {
-    ContainerRecord(
+    var labels = [
+      ComposeLabelKey.project: "demo",
+      ComposeLabelKey.service: service,
+      ComposeLabelKey.oneOff: oneOff ? "True" : "False",
+      ComposeLabelKey.configHash: String(repeating: "a", count: 64),
+    ]
+    if let replica {
+      labels[ComposeLabelKey.containerNumber] = String(replica)
+    }
+    return ContainerRecord(
       id: id,
       imageReference: "example/\(service):latest",
+      imageDigest: imageDigest,
       platform: "linux/arm64",
-      state: .running,
+      state: state,
       ipAddress: nil,
       createdAt: Date(timeIntervalSince1970: 1),
       startedAt: Date(timeIntervalSince1970: 2),
       cpuCount: 2,
       memoryBytes: 1_024,
       ports: [],
-      labels: [
-        ComposeLabelKey.project: "demo",
-        ComposeLabelKey.service: service,
-        ComposeLabelKey.containerNumber: "1",
-        ComposeLabelKey.oneOff: oneOff ? "True" : "False",
-        ComposeLabelKey.configHash: String(repeating: "a", count: 64),
-      ]
+      labels: labels
+    )
+  }
+
+  private func image(reference: String, digest: String) -> ImageRecord {
+    ImageRecord(
+      reference: reference,
+      digest: digest,
+      mediaType: "application/test",
+      indexSizeBytes: 1
     )
   }
 

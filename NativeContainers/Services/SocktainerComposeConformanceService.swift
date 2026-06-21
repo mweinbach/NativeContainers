@@ -68,9 +68,8 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
     implementedOperations: [
       .containerCreate, .containerDelete, .containerInspect, .containerKill,
       .containerList, .containerLogs, .containerStart, .containerStop,
-      .containerWait, .networkConnect, .networkCreate, .networkDelete,
-      .networkDisconnect, .networkInspect, .networkList, .volumeCreate,
-      .volumeDelete, .volumeInspect, .volumeList,
+      .containerWait, .networkCreate, .networkDelete, .networkInspect,
+      .networkList, .volumeCreate, .volumeDelete, .volumeInspect, .volumeList,
     ],
     fixtures: [
       SocktainerComposeConformanceFixture(
@@ -109,7 +108,8 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
           .networkList, .networkCreate, .networkInspect, .networkConnect,
           .networkDisconnect, .networkDelete,
         ],
-        evidence: "Pinned Engine routes cover labeled project-network lifecycle.",
+        evidence:
+          "Pinned create/list/inspect/delete routes cover labeled project networks, but Socktainer 1.0.0 returns NotImplemented for connect and disconnect.",
         limitations: [
           "Per-service network aliases are not mapped by Socktainer 1.0.0."
         ]
@@ -145,7 +145,7 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
         evidence:
           "NativeContainers renders a stable full/active model, stores opaque reviewed plans, revalidates source/binary/environment/inventory at commit time, and journals exact-ID mutations.",
         limitations: [
-          "Execution currently covers fresh Up plus exact-ID Start, Stop, and declared-service Down; existing-project convergence, orphan deletion, and named-volume deletion remain policy-blocked."
+          "Execution covers fresh Up, exact-count native existing-project Up, exact-ID Start/Stop, separately typed declared/orphan Down, and reviewed named-volume/network deletion. Create-missing and recreation remain blocked until a frozen execution overlay can avoid Socktainer's missing rename and network-attachment routes."
         ]
       ),
     ]

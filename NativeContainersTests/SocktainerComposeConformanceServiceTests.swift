@@ -18,7 +18,9 @@ struct SocktainerComposeConformanceServiceTests {
 
     #expect(try result("compose-project-labels", in: report).status == .supported)
     #expect(try result("compose-container-lifecycle", in: report).status == .supported)
-    #expect(try result("compose-project-networks", in: report).status == .partial)
+    let networks = try result("compose-project-networks", in: report)
+    #expect(networks.status == .unsupported)
+    #expect(networks.missingOperations == ["Network connect", "Network disconnect"])
     #expect(try result("compose-healthchecks", in: report).status == .unsupported)
     #expect(try result("compose-project-lifecycle", in: report).status == .partial)
   }

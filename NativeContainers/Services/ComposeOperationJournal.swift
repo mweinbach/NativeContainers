@@ -119,9 +119,9 @@ struct ComposeOperationJournalEntry: Equatable, Sendable {
       environmentSHA256: plan.environmentSHA256,
       removeOrphans: plan.options.removeOrphans,
       removeVolumes: plan.options.removeVolumes,
-      affectedContainerCount: plan.affectedContainerIDs.count,
-      affectedVolumeCount: plan.affectedVolumeNames.count,
-      affectedNetworkCount: plan.affectedNetworkNames.count,
+      affectedContainerCount: plan.containerActions.count,
+      affectedVolumeCount: plan.volumeActions.count,
+      affectedNetworkCount: plan.networkActions.count,
       orphanContainerCount: plan.orphanContainerIDs.count,
       plannedStepTokens: plan.executionStepTokens
     )
@@ -685,6 +685,33 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
       plannedStepTokens = planned
       completedStepTokens = completed
     } else {
+      guard let legacyContainerIDs = record.completedContainerIDs,
+        let legacyNetworkNames = record.completedNetworkNames,
+        let legacyVolumeNames = record.completedVolumeNames,
+        [
+          record.affectedContainerCount,
+          record.affectedNetworkCount,
+          record.affectedVolumeCount,
+        ].allSatisfy({ $0 >= 0 && $0 <= 1_024 }),
+        legacyContainerIDs.count <= record.affectedContainerCount,
+        legacyNetworkNames.count <= record.affectedNetworkCount,
+        legacyVolumeNames.count <= record.affectedVolumeCount,
+        record.affectedContainerCount + record.affectedNetworkCount
+          + record.affectedVolumeCount <= 1_024,
+        legacyContainerIDs.allSatisfy({
+          Self.isSafeIdentifier($0, maximumByteCount: 256)
+        }),
+        legacyNetworkNames.allSatisfy({
+          Self.isSafeIdentifier($0, maximumByteCount: 256)
+        }),
+        legacyVolumeNames.allSatisfy({
+          Self.isSafeIdentifier($0, maximumByteCount: 256)
+        })
+      else {
+        throw ComposeOperationJournalError.invalidRecord(
+          "the legacy progress summary is invalid"
+        )
+      }
       let containerTokens = Self.legacyStepTokens(
         prefix: "container",
         count: record.affectedContainerCount
@@ -699,9 +726,9 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
       )
       plannedStepTokens = containerTokens + networkTokens + volumeTokens
       completedStepTokens =
-        Array(containerTokens.prefix(record.completedContainerIDs?.count ?? 0))
-        + Array(networkTokens.prefix(record.completedNetworkNames?.count ?? 0))
-        + Array(volumeTokens.prefix(record.completedVolumeNames?.count ?? 0))
+        Array(containerTokens.prefix(legacyContainerIDs.count))
+        + Array(networkTokens.prefix(legacyNetworkNames.count))
+        + Array(volumeTokens.prefix(legacyVolumeNames.count))
     }
 
     let entry = ComposeOperationJournalEntry(
@@ -1162,9 +1189,12 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
 
   private static func isOpaqueStepToken(_ value: String) -> Bool {
     let prefixes = ["compose-up-", "container-", "network-", "volume-"]
-    guard let prefix = prefixes.first(where: value.hasPrefix) else { return false }
+    guard let prefix = prefixes.first(where: { value.hasPrefix($0) }) else { return false }
     let suffix = value.dropFirst(prefix.count)
-    return suffix.count == 4 && suffix.allSatisfy(\.isNumber) && suffix != "0000"
+    let bytes = suffix.utf8
+    return bytes.count == 4
+      && bytes.allSatisfy { $0 >= 48 && $0 <= 57 }
+      && suffix != "0000"
   }
 }
 

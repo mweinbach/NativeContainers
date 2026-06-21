@@ -179,6 +179,88 @@ struct ComposeOperationJournalTests {
   }
 
   @Test
+  func progressAcceptsOnlyReviewedOpaqueStepTokens() async throws {
+    let fixture = try JournalFixture()
+    defer { fixture.remove() }
+    let entry = sampleEntry()
+    try await fixture.journal.persistPending(entry)
+
+    await #expect(throws: ComposeOperationJournalError.self) {
+      try await fixture.journal.updatePending(
+        operationID: entry.operationID,
+        expectedPhase: .prepared,
+        progress: ComposeOperationJournalProgress(
+          phase: .executing,
+          completedStepTokens: ["container-0002"]
+        )
+      )
+    }
+    await #expect(throws: ComposeOperationJournalError.self) {
+      try await fixture.journal.updatePending(
+        operationID: entry.operationID,
+        expectedPhase: .prepared,
+        progress: ComposeOperationJournalProgress(
+          phase: .executing,
+          completedStepTokens: ["container-secret"]
+        )
+      )
+    }
+
+    let encoded = try Data(contentsOf: fixture.recordURL(for: entry.operationID))
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    #expect(!json.contains("container-secret"))
+  }
+
+  @Test
+  func schemaTwoRecordLoadsAsRedactedManualOnlyRecovery() async throws {
+    let fixture = try JournalFixture()
+    defer { fixture.remove() }
+    let entry = sampleEntry()
+    try await fixture.journal.persistPending(entry)
+    let recordURL = fixture.recordURL(for: entry.operationID)
+
+    let encoded = try Data(contentsOf: recordURL)
+    var object = try #require(
+      try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    object["schemaVersion"] = 2
+    object["phase"] = ComposeOperationJournalPhase.executing.rawValue
+    object.removeValue(forKey: "plannedStepTokens")
+    object.removeValue(forKey: "completedStepTokens")
+    object["completedContainerIDs"] = ["legacy-container-secret"]
+    object["completedNetworkNames"] = []
+    object["completedVolumeNames"] = []
+    let legacyData = try JSONSerialization.data(
+      withJSONObject: object,
+      options: [.prettyPrinted, .sortedKeys]
+    )
+    let handle = try FileHandle(forWritingTo: recordURL)
+    try handle.truncate(atOffset: 0)
+    try handle.write(contentsOf: legacyData)
+    try handle.close()
+
+    let snapshot = try #require(
+      try await fixture.journal.pendingRecoverySnapshots().first
+    )
+    #expect(snapshot.schemaVersion == 2)
+    #expect(snapshot.isLegacyRecord)
+    #expect(!snapshot.allowsAutomaticExecution)
+    #expect(snapshot.completedStepTokens == ["container-0001"])
+    #expect(!snapshot.completedStepTokens.contains { $0.contains("secret") })
+
+    await #expect(throws: ComposeOperationJournalError.self) {
+      try await fixture.journal.updatePending(
+        operationID: entry.operationID,
+        expectedPhase: .executing,
+        progress: ComposeOperationJournalProgress(
+          phase: .executing,
+          completedStepTokens: ["container-0001", "container-0002"]
+        )
+      )
+    }
+  }
+
+  @Test
   func destructiveRecoverySnapshotIsReadOnlyAndCannotAuthorizeAutomaticExecution() async throws {
     let fixture = try JournalFixture()
     defer { fixture.remove() }

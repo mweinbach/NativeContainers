@@ -1,3 +1,4 @@
+import ContainerResource
 import Foundation
 import Testing
 
@@ -174,14 +175,121 @@ struct ComposeProjectMutationExecutorTests {
     #expect(await journal.phases == [.executing])
   }
 
+  @Test
+  func exactExistingUpStartsReviewedIdentityWithoutComposeCommand() async throws {
+    let record = mutationContainer(
+      id: "web-1",
+      service: "web",
+      replica: 1,
+      state: .stopped
+    )
+    let state = ComposeMutationState(snapshots: [mutationSnapshot(record)])
+    let journal = MutationJournalDouble()
+    let command = MutationCommandDouble(
+      result: HostCommandResult(
+        exitCode: 99,
+        standardOutput: "",
+        standardError: "must not run",
+        outputWasTruncated: false
+      )
+    )
+    let executor = makeExecutor(state: state, journal: journal, commandExecutor: command)
+    let plan = mutationPlan(action: .up, records: [record])
+
+    _ = try await executor.execute(mutationRequest(plan))
+
+    #expect(await state.startIDs == ["web-1"])
+    #expect(await command.arguments.isEmpty)
+    #expect(await journal.completedStepTokens.last == ["container-0001"])
+  }
+
+  @Test
+  func downDeletesTypedOrphanAndNamedVolumeOnlyAfterExactRevalidation() async throws {
+    let declared = mutationContainer(
+      id: "web-1",
+      service: "web",
+      replica: 1,
+      state: .stopped
+    )
+    let orphan = mutationContainer(
+      id: "legacy-1",
+      service: "legacy",
+      replica: 1,
+      state: .stopped
+    )
+    let volume = mutationVolume(name: "sample_data", consumers: [])
+    let state = ComposeMutationState(
+      snapshots: [mutationSnapshot(declared), mutationSnapshot(orphan)],
+      volumes: [volume]
+    )
+    let journal = MutationJournalDouble()
+    let executor = makeExecutor(state: state, journal: journal)
+    let plan = mutationPlan(
+      action: .down,
+      records: [declared, orphan],
+      orphanIDs: [orphan.id],
+      volumes: [volume],
+      removeOrphans: true,
+      removeVolumes: true
+    )
+
+    let result = try await executor.execute(mutationRequest(plan))
+
+    #expect(result.remainingContainerCount == 0)
+    #expect(result.remainingVolumeCount == 0)
+    #expect(await state.deleteIDs == ["web-1", "legacy-1"])
+    #expect(await state.deletedVolumeNames == ["sample_data"])
+    #expect(
+      await journal.completedStepTokens.last
+        == ["container-0001", "container-0002", "volume-0001"]
+    )
+  }
+
+  @Test
+  func lateVolumeConsumerPreventsNameOnlyDeletion() async throws {
+    let volume = mutationVolume(name: "sample_data", consumers: [])
+    let usedVolume = mutationVolume(name: "sample_data", consumers: ["foreign-container"])
+    let state = ComposeMutationState(
+      snapshots: [],
+      volumes: [volume],
+      replacementVolumeAfterInventoryCount: 1,
+      replacementVolume: usedVolume
+    )
+    let journal = MutationJournalDouble()
+    let executor = makeExecutor(state: state, journal: journal)
+    let plan = mutationPlan(
+      action: .down,
+      records: [],
+      volumes: [volume],
+      removeVolumes: true
+    )
+
+    await #expect(throws: ComposeProjectLifecycleError.observedStateChanged) {
+      _ = try await executor.execute(mutationRequest(plan))
+    }
+
+    #expect(await state.deletedVolumeNames.isEmpty)
+    #expect(await state.currentVolumes == [usedVolume])
+  }
+
   private func makeExecutor(
     state: ComposeMutationState,
-    journal: MutationJournalDouble
+    journal: MutationJournalDouble,
+    commandExecutor: any HostCommandExecuting = MutationCommandDouble(
+      result: HostCommandResult(
+        exitCode: 0,
+        standardOutput: "",
+        standardError: "",
+        outputWasTruncated: false
+      )
+    )
   ) -> AppleComposeProjectMutationExecutor {
     AppleComposeProjectMutationExecutor(
       runtimeMutationCoordinator: RuntimeMutationCoordinator(),
       containers: MutationContainerTransport(state: state),
+      infrastructure: MutationInfrastructureTransport(state: state),
       inventory: MutationInventoryLoader(state: state),
+      commandExecutor: commandExecutor,
       journal: journal,
       sleeper: ImmediateMutationSleeper(),
       timing: ComposeMutationTiming(
@@ -247,30 +355,47 @@ private final class PreparedPlanClock: @unchecked Sendable {
 
 private actor ComposeMutationState {
   private var snapshots: [ComposeRuntimeContainerSnapshot]
+  private var volumes: [VolumeRecord]
+  private var networks: [NetworkRecord]
   private let gracefulSignalStopsContainer: Bool
   private let replacementAfterListCount: Int?
   private let replacementSnapshot: ComposeRuntimeContainerSnapshot?
+  private let replacementVolumeAfterInventoryCount: Int?
+  private let replacementVolume: VolumeRecord?
   private var listCount = 0
+  private var inventoryCount = 0
 
   private(set) var startIDs: [String] = []
   private(set) var signals: [String] = []
   private(set) var deleteIDs: [String] = []
+  private(set) var deletedVolumeNames: [String] = []
+  private(set) var deletedNetworkIDs: [String] = []
 
   init(
     snapshots: [ComposeRuntimeContainerSnapshot],
+    volumes: [VolumeRecord] = [],
+    networks: [NetworkRecord] = [],
     gracefulSignalStopsContainer: Bool = true,
     replacementAfterListCount: Int? = nil,
-    replacementSnapshot: ComposeRuntimeContainerSnapshot? = nil
+    replacementSnapshot: ComposeRuntimeContainerSnapshot? = nil,
+    replacementVolumeAfterInventoryCount: Int? = nil,
+    replacementVolume: VolumeRecord? = nil
   ) {
     self.snapshots = snapshots
+    self.volumes = volumes
+    self.networks = networks
     self.gracefulSignalStopsContainer = gracefulSignalStopsContainer
     self.replacementAfterListCount = replacementAfterListCount
     self.replacementSnapshot = replacementSnapshot
+    self.replacementVolumeAfterInventoryCount = replacementVolumeAfterInventoryCount
+    self.replacementVolume = replacementVolume
   }
 
   var currentRecords: [ContainerRecord] {
     snapshots.map(\.record)
   }
+
+  var currentVolumes: [VolumeRecord] { volumes }
 
   func list() -> [ComposeRuntimeContainerSnapshot] {
     listCount += 1
@@ -300,8 +425,25 @@ private actor ComposeMutationState {
     snapshots.removeAll { $0.record.id == id }
   }
 
+  func deleteVolume(name: String) {
+    deletedVolumeNames.append(name)
+    volumes.removeAll { $0.name == name }
+  }
+
+  func deleteNetwork(id: String) {
+    deletedNetworkIDs.append(id)
+    networks.removeAll { $0.id == id }
+  }
+
   func inventory() -> ContainerInventory {
-    ContainerInventory(
+    inventoryCount += 1
+    if let replacementVolumeAfterInventoryCount,
+      inventoryCount > replacementVolumeAfterInventoryCount,
+      let replacementVolume
+    {
+      volumes = [replacementVolume]
+    }
+    return ContainerInventory(
       system: ContainerSystemInfo(
         version: "test",
         build: "test",
@@ -318,8 +460,8 @@ private actor ComposeMutationState {
           indexSizeBytes: 1
         )
       ],
-      volumes: [],
-      networks: [],
+      volumes: volumes,
+      networks: networks,
       machines: []
     )
   }
@@ -373,6 +515,49 @@ private struct MutationContainerTransport: ComposeContainerMutationTransport {
   }
 }
 
+private enum MutationInfrastructureError: Error {
+  case unexpectedCall
+}
+
+private struct MutationInfrastructureTransport: AppleInfrastructureTransport {
+  let state: ComposeMutationState
+
+  func createVolume(
+    name: String,
+    driver: String,
+    driverOptions: [String: String],
+    labels: [String: String]
+  ) async throws -> VolumeConfiguration {
+    throw MutationInfrastructureError.unexpectedCall
+  }
+
+  func deleteVolume(name: String) async throws {
+    await state.deleteVolume(name: name)
+  }
+
+  func listVolumes() async throws -> [VolumeConfiguration] {
+    throw MutationInfrastructureError.unexpectedCall
+  }
+
+  func volumeDiskUsage(name: String) async throws -> UInt64 {
+    throw MutationInfrastructureError.unexpectedCall
+  }
+
+  func createNetwork(
+    configuration: NetworkConfiguration
+  ) async throws -> NetworkResource {
+    throw MutationInfrastructureError.unexpectedCall
+  }
+
+  func deleteNetwork(id: String) async throws {
+    await state.deleteNetwork(id: id)
+  }
+
+  func listNetworks() async throws -> [NetworkResource] {
+    throw MutationInfrastructureError.unexpectedCall
+  }
+}
+
 private struct MutationInventoryLoader: ContainerInventoryLoading {
   let state: ComposeMutationState
 
@@ -387,6 +572,7 @@ private struct ImmediateMutationSleeper: ComposeMutationSleeping {
 
 private actor MutationJournalDouble: ComposeOperationJournaling {
   private(set) var phases: [ComposeOperationJournalPhase] = []
+  private(set) var completedStepTokens: [[String]] = []
 
   func persistPending(_ entry: ComposeOperationJournalEntry) async throws {}
 
@@ -396,6 +582,7 @@ private actor MutationJournalDouble: ComposeOperationJournaling {
     progress: ComposeOperationJournalProgress
   ) async throws {
     phases.append(progress.phase)
+    completedStepTokens.append(progress.completedStepTokens)
   }
 
   func pendingRecoverySnapshots() async throws -> [ComposeOperationRecoverySnapshot] { [] }
@@ -466,11 +653,16 @@ private func mutationPlan(
   action: ComposeProjectLifecycleAction,
   records: [ContainerRecord],
   dependencies: [String: [String]] = ["web": []],
-  killStuckContainers: Bool = true
+  killStuckContainers: Bool = true,
+  orphanIDs: Set<String> = [],
+  volumes: [VolumeRecord] = [],
+  networks: [NetworkRecord] = [],
+  removeOrphans: Bool = false,
+  removeVolumes: Bool = false
 ) -> ComposeProjectPlan {
   let serviceNames = Array(
     Set(
-      records.compactMap {
+      records.filter { !orphanIDs.contains($0.id) }.compactMap {
         $0.labels[ComposeLabelKey.service]
       })
   ).sorted()
@@ -489,14 +681,6 @@ private func mutationPlan(
       publishedPortCount: 0
     )
   }
-  let configuration = Data(#"{"name":"sample","services":{}}"#.utf8)
-  let containerOperation: ComposeProjectContainerOperation =
-    switch action {
-    case .up: .converge
-    case .start: .start
-    case .stop: .stop
-    case .down: .removeDeclared
-    }
   var visited: Set<String> = []
   var serviceOrder: [String] = []
   func visit(_ service: String) {
@@ -521,15 +705,44 @@ private func mutationPlan(
     return lhs.id < rhs.id
   }
   let containerActions = orderedRecords.enumerated().map { offset, record in
-    ComposeProjectContainerAction(
+    let operation: ComposeProjectContainerOperation =
+      switch action {
+      case .up: .converge
+      case .start: .start
+      case .stop: .stop
+      case .down: orphanIDs.contains(record.id) ? .removeOrphan : .removeDeclared
+      }
+    return ComposeProjectContainerAction(
       stepID: .container(offset + 1),
-      operation: containerOperation,
+      operation: operation,
       serviceName: record.labels[ComposeLabelKey.service] ?? "unknown",
       replicaNumber: Int(record.labels[ComposeLabelKey.containerNumber] ?? ""),
       expectedIdentity: ComposeProjectContainerIdentity(
         record,
         imageDigest: "sha256:image"
       )
+    )
+  }
+  let volumeActions: [ComposeProjectVolumeAction] = volumes.enumerated().compactMap {
+    offset, volume in
+    guard action == .down, removeVolumes else { return nil }
+    return ComposeProjectVolumeAction(
+      stepID: .volume(offset + 1),
+      operation: .removeManaged,
+      logicalName: volume.labels[ComposeLabelKey.volume] ?? volume.name,
+      runtimeName: volume.name,
+      expectedIdentity: ComposeProjectVolumeIdentity(volume)
+    )
+  }
+  let networkActions: [ComposeProjectNetworkAction] = networks.enumerated().compactMap {
+    offset, network in
+    guard action == .down else { return nil }
+    return ComposeProjectNetworkAction(
+      stepID: .network(offset + 1),
+      operation: .removeManaged,
+      logicalName: network.labels[ComposeLabelKey.network] ?? network.name,
+      runtimeName: network.name,
+      expectedIdentity: ComposeProjectNetworkIdentity(network)
     )
   }
   return ComposeProjectPlan(
@@ -539,6 +752,8 @@ private func mutationPlan(
       action: action,
       projectName: "sample",
       pullPolicy: .never,
+      removeOrphans: removeOrphans,
+      removeVolumes: removeVolumes,
       killStuckContainers: killStuckContainers
     ),
     source: ComposeProjectSourceSummary(
@@ -562,8 +777,24 @@ private func mutationPlan(
       declaredServiceNames: serviceNames,
       serviceDependencies: dependencies,
       activeServices: activeServices,
-      volumes: [],
-      networks: []
+      volumes: volumes.map {
+        ComposeDesiredResource(
+          kind: .volume,
+          logicalName: $0.labels[ComposeLabelKey.volume] ?? $0.name,
+          runtimeName: $0.name,
+          isExternal: false,
+          isActive: false
+        )
+      },
+      networks: networks.map {
+        ComposeDesiredResource(
+          kind: .network,
+          logicalName: $0.labels[ComposeLabelKey.network] ?? $0.name,
+          runtimeName: $0.name,
+          isExternal: false,
+          isActive: false
+        )
+      }
     ),
     fullConfigurationSHA256: String(repeating: "f", count: 64),
     activeConfigurationSHA256: String(repeating: "e", count: 64),
@@ -580,14 +811,16 @@ private func mutationPlan(
       containers: records.map {
         ComposeProjectContainerIdentity($0, imageDigest: "sha256:image")
       },
-      volumes: [],
-      networks: []
+      volumes: volumes.map(ComposeProjectVolumeIdentity.init),
+      networks: networks.map(ComposeProjectNetworkIdentity.init)
     ),
     issues: [],
     containerActions: containerActions,
-    volumeActions: [],
-    networkActions: [],
-    orphanContainers: [],
+    volumeActions: volumeActions,
+    networkActions: networkActions,
+    orphanContainers: records.filter { orphanIDs.contains($0.id) }.map {
+      ComposeProjectContainerIdentity($0, imageDigest: "sha256:image")
+    },
     preservedResources: []
   )
 }
@@ -617,6 +850,29 @@ private func mutationContainer(
       ComposeLabelKey.oneOff: "False",
       ComposeLabelKey.configHash: String(repeating: "c", count: 64),
     ]
+  )
+}
+
+private func mutationVolume(
+  name: String,
+  consumers: [String]
+) -> VolumeRecord {
+  VolumeRecord(
+    id: "volume-\(name)",
+    name: name,
+    driver: "local",
+    format: "ext4",
+    source: "/tmp/\(name).img",
+    createdAt: Date(timeIntervalSince1970: 1_000),
+    sizeBytes: 1_024,
+    allocatedBytes: 512,
+    labels: [
+      ComposeLabelKey.project: "sample",
+      ComposeLabelKey.volume: "data",
+    ],
+    options: [:],
+    isAnonymous: false,
+    usedByContainerIDs: consumers
   )
 }
 
