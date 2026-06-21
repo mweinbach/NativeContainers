@@ -95,9 +95,7 @@ struct ComposeOperationJournalTests {
       expectedPhase: .prepared,
       progress: ComposeOperationJournalProgress(
         phase: .executing,
-        completedContainerIDs: ["container-1"],
-        completedNetworkNames: ["sample-project_default"],
-        completedVolumeNames: ["sample-project_data"]
+        completedStepTokens: ["container-0001"]
       )
     )
 
@@ -114,9 +112,14 @@ struct ComposeOperationJournalTests {
       expectedPhase: .executing,
       progress: ComposeOperationJournalProgress(
         phase: .verifying,
-        completedContainerIDs: ["container-2", "container-1"],
-        completedNetworkNames: ["sample-project_default"],
-        completedVolumeNames: ["sample-project_data", "sample-project_cache"]
+        completedStepTokens: [
+          "container-0001",
+          "container-0002",
+          "container-0003",
+          "network-0001",
+          "volume-0001",
+          "volume-0002",
+        ]
       )
     )
     #expect(syncer.events == [.file, .directory])
@@ -126,13 +129,13 @@ struct ComposeOperationJournalTests {
       try await recoveredJournal.pendingRecoverySnapshots().first
     )
     #expect(snapshot.phase == .verifying)
-    #expect(snapshot.completedContainerIDs == ["container-1", "container-2"])
-    #expect(snapshot.completedNetworkNames == ["sample-project_default"])
     #expect(
-      snapshot.completedVolumeNames == [
-        "sample-project_cache",
-        "sample-project_data",
-      ]
+      snapshot.completedContainerIDs
+        == ["container-0001", "container-0002", "container-0003"]
+    )
+    #expect(snapshot.completedNetworkNames == ["network-0001"])
+    #expect(
+      snapshot.completedVolumeNames == ["volume-0001", "volume-0002"]
     )
     #expect(snapshot.recoveryDisposition == .manualReviewRequired)
     #expect(!snapshot.allowsAutomaticExecution)
@@ -149,7 +152,7 @@ struct ComposeOperationJournalTests {
       expectedPhase: .prepared,
       progress: ComposeOperationJournalProgress(
         phase: .executing,
-        completedContainerIDs: ["container-1"]
+        completedStepTokens: ["container-0001"]
       )
     )
 
@@ -172,7 +175,7 @@ struct ComposeOperationJournalTests {
       try await fixture.journal.pendingRecoverySnapshots().first
     )
     #expect(snapshot.phase == .executing)
-    #expect(snapshot.completedContainerIDs == ["container-1"])
+    #expect(snapshot.completedContainerIDs == ["container-0001"])
   }
 
   @Test
@@ -254,7 +257,8 @@ struct ComposeOperationJournalTests {
       affectedContainerCount: 0,
       affectedVolumeCount: 0,
       affectedNetworkCount: 0,
-      orphanContainerCount: 0
+      orphanContainerCount: 0,
+      plannedStepTokens: []
     )
 
     await #expect(
@@ -517,7 +521,15 @@ private func sampleEntry(
     affectedContainerCount: 3,
     affectedVolumeCount: 2,
     affectedNetworkCount: 1,
-    orphanContainerCount: 1
+    orphanContainerCount: 1,
+    plannedStepTokens: [
+      "container-0001",
+      "container-0002",
+      "container-0003",
+      "network-0001",
+      "volume-0001",
+      "volume-0002",
+    ]
   )
 }
 
@@ -545,6 +557,26 @@ private func sensitivePlan() -> ComposeProjectPlan {
     networkNames: ["network-secret"],
     publishedPortCount: 0
   )
+  func identity(_ id: String) -> ComposeProjectContainerIdentity {
+    ComposeProjectContainerIdentity(
+      ContainerRecord(
+        id: id,
+        imageReference: "registry.example.com/private-token",
+        imageDigest: "sha256:private-image",
+        platform: "linux/arm64",
+        state: .stopped,
+        ipAddress: nil,
+        createdAt: Date(timeIntervalSince1970: 1_749_999_000),
+        startedAt: nil,
+        cpuCount: 2,
+        memoryBytes: 1_024,
+        ports: [],
+        labels: [ComposeLabelKey.project: "private-project"]
+      )
+    )
+  }
+  let containerIdentity = identity("container-secret")
+  let orphanIdentity = identity("orphan-secret")
 
   return ComposeProjectPlan(
     id: UUID(uuidString: "abcdefab-cdef-abcd-efab-cdefabcdefab")!,
@@ -596,10 +628,34 @@ private func sensitivePlan() -> ComposeProjectPlan {
     ],
     observedIdentity: .empty,
     issues: [],
-    affectedContainerIDs: ["container-secret"],
-    affectedVolumeNames: ["volume-secret"],
-    affectedNetworkNames: ["network-secret"],
-    orphanContainerIDs: ["orphan-secret"],
-    preservedResourceNames: ["preserved-secret"]
+    containerActions: [
+      ComposeProjectContainerAction(
+        stepID: .container(1),
+        operation: .removeDeclared,
+        serviceName: "secret-service",
+        replicaNumber: 1,
+        expectedIdentity: containerIdentity
+      )
+    ],
+    volumeActions: [
+      ComposeProjectVolumeAction(
+        stepID: .volume(1),
+        operation: .removeManaged,
+        logicalName: "volume-secret",
+        runtimeName: "volume-secret",
+        expectedIdentity: nil
+      )
+    ],
+    networkActions: [
+      ComposeProjectNetworkAction(
+        stepID: .network(1),
+        operation: .removeManaged,
+        logicalName: "network-secret",
+        runtimeName: "network-secret",
+        expectedIdentity: nil
+      )
+    ],
+    orphanContainers: [orphanIdentity],
+    preservedResources: [.absent(kind: .network, name: "preserved-secret")]
   )
 }

@@ -157,71 +157,99 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
       progress: ComposeOperationJournalProgress(phase: .executing)
     )
 
-    var completedContainerIDs: [String] = []
-    var completedNetworkNames: [String] = []
+    var completedStepTokens: [String] = []
 
     switch request.plan.options.action {
     case .up:
-      try await executeFreshUp(request)
-
-    case .start:
-      for identity in orderedContainerIdentities(
-        in: request.plan,
-        reverseDependencies: false
-      ) {
-        try await start(identity)
-        completedContainerIDs.append(identity.id)
+      if request.plan.containerActions.contains(where: { $0.operation == .converge }) {
+        guard request.plan.containerActions.allSatisfy({ $0.operation == .converge }) else {
+          throw ComposeProjectLifecycleError.observedStateChanged
+        }
+        for action in request.plan.containerActions {
+          let identity = try requiredIdentity(for: action)
+          try await start(identity)
+          completedStepTokens.append(action.stepID.rawValue)
+          try await recordExecutingProgress(
+            operationID: request.operationID,
+            stepTokens: completedStepTokens
+          )
+        }
+      } else {
+        guard request.plan.containerActions.allSatisfy({ $0.operation == .create }) else {
+          throw ComposeProjectLifecycleError.observedStateChanged
+        }
+        try await executeFreshUp(request)
+        completedStepTokens.append(ComposeProjectActionStepID.composeUp().rawValue)
         try await recordExecutingProgress(
           operationID: request.operationID,
-          containerIDs: completedContainerIDs,
-          networkNames: completedNetworkNames
+          stepTokens: completedStepTokens
+        )
+      }
+
+    case .start:
+      for action in request.plan.containerActions {
+        guard action.operation == .start else {
+          throw ComposeProjectLifecycleError.observedStateChanged
+        }
+        let identity = try requiredIdentity(for: action)
+        try await start(identity)
+        completedStepTokens.append(action.stepID.rawValue)
+        try await recordExecutingProgress(
+          operationID: request.operationID,
+          stepTokens: completedStepTokens
         )
       }
 
     case .stop:
-      for identity in orderedContainerIdentities(
-        in: request.plan,
-        reverseDependencies: true
-      ) {
+      for action in request.plan.containerActions {
+        guard action.operation == .stop else {
+          throw ComposeProjectLifecycleError.observedStateChanged
+        }
+        let identity = try requiredIdentity(for: action)
         try await stop(
           identity,
           killStuckContainers: request.plan.options.killStuckContainers
         )
-        completedContainerIDs.append(identity.id)
+        completedStepTokens.append(action.stepID.rawValue)
         try await recordExecutingProgress(
           operationID: request.operationID,
-          containerIDs: completedContainerIDs,
-          networkNames: completedNetworkNames
+          stepTokens: completedStepTokens
         )
       }
 
     case .down:
-      for identity in orderedContainerIdentities(
-        in: request.plan,
-        reverseDependencies: true
-      ) {
+      for action in request.plan.containerActions {
+        guard action.removesContainer else {
+          throw ComposeProjectLifecycleError.observedStateChanged
+        }
+        let identity = try requiredIdentity(for: action)
         try await stop(
           identity,
           killStuckContainers: request.plan.options.killStuckContainers
         )
         try await delete(identity)
-        completedContainerIDs.append(identity.id)
+        completedStepTokens.append(action.stepID.rawValue)
         try await recordExecutingProgress(
           operationID: request.operationID,
-          containerIDs: completedContainerIDs,
-          networkNames: completedNetworkNames
+          stepTokens: completedStepTokens
         )
       }
-      for networkName in request.plan.affectedNetworkNames {
-        try await deleteNetwork(
-          named: networkName,
-          plan: request.plan
-        )
-        completedNetworkNames.append(networkName)
+      for action in request.plan.networkActions {
+        guard action.operation == .removeManaged else { continue }
+        try await deleteNetwork(action)
+        completedStepTokens.append(action.stepID.rawValue)
         try await recordExecutingProgress(
           operationID: request.operationID,
-          containerIDs: completedContainerIDs,
-          networkNames: completedNetworkNames
+          stepTokens: completedStepTokens
+        )
+      }
+      for action in request.plan.volumeActions {
+        guard action.operation == .removeManaged else { continue }
+        try await deleteVolume(action)
+        completedStepTokens.append(action.stepID.rawValue)
+        try await recordExecutingProgress(
+          operationID: request.operationID,
+          stepTokens: completedStepTokens
         )
       }
     }
@@ -231,8 +259,7 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
       expectedPhase: .executing,
       progress: ComposeOperationJournalProgress(
         phase: .verifying,
-        completedContainerIDs: completedContainerIDs,
-        completedNetworkNames: completedNetworkNames
+        completedStepTokens: completedStepTokens
       )
     )
     let finalInventory = try await inventory.loadInventory()
@@ -242,8 +269,7 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
       expectedPhase: .verifying,
       progress: ComposeOperationJournalProgress(
         phase: .finished,
-        completedContainerIDs: completedContainerIDs,
-        completedNetworkNames: completedNetworkNames
+        completedStepTokens: completedStepTokens
       )
     )
     return executionResult(plan: request.plan, inventory: finalInventory)
@@ -421,20 +447,16 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
   }
 
   private func deleteNetwork(
-    named name: String,
-    plan: ComposeProjectPlan
+    _ action: ComposeProjectNetworkAction
   ) async throws {
-    guard
-      let expected = plan.observedIdentity.networks.first(
-        where: { $0.configuration.name == name }
-      )
-    else {
-      return
+    guard let expected = action.expectedIdentity else {
+      throw ComposeProjectLifecycleError.observedStateChanged
     }
     let before = try await inventory.loadInventory()
     guard
-      let record = before.networks.first(where: { $0.name == name }),
+      let record = before.networks.first(where: { $0.id == expected.id }),
       expected.matches(record),
+      record.name == action.runtimeName,
       record.usedByContainerIDs.isEmpty,
       !record.isBuiltin
     else {
@@ -458,9 +480,58 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
       })
     else {
       throw ComposeProjectLifecycleError.postconditionNotMet(
-        "Network \(name) remained present after deletion."
+        "Network \(action.runtimeName) remained present after deletion."
       )
     }
+  }
+
+  private func deleteVolume(
+    _ action: ComposeProjectVolumeAction
+  ) async throws {
+    guard let expected = action.expectedIdentity else {
+      throw ComposeProjectLifecycleError.observedStateChanged
+    }
+    let before = try await inventory.loadInventory()
+    guard
+      let record = before.volumes.first(where: { $0.id == expected.id }),
+      expected.matches(record),
+      record.name == action.runtimeName,
+      record.usedByContainerIDs.isEmpty
+    else {
+      throw ComposeProjectLifecycleError.observedStateChanged
+    }
+
+    do {
+      try await infrastructure.deleteVolume(name: record.name)
+    } catch {
+      let reconciled = try await inventory.loadInventory()
+      if !reconciled.volumes.contains(where: {
+        $0.id == expected.id || $0.name == expected.configuration.name
+      }) {
+        return
+      }
+      throw error
+    }
+
+    let confirmed = try await inventory.loadInventory()
+    guard
+      !confirmed.volumes.contains(where: {
+        $0.id == expected.id || $0.name == expected.configuration.name
+      })
+    else {
+      throw ComposeProjectLifecycleError.postconditionNotMet(
+        "Volume \(action.runtimeName) remained present after deletion."
+      )
+    }
+  }
+
+  private func requiredIdentity(
+    for action: ComposeProjectContainerAction
+  ) throws -> ComposeProjectContainerIdentity {
+    guard let identity = action.expectedIdentity else {
+      throw ComposeProjectLifecycleError.observedStateChanged
+    }
+    return identity
   }
 
   private func requireContainer(
@@ -535,14 +606,6 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
       else {
         throw ComposeProjectLifecycleError.observedStateChanged
       }
-      if let digest = identity.imageDigest {
-        guard
-          current.images.first(where: { $0.reference == identity.imageReference })?.digest
-            == digest
-        else {
-          throw ComposeProjectLifecycleError.observedStateChanged
-        }
-      }
     }
     for identity in plan.observedIdentity.volumes {
       guard
@@ -570,65 +633,46 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
     guard expectedContainerIDs == currentProjectIDs else {
       throw ComposeProjectLifecycleError.observedStateChanged
     }
-  }
 
-  private func orderedContainerIdentities(
-    in plan: ComposeProjectPlan,
-    reverseDependencies: Bool
-  ) -> [ComposeProjectContainerIdentity] {
-    let affected = Set(plan.affectedContainerIDs)
-    let serviceOrder = topologicalServiceOrder(plan.desiredState)
-    let serviceIndexes = Dictionary(
-      uniqueKeysWithValues: serviceOrder.enumerated().map { ($1, $0) }
+    let expectedProjectVolumeIDs = Set(
+      plan.observedIdentity.volumes.filter {
+        $0.configuration.labels[ComposeLabelKey.project] == plan.options.projectName
+      }.map(\.id)
     )
-    let sorted = plan.observedIdentity.containers.filter {
-      affected.contains($0.id)
-    }.sorted { lhs, rhs in
-      let lhsService = lhs.labels[ComposeLabelKey.service] ?? ""
-      let rhsService = rhs.labels[ComposeLabelKey.service] ?? ""
-      let lhsIndex = serviceIndexes[lhsService] ?? Int.max
-      let rhsIndex = serviceIndexes[rhsService] ?? Int.max
-      if lhsIndex != rhsIndex { return lhsIndex < rhsIndex }
-      let lhsReplica = Int(lhs.labels[ComposeLabelKey.containerNumber] ?? "") ?? Int.max
-      let rhsReplica = Int(rhs.labels[ComposeLabelKey.containerNumber] ?? "") ?? Int.max
-      if lhsReplica != rhsReplica { return lhsReplica < rhsReplica }
-      return composeStringOrder(lhs.id, rhs.id)
-    }
-    return reverseDependencies ? Array(sorted.reversed()) : sorted
-  }
-
-  private func topologicalServiceOrder(_ desired: ComposeDesiredState) -> [String] {
-    var visited: Set<String> = []
-    var order: [String] = []
-
-    func visit(_ service: String) {
-      guard visited.insert(service).inserted else { return }
-      for dependency in desired.serviceDependencies[service, default: []].sorted(
-        by: composeStringOrder
-      ) {
-        visit(dependency)
-      }
-      order.append(service)
+    let currentProjectVolumeIDs = Set(
+      current.volumes.filter {
+        $0.labels[ComposeLabelKey.project] == plan.options.projectName
+      }.map(\.id)
+    )
+    guard expectedProjectVolumeIDs == currentProjectVolumeIDs else {
+      throw ComposeProjectLifecycleError.observedStateChanged
     }
 
-    for service in desired.declaredServiceNames.sorted(by: composeStringOrder) {
-      visit(service)
+    let expectedProjectNetworkIDs = Set(
+      plan.observedIdentity.networks.filter {
+        $0.configuration.labels[ComposeLabelKey.project] == plan.options.projectName
+      }.map(\.id)
+    )
+    let currentProjectNetworkIDs = Set(
+      current.networks.filter {
+        $0.labels[ComposeLabelKey.project] == plan.options.projectName
+      }.map(\.id)
+    )
+    guard expectedProjectNetworkIDs == currentProjectNetworkIDs else {
+      throw ComposeProjectLifecycleError.observedStateChanged
     }
-    return order
   }
 
   private func recordExecutingProgress(
     operationID: UUID,
-    containerIDs: [String],
-    networkNames: [String]
+    stepTokens: [String]
   ) async throws {
     try await journal.updatePending(
       operationID: operationID,
       expectedPhase: .executing,
       progress: ComposeOperationJournalProgress(
         phase: .executing,
-        completedContainerIDs: containerIDs,
-        completedNetworkNames: networkNames
+        completedStepTokens: stepTokens
       )
     )
   }
@@ -637,65 +681,50 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
     plan: ComposeProjectPlan,
     inventory: ContainerInventory
   ) throws {
-    let projectContainers = inventory.containers.filter {
-      $0.labels[ComposeLabelKey.project] == plan.options.projectName
-        && $0.labels[ComposeLabelKey.oneOff]?.lowercased() != "true"
-    }
-
     switch plan.options.action {
     case .up:
-      for service in plan.desiredState.activeServices {
-        let instances = projectContainers.filter {
-          $0.labels[ComposeLabelKey.service] == service.name
-        }
-        guard
-          instances.count == service.replicaCount,
-          instances.allSatisfy({ $0.state == .running }),
-          instances.allSatisfy({ $0.imageReference == service.imageReference }),
-          instances.allSatisfy({
-            service.configurationHash == nil
-              || $0.labels[ComposeLabelKey.configHash] == service.configurationHash
-          })
-        else {
-          throw ComposeProjectLifecycleError.postconditionNotMet(
-            "Service \(service.name) did not reach its reviewed running replica count."
-          )
-        }
-      }
-      guard
-        Set(projectContainers.compactMap { $0.labels[ComposeLabelKey.service] })
-          == Set(plan.desiredState.activeServiceNames)
-      else {
-        throw ComposeProjectLifecycleError.postconditionNotMet(
-          "Unexpected project containers appeared during Up."
-        )
-      }
+      try verifyUpPostconditions(plan: plan, inventory: inventory)
 
     case .start:
-      try requireAffectedContainers(
-        plan: plan,
+      try requireActionContainers(
+        actions: plan.containerActions,
         inventory: inventory,
         stateMatches: { $0 == .running }
       )
 
     case .stop:
-      try requireAffectedContainers(
-        plan: plan,
+      try requireActionContainers(
+        actions: plan.containerActions,
         inventory: inventory,
         stateMatches: { $0 != .running && $0 != .stopping }
       )
 
     case .down:
       let remainingIDs = Set(inventory.containers.map(\.id))
-      guard remainingIDs.isDisjoint(with: plan.affectedContainerIDs) else {
+      let removedContainerIDs = Set(
+        plan.containerActions.filter(\.removesContainer).compactMap(\.existingContainerID)
+      )
+      guard remainingIDs.isDisjoint(with: removedContainerIDs) else {
         throw ComposeProjectLifecycleError.postconditionNotMet(
           "One or more reviewed containers remained after Down."
         )
       }
       let remainingNetworkNames = Set(inventory.networks.map(\.name))
-      guard remainingNetworkNames.isDisjoint(with: plan.affectedNetworkNames) else {
+      let removedNetworkNames = Set(
+        plan.networkActions.filter { $0.operation == .removeManaged }.map(\.runtimeName)
+      )
+      guard remainingNetworkNames.isDisjoint(with: removedNetworkNames) else {
         throw ComposeProjectLifecycleError.postconditionNotMet(
           "One or more reviewed networks remained after Down."
+        )
+      }
+      let remainingVolumeNames = Set(inventory.volumes.map(\.name))
+      let removedVolumeNames = Set(
+        plan.volumeActions.filter { $0.operation == .removeManaged }.map(\.runtimeName)
+      )
+      guard remainingVolumeNames.isDisjoint(with: removedVolumeNames) else {
+        throw ComposeProjectLifecycleError.postconditionNotMet(
+          "One or more reviewed volumes remained after Down."
         )
       }
     }
@@ -703,16 +732,192 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
     try verifyPreservedIdentities(plan: plan, inventory: inventory)
   }
 
-  private func requireAffectedContainers(
+  private func verifyUpPostconditions(
     plan: ComposeProjectPlan,
+    inventory: ContainerInventory
+  ) throws {
+    let projectContainers = inventory.containers.filter {
+      $0.labels[ComposeLabelKey.project] == plan.options.projectName
+    }
+    let observedIDs = Set(plan.observedIdentity.containers.map(\.id))
+    let createActions = plan.containerActions.filter { $0.operation == .create }
+    let newContainers = projectContainers.filter { !observedIDs.contains($0.id) }
+
+    guard newContainers.count == createActions.count else {
+      throw ComposeProjectLifecycleError.postconditionNotMet(
+        "Up produced an unexpected number of new project containers."
+      )
+    }
+    for action in createActions {
+      let matches = newContainers.filter {
+        $0.labels[ComposeLabelKey.service] == action.serviceName
+          && Int($0.labels[ComposeLabelKey.containerNumber] ?? "")
+            == action.replicaNumber
+          && $0.labels[ComposeLabelKey.oneOff]?.lowercased() != "true"
+      }
+      guard matches.count == 1 else {
+        throw ComposeProjectLifecycleError.postconditionNotMet(
+          "Up did not create exactly one reviewed \(action.serviceName) replica."
+        )
+      }
+    }
+
+    let imagesByReference = Dictionary(
+      inventory.images.map { ($0.reference, $0.digest) },
+      uniquingKeysWith: { first, _ in first }
+    )
+    for service in plan.desiredState.activeServices {
+      let instances = projectContainers.filter {
+        $0.labels[ComposeLabelKey.service] == service.name
+          && $0.labels[ComposeLabelKey.oneOff]?.lowercased() != "true"
+      }
+      let expectedReplicas = Set(1...service.replicaCount)
+      guard
+        instances.count == service.replicaCount,
+        Set(
+          instances.compactMap {
+            Int($0.labels[ComposeLabelKey.containerNumber] ?? "")
+          }) == expectedReplicas,
+        instances.allSatisfy({ $0.state == .running }),
+        instances.allSatisfy({ $0.imageReference == service.imageReference }),
+        instances.allSatisfy({
+          $0.imageDigest != nil
+            && $0.imageDigest == imagesByReference[service.imageReference]
+        }),
+        instances.allSatisfy({
+          service.configurationHash == nil
+            || $0.labels[ComposeLabelKey.configHash] == service.configurationHash
+        })
+      else {
+        throw ComposeProjectLifecycleError.postconditionNotMet(
+          "Service \(service.name) did not reach its exact reviewed running replica set."
+        )
+      }
+    }
+
+    try requireActionContainers(
+      actions: plan.containerActions.filter { $0.operation == .converge },
+      inventory: inventory,
+      stateMatches: { $0 == .running }
+    )
+    try verifyUpVolumeActions(plan: plan, inventory: inventory)
+    try verifyUpNetworkActions(plan: plan, inventory: inventory)
+  }
+
+  private func verifyUpVolumeActions(
+    plan: ComposeProjectPlan,
+    inventory: ContainerInventory
+  ) throws {
+    var allowedProjectIDs = Set(
+      plan.observedIdentity.volumes.filter {
+        $0.configuration.labels[ComposeLabelKey.project] == plan.options.projectName
+      }.map(\.id)
+    )
+    for action in plan.volumeActions {
+      let matches = inventory.volumes.filter { $0.name == action.runtimeName }
+      guard matches.count == 1, let record = matches.first else {
+        throw ComposeProjectLifecycleError.postconditionNotMet(
+          "Volume \(action.runtimeName) did not reach its reviewed disposition."
+        )
+      }
+      switch action.operation {
+      case .createManaged:
+        guard
+          action.expectedIdentity == nil,
+          record.labels[ComposeLabelKey.project] == plan.options.projectName,
+          record.labels[ComposeLabelKey.volume] == action.logicalName
+        else {
+          throw ComposeProjectLifecycleError.postconditionNotMet(
+            "Managed volume \(action.runtimeName) has unexpected ownership."
+          )
+        }
+        allowedProjectIDs.insert(record.id)
+      case .reuseManaged, .useExternal:
+        guard let expected = action.expectedIdentity, expected.matches(record) else {
+          throw ComposeProjectLifecycleError.postconditionNotMet(
+            "Volume \(action.runtimeName) changed during Up."
+          )
+        }
+      case .removeManaged:
+        throw ComposeProjectLifecycleError.observedStateChanged
+      }
+    }
+    let currentProjectIDs = Set(
+      inventory.volumes.filter {
+        $0.labels[ComposeLabelKey.project] == plan.options.projectName
+      }.map(\.id)
+    )
+    guard currentProjectIDs == allowedProjectIDs else {
+      throw ComposeProjectLifecycleError.postconditionNotMet(
+        "Unexpected project volumes appeared during Up."
+      )
+    }
+  }
+
+  private func verifyUpNetworkActions(
+    plan: ComposeProjectPlan,
+    inventory: ContainerInventory
+  ) throws {
+    var allowedProjectIDs = Set(
+      plan.observedIdentity.networks.filter {
+        $0.configuration.labels[ComposeLabelKey.project] == plan.options.projectName
+      }.map(\.id)
+    )
+    for action in plan.networkActions {
+      let matches = inventory.networks.filter { $0.name == action.runtimeName }
+      guard matches.count == 1, let record = matches.first else {
+        throw ComposeProjectLifecycleError.postconditionNotMet(
+          "Network \(action.runtimeName) did not reach its reviewed disposition."
+        )
+      }
+      switch action.operation {
+      case .createManaged:
+        guard
+          action.expectedIdentity == nil,
+          record.labels[ComposeLabelKey.project] == plan.options.projectName,
+          record.labels[ComposeLabelKey.network] == action.logicalName
+        else {
+          throw ComposeProjectLifecycleError.postconditionNotMet(
+            "Managed network \(action.runtimeName) has unexpected ownership."
+          )
+        }
+        allowedProjectIDs.insert(record.id)
+      case .reuseManaged, .useExternal:
+        guard let expected = action.expectedIdentity, expected.matches(record) else {
+          throw ComposeProjectLifecycleError.postconditionNotMet(
+            "Network \(action.runtimeName) changed during Up."
+          )
+        }
+      case .removeManaged:
+        throw ComposeProjectLifecycleError.observedStateChanged
+      }
+    }
+    let currentProjectIDs = Set(
+      inventory.networks.filter {
+        $0.labels[ComposeLabelKey.project] == plan.options.projectName
+      }.map(\.id)
+    )
+    guard currentProjectIDs == allowedProjectIDs else {
+      throw ComposeProjectLifecycleError.postconditionNotMet(
+        "Unexpected project networks appeared during Up."
+      )
+    }
+  }
+
+  private func requireActionContainers(
+    actions: [ComposeProjectContainerAction],
     inventory: ContainerInventory,
     stateMatches: (RuntimeState) -> Bool
   ) throws {
     let recordsByID = Dictionary(
       uniqueKeysWithValues: inventory.containers.map { ($0.id, $0) }
     )
-    for identity in plan.observedIdentity.containers
-    where plan.affectedContainerIDs.contains(identity.id) {
+    for action in actions {
+      guard let identity = action.expectedIdentity else {
+        throw ComposeProjectLifecycleError.postconditionNotMet(
+          "A reviewed container action lost its exact identity."
+        )
+      }
       guard
         let record = recordsByID[identity.id],
         identity.matches(record),
@@ -729,40 +934,46 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
     plan: ComposeProjectPlan,
     inventory: ContainerInventory
   ) throws {
-    let affectedContainers = Set(plan.affectedContainerIDs)
-    for identity in plan.observedIdentity.containers
-    where !affectedContainers.contains(identity.id) {
-      guard
-        let record = inventory.containers.first(where: { $0.id == identity.id }),
-        identity.matches(record)
-      else {
-        throw ComposeProjectLifecycleError.postconditionNotMet(
-          "Preserved container \(identity.id) changed during the operation."
-        )
-      }
-    }
-
-    let affectedNetworks = Set(plan.affectedNetworkNames)
-    for identity in plan.observedIdentity.networks
-    where !affectedNetworks.contains(identity.configuration.name) {
-      guard
-        let record = inventory.networks.first(where: { $0.id == identity.id }),
-        identity.matches(record)
-      else {
-        throw ComposeProjectLifecycleError.postconditionNotMet(
-          "Preserved network \(identity.configuration.name) changed during the operation."
-        )
-      }
-    }
-
-    for identity in plan.observedIdentity.volumes {
-      guard
-        let record = inventory.volumes.first(where: { $0.id == identity.id }),
-        identity.matches(record)
-      else {
-        throw ComposeProjectLifecycleError.postconditionNotMet(
-          "Preserved volume \(identity.configuration.name) changed during the operation."
-        )
+    for resource in plan.preservedResources {
+      switch resource {
+      case .container(let identity):
+        guard
+          let record = inventory.containers.first(where: { $0.id == identity.id }),
+          identity.matches(record)
+        else {
+          throw ComposeProjectLifecycleError.postconditionNotMet(
+            "Preserved container \(identity.id) changed during the operation."
+          )
+        }
+      case .volume(let identity):
+        guard
+          let record = inventory.volumes.first(where: { $0.id == identity.id }),
+          identity.matches(record)
+        else {
+          throw ComposeProjectLifecycleError.postconditionNotMet(
+            "Preserved volume \(identity.configuration.name) changed during the operation."
+          )
+        }
+      case .network(let identity):
+        guard
+          let record = inventory.networks.first(where: { $0.id == identity.id }),
+          identity.matches(record)
+        else {
+          throw ComposeProjectLifecycleError.postconditionNotMet(
+            "Preserved network \(identity.configuration.name) changed during the operation."
+          )
+        }
+      case .external(let kind, let name), .absent(let kind, let name):
+        let isPresent =
+          switch kind {
+          case .volume: inventory.volumes.contains { $0.name == name }
+          case .network: inventory.networks.contains { $0.name == name }
+          }
+        guard !isPresent else {
+          throw ComposeProjectLifecycleError.postconditionNotMet(
+            "Preserved absent \(kind.rawValue) \(name) appeared during the operation."
+          )
+        }
       }
     }
   }

@@ -31,6 +31,7 @@ struct ContainerPort: Codable, Equatable, Hashable, Sendable, Identifiable {
 struct ContainerRecord: Codable, Equatable, Sendable, Identifiable {
   let id: String
   let imageReference: String
+  let imageDigest: String?
   let platform: String
   let state: RuntimeState
   let ipAddress: String?
@@ -44,6 +45,7 @@ struct ContainerRecord: Codable, Equatable, Sendable, Identifiable {
   init(
     id: String,
     imageReference: String,
+    imageDigest: String? = nil,
     platform: String,
     state: RuntimeState,
     ipAddress: String?,
@@ -56,6 +58,7 @@ struct ContainerRecord: Codable, Equatable, Sendable, Identifiable {
   ) {
     self.id = id
     self.imageReference = imageReference
+    self.imageDigest = imageDigest
     self.platform = platform
     self.state = state
     self.ipAddress = ipAddress

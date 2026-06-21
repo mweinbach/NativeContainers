@@ -23,20 +23,14 @@ enum ComposeOperationJournalPhase: String, CaseIterable, Codable, Equatable, Sen
 
 struct ComposeOperationJournalProgress: Equatable, Sendable {
   let phase: ComposeOperationJournalPhase
-  let completedContainerIDs: [String]
-  let completedNetworkNames: [String]
-  let completedVolumeNames: [String]
+  let completedStepTokens: [String]
 
   init(
     phase: ComposeOperationJournalPhase,
-    completedContainerIDs: [String] = [],
-    completedNetworkNames: [String] = [],
-    completedVolumeNames: [String] = []
+    completedStepTokens: [String] = []
   ) {
     self.phase = phase
-    self.completedContainerIDs = Array(Set(completedContainerIDs)).sorted()
-    self.completedNetworkNames = Array(Set(completedNetworkNames)).sorted()
-    self.completedVolumeNames = Array(Set(completedVolumeNames)).sorted()
+    self.completedStepTokens = completedStepTokens
   }
 }
 
@@ -59,9 +53,8 @@ struct ComposeOperationJournalEntry: Equatable, Sendable {
   let affectedNetworkCount: Int
   let orphanContainerCount: Int
   let phase: ComposeOperationJournalPhase
-  let completedContainerIDs: [String]
-  let completedNetworkNames: [String]
-  let completedVolumeNames: [String]
+  let plannedStepTokens: [String]
+  let completedStepTokens: [String]
 
   init(
     operationID: UUID = UUID(),
@@ -82,9 +75,8 @@ struct ComposeOperationJournalEntry: Equatable, Sendable {
     affectedNetworkCount: Int,
     orphanContainerCount: Int,
     phase: ComposeOperationJournalPhase = .prepared,
-    completedContainerIDs: [String] = [],
-    completedNetworkNames: [String] = [],
-    completedVolumeNames: [String] = []
+    plannedStepTokens: [String],
+    completedStepTokens: [String] = []
   ) {
     self.operationID = operationID
     self.planID = planID
@@ -104,9 +96,8 @@ struct ComposeOperationJournalEntry: Equatable, Sendable {
     self.affectedNetworkCount = affectedNetworkCount
     self.orphanContainerCount = orphanContainerCount
     self.phase = phase
-    self.completedContainerIDs = completedContainerIDs
-    self.completedNetworkNames = completedNetworkNames
-    self.completedVolumeNames = completedVolumeNames
+    self.plannedStepTokens = plannedStepTokens
+    self.completedStepTokens = completedStepTokens
   }
 
   init(
@@ -131,12 +122,14 @@ struct ComposeOperationJournalEntry: Equatable, Sendable {
       affectedContainerCount: plan.affectedContainerIDs.count,
       affectedVolumeCount: plan.affectedVolumeNames.count,
       affectedNetworkCount: plan.affectedNetworkNames.count,
-      orphanContainerCount: plan.orphanContainerIDs.count
+      orphanContainerCount: plan.orphanContainerIDs.count,
+      plannedStepTokens: plan.executionStepTokens
     )
   }
 }
 
 struct ComposeOperationRecoverySnapshot: Equatable, Identifiable, Sendable {
+  let schemaVersion: Int
   let operationID: UUID
   let planID: UUID
   let action: ComposeProjectLifecycleAction
@@ -155,13 +148,25 @@ struct ComposeOperationRecoverySnapshot: Equatable, Identifiable, Sendable {
   let affectedNetworkCount: Int
   let orphanContainerCount: Int
   let phase: ComposeOperationJournalPhase
-  let completedContainerIDs: [String]
-  let completedNetworkNames: [String]
-  let completedVolumeNames: [String]
+  let plannedStepTokens: [String]
+  let completedStepTokens: [String]
 
   var id: UUID { operationID }
   var recoveryDisposition: ComposeOperationRecoveryDisposition { .manualReviewRequired }
   var allowsAutomaticExecution: Bool { false }
+  var isLegacyRecord: Bool { schemaVersion < 3 }
+
+  var completedContainerIDs: [String] {
+    completedStepTokens.filter { $0.hasPrefix("container-") }
+  }
+
+  var completedNetworkNames: [String] {
+    completedStepTokens.filter { $0.hasPrefix("network-") }
+  }
+
+  var completedVolumeNames: [String] {
+    completedStepTokens.filter { $0.hasPrefix("volume-") }
+  }
 }
 
 enum ComposeOperationJournalError: LocalizedError, Equatable, Sendable {
@@ -246,7 +251,7 @@ struct DarwinComposeOperationJournalDurabilitySyncer:
 actor ComposeOperationJournal: ComposeOperationJournaling {
   static let maximumRecordByteCount: Int64 = 64 * 1_024
 
-  private static let schemaVersion = 2
+  private static let schemaVersion = 3
   private static let recordSuffix = ".json"
   private static let temporaryPrefix = ".pending-"
 
@@ -384,6 +389,11 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
       expectedOperationID: operationID,
       directoryDescriptor: directoryDescriptor
     )
+    guard current.schemaVersion == Self.schemaVersion else {
+      throw ComposeOperationJournalError.invalidProgress(
+        "legacy journal records require manual reconciliation and cannot be resumed"
+      )
+    }
     guard current.phase == expectedPhase else {
       throw ComposeOperationJournalError.staleProgress(
         expected: expectedPhase,
@@ -411,9 +421,8 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
       affectedNetworkCount: current.affectedNetworkCount,
       orphanContainerCount: current.orphanContainerCount,
       phase: progress.phase,
-      completedContainerIDs: progress.completedContainerIDs,
-      completedNetworkNames: progress.completedNetworkNames,
-      completedVolumeNames: progress.completedVolumeNames
+      plannedStepTokens: current.plannedStepTokens,
+      completedStepTokens: progress.completedStepTokens
     )
     try validate(updated)
 
@@ -507,6 +516,13 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
 
   static func recordFilename(for operationID: UUID) -> String {
     "\(operationID.uuidString.lowercased())\(recordSuffix)"
+  }
+
+  private static func legacyStepTokens(prefix: String, count: Int) -> [String] {
+    guard count > 0 else { return [] }
+    return (1...count).map {
+      "\(prefix)-\(String(format: "%04d", $0))"
+    }
   }
 
   private func replacePendingRecord(
@@ -644,7 +660,7 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
       throw ComposeOperationJournalError.invalidRecord("the JSON payload could not be decoded")
     }
 
-    guard record.schemaVersion == Self.schemaVersion else {
+    guard record.schemaVersion == Self.schemaVersion || record.schemaVersion == 2 else {
       throw ComposeOperationJournalError.unsupportedSchema(record.schemaVersion)
     }
     guard record.operationID == expectedOperationID else {
@@ -654,6 +670,38 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
     }
     guard let action = ComposeProjectLifecycleAction(rawValue: record.action) else {
       throw ComposeOperationJournalError.invalidRecord("the lifecycle action is unknown")
+    }
+
+    let plannedStepTokens: [String]
+    let completedStepTokens: [String]
+    if record.schemaVersion == Self.schemaVersion {
+      guard let planned = record.plannedStepTokens,
+        let completed = record.completedStepTokens
+      else {
+        throw ComposeOperationJournalError.invalidRecord(
+          "the opaque execution steps are missing"
+        )
+      }
+      plannedStepTokens = planned
+      completedStepTokens = completed
+    } else {
+      let containerTokens = Self.legacyStepTokens(
+        prefix: "container",
+        count: record.affectedContainerCount
+      )
+      let networkTokens = Self.legacyStepTokens(
+        prefix: "network",
+        count: record.affectedNetworkCount
+      )
+      let volumeTokens = Self.legacyStepTokens(
+        prefix: "volume",
+        count: record.affectedVolumeCount
+      )
+      plannedStepTokens = containerTokens + networkTokens + volumeTokens
+      completedStepTokens =
+        Array(containerTokens.prefix(record.completedContainerIDs?.count ?? 0))
+        + Array(networkTokens.prefix(record.completedNetworkNames?.count ?? 0))
+        + Array(volumeTokens.prefix(record.completedVolumeNames?.count ?? 0))
     }
 
     let entry = ComposeOperationJournalEntry(
@@ -675,13 +723,13 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
       affectedNetworkCount: record.affectedNetworkCount,
       orphanContainerCount: record.orphanContainerCount,
       phase: record.phase,
-      completedContainerIDs: record.completedContainerIDs,
-      completedNetworkNames: record.completedNetworkNames,
-      completedVolumeNames: record.completedVolumeNames
+      plannedStepTokens: plannedStepTokens,
+      completedStepTokens: completedStepTokens
     )
-    try validate(entry)
+    try validate(entry, isLegacyRecord: record.schemaVersion == 2)
 
     return ComposeOperationRecoverySnapshot(
+      schemaVersion: record.schemaVersion,
       operationID: entry.operationID,
       planID: entry.planID,
       action: entry.action,
@@ -700,13 +748,15 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
       affectedNetworkCount: entry.affectedNetworkCount,
       orphanContainerCount: entry.orphanContainerCount,
       phase: entry.phase,
-      completedContainerIDs: entry.completedContainerIDs,
-      completedNetworkNames: entry.completedNetworkNames,
-      completedVolumeNames: entry.completedVolumeNames
+      plannedStepTokens: entry.plannedStepTokens,
+      completedStepTokens: entry.completedStepTokens
     )
   }
 
-  private func validate(_ entry: ComposeOperationJournalEntry) throws {
+  private func validate(
+    _ entry: ComposeOperationJournalEntry,
+    isLegacyRecord: Bool = false
+  ) throws {
     guard isValidComposeProjectName(entry.projectName) else {
       throw ComposeOperationJournalError.invalidRecord("the project name is invalid")
     }
@@ -739,12 +789,9 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
     }
     try validateProgress(
       phase: entry.phase,
-      completedContainerIDs: entry.completedContainerIDs,
-      completedNetworkNames: entry.completedNetworkNames,
-      completedVolumeNames: entry.completedVolumeNames,
-      affectedContainerCount: entry.affectedContainerCount,
-      affectedNetworkCount: entry.affectedNetworkCount,
-      affectedVolumeCount: entry.affectedVolumeCount
+      plannedStepTokens: entry.plannedStepTokens,
+      completedStepTokens: entry.completedStepTokens,
+      requireCompleteBeforeVerification: !isLegacyRecord
     )
   }
 
@@ -757,19 +804,14 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
         "operation phases cannot move backward"
       )
     }
-    guard Set(current.completedContainerIDs).isSubset(of: progress.completedContainerIDs),
-      Set(current.completedNetworkNames).isSubset(of: progress.completedNetworkNames),
-      Set(current.completedVolumeNames).isSubset(of: progress.completedVolumeNames)
-    else {
+    guard progress.completedStepTokens.starts(with: current.completedStepTokens) else {
       throw ComposeOperationJournalError.invalidProgress(
-        "completed resources cannot be removed from durable progress"
+        "completed execution steps cannot be removed or reordered"
       )
     }
     if current.phase == .finished {
       guard progress.phase == .finished,
-        progress.completedContainerIDs == current.completedContainerIDs,
-        progress.completedNetworkNames == current.completedNetworkNames,
-        progress.completedVolumeNames == current.completedVolumeNames
+        progress.completedStepTokens == current.completedStepTokens
       else {
         throw ComposeOperationJournalError.invalidProgress(
           "finished operation progress is immutable"
@@ -778,61 +820,49 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
     }
     try validateProgress(
       phase: progress.phase,
-      completedContainerIDs: progress.completedContainerIDs,
-      completedNetworkNames: progress.completedNetworkNames,
-      completedVolumeNames: progress.completedVolumeNames,
-      affectedContainerCount: current.affectedContainerCount,
-      affectedNetworkCount: current.affectedNetworkCount,
-      affectedVolumeCount: current.affectedVolumeCount
+      plannedStepTokens: current.plannedStepTokens,
+      completedStepTokens: progress.completedStepTokens,
+      requireCompleteBeforeVerification: true
     )
   }
 
   private func validateProgress(
     phase: ComposeOperationJournalPhase,
-    completedContainerIDs: [String],
-    completedNetworkNames: [String],
-    completedVolumeNames: [String],
-    affectedContainerCount: Int,
-    affectedNetworkCount: Int,
-    affectedVolumeCount: Int
+    plannedStepTokens: [String],
+    completedStepTokens: [String],
+    requireCompleteBeforeVerification: Bool
   ) throws {
-    let groups = [
-      (completedContainerIDs, affectedContainerCount),
-      (completedNetworkNames, affectedNetworkCount),
-      (completedVolumeNames, affectedVolumeCount),
-    ]
-    guard groups.reduce(0, { $0 + $1.0.count }) <= 1_024 else {
+    guard plannedStepTokens.count <= 1_024 else {
       throw ComposeOperationJournalError.invalidProgress(
-        "too many completed resources were recorded"
+        "too many execution steps were recorded"
       )
     }
-    for (identifiers, affectedCount) in groups {
-      guard identifiers == Array(Set(identifiers)).sorted() else {
+    guard plannedStepTokens.count == Set(plannedStepTokens).count,
+      plannedStepTokens.allSatisfy(Self.isOpaqueStepToken)
+    else {
+      throw ComposeOperationJournalError.invalidProgress(
+        "planned execution step tokens must be unique and opaque"
+      )
+    }
+    guard completedStepTokens == Array(plannedStepTokens.prefix(completedStepTokens.count)) else {
+      throw ComposeOperationJournalError.invalidProgress(
+        "completed execution steps must be an ordered prefix of the reviewed plan"
+      )
+    }
+    if phase == .prepared {
+      guard completedStepTokens.isEmpty else {
         throw ComposeOperationJournalError.invalidProgress(
-          "completed resource identifiers must be unique and sorted"
-        )
-      }
-      guard identifiers.count <= affectedCount else {
-        throw ComposeOperationJournalError.invalidProgress(
-          "completed resources exceed the reviewed affected-resource count"
-        )
-      }
-      guard
-        identifiers.allSatisfy({
-          Self.isSafeIdentifier($0, maximumByteCount: 256)
-        })
-      else {
-        throw ComposeOperationJournalError.invalidProgress(
-          "a completed resource identifier is invalid"
+          "prepared operations cannot contain completed execution steps"
         )
       }
     }
-    if phase == .prepared {
-      guard groups.allSatisfy({ $0.0.isEmpty }) else {
-        throw ComposeOperationJournalError.invalidProgress(
-          "prepared operations cannot contain completed resources"
-        )
-      }
+    if requireCompleteBeforeVerification,
+      phase.order >= ComposeOperationJournalPhase.verifying.order,
+      completedStepTokens != plannedStepTokens
+    {
+      throw ComposeOperationJournalError.invalidProgress(
+        "verification cannot begin before every reviewed execution step completes"
+      )
     }
   }
 
@@ -1129,6 +1159,13 @@ actor ComposeOperationJournal: ComposeOperationJournaling {
         || $0 == 95
     }
   }
+
+  private static func isOpaqueStepToken(_ value: String) -> Bool {
+    let prefixes = ["compose-up-", "container-", "network-", "volume-"]
+    guard let prefix = prefixes.first(where: value.hasPrefix) else { return false }
+    let suffix = value.dropFirst(prefix.count)
+    return suffix.count == 4 && suffix.allSatisfy(\.isNumber) && suffix != "0000"
+  }
 }
 
 private struct StoredRecord: Codable {
@@ -1151,12 +1188,14 @@ private struct StoredRecord: Codable {
   let affectedNetworkCount: Int
   let orphanContainerCount: Int
   let phase: ComposeOperationJournalPhase
-  let completedContainerIDs: [String]
-  let completedNetworkNames: [String]
-  let completedVolumeNames: [String]
+  let plannedStepTokens: [String]?
+  let completedStepTokens: [String]?
+  let completedContainerIDs: [String]?
+  let completedNetworkNames: [String]?
+  let completedVolumeNames: [String]?
 
   init(entry: ComposeOperationJournalEntry) {
-    schemaVersion = 2
+    schemaVersion = 3
     operationID = entry.operationID
     planID = entry.planID
     action = entry.action.rawValue
@@ -1175,8 +1214,10 @@ private struct StoredRecord: Codable {
     affectedNetworkCount = entry.affectedNetworkCount
     orphanContainerCount = entry.orphanContainerCount
     phase = entry.phase
-    completedContainerIDs = entry.completedContainerIDs
-    completedNetworkNames = entry.completedNetworkNames
-    completedVolumeNames = entry.completedVolumeNames
+    plannedStepTokens = entry.plannedStepTokens
+    completedStepTokens = entry.completedStepTokens
+    completedContainerIDs = nil
+    completedNetworkNames = nil
+    completedVolumeNames = nil
   }
 }

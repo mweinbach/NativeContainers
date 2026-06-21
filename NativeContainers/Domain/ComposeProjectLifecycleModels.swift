@@ -162,21 +162,34 @@ struct ComposeProjectContainerIdentity: Equatable, Sendable {
   let id: String
   let imageReference: String
   let imageDigest: String?
+  let platform: String
   let createdAt: Date
+  let cpuCount: Int
+  let memoryBytes: UInt64
+  let ports: [ContainerPort]
   let labels: [String: String]
 
   init(_ container: ContainerRecord, imageDigest: String? = nil) {
     id = container.id
     imageReference = container.imageReference
-    self.imageDigest = imageDigest
+    self.imageDigest = imageDigest ?? container.imageDigest
+    platform = container.platform
     createdAt = container.createdAt
+    cpuCount = container.cpuCount
+    memoryBytes = container.memoryBytes
+    ports = container.ports
     labels = container.labels
   }
 
   func matches(_ container: ContainerRecord) -> Bool {
     id == container.id
       && imageReference == container.imageReference
+      && (imageDigest == nil || imageDigest == container.imageDigest)
+      && platform == container.platform
       && createdAt == container.createdAt
+      && cpuCount == container.cpuCount
+      && memoryBytes == container.memoryBytes
+      && ports == container.ports
       && labels == container.labels
   }
 }
@@ -236,11 +249,11 @@ struct ComposeProjectPlan: Equatable, Identifiable, Sendable {
   let serviceConfigurationHashes: [String: String]
   let observedIdentity: ComposeProjectInventoryIdentity
   let issues: [ComposeProjectReviewIssue]
-  let affectedContainerIDs: [String]
-  let affectedVolumeNames: [String]
-  let affectedNetworkNames: [String]
-  let orphanContainerIDs: [String]
-  let preservedResourceNames: [String]
+  let containerActions: [ComposeProjectContainerAction]
+  let volumeActions: [ComposeProjectVolumeAction]
+  let networkActions: [ComposeProjectNetworkAction]
+  let orphanContainers: [ComposeProjectContainerIdentity]
+  let preservedResources: [ComposeProjectPreservedResource]
 
   var blockers: [ComposeProjectReviewIssue] {
     issues.filter { $0.severity == .blocker }

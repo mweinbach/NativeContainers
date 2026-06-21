@@ -49,6 +49,7 @@ struct AppleRuntimeInventoryServiceTests {
     #expect(record.id == "compose-api-1")
     #expect(record.state == .running)
     #expect(record.imageReference == "example.invalid/api:latest")
+    #expect(record.imageDigest == descriptor.digest)
     #expect(record.labels == labels)
   }
 }

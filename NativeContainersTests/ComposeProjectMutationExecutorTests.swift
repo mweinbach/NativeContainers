@@ -107,6 +107,7 @@ struct ComposeProjectMutationExecutorTests {
     let replacement = ContainerRecord(
       id: original.id,
       imageReference: original.imageReference,
+      imageDigest: original.imageDigest,
       platform: original.platform,
       state: .stopped,
       ipAddress: nil,
@@ -333,6 +334,7 @@ private actor ComposeMutationState {
       record: ContainerRecord(
         id: record.id,
         imageReference: record.imageReference,
+        imageDigest: record.imageDigest,
         platform: record.platform,
         state: state,
         ipAddress: record.ipAddress,
@@ -488,6 +490,48 @@ private func mutationPlan(
     )
   }
   let configuration = Data(#"{"name":"sample","services":{}}"#.utf8)
+  let containerOperation: ComposeProjectContainerOperation =
+    switch action {
+    case .up: .converge
+    case .start: .start
+    case .stop: .stop
+    case .down: .removeDeclared
+    }
+  var visited: Set<String> = []
+  var serviceOrder: [String] = []
+  func visit(_ service: String) {
+    guard visited.insert(service).inserted else { return }
+    for dependency in dependencies[service, default: []].sorted() {
+      visit(dependency)
+    }
+    serviceOrder.append(service)
+  }
+  for service in serviceNames { visit(service) }
+  if action == .stop || action == .down { serviceOrder.reverse() }
+  let serviceIndexes = Dictionary(
+    uniqueKeysWithValues: serviceOrder.enumerated().map { ($1, $0) }
+  )
+  let orderedRecords = records.sorted { lhs, rhs in
+    let lhsIndex = serviceIndexes[lhs.labels[ComposeLabelKey.service] ?? ""] ?? Int.max
+    let rhsIndex = serviceIndexes[rhs.labels[ComposeLabelKey.service] ?? ""] ?? Int.max
+    if lhsIndex != rhsIndex { return lhsIndex < rhsIndex }
+    let lhsReplica = Int(lhs.labels[ComposeLabelKey.containerNumber] ?? "") ?? Int.max
+    let rhsReplica = Int(rhs.labels[ComposeLabelKey.containerNumber] ?? "") ?? Int.max
+    if lhsReplica != rhsReplica { return lhsReplica < rhsReplica }
+    return lhs.id < rhs.id
+  }
+  let containerActions = orderedRecords.enumerated().map { offset, record in
+    ComposeProjectContainerAction(
+      stepID: .container(offset + 1),
+      operation: containerOperation,
+      serviceName: record.labels[ComposeLabelKey.service] ?? "unknown",
+      replicaNumber: Int(record.labels[ComposeLabelKey.containerNumber] ?? ""),
+      expectedIdentity: ComposeProjectContainerIdentity(
+        record,
+        imageDigest: "sha256:image"
+      )
+    )
+  }
   return ComposeProjectPlan(
     id: UUID(),
     generatedAt: Date(timeIntervalSince1970: 1_000),
@@ -540,11 +584,11 @@ private func mutationPlan(
       networks: []
     ),
     issues: [],
-    affectedContainerIDs: records.map(\.id).sorted(),
-    affectedVolumeNames: [],
-    affectedNetworkNames: [],
-    orphanContainerIDs: [],
-    preservedResourceNames: []
+    containerActions: containerActions,
+    volumeActions: [],
+    networkActions: [],
+    orphanContainers: [],
+    preservedResources: []
   )
 }
 
@@ -557,6 +601,7 @@ private func mutationContainer(
   ContainerRecord(
     id: id,
     imageReference: "example/web:latest",
+    imageDigest: "sha256:image",
     platform: "linux/arm64",
     state: state,
     ipAddress: nil,

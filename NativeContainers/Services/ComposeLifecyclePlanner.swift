@@ -20,144 +20,97 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
   ) -> ComposeProjectPlan {
     let desired = review.desiredState
     var issues = review.issues
-    var affectedContainerIDs: [String] = []
-    var orphanContainerIDs: [String] = []
-    var preservedResourceNames: [String] = []
-    let declaredServices = Set(desired.declaredServiceNames)
-    let activeServices = Set(desired.activeServiceNames)
+    var preservedResources: [ComposeProjectPreservedResource] = []
+    var orphanContainers: [ComposeProjectContainerIdentity] = []
 
     let projectContainers = inventory.containers.filter {
       $0.labels[ComposeLabelKey.project] == desired.projectName
-    }
-    for container in projectContainers.sorted(by: containerOrder) {
-      guard let serviceName = container.labels[ComposeLabelKey.service],
-        !serviceName.isEmpty
-      else {
-        issues.append(
-          blocker(
-            .observedProjectDrift,
-            subject: container.id,
-            message: "A project-labeled container has no valid service identity."
-          )
-        )
-        continue
-      }
-
-      let oneOff = parseBooleanLabel(container.labels[ComposeLabelKey.oneOff])
-      if oneOff == nil, container.labels[ComposeLabelKey.oneOff] != nil {
-        issues.append(
-          blocker(
-            .observedProjectDrift,
-            subject: container.id,
-            message: "A container has an invalid one-off label."
-          )
-        )
-        continue
-      }
-      if oneOff == true {
-        preservedResourceNames.append(container.id)
-        issues.append(
-          warning(
-            .observedProjectDrift,
-            subject: container.id,
-            message: "One-off containers are preserved by this initial lifecycle policy."
-          )
-        )
-        continue
-      }
-
-      if let replica = container.labels[ComposeLabelKey.containerNumber],
-        Int(replica).map({ $0 > 0 }) != true
-      {
-        issues.append(
-          blocker(
-            .observedProjectDrift,
-            subject: container.id,
-            message: "A container has an invalid replica-number label."
-          )
-        )
-        continue
-      }
-
-      if declaredServices.contains(serviceName) {
-        let isAffected =
-          switch options.action {
-          case .up:
-            false
-          case .start, .stop:
-            activeServices.contains(serviceName)
-          case .down:
-            true
-          }
-        if isAffected {
-          affectedContainerIDs.append(container.id)
-        } else {
-          preservedResourceNames.append(container.id)
-        }
-      } else {
-        orphanContainerIDs.append(container.id)
-        if options.action == .down, options.removeOrphans {
-          affectedContainerIDs.append(container.id)
-        } else {
-          preservedResourceNames.append(container.id)
-          issues.append(
-            warning(
-              .observedProjectDrift,
-              subject: container.id,
-              message: "A true orphan is preserved unless Remove Orphans is reviewed."
-            )
-          )
-        }
-      }
+    }.sorted(by: containerOrder)
+    let observedContainers = projectContainers.map {
+      ObservedComposeContainer(record: $0, identity: ComposeProjectContainerIdentity($0))
     }
 
-    var affectedVolumeNames: [String] = []
-    var affectedNetworkNames: [String] = []
-    inspectResources(
+    let containerDrafts = planContainerActions(
+      desired: desired,
+      options: options,
+      observed: observedContainers,
+      inventory: inventory,
+      orphanContainers: &orphanContainers,
+      preservedResources: &preservedResources,
+      issues: &issues
+    )
+    let containerActions = containerDrafts.enumerated().map { offset, draft in
+      ComposeProjectContainerAction(
+        stepID: .container(offset + 1),
+        operation: draft.operation,
+        serviceName: draft.serviceName,
+        replicaNumber: draft.replicaNumber,
+        expectedIdentity: draft.expectedIdentity
+      )
+    }
+    let affectedContainerIDs = Set(containerActions.compactMap(\.existingContainerID))
+
+    let volumeDrafts = planVolumes(
       desired.volumes,
       options: options,
       inventory: inventory,
-      affectedContainerIDs: Set(affectedContainerIDs),
-      affectedNames: &affectedVolumeNames,
-      preservedNames: &preservedResourceNames,
+      affectedContainerIDs: affectedContainerIDs,
+      preservedResources: &preservedResources,
       issues: &issues
     )
-    inspectResources(
+    let volumeActions = volumeDrafts.enumerated().map { offset, draft in
+      ComposeProjectVolumeAction(
+        stepID: .volume(offset + 1),
+        operation: draft.operation,
+        logicalName: draft.logicalName,
+        runtimeName: draft.runtimeName,
+        expectedIdentity: draft.expectedIdentity
+      )
+    }
+
+    let networkDrafts = planNetworks(
       desired.networks,
       options: options,
       inventory: inventory,
-      affectedContainerIDs: Set(affectedContainerIDs),
-      affectedNames: &affectedNetworkNames,
-      preservedNames: &preservedResourceNames,
+      affectedContainerIDs: affectedContainerIDs,
+      preservedResources: &preservedResources,
       issues: &issues
     )
-    inspectUndeclaredProjectResources(
-      desired: desired,
-      inventory: inventory,
+    let networkActions = networkDrafts.enumerated().map { offset, draft in
+      ComposeProjectNetworkAction(
+        stepID: .network(offset + 1),
+        operation: draft.operation,
+        logicalName: draft.logicalName,
+        runtimeName: draft.runtimeName,
+        expectedIdentity: draft.expectedIdentity
+      )
+    }
+
+    appendUpModeIssues(
+      options: options,
+      containerActions: containerActions,
+      volumeActions: volumeActions,
+      networkActions: networkActions,
       issues: &issues
     )
 
+    preserveUndeclaredProjectResources(
+      desired: desired,
+      inventory: inventory,
+      preservedResources: &preservedResources,
+      issues: &issues
+    )
     appendExecutionPolicyIssues(
       options: options,
       desired: desired,
-      projectContainers: projectContainers,
       inventory: inventory,
       issues: &issues
     )
 
     let relevantVolumeNames = Set(desired.volumes.map(\.runtimeName))
     let relevantNetworkNames = Set(desired.networks.map(\.runtimeName))
-    let imageDigestsByReference = Dictionary(
-      inventory.images.map { ($0.reference, $0.digest) },
-      uniquingKeysWith: { first, _ in first }
-    )
     let observedIdentity = ComposeProjectInventoryIdentity(
-      containers: projectContainers.sorted(by: containerOrder).map {
-        ComposeProjectContainerIdentity(
-          $0,
-          imageDigest: imageDigestsByReference[$0.imageReference]
-        )
-      },
+      containers: observedContainers.map(\.identity),
       volumes: inventory.volumes.filter {
         relevantVolumeNames.contains($0.name)
           || $0.labels[ComposeLabelKey.project] == desired.projectName
@@ -183,118 +136,561 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
       serviceConfigurationHashes: rendered.serviceConfigurationHashes,
       observedIdentity: observedIdentity,
       issues: issues.sorted(by: issueOrder),
-      affectedContainerIDs: Array(Set(affectedContainerIDs)).sorted(by: composeStringOrder),
-      affectedVolumeNames: Array(Set(affectedVolumeNames)).sorted(by: composeStringOrder),
-      affectedNetworkNames: Array(Set(affectedNetworkNames)).sorted(by: composeStringOrder),
-      orphanContainerIDs: Array(Set(orphanContainerIDs)).sorted(by: composeStringOrder),
-      preservedResourceNames: Array(Set(preservedResourceNames)).sorted(
-        by: composeStringOrder
-      )
+      containerActions: containerActions,
+      volumeActions: volumeActions,
+      networkActions: networkActions,
+      orphanContainers: orphanContainers.sorted(by: identityOrder),
+      preservedResources: uniquePreservedResources(preservedResources)
     )
   }
 
-  private func inspectResources(
-    _ resources: [ComposeDesiredResource],
+  private func planContainerActions(
+    desired: ComposeDesiredState,
     options: ComposeProjectReviewOptions,
+    observed: [ObservedComposeContainer],
     inventory: ContainerInventory,
-    affectedContainerIDs: Set<String>,
-    affectedNames: inout [String],
-    preservedNames: inout [String],
+    orphanContainers: inout [ComposeProjectContainerIdentity],
+    preservedResources: inout [ComposeProjectPreservedResource],
     issues: inout [ComposeProjectReviewIssue]
-  ) {
-    for resource in resources {
-      let matches: [(labels: [String: String], consumers: [String])] =
-        switch resource.kind {
-        case .volume:
-          inventory.volumes.filter { $0.name == resource.runtimeName }.map {
-            ($0.labels, $0.usedByContainerIDs)
-          }
-        case .network:
-          inventory.networks.filter { $0.name == resource.runtimeName }.map {
-            ($0.labels, $0.usedByContainerIDs)
-          }
-        }
+  ) -> [ContainerActionDraft] {
+    let declaredServices = Set(desired.declaredServiceNames)
+    let activeServices = Dictionary(
+      uniqueKeysWithValues: desired.activeServices.map { ($0.name, $0) }
+    )
+    var declaredByService: [String: [ObservedComposeContainer]] = [:]
 
-      if matches.count > 1 {
+    for container in observed {
+      guard let serviceName = container.record.labels[ComposeLabelKey.service],
+        !serviceName.isEmpty
+      else {
         issues.append(
           blocker(
-            .resourceIdentityConflict,
-            subject: resource.runtimeName,
-            message: "More than one runtime resource has the reviewed name."
+            .observedProjectDrift,
+            subject: container.record.id,
+            message: "A project-labeled container has no valid service identity."
+          )
+        )
+        preservedResources.append(.container(container.identity))
+        continue
+      }
+
+      let oneOff = parseBooleanLabel(container.record.labels[ComposeLabelKey.oneOff])
+      guard oneOff != nil else {
+        issues.append(
+          blocker(
+            .observedProjectDrift,
+            subject: container.record.id,
+            message: "A container has an invalid one-off label."
+          )
+        )
+        preservedResources.append(.container(container.identity))
+        continue
+      }
+      if oneOff == true {
+        preservedResources.append(.container(container.identity))
+        issues.append(
+          warning(
+            .observedProjectDrift,
+            subject: container.record.id,
+            message: "One-off containers are preserved by this lifecycle policy."
           )
         )
         continue
       }
 
-      if resource.isExternal {
-        preservedNames.append(resource.runtimeName)
-        if options.action == .up, resource.isActive, matches.isEmpty {
+      if declaredServices.contains(serviceName) {
+        declaredByService[serviceName, default: []].append(container)
+      } else {
+        orphanContainers.append(container.identity)
+        if !(options.action == .down && options.removeOrphans) {
+          preservedResources.append(.container(container.identity))
           issues.append(
-            blocker(
-              .externalResourceMissing,
-              subject: resource.runtimeName,
-              message: "The active external \(resource.kind.rawValue) does not exist."
+            warning(
+              .observedProjectDrift,
+              subject: container.record.id,
+              message: "A true orphan is preserved unless Remove Orphans is reviewed."
             )
           )
+        }
+      }
+    }
+
+    var serviceOrder = topologicalServiceOrder(desired)
+    if options.action == .stop || options.action == .down {
+      serviceOrder.reverse()
+    }
+
+    let localDigests = Dictionary(
+      inventory.images.map { ($0.reference, $0.digest) },
+      uniquingKeysWith: { first, _ in first }
+    )
+    var drafts: [ContainerActionDraft] = []
+    for serviceName in serviceOrder {
+      let instances = declaredByService[serviceName, default: []]
+      let isActive = activeServices[serviceName] != nil
+      let isAffected =
+        switch options.action {
+        case .up, .start, .stop: isActive
+        case .down: true
+        }
+      guard isAffected else {
+        preservedResources.append(contentsOf: instances.map { .container($0.identity) })
+        continue
+      }
+
+      let replicas = validatedReplicas(
+        instances,
+        serviceName: serviceName,
+        issues: &issues
+      )
+      let orderedInstances = instances.sorted {
+        let lhsReplica = replicas[$0.identity.id] ?? Int.max
+        let rhsReplica = replicas[$1.identity.id] ?? Int.max
+        if lhsReplica != rhsReplica { return lhsReplica < rhsReplica }
+        return composeStringOrder($0.identity.id, $1.identity.id)
+      }
+
+      switch options.action {
+      case .up:
+        guard let service = activeServices[serviceName] else { continue }
+        validateConvergenceReplicaSet(
+          instances: orderedInstances,
+          replicas: replicas,
+          service: service,
+          issues: &issues
+        )
+        for instance in orderedInstances {
+          validateExistingContainer(
+            instance.record,
+            service: service,
+            localDigest: localDigests[service.imageReference],
+            context: "Up",
+            requiresNativeStartSafety: false,
+            issues: &issues
+          )
+          guard let replica = replicas[instance.identity.id] else { continue }
+          drafts.append(
+            ContainerActionDraft(
+              operation: .converge,
+              serviceName: serviceName,
+              replicaNumber: replica,
+              expectedIdentity: instance.identity
+            )
+          )
+        }
+        let existingReplicas = Set(replicas.values)
+        for replica in 1...service.replicaCount where !existingReplicas.contains(replica) {
+          drafts.append(
+            ContainerActionDraft(
+              operation: .create,
+              serviceName: serviceName,
+              replicaNumber: replica,
+              expectedIdentity: nil
+            )
+          )
+        }
+
+      case .start:
+        guard let service = activeServices[serviceName] else { continue }
+        validateExactReplicaSet(
+          instances: orderedInstances,
+          replicas: replicas,
+          service: service,
+          actionName: "Start",
+          issues: &issues
+        )
+        for instance in orderedInstances {
+          validateExistingContainer(
+            instance.record,
+            service: service,
+            localDigest: localDigests[service.imageReference],
+            context: "Start",
+            requiresNativeStartSafety: true,
+            issues: &issues
+          )
+          guard let replica = replicas[instance.identity.id] else { continue }
+          drafts.append(
+            ContainerActionDraft(
+              operation: .start,
+              serviceName: serviceName,
+              replicaNumber: replica,
+              expectedIdentity: instance.identity
+            )
+          )
+        }
+
+      case .stop:
+        if let service = activeServices[serviceName] {
+          validateReplicaRange(
+            replicas,
+            service: service,
+            actionName: "Stop",
+            issues: &issues
+          )
+        }
+        drafts.append(
+          contentsOf: orderedInstances.compactMap { instance in
+            guard let replica = replicas[instance.identity.id] else { return nil }
+            return ContainerActionDraft(
+              operation: .stop,
+              serviceName: serviceName,
+              replicaNumber: replica,
+              expectedIdentity: instance.identity
+            )
+          })
+
+      case .down:
+        drafts.append(
+          contentsOf: orderedInstances.compactMap { instance in
+            guard let replica = replicas[instance.identity.id] else { return nil }
+            return ContainerActionDraft(
+              operation: .removeDeclared,
+              serviceName: serviceName,
+              replicaNumber: replica,
+              expectedIdentity: instance.identity
+            )
+          })
+      }
+    }
+
+    if options.action == .down, options.removeOrphans {
+      for identity in orphanContainers.sorted(by: identityOrder) {
+        drafts.append(
+          ContainerActionDraft(
+            operation: .removeOrphan,
+            serviceName: identity.labels[ComposeLabelKey.service] ?? "unknown",
+            replicaNumber: parsePositiveInteger(
+              identity.labels[ComposeLabelKey.containerNumber]
+            ),
+            expectedIdentity: identity
+          )
+        )
+      }
+    }
+    return drafts
+  }
+
+  private func planVolumes(
+    _ resources: [ComposeDesiredResource],
+    options: ComposeProjectReviewOptions,
+    inventory: ContainerInventory,
+    affectedContainerIDs: Set<String>,
+    preservedResources: inout [ComposeProjectPreservedResource],
+    issues: inout [ComposeProjectReviewIssue]
+  ) -> [VolumeActionDraft] {
+    var actions: [VolumeActionDraft] = []
+    for resource in resources.sorted(by: resourceOrder) {
+      let matches = inventory.volumes.filter { $0.name == resource.runtimeName }
+      guard matches.count <= 1 else {
+        issues.append(identityConflict(resource.runtimeName))
+        continue
+      }
+      let match = matches.first
+      let identity = match.map(ComposeProjectVolumeIdentity.init)
+
+      if resource.isExternal {
+        if options.action == .up, resource.isActive {
+          guard let identity else {
+            issues.append(missingExternal(resource))
+            preservedResources.append(.external(kind: .volume, name: resource.runtimeName))
+            continue
+          }
+          actions.append(
+            VolumeActionDraft(
+              operation: .useExternal,
+              logicalName: resource.logicalName,
+              runtimeName: resource.runtimeName,
+              expectedIdentity: identity
+            )
+          )
+          preservedResources.append(.volume(identity))
+        } else {
+          preserveVolume(identity, resource: resource, in: &preservedResources)
         }
         continue
       }
 
-      if let match = matches.first {
-        let logicalLabelKey =
-          resource.kind == .volume ? ComposeLabelKey.volume : ComposeLabelKey.network
-        guard
-          match.labels[ComposeLabelKey.project] == options.projectName,
-          match.labels[logicalLabelKey] == resource.logicalName
-        else {
-          issues.append(
-            blocker(
-              .resourceIdentityConflict,
-              subject: resource.runtimeName,
-              message: "An existing resource with this name has foreign ownership evidence."
-            )
-          )
-          continue
-        }
-      }
-
-      let isAffected: Bool =
-        switch options.action {
-        case .up:
-          resource.isActive
-        case .start, .stop:
-          false
-        case .down:
-          resource.kind == .network || options.removeVolumes
-        }
-      if isAffected {
-        affectedNames.append(resource.runtimeName)
-      } else {
-        preservedNames.append(resource.runtimeName)
-      }
-
-      if options.action == .down,
-        isAffected,
-        let match = matches.first
+      if let match,
+        !hasManagedOwnership(
+          labels: match.labels,
+          projectName: options.projectName,
+          logicalName: resource.logicalName,
+          logicalLabelKey: ComposeLabelKey.volume
+        )
       {
-        let foreignConsumers = Set(match.consumers).subtracting(affectedContainerIDs)
-        if !foreignConsumers.isEmpty {
-          issues.append(
-            blocker(
-              .crossProjectConsumer,
-              subject: resource.runtimeName,
-              message: "A consumer outside the reviewed container set still uses this resource."
+        issues.append(foreignOwnership(resource.runtimeName))
+        preservedResources.append(.volume(ComposeProjectVolumeIdentity(match)))
+        continue
+      }
+
+      let shouldRemove = options.action == .down && options.removeVolumes
+      if options.action == .up, resource.isActive {
+        actions.append(
+          VolumeActionDraft(
+            operation: identity == nil ? .createManaged : .reuseManaged,
+            logicalName: resource.logicalName,
+            runtimeName: resource.runtimeName,
+            expectedIdentity: identity
+          )
+        )
+      } else if shouldRemove, let match, let identity {
+        appendCrossConsumerIssue(
+          resourceName: resource.runtimeName,
+          consumers: match.usedByContainerIDs,
+          affectedContainerIDs: affectedContainerIDs,
+          issues: &issues
+        )
+        actions.append(
+          VolumeActionDraft(
+            operation: .removeManaged,
+            logicalName: resource.logicalName,
+            runtimeName: resource.runtimeName,
+            expectedIdentity: identity
+          )
+        )
+      } else {
+        preserveVolume(identity, resource: resource, in: &preservedResources)
+      }
+    }
+    return actions
+  }
+
+  private func planNetworks(
+    _ resources: [ComposeDesiredResource],
+    options: ComposeProjectReviewOptions,
+    inventory: ContainerInventory,
+    affectedContainerIDs: Set<String>,
+    preservedResources: inout [ComposeProjectPreservedResource],
+    issues: inout [ComposeProjectReviewIssue]
+  ) -> [NetworkActionDraft] {
+    var actions: [NetworkActionDraft] = []
+    for resource in resources.sorted(by: resourceOrder) {
+      let matches = inventory.networks.filter { $0.name == resource.runtimeName }
+      guard matches.count <= 1 else {
+        issues.append(identityConflict(resource.runtimeName))
+        continue
+      }
+      let match = matches.first
+      let identity = match.map(ComposeProjectNetworkIdentity.init)
+
+      if resource.isExternal {
+        if options.action == .up, resource.isActive {
+          guard let identity else {
+            issues.append(missingExternal(resource))
+            preservedResources.append(.external(kind: .network, name: resource.runtimeName))
+            continue
+          }
+          actions.append(
+            NetworkActionDraft(
+              operation: .useExternal,
+              logicalName: resource.logicalName,
+              runtimeName: resource.runtimeName,
+              expectedIdentity: identity
             )
           )
+          preservedResources.append(.network(identity))
+        } else {
+          preserveNetwork(identity, resource: resource, in: &preservedResources)
         }
+        continue
       }
+
+      if let match,
+        !hasManagedOwnership(
+          labels: match.labels,
+          projectName: options.projectName,
+          logicalName: resource.logicalName,
+          logicalLabelKey: ComposeLabelKey.network
+        )
+      {
+        issues.append(foreignOwnership(resource.runtimeName))
+        preservedResources.append(.network(ComposeProjectNetworkIdentity(match)))
+        continue
+      }
+
+      if options.action == .up, resource.isActive {
+        actions.append(
+          NetworkActionDraft(
+            operation: identity == nil ? .createManaged : .reuseManaged,
+            logicalName: resource.logicalName,
+            runtimeName: resource.runtimeName,
+            expectedIdentity: identity
+          )
+        )
+      } else if options.action == .down, let match, let identity {
+        appendCrossConsumerIssue(
+          resourceName: resource.runtimeName,
+          consumers: match.usedByContainerIDs,
+          affectedContainerIDs: affectedContainerIDs,
+          issues: &issues
+        )
+        actions.append(
+          NetworkActionDraft(
+            operation: .removeManaged,
+            logicalName: resource.logicalName,
+            runtimeName: resource.runtimeName,
+            expectedIdentity: identity
+          )
+        )
+      } else {
+        preserveNetwork(identity, resource: resource, in: &preservedResources)
+      }
+    }
+    return actions
+  }
+
+  private func validatedReplicas(
+    _ instances: [ObservedComposeContainer],
+    serviceName: String,
+    issues: inout [ComposeProjectReviewIssue]
+  ) -> [String: Int] {
+    var result: [String: Int] = [:]
+    var ownersByReplica: [Int: [String]] = [:]
+    for instance in instances {
+      guard
+        let replica = parsePositiveInteger(
+          instance.record.labels[ComposeLabelKey.containerNumber]
+        )
+      else {
+        issues.append(
+          blocker(
+            .observedProjectDrift,
+            subject: instance.record.id,
+            message: "An executable declared container needs a positive replica-number label."
+          )
+        )
+        continue
+      }
+      result[instance.record.id] = replica
+      ownersByReplica[replica, default: []].append(instance.record.id)
+    }
+    for (replica, owners) in ownersByReplica where owners.count > 1 {
+      issues.append(
+        blocker(
+          .observedProjectDrift,
+          subject: serviceName,
+          message: "Replica \(replica) is claimed by more than one reviewed container."
+        )
+      )
+    }
+    return result
+  }
+
+  private func validateConvergenceReplicaSet(
+    instances: [ObservedComposeContainer],
+    replicas: [String: Int],
+    service: ComposeDesiredService,
+    issues: inout [ComposeProjectReviewIssue]
+  ) {
+    if instances.count > service.replicaCount {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: service.name,
+          message: "Up will not remove extra replicas; review Down before converging this service."
+        )
+      )
+    }
+    validateReplicaRange(
+      replicas,
+      service: service,
+      actionName: "Up",
+      issues: &issues
+    )
+  }
+
+  private func validateExactReplicaSet(
+    instances: [ObservedComposeContainer],
+    replicas: [String: Int],
+    service: ComposeDesiredService,
+    actionName: String,
+    issues: inout [ComposeProjectReviewIssue]
+  ) {
+    let expected = Set(1...service.replicaCount)
+    if instances.count != service.replicaCount || Set(replicas.values) != expected {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: service.name,
+          message:
+            "\(actionName) requires the exact reviewed replica set 1...\(service.replicaCount)."
+        )
+      )
+    }
+  }
+
+  private func validateReplicaRange(
+    _ replicas: [String: Int],
+    service: ComposeDesiredService,
+    actionName: String,
+    issues: inout [ComposeProjectReviewIssue]
+  ) {
+    if replicas.values.contains(where: { $0 > service.replicaCount }) {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: service.name,
+          message:
+            "\(actionName) found a replica number above the reviewed count of \(service.replicaCount)."
+        )
+      )
+    }
+  }
+
+  private func validateExistingContainer(
+    _ container: ContainerRecord,
+    service: ComposeDesiredService,
+    localDigest: String?,
+    context: String,
+    requiresNativeStartSafety: Bool,
+    issues: inout [ComposeProjectReviewIssue]
+  ) {
+    if container.imageReference != service.imageReference {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: container.id,
+          message: "The existing container image does not match the reviewed service image."
+        )
+      )
+    }
+    guard let imageDigest = container.imageDigest, localDigest == imageDigest else {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: container.id,
+          message:
+            "\(context) requires the existing container and local image reference to share an exact digest."
+        )
+      )
+      return
+    }
+    if let expectedHash = service.configurationHash,
+      container.labels[ComposeLabelKey.configHash] != expectedHash
+    {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: container.id,
+          message: "The existing container does not match the reviewed service configuration hash."
+        )
+      )
+    }
+    if requiresNativeStartSafety, !container.ports.isEmpty {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: container.id,
+          message:
+            "Native exact-ID Start is not enabled for containers with published ports until their socket workspace has verifiable ownership."
+        )
+      )
     }
   }
 
   private func appendExecutionPolicyIssues(
     options: ComposeProjectReviewOptions,
     desired: ComposeDesiredState,
-    projectContainers: [ContainerRecord],
     inventory: ContainerInventory,
     issues: inout [ComposeProjectReviewIssue]
   ) {
@@ -316,153 +712,104 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
         )
       )
     }
-    if options.action == .down, options.removeVolumes {
+    guard options.action == .up else { return }
+    if desired.activeServices.isEmpty {
       issues.append(
         blocker(
           .executionPolicy,
           subject: desired.projectName,
-          message:
-            "Named-volume deletion remains review-only until every volume action has an independently typed exact-identity contract."
+          message: "Up requires at least one active service."
         )
       )
     }
-    if options.action == .down, options.removeOrphans {
-      issues.append(
-        blocker(
-          .executionPolicy,
-          subject: desired.projectName,
-          message:
-            "Orphan deletion remains review-only until orphan actions are represented separately from declared services."
-        )
-      )
-    }
-
-    switch options.action {
-    case .up:
-      guard !desired.activeServices.isEmpty else {
+    if options.pullPolicy == .never {
+      let localReferences = Set(inventory.images.map(\.reference))
+      for service in desired.activeServices
+      where !localReferences.contains(service.imageReference) {
         issues.append(
           blocker(
             .executionPolicy,
-            subject: desired.projectName,
-            message: "Fresh Up requires at least one active service."
-          )
-        )
-        return
-      }
-      let hasManagedProjectResources =
-        !projectContainers.isEmpty
-        || inventory.volumes.contains {
-          $0.labels[ComposeLabelKey.project] == desired.projectName
-        }
-        || inventory.networks.contains {
-          $0.labels[ComposeLabelKey.project] == desired.projectName
-        }
-      if hasManagedProjectResources {
-        issues.append(
-          blocker(
-            .executionPolicy,
-            subject: desired.projectName,
+            subject: service.name,
             message:
-              "Up currently supports fresh projects only; existing project resources require reviewed convergence and recreation support."
+              "Pull policy Never requires the reviewed image reference to exist in the local Apple image store."
           )
         )
       }
-      if options.pullPolicy == .never {
-        let localReferences = Set(inventory.images.map(\.reference))
-        for service in desired.activeServices
-        where !localReferences.contains(service.imageReference) {
-          issues.append(
-            blocker(
-              .executionPolicy,
-              subject: service.name,
-              message:
-                "Pull policy Never requires the reviewed image reference to exist in the local Apple image store."
-            )
-          )
-        }
-      }
-
-    case .start:
-      let regularContainers = projectContainers.filter {
-        parseBooleanLabel($0.labels[ComposeLabelKey.oneOff]) != true
-      }
-      let localImageReferences = Set(inventory.images.map(\.reference))
-      for service in desired.activeServices {
-        let instances = regularContainers.filter {
-          $0.labels[ComposeLabelKey.service] == service.name
-        }
-        if instances.count != service.replicaCount {
-          issues.append(
-            blocker(
-              .executionPolicy,
-              subject: service.name,
-              message:
-                "Start requires exactly \(service.replicaCount) reviewed existing replica(s); use fresh Up or a later convergence workflow to create missing replicas."
-            )
-          )
-        }
-        for container in instances {
-          if container.imageReference != service.imageReference {
-            issues.append(
-              blocker(
-                .executionPolicy,
-                subject: container.id,
-                message: "The existing container image does not match the reviewed service image."
-              )
-            )
-          }
-          if !localImageReferences.contains(container.imageReference) {
-            issues.append(
-              blocker(
-                .executionPolicy,
-                subject: container.id,
-                message:
-                  "Native exact-ID Start requires pinned local image digest evidence for the existing container."
-              )
-            )
-          }
-          if !container.ports.isEmpty {
-            issues.append(
-              blocker(
-                .executionPolicy,
-                subject: container.id,
-                message:
-                  "Native exact-ID Start is not enabled for containers with published ports until their socket workspace has verifiable ownership."
-              )
-            )
-          }
-          if let expectedHash = service.configurationHash,
-            container.labels[ComposeLabelKey.configHash] != expectedHash
-          {
-            issues.append(
-              blocker(
-                .executionPolicy,
-                subject: container.id,
-                message:
-                  "The stopped container does not match the reviewed service configuration hash."
-              )
-            )
-          }
-        }
-      }
-
-    case .stop, .down:
-      break
     }
   }
 
-  private func inspectUndeclaredProjectResources(
+  private func appendUpModeIssues(
+    options: ComposeProjectReviewOptions,
+    containerActions: [ComposeProjectContainerAction],
+    volumeActions: [ComposeProjectVolumeAction],
+    networkActions: [ComposeProjectNetworkAction],
+    issues: inout [ComposeProjectReviewIssue]
+  ) {
+    guard options.action == .up else { return }
+    let hasExistingContainers = containerActions.contains {
+      $0.operation == .converge
+    }
+    let createsContainers = containerActions.contains { $0.operation == .create }
+    let reusesManagedResources =
+      volumeActions.contains {
+        $0.operation == .reuseManaged
+      }
+      || networkActions.contains {
+        $0.operation == .reuseManaged
+      }
+    let createsManagedResources =
+      volumeActions.contains {
+        $0.operation == .createManaged
+      }
+      || networkActions.contains {
+        $0.operation == .createManaged
+      }
+
+    if hasExistingContainers, createsContainers {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: options.projectName,
+          message:
+            "Create-missing Up remains disabled because the pinned compatibility bridge cannot safely rename a replacement after partial reconciliation."
+        )
+      )
+    }
+    if hasExistingContainers, createsManagedResources {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: options.projectName,
+          message:
+            "Native existing-project Up requires every active managed network and volume to already exist with its reviewed identity."
+        )
+      )
+    }
+    if !hasExistingContainers, reusesManagedResources {
+      issues.append(
+        blocker(
+          .executionPolicy,
+          subject: options.projectName,
+          message:
+            "Command-based fresh Up will not reconcile a pre-existing managed network or volume without a frozen desired configuration identity."
+        )
+      )
+    }
+  }
+
+  private func preserveUndeclaredProjectResources(
     desired: ComposeDesiredState,
     inventory: ContainerInventory,
+    preservedResources: inout [ComposeProjectPreservedResource],
     issues: inout [ComposeProjectReviewIssue]
   ) {
     let volumeNames = Set(desired.volumes.map(\.runtimeName))
     let networkNames = Set(desired.networks.map(\.runtimeName))
-
     for volume in inventory.volumes
     where volume.labels[ComposeLabelKey.project] == desired.projectName
       && !volumeNames.contains(volume.name)
     {
+      preservedResources.append(.volume(ComposeProjectVolumeIdentity(volume)))
       issues.append(
         warning(
           .observedProjectDrift,
@@ -475,6 +822,7 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
     where network.labels[ComposeLabelKey.project] == desired.projectName
       && !networkNames.contains(network.name)
     {
+      preservedResources.append(.network(ComposeProjectNetworkIdentity(network)))
       issues.append(
         warning(
           .observedProjectDrift,
@@ -485,6 +833,93 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
     }
   }
 
+  private func appendCrossConsumerIssue(
+    resourceName: String,
+    consumers: [String],
+    affectedContainerIDs: Set<String>,
+    issues: inout [ComposeProjectReviewIssue]
+  ) {
+    let foreignConsumers = Set(consumers).subtracting(affectedContainerIDs)
+    if !foreignConsumers.isEmpty {
+      issues.append(
+        blocker(
+          .crossProjectConsumer,
+          subject: resourceName,
+          message: "A consumer outside the reviewed container actions still uses this resource."
+        )
+      )
+    }
+  }
+
+  private func hasManagedOwnership(
+    labels: [String: String],
+    projectName: String,
+    logicalName: String,
+    logicalLabelKey: String
+  ) -> Bool {
+    labels[ComposeLabelKey.project] == projectName
+      && labels[logicalLabelKey] == logicalName
+  }
+
+  private func preserveVolume(
+    _ identity: ComposeProjectVolumeIdentity?,
+    resource: ComposeDesiredResource,
+    in preservedResources: inout [ComposeProjectPreservedResource]
+  ) {
+    if let identity {
+      preservedResources.append(.volume(identity))
+    } else {
+      preservedResources.append(.absent(kind: .volume, name: resource.runtimeName))
+    }
+  }
+
+  private func preserveNetwork(
+    _ identity: ComposeProjectNetworkIdentity?,
+    resource: ComposeDesiredResource,
+    in preservedResources: inout [ComposeProjectPreservedResource]
+  ) {
+    if let identity {
+      preservedResources.append(.network(identity))
+    } else {
+      preservedResources.append(.absent(kind: .network, name: resource.runtimeName))
+    }
+  }
+
+  private func uniquePreservedResources(
+    _ resources: [ComposeProjectPreservedResource]
+  ) -> [ComposeProjectPreservedResource] {
+    var seen: Set<String> = []
+    return resources.sorted { composeStringOrder($0.id, $1.id) }.filter {
+      seen.insert($0.id).inserted
+    }
+  }
+
+  private func identityConflict(_ name: String) -> ComposeProjectReviewIssue {
+    blocker(
+      .resourceIdentityConflict,
+      subject: name,
+      message: "More than one runtime resource has the reviewed name."
+    )
+  }
+
+  private func foreignOwnership(_ name: String) -> ComposeProjectReviewIssue {
+    blocker(
+      .resourceIdentityConflict,
+      subject: name,
+      message: "An existing resource with this name has foreign ownership evidence."
+    )
+  }
+
+  private func missingExternal(
+    _ resource: ComposeDesiredResource
+  ) -> ComposeProjectReviewIssue {
+    blocker(
+      .externalResourceMissing,
+      subject: resource.runtimeName,
+      message: "The active external \(resource.kind.rawValue) does not exist."
+    )
+  }
+
   private func parseBooleanLabel(_ value: String?) -> Bool? {
     guard let value else { return false }
     switch value.lowercased() {
@@ -492,6 +927,31 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
     case "false": return false
     default: return nil
     }
+  }
+
+  private func parsePositiveInteger(_ value: String?) -> Int? {
+    guard let value, let parsed = Int(value), parsed > 0 else { return nil }
+    return parsed
+  }
+
+  private func topologicalServiceOrder(_ desired: ComposeDesiredState) -> [String] {
+    var visited: Set<String> = []
+    var order: [String] = []
+
+    func visit(_ service: String) {
+      guard visited.insert(service).inserted else { return }
+      for dependency in desired.serviceDependencies[service, default: []].sorted(
+        by: composeStringOrder
+      ) {
+        visit(dependency)
+      }
+      order.append(service)
+    }
+
+    for service in desired.declaredServiceNames.sorted(by: composeStringOrder) {
+      visit(service)
+    }
+    return order
   }
 
   private func blocker(
@@ -544,4 +1004,47 @@ struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
   private func networkOrder(_ lhs: NetworkRecord, _ rhs: NetworkRecord) -> Bool {
     composeStringOrder(lhs.name, rhs.name)
   }
+
+  private func identityOrder(
+    _ lhs: ComposeProjectContainerIdentity,
+    _ rhs: ComposeProjectContainerIdentity
+  ) -> Bool {
+    composeStringOrder(lhs.id, rhs.id)
+  }
+
+  private func resourceOrder(
+    _ lhs: ComposeDesiredResource,
+    _ rhs: ComposeDesiredResource
+  ) -> Bool {
+    if lhs.logicalName != rhs.logicalName {
+      return composeStringOrder(lhs.logicalName, rhs.logicalName)
+    }
+    return composeStringOrder(lhs.runtimeName, rhs.runtimeName)
+  }
+}
+
+private struct ObservedComposeContainer {
+  let record: ContainerRecord
+  let identity: ComposeProjectContainerIdentity
+}
+
+private struct ContainerActionDraft {
+  let operation: ComposeProjectContainerOperation
+  let serviceName: String
+  let replicaNumber: Int?
+  let expectedIdentity: ComposeProjectContainerIdentity?
+}
+
+private struct VolumeActionDraft {
+  let operation: ComposeProjectResourceOperation
+  let logicalName: String
+  let runtimeName: String
+  let expectedIdentity: ComposeProjectVolumeIdentity?
+}
+
+private struct NetworkActionDraft {
+  let operation: ComposeProjectResourceOperation
+  let logicalName: String
+  let runtimeName: String
+  let expectedIdentity: ComposeProjectNetworkIdentity?
 }

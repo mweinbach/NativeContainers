@@ -136,6 +136,7 @@ struct AppleRuntimeInventoryService: ContainerInventoryLoading {
     ContainerRecord(
       id: snapshot.id,
       imageReference: snapshot.configuration.image.reference,
+      imageDigest: snapshot.configuration.image.digest,
       platform: String(describing: snapshot.platform),
       state: RuntimeState(rawValue: snapshot.status.rawValue) ?? .unknown,
       ipAddress: snapshot.networks.first.map { String(describing: $0.ipv4Address) },

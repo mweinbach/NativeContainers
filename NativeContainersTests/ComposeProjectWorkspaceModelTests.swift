@@ -155,11 +155,11 @@ private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
       serviceConfigurationHashes: [:],
       observedIdentity: .empty,
       issues: [],
-      affectedContainerIDs: [],
-      affectedVolumeNames: [],
-      affectedNetworkNames: [],
-      orphanContainerIDs: [],
-      preservedResourceNames: []
+      containerActions: [],
+      volumeActions: [],
+      networkActions: [],
+      orphanContainers: [],
+      preservedResources: []
     )
   }
 
@@ -192,6 +192,7 @@ private final class WorkspaceMutationRecorder {
 
 private func workspaceRecoverySnapshot() -> ComposeOperationRecoverySnapshot {
   ComposeOperationRecoverySnapshot(
+    schemaVersion: 3,
     operationID: UUID(),
     planID: UUID(),
     action: .down,
@@ -210,8 +211,7 @@ private func workspaceRecoverySnapshot() -> ComposeOperationRecoverySnapshot {
     affectedNetworkCount: 1,
     orphanContainerCount: 0,
     phase: .executing,
-    completedContainerIDs: [],
-    completedNetworkNames: [],
-    completedVolumeNames: []
+    plannedStepTokens: ["container-0001", "network-0001"],
+    completedStepTokens: []
   )
 }

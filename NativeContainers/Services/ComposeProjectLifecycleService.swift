@@ -238,11 +238,11 @@ extension ComposeProjectPlan {
       && serviceConfigurationHashes == reviewed.serviceConfigurationHashes
       && observedIdentity == reviewed.observedIdentity
       && issues == reviewed.issues
-      && affectedContainerIDs == reviewed.affectedContainerIDs
-      && affectedVolumeNames == reviewed.affectedVolumeNames
-      && affectedNetworkNames == reviewed.affectedNetworkNames
-      && orphanContainerIDs == reviewed.orphanContainerIDs
-      && preservedResourceNames == reviewed.preservedResourceNames
+      && containerActions == reviewed.containerActions
+      && volumeActions == reviewed.volumeActions
+      && networkActions == reviewed.networkActions
+      && orphanContainers == reviewed.orphanContainers
+      && preservedResources == reviewed.preservedResources
   }
 }
 
