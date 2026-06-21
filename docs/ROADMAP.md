@@ -100,7 +100,7 @@ must leave a usable, test-backed product slice.
       blocked on Socktainer 1.0.0.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
-- [ ] SSH agent forwarding and safe host-directory sharing.
+- [x] SSH agent forwarding and safe host-directory sharing.
 - [x] Native menu-bar quick controls backed by the shared app inventory and
       exact container lifecycle services, including explicit Force Stop.
 - [x] Native completion notifications for image builds, restore-image
@@ -136,7 +136,7 @@ must leave a usable, test-backed product slice.
       journal exact legacy Caches-reference migration without deleting the old
       copy or exposing store mechanics to SwiftUI.
 - [x] Create bundle, disk, auxiliary storage, hardware model, and identifier.
-- [ ] Live-verify macOS installation after the entitlement is available. The
+- [ ] Live-verify macOS installation against a local IPSW. The entitlement and
       service/UI path, progress, supported cancellation, operation leases,
       interruption recovery, and deterministic cleanup tests are implemented.
 - [x] Start, pause, resume, request stop, and explicit force stop through an
@@ -144,13 +144,13 @@ must leave a usable, test-backed product slice.
       requires an installed macOS VM.
 - [x] Transactional same-host save/restore with configuration fingerprints,
       single-use restore consumption, and queued Force Stop. Live verification
-      remains gated by the Virtualization entitlement and an installed guest.
+      remains gated by an installed guest.
 - [x] Native console with automatic display reconfiguration and system-key
       capture controls.
 - [x] Persistent, security-scoped VirtioFS shared directories with stopped-only
       editing, saved-state invalidation, read-only/read-write access, and a
       selected-VM configuration inspector. Live guest mount verification remains
-      gated by the Virtualization entitlement and an installed guest.
+      gated by an installed guest.
 - [ ] Clipboard, audio, advanced networking, and USB configuration where public
       APIs support the guest.
 - [x] Stopped-only same-host clone service with APFS copy-on-write when

@@ -538,6 +538,7 @@ private struct ContainerAttachmentsPreview: View {
   let environment: ContainerAttachmentEnvironment
 
   @State private var mounts: [ContainerVolumeMountDraft]
+  @State private var hostDirectories: [ContainerHostDirectoryMountDraft]
   @State private var networkAttachments: [ContainerNetworkAttachmentDraft]
   @State private var sockets: [ContainerSocketPublicationDraft]
   @State private var requiresHostAccess = true
@@ -566,6 +567,18 @@ private struct ContainerAttachmentsPreview: View {
         )
       ]
     )
+    _hostDirectories = State(
+      initialValue: [
+        ContainerHostDirectoryMountDraft(
+          sourceURL: URL(
+            filePath: "/Users/example/Projects/NativeContainers",
+            directoryHint: .isDirectory
+          ),
+          containerPath: "/workspace/project",
+          isReadOnly: false
+        )
+      ]
+    )
     _networkAttachments = State(
       initialValue: model.networks.map {
         ContainerNetworkAttachmentDraft(networkID: $0.id)
@@ -585,6 +598,10 @@ private struct ContainerAttachmentsPreview: View {
   var body: some View {
     Form {
       ContainerStorageSection(mounts: $mounts, volumes: volumes)
+      ContainerHostDirectoriesSection(
+        mounts: $hostDirectories,
+        reportError: { _ in }
+      )
       ContainerNetworksSection(
         attachments: $networkAttachments,
         networks: networks

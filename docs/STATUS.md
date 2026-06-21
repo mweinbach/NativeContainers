@@ -7,10 +7,11 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 759 test declarations and 764 expanded outcomes.
-  The current full app-hosted Xcode run passed all 745 deterministic outcomes,
-  with 19 destructive or external-service integrations skipped behind explicit
-  live gates and no failures. Existing opt-in tests cover Apple runtime provisioning, interactive
+- The suite currently contains 800 test declarations and 805 expanded outcomes.
+  The current full app-hosted Xcode run passed all 784 deterministic outcomes,
+  with 21 destructive or external-service integrations skipped behind explicit
+  live gates and no failures. Existing opt-in tests cover Apple runtime
+  provisioning, reviewed host-directory and SSH-agent attachments, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
   none run against public services by default.
 - The app launches and stops through Xcode. A Preview-owned orphan was terminated
@@ -179,6 +180,21 @@ Updated: 2026-06-21.
   replacement or newly used volumes, preserves primary-network ordering, and
   constructs mounts, attachments, and socket publications directly without
   invoking Apple's CLI-oriented auto-create parser paths.
+- Host-directory sharing is split into focused domain, bookmark, manifest, and
+  attachment services. Folder selection creates a security-scoped bookmark,
+  rejects symbolic-link leaves, pins the device/inode across canonical path
+  resolution, and defaults to read-only until write access is explicitly
+  selected. Resolution keeps security scope alive through create/start and
+  emits Apple's native VirtioFS configuration. Mode-0600 atomic manifests under
+  a mode-0700 private root preserve the reviewed selection; every restart
+  revalidates both source identity and the container's exact mount
+  configuration before access is granted.
+- SSH-agent forwarding is a separate injectable service. It reviews only the
+  current absolute `SSH_AUTH_SOCK`, requires a Unix-domain socket, pins its
+  device/inode, and rechecks the same dynamic environment before creation and
+  every start. Creation uses Apple's native `configuration.ssh` path rather
+  than constructing a guest mount, and a missing or replaced socket fails
+  closed instead of silently dropping forwarding.
 - Published Unix sockets are confined to a mode-0700, current-user operation
   workspace under `/private/tmp/nativecontainers-<uid>`. Directory creation is
   `mkdir`/`lstat` based, arbitrary or occupied leaves fail closed, the portable
@@ -253,6 +269,15 @@ Updated: 2026-06-21.
   started it, observed the host socket in the private workspace, force-stopped
   it through `KILL`, verified socket removal, and deleted the container,
   operation directory, network, and volume with no probe resources remaining.
+- A disposable live Xcode runtime pass mounted a reviewed host folder into
+  Alpine through VirtioFS, read its marker, proved the default read-only policy
+  rejected a container write, force-stopped and restarted the container, read
+  the marker again through the persisted identity-bound manifest, then deleted
+  the container and host fixture.
+- A second disposable live pass created a real local Unix listener, reviewed
+  it as `SSH_AUTH_SOCK`, and verified Apple's native forwarding exposed
+  `/var/host-services/ssh-auth.sock` as a socket inside Alpine before and after
+  force-stop/restart. The container and socket were removed afterward.
 - Running-container inspectors now sample statistics every two seconds, retain
   a bounded 60-sample in-memory history, calculate allocation-normalized CPU
   usage, and can pause live work immediately through structured task
@@ -860,9 +885,9 @@ Updated: 2026-06-21.
   blocked. The focused overlay/workspace/planner/executor/resource proof passed
   12 tests. Xcode MCP then completed the full plan in eight bounded, ordered
   suite shards: 735 outcomes passed, the 19 explicit live-environment gates
-  skipped, and no outcome failed or remained unrun. Xcode currently discovers
-  749 test declarations; five parameterized cases expand the execution to 754
-  outcomes. Build-for-testing also passed.
+  skipped, and no outcome failed or remained unrun. At that checkpoint Xcode
+  discovered 749 test declarations; five parameterized cases expanded the
+  execution to 754 outcomes. Build-for-testing also passed.
 
 ## Remaining live verification gap
 

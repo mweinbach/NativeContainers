@@ -110,6 +110,28 @@ before every start. A missing private directory can be safely reconstructed
 from the persisted operation identity; stop removes the socket and failed
 creation or container deletion removes only that operation directory.
 
+Host-directory sharing remains a reviewed attachment rather than a raw path on
+the creation request. `ContainerHostDirectoryBookmarkService` owns
+security-scoped bookmark creation and resolution, rejects a symbolic-link leaf,
+pins the selected device/inode across canonical path resolution, and retains
+the security-scope lease for the full create or start operation.
+`AppleContainerHostDirectoryService` turns only those resolved selections into
+Apple `Filesystem.virtiofs` values. A private mode-0700 manifest root with
+mode-0600 atomic records preserves the reviewed bookmark and exact guest path;
+every later start compares the persisted attachment to the container's current
+configuration before opening access. Read-only is the default and write access
+is an explicit per-folder choice. Cleanup removes only the operation-owned
+manifest after failed creation or container deletion.
+
+SSH-agent forwarding follows Apple's native configuration path.
+`AppleContainerSSHAgentService` accepts only an absolute `SSH_AUTH_SOCK` that
+is currently a Unix-domain socket, freezes its device/inode during review, and
+revalidates the same environment and identity before creation and every start.
+The creation and lifecycle services pass that one dynamic environment entry to
+Apple while setting `ContainerConfiguration.ssh`; they never synthesize a
+guest mount. A missing, replaced, or non-socket source fails closed instead of
+silently starting without the reviewed agent.
+
 Apple's host alias is global resolver and packet-filter state, not a container
 configuration field. `AppleContainerHostAccessService` therefore performs
 read-only discovery of exact root-owned resolver, `pf.conf`, and anchor files.
@@ -144,6 +166,8 @@ mutations. `AppModel` depends on named narrow facets through `AppServices`, not
 the complete runtime adapter. `AppleRuntimeInventoryService`,
 `AppleInfrastructureService`, `AppleContainerCreationService`,
 `AppleContainerAttachmentService`, `ApplePublishedSocketWorkspace`,
+`AppleContainerHostDirectoryService`, `ContainerHostDirectoryBookmarkService`,
+`FileContainerHostDirectoryManifestStore`, `AppleContainerSSHAgentService`,
 `AppleContainerHostAccessService`,
 `AppleContainerLifecycleService`, `AppleContainerInspectionService`,
 `AppleContainerShellService`, `AppleContainerToolService`,

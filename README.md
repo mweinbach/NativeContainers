@@ -33,7 +33,8 @@ The current foundation includes native container lifecycle and inspection,
 exec/copy and interactive PTY workflows, safe OCI image management, reviewed
 volume/network lifecycle, explicit HTTP/HTTPS opening for published TCP ports,
 reviewed named-volume and ordered-network attachments, private Unix-socket
-publishing, read-only host-access discovery,
+publishing, reviewed read-only/read-write host-folder sharing, native
+identity-pinned SSH-agent forwarding, read-only host-access discovery,
 Apple Keychain-backed registry login management, reviewed native pull/push
 transfers, reviewed Dockerfile/Containerfile builds through Apple’s public
 BuildKit APIs with image-store, OCI-archive, root-filesystem tar, and folder
@@ -70,6 +71,7 @@ start machines or shell processes.
 The app is composed from narrow injectable service facets. Inventory, container
 creation and lifecycle, inspection, command tools, terminal sessions, image
 management, infrastructure, attachment resolution, private socket workspace,
+host-directory bookmark/manifest management, SSH-agent validation,
 host-access discovery, build-secret review/consumption, shared-builder
 management, build-history recording and persistence, machine lifecycle, bounded
 XPC/process transport, machine image preparation, machine process-target

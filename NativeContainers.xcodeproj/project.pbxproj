@@ -55,6 +55,7 @@
 		1F5E63CB2FE875CD00A430FF /* ContainerHostDirectoriesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63CA2FE875CD00A430FF /* ContainerHostDirectoriesSection.swift */; };
 		1F5E63CD2FE8765C00A430FF /* ContainerHostDirectoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63CC2FE8765C00A430FF /* ContainerHostDirectoryServiceTests.swift */; };
 		1F5E63CF2FE8766200A430FF /* ContainerSSHAgentServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63CE2FE8766200A430FF /* ContainerSSHAgentServiceTests.swift */; };
+		1F5E63D12FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63D02FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -539,6 +540,7 @@
 		1F5E63CA2FE875CD00A430FF /* ContainerHostDirectoriesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerHostDirectoriesSection.swift; sourceTree = "<group>"; };
 		1F5E63CC2FE8765C00A430FF /* ContainerHostDirectoryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerHostDirectoryServiceTests.swift; sourceTree = "<group>"; };
 		1F5E63CE2FE8766200A430FF /* ContainerSSHAgentServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerSSHAgentServiceTests.swift; sourceTree = "<group>"; };
+		1F5E63D02FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAppleContainerAttachmentSmokeTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1456,6 +1458,7 @@
 				1F5E63B82FE86FA200A430FF /* TerminalTargetServiceTests.swift */,
 				1F5E63CC2FE8765C00A430FF /* ContainerHostDirectoryServiceTests.swift */,
 				1F5E63CE2FE8766200A430FF /* ContainerSSHAgentServiceTests.swift */,
+				1F5E63D02FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift */,
 			);
 			path = Containers;
 			sourceTree = "<group>";
@@ -1971,6 +1974,7 @@
 				1F9D2AD32FE7583C0076F5B9 /* LiveAppleInfrastructureSmokeTests.swift in Sources */,
 				F49108654E1F41090402ABFB /* ContainerTerminalTests.swift in Sources */,
 				1F9D2AE72FE761600076F5B9 /* AppleInfrastructureServiceTests.swift in Sources */,
+				1F5E63D12FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift in Sources */,
 				1F9D2BA62FE7AA560076F5B9 /* MacVirtualMachineRuntimeOwnershipStoreTests.swift in Sources */,
 				1FEC47542FE8435D00DC60B2 /* ComposeExecutionOverlayServiceTests.swift in Sources */,
 				1F9D2B5C2FE792CF0076F5B9 /* LinuxMachineManagementTests.swift in Sources */,
