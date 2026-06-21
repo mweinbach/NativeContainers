@@ -12,15 +12,18 @@ final class MacVirtualMachineInstallationModel {
   private(set) var didFinish = false
 
   private let installer: any MacVirtualMachineInstalling
+  private let notifications: any AppNotificationManaging
   private let refresh: @MainActor @Sendable () async -> Void
 
   init(
     machine: VirtualMachineManifest,
     installer: any MacVirtualMachineInstalling,
+    notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     refresh: @escaping @MainActor @Sendable () async -> Void
   ) {
     self.machine = machine
     self.installer = installer
+    self.notifications = notifications
     self.refresh = refresh
   }
 
@@ -43,6 +46,9 @@ final class MacVirtualMachineInstallationModel {
       phase = .finalizing
       fractionCompleted = 1
       await refresh()
+      await notifications.deliver(
+        .virtualMachineInstallationSucceeded(machineID: machine.id, machineName: machine.name)
+      )
       return true
     } catch is CancellationError {
       phase = nil
@@ -56,6 +62,9 @@ final class MacVirtualMachineInstallationModel {
       fractionCompleted = nil
       errorMessage = error.localizedDescription
       await refresh()
+      await notifications.deliver(
+        .virtualMachineInstallationFailed(machineID: machine.id, machineName: machine.name)
+      )
       return false
     }
   }

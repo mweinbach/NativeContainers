@@ -35,7 +35,8 @@ final class AppModel {
 
   @ObservationIgnored
   private lazy var imageBuildWorkspaceModel = ImageBuildModel(
-    service: services.imageBuild
+    service: services.imageBuild,
+    notifications: services.notifications
   ) { [weak self] in
     await self?.refresh()
   }
@@ -101,6 +102,11 @@ final class AppModel {
   )
 
   @ObservationIgnored
+  private lazy var appNotificationSettingsModel = AppNotificationSettingsModel(
+    service: services.notifications
+  )
+
+  @ObservationIgnored
   private lazy var composeProjectWorkspaceModel = ComposeProjectWorkspaceModel(
     service: services.composeProjectLifecycle
   ) { [weak self] in
@@ -148,11 +154,15 @@ final class AppModel {
       lastRefresh = Date()
     }
     updateWorkspaceNavigation()
+    services.notifications.setResponseHandler { [weak self] destination in
+      await self?.handleNotificationResponse(destination)
+    }
   }
 
   convenience init(
     containerService: any ContainerManaging = AppleContainerService(),
     launchAtLoginService: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
+    notificationService: any AppNotificationManaging = UnavailableAppNotificationService(),
     composeTopologyService: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsageService: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamationService: any StorageReclamationManaging =
@@ -195,6 +205,7 @@ final class AppModel {
       services: AppServices(
         containerService: containerService,
         launchAtLogin: launchAtLoginService,
+        notifications: notificationService,
         composeTopology: composeTopologyService,
         storageUsage: storageUsageService,
         storageReclamation: storageReclamationService,
@@ -586,6 +597,15 @@ final class AppModel {
     workspaceNavigation.presentQuickOpen()
   }
 
+  private func handleNotificationResponse(
+    _ destination: AppNotificationDestination
+  ) async {
+    await loadIfNeeded()
+    let route = destination.workspaceRoute
+    guard !navigate(to: route) else { return }
+    _ = navigate(to: route.baseRoute)
+  }
+
   func makeImageBuildModel() -> ImageBuildModel {
     imageBuildWorkspaceModel
   }
@@ -624,6 +644,10 @@ final class AppModel {
     launchAtLoginModel
   }
 
+  func makeAppNotificationSettingsModel() -> AppNotificationSettingsModel {
+    appNotificationSettingsModel
+  }
+
   func makeDockerCompatibilityModel() -> DockerCompatibilityModel {
     dockerCompatibilitySettingsModel
   }
@@ -646,7 +670,8 @@ final class AppModel {
     MacRestoreImagePreparationModel(
       machine: machine,
       discovery: services.restoreImageDiscovery,
-      acquisition: services.restoreImageAcquisition
+      acquisition: services.restoreImageAcquisition,
+      notifications: services.notifications
     ) { [self] restoreImageURL in
       try await prepareMacVirtualMachine(
         id: machine.id,
@@ -660,7 +685,8 @@ final class AppModel {
   ) -> MacVirtualMachineInstallationModel {
     MacVirtualMachineInstallationModel(
       machine: machine,
-      installer: services.virtualMachineInstaller
+      installer: services.virtualMachineInstaller,
+      notifications: services.notifications
     ) { [weak self] in
       await self?.refresh()
     }

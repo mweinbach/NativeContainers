@@ -22,10 +22,12 @@ struct MacRestoreImagePreparationModelTests {
     )
     let acquisition = TestRestoreImageAcquisition(cachedURL: localURL)
     let recorder = PreparedURLRecorder()
+    let notifications = RecordingAppNotificationService()
     let model = MacRestoreImagePreparationModel(
       machine: machine,
       discovery: TestRestoreImageDiscovery(info: info),
-      acquisition: acquisition
+      acquisition: acquisition,
+      notifications: notifications
     ) { url in
       await recorder.record(url)
     }
@@ -41,6 +43,11 @@ struct MacRestoreImagePreparationModelTests {
     #expect(await acquisition.requestedSources == [.remote(remoteURL)])
     #expect(await acquisition.committedURLs == [localURL])
     #expect(await recorder.urls == [localURL])
+    #expect(
+      notifications.events == [
+        .restoreImagePrepared(machineID: machine.id, machineName: machine.name)
+      ]
+    )
   }
 
   @Test
@@ -97,10 +104,12 @@ struct MacRestoreImagePreparationModelTests {
     let acquisition = TestRestoreImageAcquisition(
       cachedURL: URL(filePath: "/tmp/macOS.ipsw")
     )
+    let notifications = RecordingAppNotificationService()
     let model = MacRestoreImagePreparationModel(
       machine: machine,
       discovery: TestRestoreImageDiscovery(info: info),
-      acquisition: acquisition
+      acquisition: acquisition,
+      notifications: notifications
     ) { _ in
       Issue.record("An incompatible restore image must not be prepared.")
     }
@@ -112,6 +121,7 @@ struct MacRestoreImagePreparationModelTests {
     #expect(model.latestImageCompatibilityMessage?.contains("at least 4 CPUs") == true)
     #expect(model.errorMessage == model.latestImageCompatibilityMessage)
     #expect(await acquisition.requestedSources.isEmpty)
+    #expect(notifications.events.isEmpty)
   }
 
   @Test
@@ -156,6 +166,7 @@ struct MacRestoreImagePreparationModelTests {
     let selectedURL = URL(filePath: "/tmp/Selected.ipsw")
     let importedURL = URL(filePath: "/private/cache/Imported.ipsw")
     let acquisition = TestRestoreImageAcquisition(cachedURL: importedURL)
+    let notifications = RecordingAppNotificationService()
     let model = MacRestoreImagePreparationModel(
       machine: machine,
       discovery: TestRestoreImageDiscovery(
@@ -170,7 +181,8 @@ struct MacRestoreImagePreparationModelTests {
           isSupported: true
         )
       ),
-      acquisition: acquisition
+      acquisition: acquisition,
+      notifications: notifications
     ) { _ in
       throw TestRestoreImagePreparationError.expected
     }
@@ -180,6 +192,11 @@ struct MacRestoreImagePreparationModelTests {
     #expect(!succeeded)
     #expect(await acquisition.abandonedURLs == [importedURL])
     #expect(await acquisition.committedURLs.isEmpty)
+    #expect(
+      notifications.events == [
+        .restoreImagePreparationFailed(machineID: machine.id, machineName: machine.name)
+      ]
+    )
   }
 
   private func makeMachine(cpuCount: Int = 4) throws -> VirtualMachineManifest {

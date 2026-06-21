@@ -9,6 +9,10 @@ struct SettingsView: View {
         launchAtLogin: model.makeLaunchAtLoginModel()
       )
 
+      AppNotificationSettingsSection(
+        model: model.makeAppNotificationSettingsModel()
+      )
+
       Section("Apple container runtime") {
         LabeledContent("Status") {
           Text(model.systemInfo == nil ? "Unavailable" : "Running")

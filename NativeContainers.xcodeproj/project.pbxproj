@@ -26,6 +26,12 @@
 		1E35A77F5D23F783CCCB7E5C /* ImageBuildModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA8FB1A2877234F18F4308A /* ImageBuildModels.swift */; };
 		1F5E63932FE8539300A430FF /* AppExecutionContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63922FE8539300A430FF /* AppExecutionContext.swift */; };
 		1F5E63952FE8539300A430FF /* AppExecutionContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63942FE8539300A430FF /* AppExecutionContextTests.swift */; };
+		1F5E63972FE85C7700A430FF /* AppNotificationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63962FE85C7700A430FF /* AppNotificationModels.swift */; };
+		1F5E63992FE85C9300A430FF /* AppNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63982FE85C9300A430FF /* AppNotificationService.swift */; };
+		1F5E639B2FE85CB100A430FF /* AppNotificationSettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E639A2FE85CB100A430FF /* AppNotificationSettingsModel.swift */; };
+		1F5E639D2FE85D0C00A430FF /* AppNotificationSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E639C2FE85D0C00A430FF /* AppNotificationSettingsSection.swift */; };
+		1F5E639F2FE85D4F00A430FF /* AppNotificationTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E639E2FE85D4F00A430FF /* AppNotificationTestSupport.swift */; };
+		1F5E63A12FE85D6500A430FF /* AppNotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63A02FE85D6500A430FF /* AppNotificationTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -481,6 +487,12 @@
 		1AA8FB1A2877234F18F4308A /* ImageBuildModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildModels.swift; sourceTree = "<group>"; };
 		1F5E63922FE8539300A430FF /* AppExecutionContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppExecutionContext.swift; sourceTree = "<group>"; };
 		1F5E63942FE8539300A430FF /* AppExecutionContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppExecutionContextTests.swift; sourceTree = "<group>"; };
+		1F5E63962FE85C7700A430FF /* AppNotificationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationModels.swift; sourceTree = "<group>"; };
+		1F5E63982FE85C9300A430FF /* AppNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationService.swift; sourceTree = "<group>"; };
+		1F5E639A2FE85CB100A430FF /* AppNotificationSettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationSettingsModel.swift; sourceTree = "<group>"; };
+		1F5E639C2FE85D0C00A430FF /* AppNotificationSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationSettingsSection.swift; sourceTree = "<group>"; };
+		1F5E639E2FE85D4F00A430FF /* AppNotificationTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationTestSupport.swift; sourceTree = "<group>"; };
+		1F5E63A02FE85D6500A430FF /* AppNotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotificationTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -967,6 +979,7 @@
 				1FEC47432FE83D0B00DC60B2 /* MacVirtualMachineConfigurationView.swift */,
 				1FEC475F2FE84A8A00DC60B2 /* LaunchAtLoginSettingsSection.swift */,
 				1FEC47612FE84A8A00DC60B2 /* MenuBarQuickControlsView.swift */,
+				1F5E639C2FE85D0C00A430FF /* AppNotificationSettingsSection.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1011,6 +1024,7 @@
 				1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */,
 				1FEC47392FE8388D00DC60B2 /* VirtualMachineDiskImageReplacementModels.swift */,
 				1FEC47552FE849FA00DC60B2 /* LaunchAtLoginModels.swift */,
+				1F5E63962FE85C7700A430FF /* AppNotificationModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1263,6 +1277,7 @@
 				1F9D2BED2FE7C4760076F5B9 /* SecureFileSystemPath.swift */,
 				1F9D2BC12FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift */,
 				1FEC47572FE849FA00DC60B2 /* LaunchAtLoginService.swift */,
+				1F5E63982FE85C9300A430FF /* AppNotificationService.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -1319,6 +1334,7 @@
 				1F9D2BC72FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift */,
 				1FEC475B2FE84A2500DC60B2 /* LaunchAtLoginModelTests.swift */,
 				1F5E63942FE8539300A430FF /* AppExecutionContextTests.swift */,
+				1F5E63A02FE85D6500A430FF /* AppNotificationTests.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1560,6 +1576,7 @@
 			children = (
 				1F9D2AE82FE7618B0076F5B9 /* AppleXPCRequestClientTests.swift */,
 				1F9D2C302FE7E6DA0076F5B9 /* HostProcessServiceTests.swift */,
+				1F5E639E2FE85D4F00A430FF /* AppNotificationTestSupport.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -1659,6 +1676,7 @@
 				1FEC47592FE849FA00DC60B2 /* LaunchAtLoginModel.swift */,
 				1FEC475D2FE84A8A00DC60B2 /* AppPreferences.swift */,
 				1F5E63922FE8539300A430FF /* AppExecutionContext.swift */,
+				1F5E639A2FE85CB100A430FF /* AppNotificationSettingsModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1871,6 +1889,7 @@
 				1F9D2C412FE7E7D20076F5B9 /* ComposeLifecyclePlannerTests.swift in Sources */,
 				1F9D2C572FE7ED120076F5B9 /* ComposeProjectMutationExecutorTests.swift in Sources */,
 				1F9D2B252FE7713F0076F5B9 /* ContainerBuilderManagementTests.swift in Sources */,
+				1F5E63A12FE85D6500A430FF /* AppNotificationTests.swift in Sources */,
 				1F9D2C292FE7DBEA0076F5B9 /* AppOwnedBuildCacheStoreTests.swift in Sources */,
 				1F9D2C0C2FE7D0470076F5B9 /* SocktainerComposeLiveFixtureServiceTests.swift in Sources */,
 				1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */,
@@ -1894,6 +1913,7 @@
 				1F9D2B782FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift in Sources */,
 				1F9D2BF62FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift in Sources */,
 				6B4AE3F68105CB5C9086241B /* ImageBuildServiceTests.swift in Sources */,
+				1F5E639F2FE85D4F00A430FF /* AppNotificationTestSupport.swift in Sources */,
 				1F9D2C3D2FE7E79F0076F5B9 /* ComposeProjectSourceServiceTests.swift in Sources */,
 				1F9D2CC02FE80C040076F5B9 /* RestoreImageCacheServiceTests.swift in Sources */,
 				1F5E63952FE8539300A430FF /* AppExecutionContextTests.swift in Sources */,
@@ -2056,6 +2076,7 @@
 				1F9D2ADD2FE7600F0076F5B9 /* AppleInfrastructureService.swift in Sources */,
 				1F9D2CBE2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift in Sources */,
 				1FEC47622FE84A8A00DC60B2 /* MenuBarQuickControlsView.swift in Sources */,
+				1F5E63972FE85C7700A430FF /* AppNotificationModels.swift in Sources */,
 				1F9D2BBC2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift in Sources */,
 				1F9D2B1F2FE7705A0076F5B9 /* ContainerBuilderManaging.swift in Sources */,
 				1F9D2C1A2FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift in Sources */,
@@ -2070,6 +2091,7 @@
 				1F9D2BDC2FE7C30F0076F5B9 /* DockerCompatibilityModels.swift in Sources */,
 				1F9D2AD52FE75CAB0076F5B9 /* AppleContainerCleanupClient.swift in Sources */,
 				73762F62AD06A7F38EA6E1E3 /* ContainerToolsModel.swift in Sources */,
+				1F5E639B2FE85CB100A430FF /* AppNotificationSettingsModel.swift in Sources */,
 				1F9D2AF32FE764B50076F5B9 /* AppleContainerToolService.swift in Sources */,
 				1F9D2B392FE77A9A0076F5B9 /* ImageBuildHistoryStore.swift in Sources */,
 				1F9D2CB22FE8065A0076F5B9 /* VirtualMachineStorageReclamationModel.swift in Sources */,
@@ -2147,6 +2169,7 @@
 				1F9D2B072FE7695B0076F5B9 /* AppleContainerHostAccessService.swift in Sources */,
 				6D997CBC0773804955C7F048 /* NativeContainersApp.swift in Sources */,
 				1F9D2BCC2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift in Sources */,
+				1F5E63992FE85C9300A430FF /* AppNotificationService.swift in Sources */,
 				1F9D2B1D2FE770390076F5B9 /* ContainerBuilderSnapshotAdapter.swift in Sources */,
 				1F9D2AEB2FE764AD0076F5B9 /* AppleContainerLifecycleService.swift in Sources */,
 				1FEC46F12FE8303500DC60B2 /* ComposeOperationJournalFileStore.swift in Sources */,
@@ -2210,6 +2233,7 @@
 				1F9D2CC42FE810B30076F5B9 /* RestoreImageStoreMigrationService.swift in Sources */,
 				1FEC47442FE83D0B00DC60B2 /* MacVirtualMachineConfigurationView.swift in Sources */,
 				1F9D2BB62FE7AE2A0076F5B9 /* MacVirtualMachineSavedStateStore.swift in Sources */,
+				1F5E639D2FE85D0C00A430FF /* AppNotificationSettingsSection.swift in Sources */,
 				1F9D2C962FE800EC0076F5B9 /* StorageReclamationReviewSheet.swift in Sources */,
 				1F9D2B9C2FE7A3190076F5B9 /* MacVirtualMachineAvailabilityChecker.swift in Sources */,
 				1F9D2C7B2FE7FABC0076F5B9 /* VirtualMachinePackagePicker.swift in Sources */,

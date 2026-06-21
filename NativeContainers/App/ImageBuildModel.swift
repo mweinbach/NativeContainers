@@ -12,13 +12,16 @@ final class ImageBuildModel {
   private(set) var isBuilding = false
 
   private let service: any ImageBuilding
+  private let notifications: any AppNotificationManaging
   private let didMutate: @MainActor @Sendable () async -> Void
 
   init(
     service: any ImageBuilding,
+    notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     didMutate: @escaping @MainActor @Sendable () async -> Void
   ) {
     self.service = service
+    self.notifications = notifications
     self.didMutate = didMutate
   }
 
@@ -73,6 +76,7 @@ final class ImageBuildModel {
       if reviewedPlan.output.kind == .imageStore {
         await didMutate()
       }
+      await notifications.deliver(.imageBuildSucceeded)
       return true
     } catch is CancellationError {
       errorMessage =
@@ -86,6 +90,7 @@ final class ImageBuildModel {
       if reviewedPlan.output.kind == .imageStore {
         await didMutate()
       }
+      await notifications.deliver(.imageBuildFailed)
       return false
     }
   }

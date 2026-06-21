@@ -1128,7 +1128,8 @@ struct ImageBuildServiceTests {
       outcome: .success(expected)
     )
     let refreshes = ImageBuildRefreshRecorder()
-    let model = ImageBuildModel(service: service) {
+    let notifications = RecordingAppNotificationService()
+    let model = ImageBuildModel(service: service, notifications: notifications) {
       await refreshes.record()
     }
 
@@ -1142,6 +1143,7 @@ struct ImageBuildServiceTests {
     #expect(!model.isBuilding)
     #expect(await refreshes.count == 1)
     #expect(await service.buildCalls == [TestImageBuildCall(plan: plan, authorization: .none)])
+    #expect(notifications.events == [.imageBuildSucceeded])
   }
 
   @Test
@@ -1190,7 +1192,8 @@ struct ImageBuildServiceTests {
     let plan = makeImageBuildPlan()
     let service = TestImageBuilding(preparedPlan: plan, outcome: .cancelled)
     let refreshes = ImageBuildRefreshRecorder()
-    let model = ImageBuildModel(service: service) {
+    let notifications = RecordingAppNotificationService()
+    let model = ImageBuildModel(service: service, notifications: notifications) {
       await refreshes.record()
     }
     _ = await model.prepare(makeImageBuildRequest())
@@ -1204,6 +1207,7 @@ struct ImageBuildServiceTests {
     #expect(model.errorMessage?.contains("cancelled") == true)
     #expect(model.errorMessage?.contains("before a final output was promised") == true)
     #expect(await refreshes.count == 1)
+    #expect(notifications.events.isEmpty)
   }
 
   @Test
@@ -1211,7 +1215,8 @@ struct ImageBuildServiceTests {
     let plan = makeImageBuildPlan()
     let service = TestImageBuilding(preparedPlan: plan, outcome: .failure(.workerUnavailable))
     let refreshes = ImageBuildRefreshRecorder()
-    let model = ImageBuildModel(service: service) {
+    let notifications = RecordingAppNotificationService()
+    let model = ImageBuildModel(service: service, notifications: notifications) {
       await refreshes.record()
     }
 
@@ -1223,6 +1228,7 @@ struct ImageBuildServiceTests {
     #expect(!model.isBuilding)
     #expect(model.errorMessage == TestImageBuildFailure.workerUnavailable.localizedDescription)
     #expect(await refreshes.count == 1)
+    #expect(notifications.events == [.imageBuildFailed])
   }
 
   @Test

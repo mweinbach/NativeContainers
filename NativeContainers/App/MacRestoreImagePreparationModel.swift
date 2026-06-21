@@ -22,17 +22,20 @@ final class MacRestoreImagePreparationModel {
 
   private let discovery: any MacRestoreImageDiscovering
   private let acquisition: any RestoreImageAcquiring
+  private let notifications: any AppNotificationManaging
   private let prepareMachine: @MainActor @Sendable (URL) async throws -> Void
 
   init(
     machine: VirtualMachineManifest,
     discovery: any MacRestoreImageDiscovering,
     acquisition: any RestoreImageAcquiring,
+    notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     prepare: @escaping @MainActor @Sendable (URL) async throws -> Void
   ) {
     self.machine = machine
     self.discovery = discovery
     self.acquisition = acquisition
+    self.notifications = notifications
     self.prepareMachine = prepare
   }
 
@@ -109,6 +112,9 @@ final class MacRestoreImagePreparationModel {
     } catch {
       stage = .idle
       errorMessage = error.localizedDescription
+      await notifications.deliver(
+        .restoreImagePreparationFailed(machineID: machine.id, machineName: machine.name)
+      )
       return false
     }
   }
@@ -139,6 +145,9 @@ final class MacRestoreImagePreparationModel {
     } catch {
       stage = .idle
       errorMessage = error.localizedDescription
+      await notifications.deliver(
+        .restoreImagePreparationFailed(machineID: machine.id, machineName: machine.name)
+      )
       return false
     }
   }
@@ -160,6 +169,9 @@ final class MacRestoreImagePreparationModel {
       try await prepareMachine(lease.fileURL)
       await acquisition.commit(lease)
       stage = .finished
+      await notifications.deliver(
+        .restoreImagePrepared(machineID: machine.id, machineName: machine.name)
+      )
       return true
     } catch {
       let operationError = error

@@ -18,6 +18,7 @@ struct VirtualMachineDiskImageMaintenanceServices: Sendable {
 struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
   let launchAtLogin: any LaunchAtLoginManaging
+  let notifications: any AppNotificationManaging
   let composeTopology: any ComposeTopologyDeriving
   let storageUsage: any StorageUsageLoading
   let storageReclamation: any StorageReclamationManaging
@@ -60,6 +61,7 @@ struct AppServices: Sendable {
   init(
     inventory: any ContainerInventoryLoading,
     launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
+    notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -115,6 +117,7 @@ struct AppServices: Sendable {
   ) {
     self.inventory = inventory
     self.launchAtLogin = launchAtLogin
+    self.notifications = notifications
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
@@ -158,6 +161,7 @@ struct AppServices: Sendable {
   init(
     containerService: any ContainerManaging,
     launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
+    notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -202,6 +206,7 @@ struct AppServices: Sendable {
   ) {
     inventory = containerService
     self.launchAtLogin = launchAtLogin
+    self.notifications = notifications
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
@@ -480,6 +485,7 @@ enum AppCompositionRoot {
     return AppServices(
       inventory: inventoryService,
       launchAtLogin: SMAppServiceLaunchAtLoginService(),
+      notifications: UserNotificationService(),
       composeTopology: ComposeTopologyService(),
       storageUsage: storageUsage,
       storageReclamation: storageReclamation,

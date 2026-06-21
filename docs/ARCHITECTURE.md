@@ -554,6 +554,19 @@ service maps `SMAppService.mainApp` into typed disabled, enabled,
 approval-required, and unavailable states. The app never installs a custom
 launch agent or treats registration as proof of user approval.
 
+Native user notifications follow the same dependency boundary. A focused
+`AppNotificationManaging` service maps `UNUserNotificationCenter` into typed
+authorization and delivery-channel snapshots, installs its delegate before any
+notification work, and owns property-list-safe response payloads. Settings
+requests alert and sound permission only from an explicit user action; launch
+never triggers the system prompt. Image builds, restore-image preparation, and
+macOS installation publish generic terminal success or failure events without
+embedding raw errors, paths, logs, or secrets. Cancellation stays silent, and
+delivery failure cannot change the underlying operation result. Foreground
+presentation is suppressed, while a response loads authoritative inventory and
+reuses `WorkspaceRoute`, falling back to the safe top-level route when an exact
+VM no longer exists.
+
 Workspace navigation is a separate focused slice. `WorkspaceRoute` represents
 both top-level destinations and exact resource identities. A pure
 `WorkspaceResourceCatalog` derives searchable entries from the current Apple

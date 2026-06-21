@@ -103,7 +103,9 @@ must leave a usable, test-backed product slice.
 - [ ] SSH agent forwarding and safe host-directory sharing.
 - [x] Native menu-bar quick controls backed by the shared app inventory and
       exact container lifecycle services, including explicit Force Stop.
-- [ ] Native notifications.
+- [x] Native completion notifications for image builds, restore-image
+      preparation, and macOS installation, with system-owned permission state
+      and typed workspace routing from notification responses.
 - [ ] Shell discovery and fallback beyond `/bin/sh`.
 - [ ] Detachable terminal windows, tabs, saved shell presets, and session
       restoration.

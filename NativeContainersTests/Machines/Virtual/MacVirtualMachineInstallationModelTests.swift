@@ -10,9 +10,11 @@ struct MacVirtualMachineInstallationModelTests {
     let machine = try makeMachine()
     let installer = ModelTestMacInstaller(behavior: .succeed)
     let refresh = ModelRefreshRecorder()
+    let notifications = RecordingAppNotificationService()
     let model = MacVirtualMachineInstallationModel(
       machine: machine,
-      installer: installer
+      installer: installer,
+      notifications: notifications
     ) {
       refresh.record()
     }
@@ -25,15 +27,22 @@ struct MacVirtualMachineInstallationModelTests {
     #expect(model.fractionCompleted == 1)
     #expect(model.errorMessage == nil)
     #expect(refresh.count == 1)
+    #expect(
+      notifications.events == [
+        .virtualMachineInstallationSucceeded(machineID: machine.id, machineName: machine.name)
+      ]
+    )
   }
 
   @Test
   func failureIsVisibleAndRefreshesPersistedState() async throws {
     let machine = try makeMachine()
     let refresh = ModelRefreshRecorder()
+    let notifications = RecordingAppNotificationService()
     let model = MacVirtualMachineInstallationModel(
       machine: machine,
-      installer: ModelTestMacInstaller(behavior: .fail)
+      installer: ModelTestMacInstaller(behavior: .fail),
+      notifications: notifications
     ) {
       refresh.record()
     }
@@ -45,15 +54,22 @@ struct MacVirtualMachineInstallationModelTests {
     #expect(model.phase == nil)
     #expect(model.errorMessage?.contains("expected") == true)
     #expect(refresh.count == 1)
+    #expect(
+      notifications.events == [
+        .virtualMachineInstallationFailed(machineID: machine.id, machineName: machine.name)
+      ]
+    )
   }
 
   @Test
   func taskCancellationProducesRecoveryGuidance() async throws {
     let machine = try makeMachine()
     let installer = ModelTestMacInstaller(behavior: .wait)
+    let notifications = RecordingAppNotificationService()
     let model = MacVirtualMachineInstallationModel(
       machine: machine,
-      installer: installer
+      installer: installer,
+      notifications: notifications
     ) {}
 
     let task = Task {
@@ -65,6 +81,7 @@ struct MacVirtualMachineInstallationModelTests {
 
     #expect(!succeeded)
     #expect(model.errorMessage?.contains("ready to retry") == true)
+    #expect(notifications.events.isEmpty)
   }
 
   private func makeMachine() throws -> VirtualMachineManifest {
