@@ -139,6 +139,11 @@
 		1F5E64752FE8A26500A430FF /* MacVirtualMachineUSBModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64742FE8A26500A430FF /* MacVirtualMachineUSBModel.swift */; };
 		1F5E64772FE8A2AF00A430FF /* MacVirtualMachineUSBControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64762FE8A2AF00A430FF /* MacVirtualMachineUSBControl.swift */; };
 		1F5E64792FE8A39400A430FF /* MacVirtualMachineUSBModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64782FE8A39400A430FF /* MacVirtualMachineUSBModelTests.swift */; };
+		1F5E647B2FE8A5F900A430FF /* WorkloadResourceDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E647A2FE8A5F900A430FF /* WorkloadResourceDefaults.swift */; };
+		1F5E647D2FE8A5FB00A430FF /* HostResourceStateProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E647C2FE8A5FB00A430FF /* HostResourceStateProviding.swift */; };
+		1F5E647F2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E647E2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift */; };
+		1F5E64812FE8A60300A430FF /* HostResourceDefaultService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64802FE8A60300A430FF /* HostResourceDefaultService.swift */; };
+		1F5E64832FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64822FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -707,6 +712,11 @@
 		1F5E64742FE8A26500A430FF /* MacVirtualMachineUSBModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineUSBModel.swift; sourceTree = "<group>"; };
 		1F5E64762FE8A2AF00A430FF /* MacVirtualMachineUSBControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineUSBControl.swift; sourceTree = "<group>"; };
 		1F5E64782FE8A39400A430FF /* MacVirtualMachineUSBModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineUSBModelTests.swift; sourceTree = "<group>"; };
+		1F5E647A2FE8A5F900A430FF /* WorkloadResourceDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkloadResourceDefaults.swift; sourceTree = "<group>"; };
+		1F5E647C2FE8A5FB00A430FF /* HostResourceStateProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResourceStateProviding.swift; sourceTree = "<group>"; };
+		1F5E647E2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessInfoHostResourceStateProvider.swift; sourceTree = "<group>"; };
+		1F5E64802FE8A60300A430FF /* HostResourceDefaultService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResourceDefaultService.swift; sourceTree = "<group>"; };
+		1F5E64822FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResourceDefaultServiceTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1267,6 +1277,7 @@
 				1F5E64442FE8971600A430FF /* MacGuestProvisioningModels.swift */,
 				1F5E64502FE89AC800A430FF /* MacVirtualMachineDiskSnapshotModels.swift */,
 				1F5E64642FE8A04800A430FF /* MacVirtualMachineUSBModels.swift */,
+				1F5E647A2FE8A5F900A430FF /* WorkloadResourceDefaults.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1557,6 +1568,9 @@
 				1FEC47572FE849FA00DC60B2 /* LaunchAtLoginService.swift */,
 				1F5E63982FE85C9300A430FF /* AppNotificationService.swift */,
 				1F5E64722FE8A25900A430FF /* AppleProcessEntitlementChecker.swift */,
+				1F5E647C2FE8A5FB00A430FF /* HostResourceStateProviding.swift */,
+				1F5E647E2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift */,
+				1F5E64802FE8A60300A430FF /* HostResourceDefaultService.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -1891,6 +1905,7 @@
 				1F9D2AE82FE7618B0076F5B9 /* AppleXPCRequestClientTests.swift */,
 				1F9D2C302FE7E6DA0076F5B9 /* HostProcessServiceTests.swift */,
 				1F5E639E2FE85D4F00A430FF /* AppNotificationTestSupport.swift */,
+				1F5E64822FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -2245,6 +2260,7 @@
 				1F5E63A72FE8612700A430FF /* AppleContainerShellServiceTests.swift in Sources */,
 				1F9D2C4D2FE7EA920076F5B9 /* ComposeOperationJournalTests.swift in Sources */,
 				1F9D2B782FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift in Sources */,
+				1F5E64832FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift in Sources */,
 				1F5E640D2FE8875A00A430FF /* LinuxPlatformArtifactPreparerTests.swift in Sources */,
 				1F9D2BF62FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift in Sources */,
 				6B4AE3F68105CB5C9086241B /* ImageBuildServiceTests.swift in Sources */,
@@ -2412,6 +2428,7 @@
 				1F9D2C332FE7E72E0076F5B9 /* ComposeProjectSourceService.swift in Sources */,
 				1F5E63DB2FE87C0600A430FF /* AppleMacVirtualMachineMicrophoneAuthorizationService.swift in Sources */,
 				1FEC47102FE8330F00DC60B2 /* MacVirtualMachineRuntimeObservations.swift in Sources */,
+				1F5E647D2FE8A5FB00A430FF /* HostResourceStateProviding.swift in Sources */,
 				1F5E63BD2FE870AC00A430FF /* TerminalPresetManagerView.swift in Sources */,
 				4F656DDFC3706DF8D8B4E3C0 /* ContainerCreationView.swift in Sources */,
 				CF01A590ABF08323E6B93DC7 /* ContainerInspectorModel.swift in Sources */,
@@ -2463,6 +2480,7 @@
 				1F9D2BBC2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift in Sources */,
 				1F9D2B1F2FE7705A0076F5B9 /* ContainerBuilderManaging.swift in Sources */,
 				1F9D2C1A2FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift in Sources */,
+				1F5E64812FE8A60300A430FF /* HostResourceDefaultService.swift in Sources */,
 				1F9D2BFC2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift in Sources */,
 				CB2BF886C18BC04C8CFB970A /* ContainerTerminalModels.swift in Sources */,
 				8BE07DC732E4109E57129AB3 /* ContainerTerminalSurface.swift in Sources */,
@@ -2471,6 +2489,7 @@
 				1FEC475A2FE849FA00DC60B2 /* LaunchAtLoginModel.swift in Sources */,
 				1F5E643B2FE8912A00A430FF /* VirtualMachineSharedDirectoryProtocols.swift in Sources */,
 				1F9D2B232FE770E70076F5B9 /* ContainerBuilderManagementModel.swift in Sources */,
+				1F5E647F2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift in Sources */,
 				1F5E63932FE8539300A430FF /* AppExecutionContext.swift in Sources */,
 				1F9D2BDC2FE7C30F0076F5B9 /* DockerCompatibilityModels.swift in Sources */,
 				1F9D2AD52FE75CAB0076F5B9 /* AppleContainerCleanupClient.swift in Sources */,
@@ -2577,6 +2596,7 @@
 				1F9D2B452FE789750076F5B9 /* PrivateBuildDirectoryStore.swift in Sources */,
 				1F5E63B72FE86F8300A430FF /* TerminalTargetService.swift in Sources */,
 				515EDFD55BB4EFF79D4B9003 /* PreviewSupport.swift in Sources */,
+				1F5E647B2FE8A5F900A430FF /* WorkloadResourceDefaults.swift in Sources */,
 				1F9D2C9A2FE801C90076F5B9 /* AppleImagePruneClient.swift in Sources */,
 				1F9D2C042FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift in Sources */,
 				1F5E63C32FE8754D00A430FF /* ContainerHostDirectoryBookmarkService.swift in Sources */,
