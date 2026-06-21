@@ -46,6 +46,17 @@ struct AppCompositionRootTests {
     #expect(services.virtualMachineTransfer is VirtualMachineTransferService)
     #expect(services.virtualMachineInstaller is MacVirtualMachineInstallationService)
     #expect(services.virtualMachineRuntime is MacVirtualMachineRuntimeService)
+    if #available(macOS 27.0, *),
+      AppleProcessEntitlementChecker().hasBooleanEntitlement(
+        "com.apple.developer.accessory-access.usb"
+      )
+    {
+      #expect(services.virtualMachineUSB is MacVirtualMachineUSBService)
+    } else {
+      #expect(
+        services.virtualMachineUSB is UnavailableMacVirtualMachineUSBService
+      )
+    }
     #expect(services.linuxVirtualMachineRuntime is LinuxVirtualMachineRuntimeService)
     #expect(
       services.linuxVirtualMachineSharedDirectories

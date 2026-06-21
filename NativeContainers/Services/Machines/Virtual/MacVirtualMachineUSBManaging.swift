@@ -72,7 +72,9 @@ protocol MacVirtualMachineUSBManaging: Sendable {
 struct UnavailableMacVirtualMachineUSBService: MacVirtualMachineUSBManaging {
   private let reason: String
 
-  init(reason: String = "USB passthrough requires macOS 27 or later.") {
+  nonisolated init(
+    reason: String = "USB passthrough requires macOS 27 or later."
+  ) {
     self.reason = reason
   }
 

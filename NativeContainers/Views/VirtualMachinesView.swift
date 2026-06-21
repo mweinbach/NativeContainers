@@ -322,7 +322,8 @@ private struct GuestVirtualMachineRuntimeView: View {
     case .macOS:
       MacVirtualMachineRuntimeView(
         machine: machine,
-        model: model.makeMacVirtualMachineRuntimeModel(for: machine)
+        model: model.makeMacVirtualMachineRuntimeModel(for: machine),
+        usb: model.makeMacVirtualMachineUSBModel(for: machine)
       )
     case .linux:
       LinuxVirtualMachineRuntimeView(

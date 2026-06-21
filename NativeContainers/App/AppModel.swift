@@ -117,6 +117,9 @@ final class AppModel {
   private var macVirtualMachineRuntimeModels: [UUID: MacVirtualMachineRuntimeModel] = [:]
 
   @ObservationIgnored
+  private var macVirtualMachineUSBModels: [UUID: MacVirtualMachineUSBModel] = [:]
+
+  @ObservationIgnored
   private var linuxVirtualMachineRuntimeModels: [UUID: LinuxVirtualMachineRuntimeModel] = [:]
 
   @ObservationIgnored
@@ -209,6 +212,8 @@ final class AppModel {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineUSB: any MacVirtualMachineUSBManaging =
+      UnavailableMacVirtualMachineUSBService(),
     virtualMachineAudio: any MacVirtualMachineAudioManaging =
       UnavailableMacVirtualMachineAudioService(),
     virtualMachineNetwork: any MacVirtualMachineNetworkManaging =
@@ -257,6 +262,7 @@ final class AppModel {
         virtualMachineTransfer: virtualMachineTransfer,
         virtualMachineInstaller: virtualMachineInstaller,
         virtualMachineRuntime: virtualMachineRuntime,
+        virtualMachineUSB: virtualMachineUSB,
         virtualMachineAudio: virtualMachineAudio,
         virtualMachineNetwork: virtualMachineNetwork,
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
@@ -773,6 +779,21 @@ final class AppModel {
     return model
   }
 
+  func makeMacVirtualMachineUSBModel(
+    for machine: VirtualMachineManifest
+  ) -> MacVirtualMachineUSBModel {
+    if let model = macVirtualMachineUSBModels[machine.id] {
+      return model
+    }
+    let model = MacVirtualMachineUSBModel(
+      machineID: machine.id,
+      service: services.virtualMachineUSB,
+      runtime: services.virtualMachineRuntime
+    )
+    macVirtualMachineUSBModels[machine.id] = model
+    return model
+  }
+
   func makeLinuxVirtualMachineRuntimeModel(
     for machine: VirtualMachineManifest
   ) -> LinuxVirtualMachineRuntimeModel {
@@ -908,6 +929,10 @@ final class AppModel {
     for identifier in Array(macVirtualMachineRuntimeModels.keys)
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineRuntimeModels.removeValue(forKey: identifier)?.stopObserving()
+    }
+    for identifier in Array(macVirtualMachineUSBModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      macVirtualMachineUSBModels.removeValue(forKey: identifier)?.stopObserving()
     }
     for identifier in Array(linuxVirtualMachineRuntimeModels.keys)
     where !currentIdentifiers.contains(identifier) {

@@ -59,6 +59,17 @@ struct AppModelTests {
   }
 
   @Test
+  func macVirtualMachineUSBUsesAStableAppScopedModel() throws {
+    let model = AppModel.previewVirtualMachines
+    let machine = try #require(model.virtualMachines.first)
+
+    #expect(
+      model.makeMacVirtualMachineUSBModel(for: machine)
+        === model.makeMacVirtualMachineUSBModel(for: machine)
+    )
+  }
+
+  @Test
   func linuxVirtualMachineRuntimeUsesAStableAppScopedModel() throws {
     let model = AppModel.previewEmpty
     let machine = try VirtualMachineManifest(

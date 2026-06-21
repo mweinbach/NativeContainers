@@ -56,6 +56,7 @@ struct AppServices: Sendable {
   let virtualMachineTransfer: any VirtualMachinePackageTransferring
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
+  let virtualMachineUSB: any MacVirtualMachineUSBManaging
   let linuxVirtualMachineRuntime: any LinuxVirtualMachineRuntimeManaging
   let virtualMachineAudio: any MacVirtualMachineAudioManaging
   let virtualMachineNetwork: any MacVirtualMachineNetworkManaging
@@ -121,6 +122,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineUSB: any MacVirtualMachineUSBManaging =
+      UnavailableMacVirtualMachineUSBService(),
     linuxVirtualMachineRuntime: any LinuxVirtualMachineRuntimeManaging =
       UnavailableLinuxVirtualMachineRuntimeService(),
     virtualMachineAudio: any MacVirtualMachineAudioManaging =
@@ -183,6 +186,7 @@ struct AppServices: Sendable {
     self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
+    self.virtualMachineUSB = virtualMachineUSB
     self.linuxVirtualMachineRuntime = linuxVirtualMachineRuntime
     self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineNetwork = virtualMachineNetwork
@@ -238,6 +242,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineUSB: any MacVirtualMachineUSBManaging =
+      UnavailableMacVirtualMachineUSBService(),
     linuxVirtualMachineRuntime: any LinuxVirtualMachineRuntimeManaging =
       UnavailableLinuxVirtualMachineRuntimeService(),
     virtualMachineAudio: any MacVirtualMachineAudioManaging =
@@ -300,6 +306,7 @@ struct AppServices: Sendable {
     self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
+    self.virtualMachineUSB = virtualMachineUSB
     self.linuxVirtualMachineRuntime = linuxVirtualMachineRuntime
     self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineNetwork = virtualMachineNetwork
@@ -532,6 +539,25 @@ enum AppCompositionRoot {
         persistence: virtualMachineLibrary
       )
     )
+    let virtualMachineUSB: any MacVirtualMachineUSBManaging = {
+      guard #available(macOS 27.0, *) else {
+        return UnavailableMacVirtualMachineUSBService()
+      }
+      guard
+        AppleProcessEntitlementChecker().hasBooleanEntitlement(
+          "com.apple.developer.accessory-access.usb"
+        )
+      else {
+        return UnavailableMacVirtualMachineUSBService(
+          reason:
+            "Accessory Access is unavailable because this signed build does not include its USB entitlement."
+        )
+      }
+      return MacVirtualMachineUSBService(
+        discovery: AppleMacVirtualMachineUSBAccessoryDiscovery(),
+        controllerProvider: virtualMachineRuntime
+      )
+    }()
     let linuxVirtualMachineRuntime = LinuxVirtualMachineRuntimeService(
       leasingStore: virtualMachineLibrary,
       installationStore: virtualMachineLibrary,
@@ -649,6 +675,7 @@ enum AppCompositionRoot {
       virtualMachineTransfer: virtualMachineTransfer,
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,
+      virtualMachineUSB: virtualMachineUSB,
       linuxVirtualMachineRuntime: linuxVirtualMachineRuntime,
       virtualMachineAudio: virtualMachineAudio,
       virtualMachineNetwork: virtualMachineNetwork,

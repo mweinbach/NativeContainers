@@ -3,6 +3,7 @@ import SwiftUI
 struct MacVirtualMachineRuntimeView: View {
   let machine: VirtualMachineManifest
   let model: MacVirtualMachineRuntimeModel
+  let usb: MacVirtualMachineUSBModel
 
   @State private var capturesSystemKeys = false
   @State private var isConfirmingForceStop = false
@@ -16,6 +17,7 @@ struct MacVirtualMachineRuntimeView: View {
       MacVirtualMachineRuntimeHeader(
         machineName: machine.name,
         snapshot: model.snapshot,
+        usb: usb,
         capturesSystemKeys: $capturesSystemKeys,
         start: { Task { await model.start() } },
         pause: { Task { await model.pause() } },
@@ -59,7 +61,10 @@ struct MacVirtualMachineRuntimeView: View {
       maxHeight: .infinity,
       alignment: .top
     )
-    .task { await model.observe() }
+    .task {
+      usb.observe()
+      await model.observe()
+    }
     .sheet(isPresented: $isPresentingGuestProvisioning) {
       if let operatingSystem = machine.macOSGuestOperatingSystem {
         MacGuestProvisioningView(
@@ -116,6 +121,7 @@ struct MacVirtualMachineRuntimeView: View {
 private struct MacVirtualMachineRuntimeHeader: View {
   let machineName: String
   let snapshot: MacVirtualMachineRuntimeSnapshot
+  let usb: MacVirtualMachineUSBModel
   @Binding var capturesSystemKeys: Bool
   let start: () -> Void
   let pause: () -> Void
@@ -163,8 +169,10 @@ private struct MacVirtualMachineRuntimeHeader: View {
             confirmStartFresh: confirmStartFresh,
             confirmDiscardSavedState: confirmDiscardSavedState
           )
-          MacVirtualMachineShortcutCaptureToggle(
-            isEnabled: $capturesSystemKeys
+          MacVirtualMachineRuntimeAccessoryControls(
+            machineName: machineName,
+            usb: usb,
+            capturesSystemKeys: $capturesSystemKeys
           )
         }
         VStack(alignment: .trailing, spacing: 8) {
@@ -179,13 +187,33 @@ private struct MacVirtualMachineRuntimeHeader: View {
             confirmStartFresh: confirmStartFresh,
             confirmDiscardSavedState: confirmDiscardSavedState
           )
-          MacVirtualMachineShortcutCaptureToggle(
-            isEnabled: $capturesSystemKeys
+          MacVirtualMachineRuntimeAccessoryControls(
+            machineName: machineName,
+            usb: usb,
+            capturesSystemKeys: $capturesSystemKeys
           )
         }
       }
     }
     .padding(14)
+  }
+}
+
+private struct MacVirtualMachineRuntimeAccessoryControls: View {
+  let machineName: String
+  let usb: MacVirtualMachineUSBModel
+  @Binding var capturesSystemKeys: Bool
+
+  var body: some View {
+    HStack(spacing: 12) {
+      MacVirtualMachineShortcutCaptureToggle(
+        isEnabled: $capturesSystemKeys
+      )
+      MacVirtualMachineUSBControl(
+        machineName: machineName,
+        model: usb
+      )
+    }
   }
 }
 
@@ -414,11 +442,17 @@ private struct MacVirtualMachineRuntimeErrorBanner: View {
     installState: .stopped,
     resources: resources
   )
+  let runtime = UnavailableMacVirtualMachineRuntimeService()
   MacVirtualMachineRuntimeView(
     machine: machine,
     model: MacVirtualMachineRuntimeModel(
       machineID: machine.id,
-      service: UnavailableMacVirtualMachineRuntimeService()
+      service: runtime
+    ),
+    usb: MacVirtualMachineUSBModel(
+      machineID: machine.id,
+      service: UnavailableMacVirtualMachineUSBService(),
+      runtime: runtime
     )
   )
 }
