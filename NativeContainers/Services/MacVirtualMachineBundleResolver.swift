@@ -2,6 +2,7 @@ import Foundation
 
 protocol MacVirtualMachineBundleResolving: Sendable {
   func resolve(_ manifest: VirtualMachineManifest) throws -> PreparedMacVirtualMachine
+  func resolveRuntime(_ manifest: VirtualMachineManifest) throws -> ResolvedMacVirtualMachine
   func resolveArtifact(
     _ path: String,
     named name: String,
@@ -20,6 +21,28 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unche
   }
 
   func resolve(_ manifest: VirtualMachineManifest) throws -> PreparedMacVirtualMachine {
+    let runtimeMachine = try resolveRuntime(manifest)
+
+    guard let restoreImageURL = manifest.restoreImageURL else {
+      throw MacVirtualMachineInstallationError.missingManifestValue("restoreImageURL")
+    }
+    guard restoreImageURL.isFileURL else {
+      throw MacVirtualMachineInstallationError.invalidRestoreImage(restoreImageURL)
+    }
+    try requireRegularFile(restoreImageURL, name: restoreImageURL.lastPathComponent)
+
+    return PreparedMacVirtualMachine(
+      manifest: manifest,
+      bundleURL: runtimeMachine.bundleURL,
+      restoreImageURL: restoreImageURL.standardizedFileURL,
+      diskImageURL: runtimeMachine.diskImageURL,
+      auxiliaryStorageURL: runtimeMachine.auxiliaryStorageURL,
+      hardwareModelURL: runtimeMachine.hardwareModelURL,
+      machineIdentifierURL: runtimeMachine.machineIdentifierURL
+    )
+  }
+
+  func resolveRuntime(_ manifest: VirtualMachineManifest) throws -> ResolvedMacVirtualMachine {
     guard manifest.guest == .macOS else {
       throw VirtualMachineModelError.requiresMacOSGuest(manifest.id)
     }
@@ -31,14 +54,6 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unche
       .standardizedFileURL
 
     try requireDirectory(bundleURL)
-
-    guard let restoreImageURL = manifest.restoreImageURL else {
-      throw MacVirtualMachineInstallationError.missingManifestValue("restoreImageURL")
-    }
-    guard restoreImageURL.isFileURL else {
-      throw MacVirtualMachineInstallationError.invalidRestoreImage(restoreImageURL)
-    }
-    try requireRegularFile(restoreImageURL, name: restoreImageURL.lastPathComponent)
 
     let diskImageURL = try resolveArtifact(
       manifest.diskImagePath,
@@ -63,10 +78,9 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unche
       in: bundleURL
     )
 
-    return PreparedMacVirtualMachine(
+    return ResolvedMacVirtualMachine(
       manifest: manifest,
       bundleURL: bundleURL,
-      restoreImageURL: restoreImageURL.standardizedFileURL,
       diskImageURL: diskImageURL,
       auxiliaryStorageURL: auxiliaryStorageURL,
       hardwareModelURL: hardwareModelURL,

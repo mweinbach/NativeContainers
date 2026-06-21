@@ -22,6 +22,21 @@ struct MacVirtualMachineBundleResolverTests {
   }
 
   @Test
+  func runtimeResolutionDoesNotRequireTheCachedRestoreImage() throws {
+    let fixture = try MacBundleFixture()
+    defer { fixture.remove() }
+    try FileManager.default.removeItem(at: fixture.restoreImage)
+
+    let resolved = try fixture.resolver.resolveRuntime(fixture.manifest)
+
+    #expect(resolved.manifest.id == fixture.manifest.id)
+    #expect(resolved.diskImageURL == fixture.bundle.appending(path: "Disk.img"))
+    #expect(throws: MacVirtualMachineInstallationError.invalidArtifact("Restore.ipsw")) {
+      try fixture.resolver.resolve(fixture.manifest)
+    }
+  }
+
+  @Test
   func rejectsPathTraversalBeforeReadingOutsideBundle() throws {
     let fixture = try MacBundleFixture(diskImagePath: "../Outside.img")
     defer { fixture.remove() }

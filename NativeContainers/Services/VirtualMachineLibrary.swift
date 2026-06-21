@@ -56,7 +56,11 @@ protocol MacVirtualMachineInstallationStoring: Sendable {
   func recoverInterruptedMacOSInstallations() async throws -> MacVirtualMachineRecoveryOutcome
 }
 
-actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineInstallationStoring {
+actor VirtualMachineLibrary:
+  VirtualMachineLibraryProtocol,
+  MacVirtualMachineInstallationStoring,
+  MacVirtualMachineRuntimeLeasing
+{
   static let bundleExtension = "nativevm"
   static let manifestFilename = "manifest.json"
   static let installationStagingPrefix = ".Installation-"
@@ -65,11 +69,14 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
   static let installationDiskFilename = "Disk.img"
   static let installationAuxiliaryStorageFilename = "AuxiliaryStorage"
   static let operationLockFilename = ".operations.lock"
+  static let runtimeLockFilename = ".runtime.lock"
+  static let runtimeOwnerFilename = ".runtime-owner.json"
   static let deletionTombstonePrefix = ".Deletion-"
   static let deletionTombstoneSuffix = ".partial"
 
   private let rootURL: URL
   private let fileManager: FileManager
+  private let launchID: UUID
   private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
   private var operationLockLease: AdvisoryFileLockLease?
@@ -79,9 +86,11 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
   init(
     rootURL: URL? = nil,
     fileManager: FileManager = .default,
+    launchID: UUID = UUID(),
     macPlatformArtifactPreparer: any MacPlatformArtifactPreparing = MacPlatformArtifactPreparer()
   ) {
     self.fileManager = fileManager
+    self.launchID = launchID
     self.rootURL = rootURL ?? Self.defaultRootURL(fileManager: fileManager)
     self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
     self.macVirtualMachineBundleResolver = MacVirtualMachineBundleResolver(
@@ -238,6 +247,14 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
     }
     let bundleURL = bundleURL(for: id)
     try requireDirectory(bundleURL)
+    guard
+      let runtimeLock = try AdvisoryFileLock.acquire(
+        at: bundleURL.appending(path: Self.runtimeLockFilename)
+      )
+    else {
+      throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
+    }
+    defer { runtimeLock.release() }
     let tombstoneURL = rootURL.appending(
       path:
         "\(Self.deletionTombstonePrefix)\(id.uuidString.lowercased())-\(UUID().uuidString.lowercased())\(Self.deletionTombstoneSuffix)",
@@ -245,6 +262,49 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
     )
     try fileManager.moveItem(at: bundleURL, to: tombstoneURL)
     try fileManager.removeItem(at: tombstoneURL)
+  }
+
+  func acquireMacOSRuntime(id: UUID) throws -> MacVirtualMachineRuntimeLease {
+    try ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
+    let manifest = try installationManifest(id: id)
+    guard manifest.installState == .stopped else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+    let machine = try macVirtualMachineBundleResolver.resolveRuntime(manifest)
+    let lockURL = machine.bundleURL.appending(path: Self.runtimeLockFilename)
+    guard let runtimeLock = try AdvisoryFileLock.acquire(at: lockURL) else {
+      throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
+    }
+
+    let target = MacVirtualMachineRuntimeTarget(machineID: id, generation: UUID())
+    let ownerURL = machine.bundleURL.appending(path: Self.runtimeOwnerFilename)
+    do {
+      let owner = MacVirtualMachineRuntimeOwnerRecord(
+        machineID: id,
+        generation: target.generation,
+        launchID: launchID,
+        processID: ProcessInfo.processInfo.processIdentifier,
+        acquiredAt: Date()
+      )
+      try Self.encoder.encode(owner).write(to: ownerURL, options: .atomic)
+      try fileManager.setAttributes(
+        [.posixPermissions: 0o600],
+        ofItemAtPath: ownerURL.path
+      )
+    } catch {
+      runtimeLock.release()
+      throw error
+    }
+
+    let fileManager = fileManager
+    return MacVirtualMachineRuntimeLease(machine: machine, target: target) {
+      try? fileManager.removeItem(at: ownerURL)
+      runtimeLock.release()
+    }
   }
 
   func stageMacOSInstallation(
