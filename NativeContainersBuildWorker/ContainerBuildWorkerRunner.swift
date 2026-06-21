@@ -131,23 +131,22 @@ struct ContainerBuildWorkerRunner {
       try? FileManager.default.removeItem(at: exportDirectory)
     }
 
-    let exporterType: String
+    let exporterConfiguration = ContainerBuildExporterConfiguration(
+      outputKind: request.outputKind
+    )
     let artifactKind: ContainerBuildWorkerArtifactKind
     let expectedOutput: URL
     let buildMessage: String
     switch request.outputKind {
     case .imageStore, .ociArchive:
-      exporterType = "oci"
       artifactKind = .ociArchive
       expectedOutput = exportDirectory.appendingPathComponent("out.tar")
       buildMessage = "Building OCI image"
     case .rootFilesystemArchive:
-      exporterType = "tar"
       artifactKind = .rootFilesystemArchive
       expectedOutput = exportDirectory.appendingPathComponent("out.tar")
       buildMessage = "Building root filesystem archive"
     case .rootFilesystemDirectory:
-      exporterType = "local"
       artifactKind = .rootFilesystemDirectory
       expectedOutput = exportDirectory.appendingPathComponent("local")
       buildMessage = "Building root filesystem directory"
@@ -161,10 +160,10 @@ struct ContainerBuildWorkerRunner {
     }
     let platforms = try request.platforms.map { try Platform(from: $0.description) }
     let export = Builder.BuildExport(
-      type: exporterType,
+      type: exporterConfiguration.type,
       destination: expectedOutput,
-      additionalFields: [:],
-      rawValue: "type=\(exporterType)"
+      additionalFields: exporterConfiguration.additionalFields,
+      rawValue: exporterConfiguration.rawValue
     )
     let configuration = Builder.BuildConfig(
       buildID: request.buildID.uuidString.lowercased(),

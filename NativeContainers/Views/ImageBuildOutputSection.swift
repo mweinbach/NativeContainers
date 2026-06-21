@@ -81,9 +81,9 @@ struct ImageBuildOutputSection: View {
     case .ociArchive:
       "Exports a runnable OCI image archive for the selected platform. A reviewed existing regular file can be replaced only with explicit confirmation."
     case .rootFilesystemArchive:
-      "Exports the final stage’s files as a tar archive, not as a runnable image. One exact platform is required."
+      "Exports the final stage’s files as a tar archive, not as a runnable image. One exact platform is required; the archive retains BuildKit’s platform directory envelope."
     case .rootFilesystemDirectory:
-      "Exports the final stage’s files into a new folder. Existing folders are never merged or replaced, and one exact platform is required."
+      "Exports one exact platform’s final-stage files directly into a new folder. Existing folders are never merged or replaced."
     }
   }
 }

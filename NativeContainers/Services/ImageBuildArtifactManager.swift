@@ -56,6 +56,8 @@ struct AppleImageBuildArtifactManager: ImageBuildArtifactManaging {
           buildID: result.buildID
         )
         return .regularFile(identity)
+      } catch is CancellationError {
+        throw CancellationError()
       } catch let error as SecureRegularFileValidationError {
         if case .missing = error {
           throw ImageBuildError.missingArtifact(actual.path(percentEncoded: false))
@@ -91,6 +93,8 @@ struct AppleImageBuildArtifactManager: ImageBuildArtifactManaging {
           buildID: result.buildID
         )
         return .directory(identity)
+      } catch is CancellationError {
+        throw CancellationError()
       } catch let error as PrivateBuildDirectoryStoreError {
         if case .ioFailure(_, _, let code) = error, code == ENOENT {
           throw ImageBuildError.missingArtifact(actual.path(percentEncoded: false))
@@ -139,6 +143,8 @@ struct AppleImageBuildArtifactManager: ImageBuildArtifactManaging {
       default:
         throw ImageBuildError.workerArtifactMismatch
       }
+    } catch is CancellationError {
+      throw CancellationError()
     } catch let error as ImageBuildError {
       throw error
     } catch {

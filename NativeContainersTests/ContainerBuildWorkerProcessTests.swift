@@ -106,6 +106,31 @@ struct ContainerBuildWorkerFrameCodecTests {
   }
 
   @Test
+  func exporterConfigurationsPinRootFilesystemLayouts() {
+    let imageStore = ContainerBuildExporterConfiguration(outputKind: .imageStore)
+    #expect(imageStore.type == "oci")
+    #expect(imageStore.additionalFields.isEmpty)
+
+    let ociArchive = ContainerBuildExporterConfiguration(outputKind: .ociArchive)
+    #expect(ociArchive.type == "oci")
+    #expect(ociArchive.additionalFields.isEmpty)
+
+    let archive = ContainerBuildExporterConfiguration(
+      outputKind: .rootFilesystemArchive
+    )
+    #expect(archive.type == "tar")
+    #expect(archive.additionalFields.isEmpty)
+    #expect(archive.rawValue == "type=tar")
+
+    let directory = ContainerBuildExporterConfiguration(
+      outputKind: .rootFilesystemDirectory
+    )
+    #expect(directory.type == "local")
+    #expect(directory.additionalFields == ["platform-split": "false"])
+    #expect(directory.rawValue == "type=local,platform-split=false")
+  }
+
+  @Test
   func rejectsZeroAndOversizedFramesFromTheirHeaders() throws {
     var zeroDecoder = ContainerBuildWorkerFrameDecoder<FrameFixture>()
     #expect(throws: ContainerBuildWorkerFrameError.emptyFrame) {
@@ -261,6 +286,60 @@ struct ContainerBuildWorkerProcessTests {
     #expect(output.standardErrorWasTruncated)
     #expect(output.standardErrorTail.utf8.count <= 1_024 * 1_024)
     #expect(output.standardErrorTail.hasSuffix("diagnostic\n"))
+  }
+
+  @Test
+  func streamsShortProgressFrameBeforeWorkerExit() async throws {
+    let hello = try ContainerBuildWorkerFrameCodec.encode(
+      ContainerBuildWorkerEvent.hello()
+    )
+    let progress = try ContainerBuildWorkerFrameCodec.encode(
+      ContainerBuildWorkerEvent.progress(.building, message: "BuildKit started")
+    )
+    let terminal = try ContainerBuildWorkerFrameCodec.encode(
+      ContainerBuildWorkerEvent.builderReady(message: "Ready")
+    )
+    let printFrame: (Data) -> String = {
+      "printf '%s' '\($0.base64EncodedString())' | /usr/bin/base64 -D"
+    }
+    let process = ContainerBuildWorkerProcess(
+      executableLocator: FixedContainerBuildWorkerExecutableLocator(
+        executableURL: URL(filePath: "/bin/sh")
+      ),
+      arguments: [
+        "-c",
+        [
+          printFrame(hello),
+          printFrame(progress),
+          "/bin/sleep 1.5",
+          printFrame(terminal),
+          "exit 0",
+        ].joined(separator: "\n"),
+      ],
+      environmentSource: [:]
+    )
+    let recorder = BuildWorkerEventRecorder()
+    let task = Task {
+      try await process.run(makeStartBuilderRequest()) { event in
+        await recorder.record(event)
+      }
+    }
+
+    let started = ContinuousClock.now
+    var sawProgress = false
+    for _ in 0..<15 {
+      if await recorder.events.contains(where: { $0.phase == .building }) {
+        sawProgress = true
+        break
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    let progressDelay = started.duration(to: .now)
+    #expect(sawProgress)
+    #expect(progressDelay < .seconds(1))
+
+    let output = try await task.value
+    #expect(output.terminalEvent.kind == .builderReady)
   }
 
   @Test

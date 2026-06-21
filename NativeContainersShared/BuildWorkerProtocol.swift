@@ -47,6 +47,31 @@ enum ImageBuildOutputKind: String, Codable, CaseIterable, Equatable, Hashable, S
   case rootFilesystemDirectory
 }
 
+struct ContainerBuildExporterConfiguration: Equatable, Sendable {
+  let type: String
+  let additionalFields: [String: String]
+
+  init(outputKind: ImageBuildOutputKind) {
+    switch outputKind {
+    case .imageStore, .ociArchive:
+      type = "oci"
+      additionalFields = [:]
+    case .rootFilesystemArchive:
+      type = "tar"
+      additionalFields = [:]
+    case .rootFilesystemDirectory:
+      type = "local"
+      additionalFields = ["platform-split": "false"]
+    }
+  }
+
+  var rawValue: String {
+    (["type=\(type)"]
+      + additionalFields.sorted(by: { $0.key < $1.key }).map { "\($0.key)=\($0.value)" })
+      .joined(separator: ",")
+  }
+}
+
 struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
   let buildID: UUID
   let outputKind: ImageBuildOutputKind

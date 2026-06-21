@@ -528,11 +528,11 @@ struct ImageBuildCreationView: View {
       ]
     case .rootFilesystemArchive:
       warnings = [
-        "Build \(platforms) and commit the final stage’s files as a root filesystem tar archive."
+        "Build \(platforms) and commit the final stage’s files as a root filesystem tar archive under its BuildKit platform directory."
       ]
     case .rootFilesystemDirectory:
       warnings = [
-        "Build \(platforms) and commit the final stage’s files into a new reviewed folder."
+        "Build \(platforms) and commit the final stage’s files directly into a new reviewed folder."
       ]
     }
     if !plan.secrets.isEmpty {

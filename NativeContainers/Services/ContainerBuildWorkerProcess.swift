@@ -634,7 +634,18 @@ private final class WorkerFileHandleReader: @unchecked Sendable {
   }
 
   func read(upToCount count: Int) throws -> Data? {
-    try handle.read(upToCount: count)
+    var buffer = [UInt8](repeating: 0, count: count)
+    while true {
+      let readCount = buffer.withUnsafeMutableBytes {
+        Darwin.read(handle.fileDescriptor, $0.baseAddress, $0.count)
+      }
+      if readCount < 0, errno == EINTR { continue }
+      guard readCount >= 0 else {
+        throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+      }
+      guard readCount > 0 else { return Data() }
+      return Data(buffer[0..<readCount])
+    }
   }
 }
 

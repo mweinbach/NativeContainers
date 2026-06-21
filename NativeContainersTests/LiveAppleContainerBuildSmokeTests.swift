@@ -1,4 +1,5 @@
 import ContainerAPIClient
+import CryptoKit
 import Darwin
 import Foundation
 import Testing
@@ -166,6 +167,98 @@ struct LiveAppleContainerBuildSmokeTests {
 
   @Test(
     .enabled(
+      if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_BUILD_TESTS"] == "1",
+      "Set NATIVECONTAINERS_LIVE_BUILD_TESTS=1 with Apple container services running."
+    )
+  )
+  func ociArchivePublishesWithoutImageStoreMutation() async throws {
+    try await withBuiltOutput(
+      prefix: "native-build-oci",
+      kind: .ociArchive,
+      destinationName: "image.oci.tar"
+    ) { destination, completion in
+      guard case .ociArchive(let committed, let sha256, let byteCount) = completion else {
+        Issue.record("Expected an OCI archive completion")
+        return
+      }
+      #expect(committed == destination.standardizedFileURL)
+      let data = try Data(contentsOf: destination)
+      #expect(byteCount == Int64(data.count))
+      #expect(sha256 == sha256Hex(data))
+
+      let entries = try await tarEntries(at: destination)
+      #expect(entries.contains { $0.hasSuffix("oci-layout") })
+      #expect(entries.contains { $0.hasSuffix("index.json") })
+      #expect(entries.contains { $0.contains("blobs/sha256/") })
+    }
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_BUILD_TESTS"] == "1",
+      "Set NATIVECONTAINERS_LIVE_BUILD_TESTS=1 with Apple container services running."
+    )
+  )
+  func rootFilesystemTarPublishesReadableMarker() async throws {
+    try await withBuiltOutput(
+      prefix: "native-build-rootfs-tar",
+      kind: .rootFilesystemArchive,
+      destinationName: "rootfs.tar"
+    ) { destination, completion in
+      guard
+        case .rootFilesystemArchive(let committed, let sha256, let byteCount) =
+          completion
+      else {
+        Issue.record("Expected a root filesystem archive completion")
+        return
+      }
+      #expect(committed == destination.standardizedFileURL)
+      let data = try Data(contentsOf: destination)
+      #expect(byteCount == Int64(data.count))
+      #expect(sha256 == sha256Hex(data))
+
+      let entries = try await tarEntries(at: destination)
+      let marker = try #require(
+        entries.first { $0 == "linux_arm64/nativecontainers-marker" }
+      )
+      let markerContents = try await tarContents(at: destination, member: marker)
+      #expect(markerContents == "native-build-ok\n")
+    }
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_BUILD_TESTS"] == "1",
+      "Set NATIVECONTAINERS_LIVE_BUILD_TESTS=1 with Apple container services running."
+    )
+  )
+  func rootFilesystemFolderPublishesReadableMarker() async throws {
+    try await withBuiltOutput(
+      prefix: "native-build-rootfs-folder",
+      kind: .rootFilesystemDirectory,
+      destinationName: "rootfs"
+    ) { destination, completion in
+      guard
+        case .rootFilesystemDirectory(let committed, let byteCount, let entryCount) =
+          completion
+      else {
+        Issue.record("Expected a root filesystem directory completion")
+        return
+      }
+      #expect(committed == destination.standardizedFileURL)
+      #expect(byteCount > 0)
+      #expect(entryCount > 0)
+      let marker = destination.appending(
+        path: "nativecontainers-marker",
+        directoryHint: .notDirectory
+      )
+      let markerContents = try String(contentsOf: marker, encoding: .utf8)
+      #expect(markerContents == "native-build-ok\n")
+    }
+  }
+
+  @Test(
+    .enabled(
       if: ProcessInfo.processInfo.environment[
         "NATIVECONTAINERS_LIVE_BUILD_CANCELLATION_TESTS"
       ] == "1",
@@ -213,6 +306,176 @@ struct LiveAppleContainerBuildSmokeTests {
       await cleanUpImage(plan.tags[0].reference, service: containerService)
       throw error
     }
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_BUILD_CANCELLATION_TESTS"
+      ] == "1",
+      "Set NATIVECONTAINERS_LIVE_BUILD_CANCELLATION_TESTS=1 for the destructive cancellation smoke."
+    )
+  )
+  func cancellingAlternateOutputLeavesNoDestinationOrArtifacts() async throws {
+    let fixture = try LiveBuildFixture(
+      prefix: "native-build-output-cancel",
+      runInstruction: "RUN sleep 60"
+    )
+    let outputRoot = try makeOutputRoot(prefix: "native-build-output-cancel")
+    defer {
+      fixture.removeContext()
+      try? FileManager.default.removeItem(at: outputRoot)
+    }
+    let destination = outputRoot.appending(
+      path: "cancelled-rootfs",
+      directoryHint: .isDirectory
+    )
+    let buildService = AppleContainerBuildService()
+    let phaseProbe = LiveBuildPhaseProbe()
+    let plan = try await buildService.prepareBuild(
+      fixture.request(
+        output: ImageBuildOutputSelection(
+          kind: .rootFilesystemDirectory,
+          destinationURL: destination
+        )
+      )
+    ) { _ in }
+    let task = Task {
+      try await buildService.build(
+        plan,
+        authorization: liveBuildAuthorization
+      ) { progress in
+        await phaseProbe.record(progress.phase)
+      }
+    }
+
+    do {
+      try await waitForBuilding(phaseProbe)
+      task.cancel()
+      await #expect(throws: CancellationError.self) {
+        _ = try await task.value
+      }
+      #expect(!FileManager.default.fileExists(atPath: destination.path))
+      #expect(
+        try FileManager.default.contentsOfDirectory(
+          at: outputRoot,
+          includingPropertiesForKeys: nil
+        ).isEmpty
+      )
+      try await expectArtifactsRemoved(buildID: plan.id)
+    } catch {
+      task.cancel()
+      _ = try? await task.value
+      await buildService.discardBuild(plan)
+      throw error
+    }
+  }
+
+  private var liveBuildAuthorization: ImageBuildAuthorization {
+    ImageBuildAuthorization(
+      allowsTagReplacement: false,
+      allowsRecreateStoppedBuilder: true,
+      allowsStopRunningBuilder: false
+    )
+  }
+
+  private func withBuiltOutput(
+    prefix: String,
+    kind: ImageBuildOutputKind,
+    destinationName: String,
+    verify: (URL, ImageBuildCompletion) async throws -> Void
+  ) async throws {
+    let fixture = try LiveBuildFixture(prefix: prefix)
+    let outputRoot = try makeOutputRoot(prefix: prefix)
+    defer {
+      fixture.removeContext()
+      try? FileManager.default.removeItem(at: outputRoot)
+    }
+    let destination = outputRoot.appending(
+      path: destinationName,
+      directoryHint: kind == .rootFilesystemDirectory ? .isDirectory : .notDirectory
+    )
+    let buildService = AppleContainerBuildService()
+    let containerService = AppleContainerService()
+    let plan = try await buildService.prepareBuild(
+      fixture.request(
+        output: ImageBuildOutputSelection(
+          kind: kind,
+          destinationURL: destination
+        )
+      )
+    ) { _ in }
+
+    do {
+      let result = try await buildService.build(
+        plan,
+        authorization: liveBuildAuthorization
+      ) { _ in }
+      #expect(result.platforms == [.current])
+      try await verify(destination, result.output)
+      let storedTagExists = try await containerService.loadInventory().images.contains {
+        $0.reference == fixture.tag
+      }
+      #expect(!storedTagExists)
+      #expect(
+        try FileManager.default.contentsOfDirectory(
+          at: outputRoot,
+          includingPropertiesForKeys: nil
+        ).map(\.lastPathComponent) == [destinationName]
+      )
+      try await expectArtifactsRemoved(buildID: plan.id)
+    } catch {
+      await buildService.discardBuild(plan)
+      throw error
+    }
+  }
+
+  private func makeOutputRoot(prefix: String) throws -> URL {
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: "\(prefix)-output-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    guard chmod(root.nativeContainersPOSIXPath, 0o700) == 0 else {
+      throw LiveBuildSmokeError.outputRootUnavailable(root.path)
+    }
+    return root
+  }
+
+  private func tarEntries(at archiveURL: URL) async throws -> [String] {
+    let result = try await executeTar(["-tf", archiveURL.nativeContainersPOSIXPath])
+    return result.standardOutput.split(separator: "\n").map(String.init)
+  }
+
+  private func tarContents(at archiveURL: URL, member: String) async throws -> String {
+    let result = try await executeTar([
+      "-xOf", archiveURL.nativeContainersPOSIXPath, member,
+    ])
+    return result.standardOutput
+  }
+
+  private func executeTar(_ arguments: [String]) async throws -> HostCommandResult {
+    var environment = ProcessInfo.processInfo.environment
+    for key in environment.keys where key.hasPrefix("DYLD_") {
+      environment.removeValue(forKey: key)
+    }
+    let result = try await FoundationHostCommandExecutor().execute(
+      executableURL: URL(filePath: "/usr/bin/tar"),
+      arguments: arguments,
+      environment: environment,
+      timeout: .seconds(20)
+    )
+    guard result.exitCode == 0 else {
+      throw LiveBuildSmokeError.tarFailed(
+        exitCode: result.exitCode,
+        output: result.standardError
+      )
+    }
+    return result
+  }
+
+  private func sha256Hex(_ data: Data) -> String {
+    SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
 
   private func waitForBuilding(
@@ -292,13 +555,14 @@ private struct LiveBuildFixture {
   }
 
   func request(
-    secrets: [ImageBuildSecretSelection]
+    secrets: [ImageBuildSecretSelection],
+    output: ImageBuildOutputSelection = .imageStore
   ) -> ImageBuildRequest {
     ImageBuildRequest(
       contextDirectory: contextURL,
       dockerfile: nil,
       secrets: secrets,
-      tags: [tag],
+      tags: output.kind.isRootFilesystem ? [] : [tag],
       platforms: [.current],
       buildArguments: [],
       labels: ["com.nativecontainers.smoke=true"],
@@ -306,8 +570,13 @@ private struct LiveBuildFixture {
       noCache: true,
       pullLatest: true,
       builderCPUCount: nil,
-      builderMemoryMiB: nil
+      builderMemoryMiB: nil,
+      output: output
     )
+  }
+
+  func request(output: ImageBuildOutputSelection) -> ImageBuildRequest {
+    request(secrets: [], output: output)
   }
 
   func removeContext() {
@@ -336,8 +605,17 @@ private actor LiveBuildPhaseProbe {
 
 private enum LiveBuildSmokeError: LocalizedError {
   case timedOutWaitingForBuild
+  case outputRootUnavailable(String)
+  case tarFailed(exitCode: Int32, output: String)
 
   var errorDescription: String? {
-    "Timed out waiting for the embedded worker to enter BuildKit."
+    switch self {
+    case .timedOutWaitingForBuild:
+      "Timed out waiting for the embedded worker to enter BuildKit."
+    case .outputRootUnavailable(let path):
+      "Could not create a private live-build output root at \(path)."
+    case .tarFailed(let exitCode, let output):
+      "tar exited with status \(exitCode). \(output)"
+    }
   }
 }
