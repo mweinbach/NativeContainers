@@ -279,9 +279,20 @@ protocol. The UI adapter stays the same across those deployment modes.
 
 Docker CLI and Compose compatibility are a separate service boundary. Apple’s
 core project intentionally exposes OCI/Dockerfile compatibility rather than the
-Docker Engine HTTP API. The first implementation candidate is the
-Apache-licensed [Socktainer](https://github.com/socktainer/socktainer) bridge,
-version-pinned and tested against an explicit compatibility suite.
+Docker Engine HTTP API. `DockerCompatibilityService` composes a pinned
+`SocktainerInstallService`, an exact-process `SocktainerProcessService`, and a
+CLI-backed `DockerContextService`; none of those capabilities enter the native
+container service graph.
+
+The installer accepts only Socktainer 1.0.0’s reviewed HTTPS asset after its
+SHA-256 and Developer ID team both match. Start requires a live Apple 1.0.0 API
+server and a real `/_ping` response with Docker API 1.51. The process layer owns
+one exact PID and socket inode, escalates TERM to KILL, exposes an immediate
+Force Stop, synchronously cleans up on app termination, and offers explicit
+stale-socket removal only after three failed listener probes and unchanged
+identity. Docker context setup uses supported `docker context create/update`
+commands, strips shell context/host overrides for the operation, and confirms
+that the user’s active context did not change.
 
 ### General VM lane
 

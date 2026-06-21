@@ -399,8 +399,34 @@ Updated: 2026-06-21.
   explicit immediate KILL path.
 - The History preview renders successfully in Xcode after replacing the macOS
   `List` path that crashed the current SDK’s outline diff with a stable
-  `ScrollView`/`LazyVStack` presentation, and remains covered by the current
-  414-test Xcode run.
+  `ScrollView`/`LazyVStack` presentation, and remains covered by the full Xcode
+  suite.
+
+## Docker compatibility checkpoint
+
+- Settings now exposes a modular, optional Socktainer compatibility lane rather
+  than presenting Docker Engine behavior as part of Apple’s native runtime.
+- The installer downloads only Socktainer 1.0.0’s direct HTTPS asset, bounds its
+  size, retains the URLSession temporary file safely, verifies the pinned
+  SHA-256 and Developer ID team, and atomically installs mode 0700 into private
+  app support.
+- Start checks the running Apple API server through `ClientHealthCheck`, then
+  waits for a complete HTTP `/_ping` response with body `OK` and API 1.51 before
+  publishing Running. Socket identity is rechecked after readiness.
+- Stop targets the exact app-owned PID, escalates TERM to KILL on timeout, and
+  confirms exit. Force Stop is a separate confirmed kill point. App termination
+  performs synchronous exact-PID shutdown and captured-inode cleanup.
+- A stale socket can be removed explicitly only after three listener probes fail
+  and its inode remains unchanged. A live external listener is never killed or
+  unlinked.
+- Docker context creation/repair uses the supported CLI, sanitizes
+  `DOCKER_CONTEXT`/`DOCKER_HOST` for its own inspection, never calls
+  `docker context use`, and verifies the active context did not change.
+- Production-path Xcode snippets verified the 67,440,560-byte install at mode
+  0700 and an isolated live bridge/context: Apple API 1.0.0, Docker API 1.51,
+  `docker ps -a`, clean graceful exit, and no remaining socket.
+- The full Xcode plan passes 463/463 outcomes: 452 deterministic tests passed
+  and 11 explicitly gated live tests skipped, with no failures or warnings.
 
 ## Known configuration issue
 
@@ -426,4 +452,6 @@ entitlement; no developer-team or provisioning-profile change should be needed.
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, and transactional same-host save/restore against a local
    IPSW.
-4. Spike a pinned Socktainer process and a product-specific Docker context.
+4. Add read-only Compose project observability from canonical project/service
+   labels and authoritative Apple inventory. Keep lifecycle claims behind
+   explicit v1.0.0 conformance fixtures; do not infer parity from sparse events.

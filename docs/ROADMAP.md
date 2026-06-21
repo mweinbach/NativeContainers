@@ -63,7 +63,10 @@ must leave a usable, test-backed product slice.
 - [x] Typed image-store, OCI archive, root-filesystem tar, and root-filesystem
       folder outputs behind reviewed destination and publication services.
 - [ ] SSH forwarding and typed, app-owned cache import/export profiles.
-- [ ] Version-pinned Socktainer service and product-specific Docker context.
+- [x] Version-pinned Socktainer service with SHA-256 and Developer ID validation,
+      HTTP-level readiness, exact-PID TERM-to-KILL/Force Stop recovery, stale
+      socket cleanup, and a product-specific Docker context that never becomes
+      the active context implicitly.
 - [ ] Compose parser and lifecycle coordinator, with conformance fixtures.
 - [ ] Automatic project detection and per-project status.
 - [ ] SSH agent forwarding and safe host-directory sharing.

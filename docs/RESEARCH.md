@@ -428,10 +428,13 @@ The UI and marketing must not collapse those four claims into one.
   pins `apple/container` 1.0.0 and Containerization 0.33.3, matching this app’s
   native runtime generation. Its advertised Docker Engine compatibility remains
   partial API v1.51 rather than a complete Docker daemon contract.
-- The release zip is pinned by SHA-256
+- The production downloader uses the direct 67,440,560-byte executable asset,
+  pinned by SHA-256
+  `8e41e8a75aaf9cb2fa938a7493bbc504d93bfbd14fbf09826d4c57d2150bd020`.
+  The arm64 executable passed the app’s Security-framework validation and is
+  signed with Developer ID Application team `HYSCB8KRL2`. The separately
+  published zip remains pinned by
   `911a207bb791f5ea1592a329938600680263b68022552641f21d1d172d591e37`.
-  The contained arm64 executable passed strict code-signature verification and
-  is signed with Developer ID Application team `HYSCB8KRL2`.
 - The v1.0.0 source binds only to `$HOME/.socktainer/container.sock`; it does not
   expose a product-specific socket argument. The release tag also does not
   create a Docker context even though later `main` documentation describes
@@ -440,9 +443,20 @@ The UI and marketing must not collapse those four claims into one.
   create a separate `nativecontainers` Docker context explicitly rather than
   relying on moving-branch behavior.
 - Runtime download/install, process ownership, socket collision handling,
-  context review, TERM-to-KILL shutdown, and launch-on-login remain a dedicated
-  compatibility-service slice. They must not be folded into the native Apple
-  container service graph or represented as built-in Engine API support.
+  context review, TERM-to-KILL shutdown, immediate Force Stop, and app-quit
+  cleanup now live behind a dedicated compatibility-service slice. They are not
+  folded into the native Apple container service graph or represented as
+  built-in Engine API support.
+- A 2026-06-21 isolated-home live probe verified HTTP 200 `/_ping`, body `OK`,
+  `Api-Version: 1.51`, Docker 29.4 client negotiation against server/minimum APIs
+  1.51/1.32, `docker ps -a`, graceful stop, and inode-matched socket cleanup.
+  Socktainer leaves its socket after exit on its own, so wrapper cleanup is a
+  required lifecycle step rather than an optimization.
+- Exact v1.0.0 Compose parity is incomplete: aliases, health checks, restart
+  policies, several resource settings, and network connect/disconnect behavior
+  cannot support a broad Compose claim. The next safe slice is read-only project
+  observability from canonical Compose labels and authoritative Apple inventory,
+  followed by explicit conformance fixtures.
 
 Apple maintainers treat the Engine API as a separate service/plugin concern.
 [Socktainer](https://github.com/socktainer/socktainer) is an active Apache-2.0

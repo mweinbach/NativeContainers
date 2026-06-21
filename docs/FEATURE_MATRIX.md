@@ -18,7 +18,7 @@ called out rather than papered over.
 | Container storage/network/socket attachments | Focused attachment service + Apple configuration types | M1 | Exact reviewed named-volume identities, ordered networks, and private operation-scoped Unix sockets are live and revalidated before mutation/start |
 | Container-to-host alias | Read-only resolver/PF discovery | Partial | Exact configured-on-disk state can be selected and a fixed privileged command is shown; the GUI does not mutate or claim active PF state, and a signed helper remains future work |
 | Direct container IP and published ports | Apple vmnet/socket forwarders | M1 | Dedicated IPs and TCP/UDP ranges are inventoried; TCP host publications offer explicit revalidated HTTP/HTTPS opening; no exact shared host loopback |
-| Docker CLI and Engine API | Socktainer compatibility service | M2 | Partial API v1.51 today |
+| Docker CLI and Engine API | Pinned Socktainer install/process/context services | M2 | Settings-managed verified install, Apple API health, HTTP readiness, exact-PID TERM-to-KILL and Force Stop, crash-residue recovery, and non-activating `nativecontainers` context are live; Engine coverage remains partial API v1.51 |
 | Docker Compose | Docker CLI through compatibility service | M2 | Compatibility matrix required |
 | Registry credentials | Apple Keychain client | M1 | Login/list/logout live; stored secrets never leave Keychain |
 | Rosetta `linux/amd64` applications | Apple Containerization | M1 | ARM Linux guest; not an x86 VM |
