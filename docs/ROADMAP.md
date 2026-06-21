@@ -212,6 +212,9 @@ must leave a usable, test-backed product slice.
       bytes, hidden-partial attribution, and cancellable scans outside ordinary
       inventory refresh.
 - [x] Measured standalone-ASIF rewrite reclamation without a compaction guarantee.
+- [x] Bounded stopped-only macOS disk snapshots through bundle-local
+      DiskImageKit overlay stacks, with transactional manifest commits,
+      restore-to-prune semantics, saved-state invalidation, and native controls.
 - [ ] Accessibility, localization, keyboard navigation, and command menus.
 - [ ] Signed/notarized packaging, updater, migration, crash diagnostics.
 - [ ] Performance benchmarks for cold start, warm start, I/O, network, build,

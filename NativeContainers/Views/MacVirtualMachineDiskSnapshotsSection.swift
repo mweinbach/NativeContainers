@@ -272,3 +272,36 @@ private struct MacVirtualMachineDiskSnapshotLock: View {
     )
   }
 }
+
+#Preview("Snapshot history") {
+  @Previewable @State var name = "Before Upgrade"
+  let snapshotItems = [
+    try! MacVirtualMachineDiskSnapshot(
+      id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+      name: "Clean Install",
+      createdAt: Date(timeIntervalSince1970: 1_750_000_000),
+      capturedLayerCount: 0
+    ),
+    try! MacVirtualMachineDiskSnapshot(
+      id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+      name: "Developer Tools",
+      createdAt: Date(timeIntervalSince1970: 1_750_086_400),
+      capturedLayerCount: 1
+    ),
+  ]
+
+  MacVirtualMachineDiskSnapshotsContent(
+    snapshotItems: snapshotItems,
+    newSnapshotName: $name,
+    isLoading: false,
+    operation: nil,
+    isAtLimit: false,
+    editBlock: nil,
+    hostIsSupported: true,
+    createSnapshot: {},
+    requestRestore: { _ in },
+    discardSavedState: nil
+  )
+  .padding(24)
+  .frame(width: 700)
+}

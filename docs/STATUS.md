@@ -7,10 +7,10 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 874 test declarations and 879 expanded outcomes.
-  The current full app-hosted Xcode run passed all 858 deterministic outcomes,
-  with 21 destructive or external-service integrations skipped behind explicit
-  live gates and no failures. Existing opt-in tests cover Apple runtime
+- The current full app-hosted Xcode run contains 909 expanded outcomes: all 888
+  deterministic outcomes passed, with 21 destructive or external-service
+  integrations skipped behind explicit live gates and no failures or unrun
+  tests. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
   none run against public services by default.
@@ -908,6 +908,20 @@ Updated: 2026-06-21.
   NativeContainers process remained. The Issue Navigator reported no warnings
   or errors. Launch emitted only the existing macOS 27 beta SetStore donation
   noise.
+
+- macOS VM disk snapshots are now a distinct manifest/domain, transactional
+  layer-store, orchestration-service, runtime-adapter, app-model, and SwiftUI
+  lane. Up to eight named stopped-VM checkpoints use canonical bundle-local
+  DiskImageKit overlays. Creation and restore hold runtime ownership, reject
+  saved states, clean failed pre-commit layers, and report post-commit cleanup
+  residue without misreporting a committed restore as failed. Restore retains
+  the selected prefix, prunes newer history, and creates a fresh writable top
+  layer. Runtime stack assembly, resolver ordering, transfer validation, and
+  saved-state fingerprints all include the complete layer topology; disk
+  replacement is blocked while history exists. Real DiskImageKit overlay and
+  writable-VZ-attachment tests pass. The native snapshot section renders in
+  both light and dark Xcode previews without clipping. Live guest I/O and
+  restore behavior still require an installed disposable macOS guest.
 
 - Compose create-missing Up is now implemented as a separate non-recreation
   lane. Canonical full/active models fail closed on an explicit supported-key

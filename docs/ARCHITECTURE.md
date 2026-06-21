@@ -639,6 +639,28 @@ RAW source. Launch recovery continues across per-VM failures, rolls back safe
 pre-commit artifacts, or completes post-commit cleanup. Neither migration nor
 recovery truncates or resizes a guest filesystem.
 
+macOS disk snapshots use a separate service boundary from replacement and
+saved-state checkpoints. A revisioned manifest value records a bounded linear
+history of named checkpoints and canonical `Snapshots/<UUID>.asif` layers. The
+snapshot service acquires the normal stopped-VM runtime lease, rejects any
+saved state, recovers only recognized unreferenced private artifacts, creates a
+DiskImageKit overlay through a hidden partial, and commits the new manifest only
+after promotion. Commit failure removes the unreferenced layer; restore commits
+the retained prefix plus a fresh writable layer before best-effort retirement
+of newer layers. A later operation safely retries any post-commit residue.
+
+The bundle resolver maps every persisted layer in manifest order. Runtime disk
+attachment opens the base and frozen layers read-only and only the top overlay
+read-write. The configuration descriptor and saved-state fingerprint include
+the snapshot revision, ordered paths, and each layer's stable file identity, so
+an older memory checkpoint cannot resume against changed disk history. Clone,
+export, and import copy the bundle-local stack, while staged-bundle validation
+requires the snapshot directory to contain exactly the referenced regular
+files. Disk conversion and standalone-ASIF rewrite remain disabled while a
+snapshot stack exists. DiskImageKit exposes stacking but no public merge or
+flatten operation, so arbitrary deletion is prohibited; restoring an earlier
+checkpoint is the bounded reclamation path.
+
 ### UI lane
 
 The SwiftUI shell uses a `NavigationSplitView` with separate screens for:

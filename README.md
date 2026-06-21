@@ -57,7 +57,11 @@ keeps uncertain exits quarantined, and pending replacement journals block runtim
 discard, clone, and transfer paths until recovery is safe. Standalone ASIF disks
 can also be rewritten out of place; the manifest switches only when the verified
 candidate has a smaller measured allocation, without claiming guaranteed
-compaction or APFS free-space recovery. Persistent Linux machines now have native
+compaction or APFS free-space recovery. Stopped macOS VMs can also keep up to
+eight named, bundle-local disk checkpoints through native DiskImageKit overlay
+stacks. Creating or restoring a checkpoint is saved-state-free and
+lease-serialized; restore prunes newer history, and the runtime opens only the
+top layer writable. Persistent Linux machines now have native
 create/start/stop/Force Stop/delete controls, cancellable first-boot user
 provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
 memory, and reviewed home-directory configuration. Existing machines can edit
