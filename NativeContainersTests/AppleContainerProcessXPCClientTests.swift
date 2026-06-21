@@ -38,6 +38,8 @@ struct AppleContainerProcessXPCClientTests {
       configuration: configuration,
       standardIO: [input.fileHandleForReading, output.fileHandleForWriting, nil]
     )
+    #expect(fcntl(input.fileHandleForReading.fileDescriptor, F_GETFD) >= 0)
+    #expect(fcntl(output.fileHandleForWriting.fileDescriptor, F_GETFD) >= 0)
     try await process.start()
     try await process.resize(to: try ContainerTerminalSize(columns: 132, rows: 43))
     let exitCode = try await process.wait()

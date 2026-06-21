@@ -60,8 +60,8 @@ actor AppleRuntimeCommandExecutor: RuntimeCommandExecuting {
 
     do {
       try await process.start()
-      try standardOutputPipe.fileHandleForWriting.close()
-      try standardErrorPipe.fileHandleForWriting.close()
+      try? standardOutputPipe.fileHandleForWriting.close()
+      try? standardErrorPipe.fileHandleForWriting.close()
       let exitCode = try await AppleContainerToolProcessWaiter.wait(
         for: process,
         timeoutSeconds: timeoutSeconds

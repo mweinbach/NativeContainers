@@ -1,5 +1,6 @@
 import ContainerResource
 import ContainerXPC
+import Darwin
 import Foundation
 
 protocol LinuxMachineProvisioningProcess: RuntimeManagedProcess {
@@ -76,11 +77,17 @@ struct AppleContainerProcessXPCClient: LinuxMachineProcessCreating, AppleRuntime
     for (index, handle) in standardIO.enumerated() {
       switch index {
       case 0:
-        if let handle { request.set(key: .stdin, value: handle) }
+        if let handle {
+          request.set(key: .stdin, value: try duplicateForTransfer(handle))
+        }
       case 1:
-        if let handle { request.set(key: .stdout, value: handle) }
+        if let handle {
+          request.set(key: .stdout, value: try duplicateForTransfer(handle))
+        }
       case 2:
-        if let handle { request.set(key: .stderr, value: handle) }
+        if let handle {
+          request.set(key: .stderr, value: try duplicateForTransfer(handle))
+        }
       default:
         throw AppleRuntimeProcessError.invalidStandardIOIndex(index)
       }
@@ -96,6 +103,16 @@ struct AppleContainerProcessXPCClient: LinuxMachineProcessCreating, AppleRuntime
       waitSender: waitSender,
       signalSender: signalSender
     )
+  }
+
+  private func duplicateForTransfer(_ handle: FileHandle) throws -> FileHandle {
+    let descriptor = Darwin.dup(handle.fileDescriptor)
+    guard descriptor >= 0 else {
+      throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+    }
+    // XPCMessage.set takes ownership by closing this descriptor after wrapping it.
+    // Keep the caller's original FileHandle valid until its normal lifecycle closes it.
+    return FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
   }
 }
 
