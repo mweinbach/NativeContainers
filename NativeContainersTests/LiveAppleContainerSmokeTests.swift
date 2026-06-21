@@ -44,6 +44,95 @@ struct LiveAppleContainerSmokeTests {
       "Set NATIVECONTAINERS_LIVE_TESTS=1 with Apple container services running."
     )
   )
+  func createWithReviewedVolumeNetworkAndPublishedSocket() async throws {
+    let service = AppleContainerService()
+    let suffix = UUID().uuidString.lowercased().prefix(8)
+    let containerID = "nativecontainers-attach-\(suffix)"
+    let volumeName = "nativecontainers-volume-\(suffix)"
+    let networkName = "nativecontainers-network-\(suffix)"
+    let volumeRequest = try VolumeCreateRequest(
+      name: volumeName,
+      sizeBytes: 16 * VolumeCreateRequest.bytesPerMiB
+    )
+    let networkRequest = try NetworkCreateRequest(
+      name: networkName,
+      mode: .nat
+    )
+
+    do {
+      let volume = try await service.createVolume(
+        try await service.prepareVolumeCreation(volumeRequest)
+      )
+      let network = try await service.createNetwork(
+        try await service.prepareNetworkCreation(networkRequest)
+      )
+      let attachments = try ContainerAttachmentSelection(
+        volumeMounts: [
+          try ContainerVolumeMount(
+            volume: volume,
+            containerPath: "/data",
+            isReadOnly: false
+          )
+        ],
+        networks: [ContainerNetworkAttachment(network: network)],
+        publishedSockets: [
+          try ContainerUnixSocketPublication(
+            hostSocketName: "api.sock",
+            containerPath: "/run/api.sock"
+          )
+        ],
+        requiredHostAccess: nil
+      )
+      let request = try ContainerCreationRequest(
+        name: containerID,
+        imageReference: "docker.io/library/alpine:3.21",
+        cpuCount: 1,
+        memoryBytes: 256 * ContainerCreationRequest.bytesPerMiB,
+        arguments: ["/bin/sh", "-c", "sleep 60"],
+        attachments: attachments,
+        startAfterCreation: false
+      )
+
+      try await service.createContainer(request: request) { _ in }
+      let snapshot = try await AppleContainerSnapshotReader().get(id: containerID)
+      #expect(snapshot.configuration.mounts.map(\.volumeName) == [volumeName])
+      #expect(snapshot.configuration.networks.map(\.network) == [networkName])
+      let publishedSocket = try #require(snapshot.configuration.publishedSockets.first)
+      let environment = await service.loadContainerAttachmentEnvironment()
+      #expect(publishedSocket.hostPath.string.hasPrefix(environment.publishedSocketRootPath))
+
+      try await service.startContainer(id: containerID)
+      try await waitForHostSocket(atPath: publishedSocket.hostPath.string)
+      try await service.forceStopContainer(id: containerID)
+      try await waitForStoppedContainer(id: containerID, service: service)
+      try await waitForMissingPath(publishedSocket.hostPath.string)
+      try await service.deleteContainer(id: containerID)
+
+      let operationDirectory = URL(
+        filePath: environment.publishedSocketRootPath,
+        directoryHint: .isDirectory
+      ).appending(
+        path: request.operationID.uuidString.lowercased(),
+        directoryHint: .isDirectory
+      )
+      #expect(
+        !FileManager.default.fileExists(atPath: operationDirectory.path(percentEncoded: false)))
+      try await deleteNetworkIfPresent(networkName, service: service)
+      try await deleteVolumeIfPresent(volumeName, service: service)
+    } catch {
+      await cleanUpRunningContainer(id: containerID, service: service)
+      try? await deleteNetworkIfPresent(networkName, service: service)
+      try? await deleteVolumeIfPresent(volumeName, service: service)
+      throw error
+    }
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_TESTS"] == "1",
+      "Set NATIVECONTAINERS_LIVE_TESTS=1 with Apple container services running."
+    )
+  )
   func interactiveTerminalPreservesPTYSemantics() async throws {
     let service = AppleContainerService()
     let id = "nativecontainers-pty-\(UUID().uuidString.lowercased().prefix(8))"
@@ -258,6 +347,70 @@ struct LiveAppleContainerSmokeTests {
     }
   }
 
+  private func waitForHostSocket(
+    atPath path: String,
+    timeout: Duration = .seconds(5)
+  ) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while clock.now < deadline {
+      let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+      if attributes?[.type] as? FileAttributeType == .typeSocket {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(25))
+    }
+    throw LiveAttachmentSmokeError.timedOut("host socket at \(path)")
+  }
+
+  private func waitForMissingPath(
+    _ path: String,
+    timeout: Duration = .seconds(5)
+  ) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while clock.now < deadline {
+      if !FileManager.default.fileExists(atPath: path) {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(25))
+    }
+    throw LiveAttachmentSmokeError.timedOut("socket cleanup at \(path)")
+  }
+
+  private func waitForStoppedContainer(
+    id: String,
+    service: AppleContainerService,
+    timeout: Duration = .seconds(5)
+  ) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while clock.now < deadline {
+      let state = try await service.loadInventory().containers.first { $0.id == id }?.state
+      if state != .running {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    throw LiveAttachmentSmokeError.timedOut("container \(id) to stop")
+  }
+
+  private func deleteVolumeIfPresent(
+    _ name: String,
+    service: AppleContainerService
+  ) async throws {
+    let plan = try await service.prepareVolumeDeletion(name: name)
+    try await service.deleteVolume(plan)
+  }
+
+  private func deleteNetworkIfPresent(
+    _ id: String,
+    service: AppleContainerService
+  ) async throws {
+    let plan = try await service.prepareNetworkDeletion(id: id)
+    try await service.deleteNetwork(plan)
+  }
+
   private func waitForTerminalOutput(
     _ session: any ContainerTerminalSession,
     stage: LiveTerminalSmokeStage,
@@ -312,6 +465,17 @@ struct LiveAppleContainerSmokeTests {
         || authorityValue == "[::1]" || authorityValue.hasPrefix("[::1]:")
     else {
       throw LocalRegistrySmokeError.nonLocalRepository(repository)
+    }
+  }
+}
+
+private enum LiveAttachmentSmokeError: LocalizedError {
+  case timedOut(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .timedOut(let operation):
+      "Timed out waiting for \(operation)."
     }
   }
 }

@@ -33,7 +33,7 @@ struct AppleContainerHostAccessService: Sendable {
 
   func loadCatalog() -> ContainerHostAccessCatalog {
     let fileManager = FileManager.default
-    guard fileManager.fileExists(atPath: resolverDirectoryURL.path()) else {
+    guard fileManager.fileExists(atPath: resolverDirectoryURL.path(percentEncoded: false)) else {
       return .empty
     }
 
@@ -49,7 +49,9 @@ struct AppleContainerHostAccessService: Sendable {
     let resolverFilenames: [String]
     do {
       resolverFilenames =
-        try fileManager.contentsOfDirectory(atPath: resolverDirectoryURL.path())
+        try fileManager.contentsOfDirectory(
+          atPath: resolverDirectoryURL.path(percentEncoded: false)
+        )
         .filter { $0.hasPrefix(Self.resolverPrefix) }
         .sorted()
     } catch {
@@ -75,7 +77,7 @@ struct AppleContainerHostAccessService: Sendable {
     }
 
     let requiredLoadDirective =
-      #"load anchor "com.apple.container" from "\#(packetFilterAnchorURL.path())""#
+      #"load anchor "com.apple.container" from "\#(packetFilterAnchorURL.path(percentEncoded: false))""#
     guard
       packetFilterConfiguration.components(separatedBy: .newlines).contains(
         requiredLoadDirective
@@ -144,7 +146,7 @@ struct AppleContainerHostAccessService: Sendable {
 
   private func requireSecureDirectory(_ url: URL) throws {
     var info = stat()
-    guard lstat(url.path(), &info) == 0 else {
+    guard lstat(url.path(percentEncoded: false), &info) == 0 else {
       throw HostAccessInspectionError.unreadable
     }
     guard
@@ -158,7 +160,7 @@ struct AppleContainerHostAccessService: Sendable {
 
   private func readSecureFile(_ url: URL) throws -> String {
     var info = stat()
-    guard lstat(url.path(), &info) == 0 else {
+    guard lstat(url.path(percentEncoded: false), &info) == 0 else {
       throw HostAccessInspectionError.unreadable
     }
     guard

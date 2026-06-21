@@ -79,7 +79,7 @@ struct AppleContainerAttachmentServiceTests {
     )
     #expect(
       resolved.publishedSockets[0].hostPath.string.hasPrefix(
-        operationDirectory.path()
+        operationDirectory.path(percentEncoded: false)
       )
     )
   }
@@ -266,8 +266,11 @@ private struct AttachmentServiceFixture {
   let service: AppleContainerAttachmentService
 
   init(volumes: [VolumeConfiguration], networks: [NetworkResource]) {
-    socketRootURL = FileManager.default.temporaryDirectory.appending(
-      path: "NativeContainersAttachmentSockets-\(UUID().uuidString)",
+    socketRootURL = URL(
+      filePath: "/private/tmp",
+      directoryHint: .isDirectory
+    ).appending(
+      path: "nca-\(UUID().uuidString.prefix(8))",
       directoryHint: .isDirectory
     )
     service = AppleContainerAttachmentService(

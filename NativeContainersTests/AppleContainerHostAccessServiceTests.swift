@@ -87,7 +87,7 @@ private struct HostAccessFixture {
 
   init() throws {
     let rootURL = FileManager.default.temporaryDirectory.appending(
-      path: "NativeContainersHostAccess-\(UUID().uuidString)",
+      path: "Native Containers Host Access -\(UUID().uuidString)",
       directoryHint: .isDirectory
     )
     let resolverDirectoryURL = rootURL.appending(
@@ -107,7 +107,7 @@ private struct HostAccessFixture {
       withIntermediateDirectories: true,
       attributes: [.posixPermissions: 0o755]
     )
-    guard chmod(resolverDirectoryURL.path(), 0o755) == 0 else {
+    guard chmod(resolverDirectoryURL.path(percentEncoded: false), 0o755) == 0 else {
       throw CocoaError(.fileWriteNoPermission)
     }
 
@@ -153,7 +153,7 @@ private struct HostAccessFixture {
     try write(
       """
       rdr-anchor "com.apple.container"
-      load anchor "com.apple.container" from "\(packetFilterAnchorURL.path())"
+      load anchor "com.apple.container" from "\(packetFilterAnchorURL.path(percentEncoded: false))"
 
       """,
       to: packetFilterConfigurationURL
@@ -170,7 +170,7 @@ private struct HostAccessFixture {
 
   private func write(_ contents: String, to url: URL) throws {
     try contents.write(to: url, atomically: true, encoding: .utf8)
-    guard chmod(url.path(), 0o644) == 0 else {
+    guard chmod(url.path(percentEncoded: false), 0o644) == 0 else {
       throw CocoaError(.fileWriteNoPermission)
     }
   }
