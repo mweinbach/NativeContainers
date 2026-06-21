@@ -1,10 +1,12 @@
 import ContainerAPIClient
+import ContainerResource
 import Foundation
 import MachineAPIClient
 
 actor AppleContainerService: ContainerManaging {
   private let inventoryService: AppleRuntimeInventoryService
   private let infrastructureService: AppleInfrastructureService
+  private let attachmentService: AppleContainerAttachmentService
   private let lifecycleService: AppleContainerLifecycleService
   private let inspectionService: AppleContainerInspectionService
   private let toolService: AppleContainerToolService
@@ -21,6 +23,7 @@ actor AppleContainerService: ContainerManaging {
     containerCleanupClient: any AppleContainerCleanupTransport = AppleContainerCleanupClient(),
     inventoryService: AppleRuntimeInventoryService? = nil,
     infrastructureService: AppleInfrastructureService? = nil,
+    attachmentService: AppleContainerAttachmentService? = nil,
     lifecycleService: AppleContainerLifecycleService? = nil,
     inspectionService: AppleContainerInspectionService? = nil,
     toolService: AppleContainerToolService? = nil,
@@ -46,8 +49,18 @@ actor AppleContainerService: ContainerManaging {
         containerReader: containerReader,
         runtimeMutationCoordinator: runtimeMutationCoordinator
       )
+    let resolvedAttachmentService =
+      attachmentService
+      ?? AppleContainerAttachmentService(
+        infrastructureClient: infrastructureClient,
+        containerReader: containerReader
+      )
     let resolvedLifecycleService =
-      lifecycleService ?? AppleContainerLifecycleService(containerClient: containerClient)
+      lifecycleService
+      ?? AppleContainerLifecycleService(
+        containerClient: containerClient,
+        attachmentService: resolvedAttachmentService
+      )
     let resolvedInspectionService =
       inspectionService ?? AppleContainerInspectionService(containerClient: containerClient)
     let resolvedToolService =
@@ -75,6 +88,7 @@ actor AppleContainerService: ContainerManaging {
 
     self.inventoryService = resolvedInventoryService
     self.infrastructureService = resolvedInfrastructureService
+    self.attachmentService = resolvedAttachmentService
     self.lifecycleService = resolvedLifecycleService
     self.inspectionService = resolvedInspectionService
     self.toolService = resolvedToolService
@@ -84,7 +98,7 @@ actor AppleContainerService: ContainerManaging {
       creationService
       ?? AppleContainerCreationService(
         containerClient: containerClient,
-        infrastructureService: resolvedInfrastructureService,
+        attachmentService: resolvedAttachmentService,
         lifecycleService: resolvedLifecycleService,
         ownedContainerRecovery: resolvedRecoveryService,
         runtimeMutationCoordinator: runtimeMutationCoordinator
@@ -230,6 +244,38 @@ actor AppleContainerService: ContainerManaging {
 
   func resolveContainerBrowserURL(_ target: ContainerBrowserTarget) async throws -> URL {
     try await infrastructureService.resolveContainerBrowserURL(target)
+  }
+
+  func loadContainerAttachmentEnvironment() async -> ContainerAttachmentEnvironment {
+    await attachmentService.loadContainerAttachmentEnvironment()
+  }
+
+  func resolveAttachments(
+    _ selection: ContainerAttachmentSelection,
+    operationID: UUID,
+    containerID: String,
+    dnsDomain: String?
+  ) async throws -> ResolvedContainerAttachments {
+    try await attachmentService.resolveAttachments(
+      selection,
+      operationID: operationID,
+      containerID: containerID,
+      dnsDomain: dnsDomain
+    )
+  }
+
+  func validatePublishedSocketsBeforeStart(
+    _ sockets: [PublishSocket],
+    operationID: UUID
+  ) async throws {
+    try await attachmentService.validatePublishedSocketsBeforeStart(
+      sockets,
+      operationID: operationID
+    )
+  }
+
+  func cleanupPublishedSocketWorkspace(operationID: UUID) async {
+    await attachmentService.cleanupPublishedSocketWorkspace(operationID: operationID)
   }
 
   func createContainer(

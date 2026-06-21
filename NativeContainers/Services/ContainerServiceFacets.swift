@@ -9,6 +9,39 @@ protocol BuiltinNetworkProviding: Sendable {
   func builtinNetworkResource() async throws -> NetworkResource?
 }
 
+struct ResolvedContainerAttachments: Sendable {
+  let mounts: [Filesystem]
+  let networks: [AttachmentConfiguration]
+  let publishedSockets: [PublishSocket]
+}
+
+protocol ContainerAttachmentEnvironmentLoading: Sendable {
+  func loadContainerAttachmentEnvironment() async -> ContainerAttachmentEnvironment
+}
+
+protocol ContainerAttachmentResolving: Sendable {
+  func resolveAttachments(
+    _ selection: ContainerAttachmentSelection,
+    operationID: UUID,
+    containerID: String,
+    dnsDomain: String?
+  ) async throws -> ResolvedContainerAttachments
+}
+
+protocol PublishedSocketWorkspaceManaging: Sendable {
+  func validatePublishedSocketsBeforeStart(
+    _ sockets: [PublishSocket],
+    operationID: UUID
+  ) async throws
+  func cleanupPublishedSocketWorkspace(operationID: UUID) async
+}
+
+protocol ContainerAttachmentManaging:
+  ContainerAttachmentEnvironmentLoading,
+  ContainerAttachmentResolving,
+  PublishedSocketWorkspaceManaging
+{}
+
 protocol ContainerCreating: Sendable {
   func createContainer(
     request: ContainerCreationRequest,

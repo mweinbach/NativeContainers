@@ -8,6 +8,7 @@ struct AppServices: Sendable {
   let containerInspector: any ContainerInspecting
   let containerTools: any ContainerTooling
   let containerTerminal: any ContainerTerminalOpening
+  let containerAttachments: any ContainerAttachmentEnvironmentLoading
   let machineLifecycle: any MachineLifecycleManaging
   let images: any ImageManaging
   let volumes: any VolumeManaging
@@ -26,6 +27,7 @@ struct AppServices: Sendable {
     containerInspector: any ContainerInspecting,
     containerTools: any ContainerTooling,
     containerTerminal: any ContainerTerminalOpening,
+    containerAttachments: any ContainerAttachmentEnvironmentLoading,
     machineLifecycle: any MachineLifecycleManaging,
     images: any ImageManaging,
     volumes: any VolumeManaging,
@@ -43,6 +45,7 @@ struct AppServices: Sendable {
     self.containerInspector = containerInspector
     self.containerTools = containerTools
     self.containerTerminal = containerTerminal
+    self.containerAttachments = containerAttachments
     self.machineLifecycle = machineLifecycle
     self.images = images
     self.volumes = volumes
@@ -69,6 +72,7 @@ struct AppServices: Sendable {
     containerInspector = containerService
     containerTools = containerService
     containerTerminal = containerService
+    containerAttachments = containerService
     machineLifecycle = containerService
     images = containerService
     volumes = containerService
@@ -108,7 +112,14 @@ enum AppCompositionRoot {
       cleanupClient: cleanupClient,
       ownershipLabel: AppleContainerOwnership.creationOperationLabel
     )
-    let lifecycleService = AppleContainerLifecycleService(containerClient: containerClient)
+    let attachmentService = AppleContainerAttachmentService(
+      infrastructureClient: infrastructureClient,
+      containerReader: containerReader
+    )
+    let lifecycleService = AppleContainerLifecycleService(
+      containerClient: containerClient,
+      attachmentService: attachmentService
+    )
     let inspectionService = AppleContainerInspectionService(containerClient: containerClient)
     let toolService = AppleContainerToolService(containerClient: containerClient)
     let terminalService = AppleContainerTerminalService(
@@ -119,29 +130,11 @@ enum AppCompositionRoot {
     let machineLifecycleService = AppleMachineLifecycleService(machineClient: machineClient)
     let creationService = AppleContainerCreationService(
       containerClient: containerClient,
-      infrastructureService: infrastructureService,
+      attachmentService: attachmentService,
       lifecycleService: lifecycleService,
       ownedContainerRecovery: recoveryService,
       runtimeMutationCoordinator: mutationCoordinator
     )
-    let containerService = AppleContainerService(
-      containerClient: containerClient,
-      machineClient: machineClient,
-      infrastructureClient: infrastructureClient,
-      containerCleanupClient: cleanupClient,
-      inventoryService: inventoryService,
-      infrastructureService: infrastructureService,
-      lifecycleService: lifecycleService,
-      inspectionService: inspectionService,
-      toolService: toolService,
-      terminalService: terminalService,
-      machineLifecycleService: machineLifecycleService,
-      creationService: creationService,
-      imageService: imageService,
-      ownedContainerRecovery: recoveryService,
-      runtimeMutationCoordinator: mutationCoordinator
-    )
-
     return AppServices(
       inventory: inventoryService,
       containerLifecycle: lifecycleService,
@@ -149,6 +142,7 @@ enum AppCompositionRoot {
       containerInspector: inspectionService,
       containerTools: toolService,
       containerTerminal: terminalService,
+      containerAttachments: attachmentService,
       machineLifecycle: machineLifecycleService,
       images: imageService,
       volumes: infrastructureService,

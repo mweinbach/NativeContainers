@@ -8,14 +8,14 @@ import TerminalProgress
 
 actor AppleContainerCreationService: ContainerCreating {
   private let containerClient: ContainerClient
-  private let infrastructureService: any BuiltinNetworkProviding
+  private let attachmentService: any ContainerAttachmentManaging
   private let lifecycleService: any ContainerLifecycleManaging
   private let ownedContainerRecovery: any OwnedContainerRecovering
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator
 
   init(
     containerClient: ContainerClient = ContainerClient(),
-    infrastructureService: any BuiltinNetworkProviding = AppleInfrastructureService(),
+    attachmentService: any ContainerAttachmentManaging = AppleContainerAttachmentService(),
     lifecycleService: any ContainerLifecycleManaging = AppleContainerLifecycleService(),
     ownedContainerRecovery: any OwnedContainerRecovering = AppleOwnedContainerRecoveryService(
       ownershipLabel: AppleContainerOwnership.creationOperationLabel
@@ -23,7 +23,7 @@ actor AppleContainerCreationService: ContainerCreating {
     runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared
   ) {
     self.containerClient = containerClient
-    self.infrastructureService = infrastructureService
+    self.attachmentService = attachmentService
     self.lifecycleService = lifecycleService
     self.ownedContainerRecovery = ownedContainerRecovery
     self.runtimeMutationCoordinator = runtimeMutationCoordinator
@@ -45,12 +45,18 @@ actor AppleContainerCreationService: ContainerCreating {
           operationID: request.operationID
         )
       } catch {
+        await attachmentService.cleanupPublishedSocketWorkspace(
+          operationID: request.operationID
+        )
         throw AppleContainerCreationError.containerCleanupFailed(
           id: request.name,
           operation: operationMessage,
           cleanup: error.localizedDescription
         )
       }
+      await attachmentService.cleanupPublishedSocketWorkspace(
+        operationID: request.operationID
+      )
       throw error
     }
   }
@@ -68,6 +74,12 @@ actor AppleContainerCreationService: ContainerCreating {
     }
 
     let systemConfiguration = try await loadSystemConfiguration()
+    let resolvedAttachments = try await attachmentService.resolveAttachments(
+      request.attachments,
+      operationID: request.operationID,
+      containerID: request.name,
+      dnsDomain: systemConfiguration.dns.domain
+    )
     let processFlags = Flags.Process(
       cwd: request.workingDirectory,
       env: request.environment.map(\.entry),
@@ -191,6 +203,9 @@ actor AppleContainerCreationService: ContainerCreating {
     configuration.labels = [
       AppleContainerOwnership.creationOperationLabel: request.operationID.uuidString
     ]
+    configuration.mounts = resolvedAttachments.mounts
+    configuration.networks = resolvedAttachments.networks
+    configuration.publishedSockets = resolvedAttachments.publishedSockets
     configuration.publishedPorts = try Parser.publishPorts(
       request.publishedPorts.map(\.appleSpecification)
     )
@@ -205,16 +220,6 @@ actor AppleContainerCreationService: ContainerCreating {
     configuration.useInit = request.useInitProcess
     configuration.stopSignal = imageConfiguration?.stopSignal
 
-    guard let builtinNetwork = try await infrastructureService.builtinNetworkResource() else {
-      throw AppleContainerCreationError.builtinNetworkUnavailable
-    }
-    let hostname = systemConfiguration.dns.domain.map { "\(request.name).\($0)." } ?? request.name
-    configuration.networks = [
-      AttachmentConfiguration(
-        network: builtinNetwork.id,
-        options: AttachmentOptions(hostname: hostname, macAddress: nil, mtu: 1_280)
-      )
-    ]
     configuration.dns = .init(
       nameservers: [],
       domain: systemConfiguration.dns.domain,
@@ -251,15 +256,12 @@ actor AppleContainerCreationService: ContainerCreating {
 
 private enum AppleContainerCreationError: LocalizedError {
   case containerAlreadyExists(String)
-  case builtinNetworkUnavailable
   case containerCleanupFailed(id: String, operation: String, cleanup: String)
 
   var errorDescription: String? {
     switch self {
     case .containerAlreadyExists(let name):
       "A container named “\(name)” already exists."
-    case .builtinNetworkUnavailable:
-      "Apple’s built-in container network is unavailable."
     case .containerCleanupFailed(let id, let operation, let cleanup):
       "Container operation failed: \(operation) Automatic KILL and force deletion for “\(id)” also failed: \(cleanup)"
     }

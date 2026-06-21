@@ -59,9 +59,11 @@ struct ContainerAttachmentModelsTests {
   @Test
   func rejectsDuplicateDestinationsAndAttachments() throws {
     let volume = makeVolume()
+    let secondVolume = makeVolume(name: "cache")
     let network = makeNetwork()
     let firstMount = try ContainerVolumeMount(volume: volume, containerPath: "/data")
-    let secondMount = try ContainerVolumeMount(volume: volume, containerPath: "/data")
+    let secondMount = try ContainerVolumeMount(volume: secondVolume, containerPath: "/data")
+    let duplicateVolume = try ContainerVolumeMount(volume: volume, containerPath: "/backup")
     let firstSocket = try ContainerUnixSocketPublication(
       hostSocketName: "one.sock",
       containerPath: "/run/one.sock"
@@ -74,6 +76,14 @@ struct ContainerAttachmentModelsTests {
     #expect(throws: ContainerAttachmentValidationError.duplicateMountDestination) {
       try ContainerAttachmentSelection(
         volumeMounts: [firstMount, secondMount],
+        networks: [],
+        publishedSockets: [],
+        requiredHostAccess: nil
+      )
+    }
+    #expect(throws: ContainerAttachmentValidationError.duplicateVolume) {
+      try ContainerAttachmentSelection(
+        volumeMounts: [firstMount, duplicateVolume],
         networks: [],
         publishedSockets: [],
         requiredHostAccess: nil
@@ -121,13 +131,16 @@ struct ContainerAttachmentModelsTests {
     }
   }
 
-  private func makeVolume(isAnonymous: Bool = false) -> VolumeRecord {
+  private func makeVolume(
+    name: String = "data",
+    isAnonymous: Bool = false
+  ) -> VolumeRecord {
     VolumeRecord(
-      id: "data",
-      name: "data",
+      id: name,
+      name: name,
       driver: "local",
       format: "ext4",
-      source: "/tmp/data.img",
+      source: "/tmp/\(name).img",
       createdAt: Date(timeIntervalSince1970: 1),
       sizeBytes: 64 * VolumeCreateRequest.bytesPerMiB,
       allocatedBytes: nil,

@@ -113,6 +113,7 @@ struct AppModelTests {
         containerInspector: lifecycleService,
         containerTools: lifecycleService,
         containerTerminal: lifecycleService,
+        containerAttachments: lifecycleService,
         machineLifecycle: lifecycleService,
         images: lifecycleService,
         volumes: lifecycleService,

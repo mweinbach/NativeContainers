@@ -12,8 +12,9 @@ struct AppleContainerCreationServiceTests {
     let coordinator = RuntimeMutationCoordinator()
     let gate = MutationGate()
     let recovery = CreationRecoveryDouble()
+    let attachments = CreationAttachmentDouble()
     let service = AppleContainerCreationService(
-      infrastructureService: EmptyBuiltinNetworkProvider(),
+      attachmentService: attachments,
       lifecycleService: EmptyContainerLifecycleService(),
       ownedContainerRecovery: recovery,
       runtimeMutationCoordinator: coordinator
@@ -45,6 +46,7 @@ struct AppleContainerCreationServiceTests {
         CreationRecoveryCall(id: request.name, operationID: operationID)
       ]
     )
+    #expect(await attachments.cleanedOperationIDs == [operationID])
   }
 
   @Test
@@ -53,7 +55,7 @@ struct AppleContainerCreationServiceTests {
     let gate = MutationGate()
     let recovery = CreationRecoveryDouble(shouldFail: true)
     let service = AppleContainerCreationService(
-      infrastructureService: EmptyBuiltinNetworkProvider(),
+      attachmentService: CreationAttachmentDouble(),
       lifecycleService: EmptyContainerLifecycleService(),
       ownedContainerRecovery: recovery,
       runtimeMutationCoordinator: coordinator
@@ -115,9 +117,36 @@ private actor CreationRecoveryDouble: OwnedContainerRecovering {
   }
 }
 
-private struct EmptyBuiltinNetworkProvider: BuiltinNetworkProviding {
-  func builtinNetworkResource() async throws -> NetworkResource? {
-    nil
+private actor CreationAttachmentDouble: ContainerAttachmentManaging {
+  private(set) var cleanedOperationIDs: [UUID] = []
+
+  func loadContainerAttachmentEnvironment() async -> ContainerAttachmentEnvironment {
+    ContainerAttachmentEnvironment(
+      publishedSocketRootPath: "",
+      hostAccess: .empty
+    )
+  }
+
+  func resolveAttachments(
+    _ selection: ContainerAttachmentSelection,
+    operationID: UUID,
+    containerID: String,
+    dnsDomain: String?
+  ) async throws -> ResolvedContainerAttachments {
+    ResolvedContainerAttachments(
+      mounts: [],
+      networks: [],
+      publishedSockets: []
+    )
+  }
+
+  func validatePublishedSocketsBeforeStart(
+    _ sockets: [PublishSocket],
+    operationID: UUID
+  ) async throws {}
+
+  func cleanupPublishedSocketWorkspace(operationID: UUID) async {
+    cleanedOperationIDs.append(operationID)
   }
 }
 

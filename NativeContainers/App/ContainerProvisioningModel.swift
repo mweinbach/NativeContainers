@@ -9,18 +9,22 @@ final class ContainerProvisioningModel {
   private(set) var errorMessage: String?
   private(set) var pullPlan: ImagePullPlan?
   private(set) var pullResult: ImagePullResult?
+  private(set) var attachmentEnvironment: ContainerAttachmentEnvironment?
 
   private let containerCreator: any ContainerCreating
   private let imageService: any ImageManaging
+  private let attachmentEnvironmentLoader: any ContainerAttachmentEnvironmentLoading
   private let didComplete: @MainActor @Sendable () async -> Void
 
   init(
     containerCreator: any ContainerCreating,
     imageService: any ImageManaging,
+    attachmentEnvironmentLoader: any ContainerAttachmentEnvironmentLoading,
     didComplete: @escaping @MainActor @Sendable () async -> Void
   ) {
     self.containerCreator = containerCreator
     self.imageService = imageService
+    self.attachmentEnvironmentLoader = attachmentEnvironmentLoader
     self.didComplete = didComplete
   }
 
@@ -31,8 +35,14 @@ final class ContainerProvisioningModel {
     self.init(
       containerCreator: service,
       imageService: service,
+      attachmentEnvironmentLoader: service,
       didComplete: didComplete
     )
+  }
+
+  func loadAttachmentEnvironment() async {
+    attachmentEnvironment =
+      await attachmentEnvironmentLoader.loadContainerAttachmentEnvironment()
   }
 
   func createContainer(_ request: ContainerCreationRequest) async -> Bool {

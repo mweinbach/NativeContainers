@@ -210,7 +210,8 @@ final class AppModel {
   func makeContainerProvisioningModel() -> ContainerProvisioningModel {
     ContainerProvisioningModel(
       containerCreator: services.containerCreator,
-      imageService: services.images
+      imageService: services.images,
+      attachmentEnvironmentLoader: services.containerAttachments
     ) { [weak self] in
       await self?.refresh()
     }

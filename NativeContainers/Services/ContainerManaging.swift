@@ -1,3 +1,4 @@
+import ContainerResource
 import Foundation
 
 protocol ImageManaging: Sendable {
@@ -181,6 +182,7 @@ extension InfrastructureManaging {
 protocol ContainerManaging:
   ImageManaging,
   InfrastructureManaging,
+  ContainerAttachmentManaging,
   ContainerInventoryLoading,
   ContainerCreating,
   ContainerInspecting,
@@ -191,6 +193,33 @@ protocol ContainerManaging:
 {}
 
 extension ContainerManaging {
+  func loadContainerAttachmentEnvironment() async -> ContainerAttachmentEnvironment {
+    ContainerAttachmentEnvironment(
+      publishedSocketRootPath: "",
+      hostAccess: .empty
+    )
+  }
+
+  func resolveAttachments(
+    _ selection: ContainerAttachmentSelection,
+    operationID: UUID,
+    containerID: String,
+    dnsDomain: String?
+  ) async throws -> ResolvedContainerAttachments {
+    throw ResourceManagementError.unsupported
+  }
+
+  func validatePublishedSocketsBeforeStart(
+    _ sockets: [PublishSocket],
+    operationID: UUID
+  ) async throws {
+    guard sockets.isEmpty else {
+      throw ResourceManagementError.unsupported
+    }
+  }
+
+  func cleanupPublishedSocketWorkspace(operationID: UUID) async {}
+
   func openTerminal(
     in id: String,
     request: ContainerTerminalRequest

@@ -118,6 +118,11 @@ struct ContainerHostAccessCatalog: Equatable, Sendable {
   static let empty = ContainerHostAccessCatalog(configurations: [], warnings: [])
 }
 
+struct ContainerAttachmentEnvironment: Equatable, Sendable {
+  let publishedSocketRootPath: String
+  let hostAccess: ContainerHostAccessCatalog
+}
+
 struct ContainerAttachmentSelection: Equatable, Sendable {
   static let empty = ContainerAttachmentSelection()
 
@@ -139,6 +144,9 @@ struct ContainerAttachmentSelection: Equatable, Sendable {
     publishedSockets: [ContainerUnixSocketPublication],
     requiredHostAccess: ContainerHostAccessConfiguration?
   ) throws {
+    guard Set(volumeMounts.map(\.volume.name)).count == volumeMounts.count else {
+      throw ContainerAttachmentValidationError.duplicateVolume
+    }
     guard Set(volumeMounts.map(\.containerPath)).count == volumeMounts.count else {
       throw ContainerAttachmentValidationError.duplicateMountDestination
     }
@@ -164,6 +172,7 @@ enum ContainerAttachmentValidationError: LocalizedError, Equatable {
   case invalidContainerPath
   case invalidHostSocketName
   case containerSocketPathTooLong
+  case duplicateVolume
   case duplicateMountDestination
   case duplicateNetwork
   case duplicateHostSocketPath
@@ -184,6 +193,8 @@ enum ContainerAttachmentValidationError: LocalizedError, Equatable {
       "Host socket names must end in .sock and use only letters, numbers, periods, underscores, or hyphens."
     case .containerSocketPathTooLong:
       "The socket path inside the Linux container is too long."
+    case .duplicateVolume:
+      "Each named volume can be attached only once."
     case .duplicateMountDestination:
       "Each volume must use a unique path inside the container."
     case .duplicateNetwork:
