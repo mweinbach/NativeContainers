@@ -1,32 +1,21 @@
 import Foundation
 
-typealias VirtualMachineDiskImageMigrationStoring =
-  VirtualMachineDiskImageReplacementStoring
-
 @MainActor
-protocol VirtualMachineDiskImageMigrating: Sendable {
-  func migrateToASIF(
+protocol VirtualMachineDiskImageRewriting: Sendable {
+  func rewriteASIF(
     machineID: UUID
-  ) async throws -> VirtualMachineDiskImageMigrationResult
+  ) async throws -> VirtualMachineDiskImageRewriteResult
 }
 
 @MainActor
-protocol VirtualMachineDiskImageMigrationRecovering: Sendable {
-  func recoverInterruptedMigrations() async throws
-    -> VirtualMachineDiskImageMigrationRecoveryReport
-}
-
-@MainActor
-protocol VirtualMachineDiskImageMigrationManaging:
-  VirtualMachineDiskImageMigrating,
-  VirtualMachineDiskImageMigrationRecovering
-{}
-
-@MainActor
-final class VirtualMachineDiskImageMigrationService:
-  VirtualMachineDiskImageMigrationManaging
+final class VirtualMachineDiskImageRewriteService:
+  VirtualMachineDiskImageRewriting
 {
   private let coordinator: VirtualMachineDiskImageReplacementCoordinator
+
+  init(coordinator: VirtualMachineDiskImageReplacementCoordinator) {
+    self.coordinator = coordinator
+  }
 
   init(
     store: any VirtualMachineDiskImageReplacementStoring,
@@ -55,39 +44,23 @@ final class VirtualMachineDiskImageMigrationService:
     )
   }
 
-  init(coordinator: VirtualMachineDiskImageReplacementCoordinator) {
-    self.coordinator = coordinator
-  }
-
-  func migrateToASIF(
+  func rewriteASIF(
     machineID: UUID
-  ) async throws -> VirtualMachineDiskImageMigrationResult {
+  ) async throws -> VirtualMachineDiskImageRewriteResult {
     try await coordinator.replace(
       machineID: machineID,
-      operation: .rawToASIF
+      operation: .rewriteASIF
     )
-  }
-
-  func recoverInterruptedMigrations() async throws
-    -> VirtualMachineDiskImageMigrationRecoveryReport
-  {
-    try await coordinator.recoverInterruptedReplacements()
   }
 }
 
 @MainActor
-struct UnavailableVirtualMachineDiskImageMigrationService:
-  VirtualMachineDiskImageMigrationManaging
+struct UnavailableVirtualMachineDiskImageRewriteService:
+  VirtualMachineDiskImageRewriting
 {
-  func migrateToASIF(
+  func rewriteASIF(
     machineID _: UUID
-  ) async throws -> VirtualMachineDiskImageMigrationResult {
+  ) async throws -> VirtualMachineDiskImageRewriteResult {
     throw VirtualMachineDiskImageReplacementError.unavailable
-  }
-
-  func recoverInterruptedMigrations() async throws
-    -> VirtualMachineDiskImageMigrationRecoveryReport
-  {
-    .empty
   }
 }

@@ -66,7 +66,7 @@ actor VirtualMachineLibrary:
   MacVirtualMachineInstallationStoring,
   MacVirtualMachineRuntimeLeasing,
   MacVirtualMachineSharedDirectoryPersisting,
-  VirtualMachineDiskImageMigrationStoring
+  VirtualMachineDiskImageReplacementStoring
 {
   static let bundleExtension = "nativevm"
   static let manifestFilename = "manifest.json"
@@ -292,8 +292,8 @@ actor VirtualMachineLibrary:
     return updated
   }
 
-  func commitDiskImageMigration(
-    _ commit: VirtualMachineDiskImageMigrationCommit,
+  func commitDiskImageReplacement(
+    _ commit: VirtualMachineDiskImageReplacementCommit,
     for lease: MacVirtualMachineRuntimeLease
   ) throws -> VirtualMachineManifest {
     let borrow = try lease.borrow()
@@ -333,10 +333,10 @@ actor VirtualMachineLibrary:
       try artifactInspector.inspect(at: destinationURL)
         .refersToSameStableFile(as: commit.destinationIdentity)
     else {
-      throw VirtualMachineDiskImageMigrationError.staleSource
+      throw VirtualMachineDiskImageReplacementError.staleSource
     }
 
-    manifest.markDiskImageMigrated(
+    manifest.markDiskImageReplaced(
       to: commit.destinationPath,
       format: commit.destinationFormat
     )
@@ -478,7 +478,7 @@ actor VirtualMachineLibrary:
       throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
     }
     defer { runtimeLock.release() }
-    try requireNoDiskImageMigrationJournal(in: bundleURL, machineID: id)
+    try requireNoDiskImageReplacementJournal(in: bundleURL, machineID: id)
     let tombstoneURL = rootURL.appending(
       path:
         "\(Self.deletionTombstonePrefix)\(id.uuidString.lowercased())-\(UUID().uuidString.lowercased())\(Self.deletionTombstoneSuffix)",
@@ -705,18 +705,18 @@ actor VirtualMachineLibrary:
   }
 
   func acquireMacOSRuntime(id: UUID) throws -> MacVirtualMachineRuntimeLease {
-    try acquireMacOSRuntime(id: id, allowsDiskImageMigrationJournal: false)
+    try acquireMacOSRuntime(id: id, allowsDiskImageReplacementJournal: false)
   }
 
-  func acquireDiskImageMigrationRuntime(
+  func acquireDiskImageReplacementRuntime(
     id: UUID
   ) throws -> MacVirtualMachineRuntimeLease {
-    try acquireMacOSRuntime(id: id, allowsDiskImageMigrationJournal: true)
+    try acquireMacOSRuntime(id: id, allowsDiskImageReplacementJournal: true)
   }
 
   private func acquireMacOSRuntime(
     id: UUID,
-    allowsDiskImageMigrationJournal: Bool
+    allowsDiskImageReplacementJournal: Bool
   ) throws -> MacVirtualMachineRuntimeLease {
     try bundleStore.ensureRootExists()
     let accessToken = UUID()
@@ -729,8 +729,8 @@ actor VirtualMachineLibrary:
     }
     let bundleURL = bundleStore.bundleURL(for: manifest.id)
     try bundleStore.requireDirectory(bundleURL)
-    if !allowsDiskImageMigrationJournal {
-      try requireNoDiskImageMigrationJournal(
+    if !allowsDiskImageReplacementJournal {
+      try requireNoDiskImageReplacementJournal(
         in: bundleURL,
         machineID: id
       )
@@ -779,22 +779,22 @@ actor VirtualMachineLibrary:
     }
   }
 
-  private func requireNoDiskImageMigrationJournal(
+  private func requireNoDiskImageReplacementJournal(
     in bundleURL: URL,
     machineID: UUID
   ) throws {
     do {
       guard
-        try FileVirtualMachineDiskImageMigrationJournalStore(
+        try FileVirtualMachineDiskImageReplacementJournalStore(
           fileManager: fileManager
         ).load(in: bundleURL) == nil
       else {
-        throw MacVirtualMachineRuntimeError.diskMigrationPending(machineID)
+        throw MacVirtualMachineRuntimeError.diskReplacementPending(machineID)
       }
     } catch let error as MacVirtualMachineRuntimeError {
       throw error
     } catch {
-      throw MacVirtualMachineRuntimeError.diskMigrationPending(machineID)
+      throw MacVirtualMachineRuntimeError.diskReplacementPending(machineID)
     }
   }
 

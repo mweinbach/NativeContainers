@@ -1,16 +1,16 @@
 import Darwin
 import Foundation
 
-struct VirtualMachineDiskImageMigrationFileOperations:
+struct VirtualMachineDiskImageReplacementFileOperations:
   @unchecked Sendable
 {
   private let artifactInspector: any VirtualMachineStorageArtifactInspecting
-  private let journalStore: any VirtualMachineDiskImageMigrationJournaling
+  private let journalStore: any VirtualMachineDiskImageReplacementJournaling
   private let fileManager: FileManager
 
   init(
     artifactInspector: any VirtualMachineStorageArtifactInspecting,
-    journalStore: any VirtualMachineDiskImageMigrationJournaling,
+    journalStore: any VirtualMachineDiskImageReplacementJournaling,
     fileManager: FileManager
   ) {
     self.artifactInspector = artifactInspector
@@ -20,12 +20,12 @@ struct VirtualMachineDiskImageMigrationFileOperations:
 
   func loadJournal(
     in bundleURL: URL
-  ) throws -> VirtualMachineDiskImageMigrationJournal? {
+  ) throws -> VirtualMachineDiskImageReplacementJournal? {
     try journalStore.load(in: bundleURL)
   }
 
   func saveJournal(
-    _ journal: VirtualMachineDiskImageMigrationJournal,
+    _ journal: VirtualMachineDiskImageReplacementJournal,
     in bundleURL: URL
   ) throws {
     try journalStore.save(journal, in: bundleURL)
@@ -39,7 +39,7 @@ struct VirtualMachineDiskImageMigrationFileOperations:
       identity.ownerUserID == UInt32(geteuid()),
       identity.linkCount == 1
     else {
-      throw VirtualMachineDiskImageMigrationError.unsafeArtifact(
+      throw VirtualMachineDiskImageReplacementError.unsafeArtifact(
         url.lastPathComponent
       )
     }
@@ -51,7 +51,7 @@ struct VirtualMachineDiskImageMigrationFileOperations:
     at url: URL
   ) throws {
     guard try inspectOwnedFile(at: url).refersToSameStableFile(as: expected) else {
-      throw VirtualMachineDiskImageMigrationError.staleSource
+      throw VirtualMachineDiskImageReplacementError.staleSource
     }
   }
 
@@ -60,11 +60,11 @@ struct VirtualMachineDiskImageMigrationFileOperations:
     at url: URL
   ) throws -> VirtualMachineStorageArtifactIdentity {
     guard let previous else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
+      throw VirtualMachineDiskImageReplacementError.invalidJournal
     }
     let current = try inspectOwnedFile(at: url)
     guard current.refersToSameStableFile(as: previous) else {
-      throw VirtualMachineDiskImageMigrationError.staleSource
+      throw VirtualMachineDiskImageReplacementError.staleSource
     }
     return current
   }
@@ -77,7 +77,7 @@ struct VirtualMachineDiskImageMigrationFileOperations:
       !components.contains(".."),
       components.allSatisfy({ $0 != "/" && $0 != "." })
     else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
+      throw VirtualMachineDiskImageReplacementError.invalidJournal
     }
     let candidate = bundleURL.appending(path: path).standardizedFileURL
     let bundleComponents = bundleURL.standardizedFileURL.pathComponents
@@ -85,7 +85,7 @@ struct VirtualMachineDiskImageMigrationFileOperations:
       candidate.pathComponents.prefix(bundleComponents.count)
         .elementsEqual(bundleComponents)
     else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
+      throw VirtualMachineDiskImageReplacementError.invalidJournal
     }
     return candidate
   }
@@ -93,10 +93,10 @@ struct VirtualMachineDiskImageMigrationFileOperations:
   func requireAbsent(_ url: URL) throws {
     var metadata = stat()
     if Darwin.lstat(url.path(percentEncoded: false), &metadata) == 0 {
-      throw VirtualMachineDiskImageMigrationError.destinationExists(url)
+      throw VirtualMachineDiskImageReplacementError.destinationExists(url)
     }
     guard errno == ENOENT else {
-      throw VirtualMachineDiskImageMigrationError.unsafeArtifact(
+      throw VirtualMachineDiskImageReplacementError.unsafeArtifact(
         url.lastPathComponent
       )
     }
@@ -117,7 +117,7 @@ struct VirtualMachineDiskImageMigrationFileOperations:
   }
 
   func rollback(
-    _ journal: VirtualMachineDiskImageMigrationJournal,
+    _ journal: VirtualMachineDiskImageReplacementJournal,
     in bundleURL: URL
   ) throws {
     let sourceURL = try resolve(journal.sourcePath, in: bundleURL)
@@ -131,7 +131,7 @@ struct VirtualMachineDiskImageMigrationFileOperations:
     switch journal.phase {
     case .planned, .terminationQuarantined:
       guard !destinationExists else {
-        throw VirtualMachineDiskImageMigrationError.invalidJournal
+        throw VirtualMachineDiskImageReplacementError.invalidJournal
       }
       if stagingExists {
         try removeOwnedFile(at: stagingURL)
@@ -141,13 +141,13 @@ struct VirtualMachineDiskImageMigrationFileOperations:
       guard !(stagingExists && destinationExists),
         let expected = journal.destinationIdentity
       else {
-        throw VirtualMachineDiskImageMigrationError.invalidJournal
+        throw VirtualMachineDiskImageReplacementError.invalidJournal
       }
       if stagingExists || destinationExists {
         let artifactURL = stagingExists ? stagingURL : destinationURL
         let identity = try inspectOwnedFile(at: artifactURL)
         guard identity.refersToSameStableFile(as: expected) else {
-          throw VirtualMachineDiskImageMigrationError.invalidJournal
+          throw VirtualMachineDiskImageReplacementError.invalidJournal
         }
         try fileManager.removeItem(at: artifactURL)
         try synchronizeDirectory(artifactURL.deletingLastPathComponent())
@@ -156,7 +156,7 @@ struct VirtualMachineDiskImageMigrationFileOperations:
       guard !stagingExists,
         let expected = journal.destinationIdentity
       else {
-        throw VirtualMachineDiskImageMigrationError.invalidJournal
+        throw VirtualMachineDiskImageReplacementError.invalidJournal
       }
       if destinationExists {
         try requireIdentity(expected, at: destinationURL)
@@ -164,20 +164,20 @@ struct VirtualMachineDiskImageMigrationFileOperations:
         try synchronizeDirectory(destinationURL.deletingLastPathComponent())
       }
     case .manifestUpdated:
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
+      throw VirtualMachineDiskImageReplacementError.invalidJournal
     }
 
     try journalStore.remove(journal, from: bundleURL)
   }
 
   func finishCommitted(
-    _ journal: VirtualMachineDiskImageMigrationJournal,
+    _ journal: VirtualMachineDiskImageReplacementJournal,
     in bundleURL: URL
   ) throws {
     guard journal.phase == .promoted || journal.phase == .manifestUpdated,
       let destinationIdentity = journal.destinationIdentity
     else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
+      throw VirtualMachineDiskImageReplacementError.invalidJournal
     }
 
     let destinationURL = try resolve(journal.destinationPath, in: bundleURL)
@@ -185,7 +185,7 @@ struct VirtualMachineDiskImageMigrationFileOperations:
 
     let stagingURL = try resolve(journal.stagingPath, in: bundleURL)
     guard !exists(stagingURL) else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
+      throw VirtualMachineDiskImageReplacementError.invalidJournal
     }
 
     let sourceURL = try resolve(journal.sourcePath, in: bundleURL)
@@ -213,7 +213,7 @@ struct VirtualMachineDiskImageMigrationFileOperations:
       O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
     )
     guard descriptor >= 0 else {
-      throw VirtualMachineDiskImageMigrationError.unsafeArtifact(
+      throw VirtualMachineDiskImageReplacementError.unsafeArtifact(
         url.lastPathComponent
       )
     }
@@ -223,3 +223,6 @@ struct VirtualMachineDiskImageMigrationFileOperations:
     }
   }
 }
+
+typealias VirtualMachineDiskImageMigrationFileOperations =
+  VirtualMachineDiskImageReplacementFileOperations

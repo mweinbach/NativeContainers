@@ -495,7 +495,7 @@ struct VirtualMachineLibraryTests {
     )
     defer { lease.release() }
 
-    let updated = try await fixture.library.commitDiskImageMigration(
+    let updated = try await fixture.library.commitDiskImageReplacement(
       VirtualMachineDiskImageMigrationCommit(
         sourcePath: fixture.manifest.diskImagePath,
         destinationPath: destinationPath,
@@ -545,7 +545,7 @@ struct VirtualMachineLibraryTests {
     )
 
     await #expect(
-      throws: MacVirtualMachineRuntimeError.diskMigrationPending(
+      throws: MacVirtualMachineRuntimeError.diskReplacementPending(
         fixture.manifest.id
       )
     ) {
@@ -554,7 +554,7 @@ struct VirtualMachineLibraryTests {
       )
     }
     await #expect(
-      throws: MacVirtualMachineRuntimeError.diskMigrationPending(
+      throws: MacVirtualMachineRuntimeError.diskReplacementPending(
         fixture.manifest.id
       )
     ) {
@@ -562,7 +562,7 @@ struct VirtualMachineLibraryTests {
     }
 
     let recoveryLease = try await fixture.library
-      .acquireDiskImageMigrationRuntime(id: fixture.manifest.id)
+      .acquireDiskImageReplacementRuntime(id: fixture.manifest.id)
     recoveryLease.release()
   }
 

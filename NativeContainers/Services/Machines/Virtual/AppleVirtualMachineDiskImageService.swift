@@ -70,7 +70,8 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
       return VirtualMachineDiskImageDescriptor(
         format: .asif,
         logicalBytes: logicalBytes,
-        blockSizeBytes: blockSizeBytes
+        blockSizeBytes: blockSizeBytes,
+        layerType: Self.layerType(image.layerType)
       )
     } catch let error as VirtualMachineDiskImageError {
       throw error
@@ -90,6 +91,22 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
       "stack"
     @unknown default:
       "an unknown format"
+    }
+  }
+
+  @available(macOS 27.0, *)
+  private static func layerType(
+    _ layerType: DiskImage.LayerType?
+  ) -> VirtualMachineDiskImageLayerType? {
+    switch layerType {
+    case .cache:
+      .cache
+    case .overlay:
+      .overlay
+    case nil:
+      nil
+    @unknown default:
+      nil
     }
   }
 }

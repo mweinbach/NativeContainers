@@ -68,7 +68,7 @@ struct VirtualMachineModelsTests {
       installState: .stopped,
       resources: resources
     )
-    source.markDiskImageMigrated(to: "Installed/Disk.asif", format: .asif)
+    source.markDiskImageReplaced(to: "Installed/Disk.asif", format: .asif)
 
     let clone = try VirtualMachineManifest(cloning: source, name: "ASIF Clone")
 

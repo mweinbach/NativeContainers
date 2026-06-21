@@ -142,7 +142,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.updatedAt = updatedAt
   }
 
-  mutating func markDiskImageMigrated(
+  mutating func markDiskImageReplaced(
     to path: String,
     format: VirtualMachineDiskImageFormat,
     updatedAt: Date = Date()

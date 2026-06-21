@@ -171,7 +171,7 @@ struct VirtualMachineDiskImageMigrationModelTests {
       installState: .stopped,
       resources: resources
     )
-    manifest.markDiskImageMigrated(
+    manifest.markDiskImageReplaced(
       to: "Installed/Disk.asif",
       format: .asif
     )

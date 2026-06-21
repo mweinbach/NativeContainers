@@ -4,12 +4,12 @@ import Testing
 
 @testable import NativeContainers
 
-struct VirtualMachineDiskImageMigrationJournalTests {
+struct VirtualMachineDiskImageReplacementJournalTests {
   @Test
   func persistsEveryOrderedMigrationPhaseAndRemovesExactJournal() throws {
     let bundle = temporaryBundle()
     defer { try? FileManager.default.removeItem(at: bundle) }
-    let store = FileVirtualMachineDiskImageMigrationJournalStore()
+    let store = FileVirtualMachineDiskImageReplacementJournalStore()
     let operationID = UUID()
     var journal = migrationJournal(operationID: operationID)
 
@@ -38,7 +38,7 @@ struct VirtualMachineDiskImageMigrationJournalTests {
   func rejectsSkippedOrRewrittenJournalPhases() throws {
     let bundle = temporaryBundle()
     defer { try? FileManager.default.removeItem(at: bundle) }
-    let store = FileVirtualMachineDiskImageMigrationJournalStore()
+    let store = FileVirtualMachineDiskImageReplacementJournalStore()
     var journal = migrationJournal(operationID: UUID())
     try store.save(journal, in: bundle)
 
@@ -46,7 +46,7 @@ struct VirtualMachineDiskImageMigrationJournalTests {
     journal.phase = .promoted
 
     #expect(
-      throws: VirtualMachineDiskImageMigrationError.invalidJournal
+      throws: VirtualMachineDiskImageReplacementError.invalidJournal
     ) {
       try store.save(journal, in: bundle)
     }
@@ -60,15 +60,15 @@ struct VirtualMachineDiskImageMigrationJournalTests {
     try Data("{}".utf8).write(to: target)
     try FileManager.default.createSymbolicLink(
       at: bundle.appending(
-        path: FileVirtualMachineDiskImageMigrationJournalStore.filename
+        path: FileVirtualMachineDiskImageReplacementJournalStore.filename
       ),
       withDestinationURL: target
     )
 
     #expect(
-      throws: VirtualMachineDiskImageMigrationError.invalidJournal
+      throws: VirtualMachineDiskImageReplacementError.invalidJournal
     ) {
-      _ = try FileVirtualMachineDiskImageMigrationJournalStore().load(
+      _ = try FileVirtualMachineDiskImageReplacementJournalStore().load(
         in: bundle
       )
     }
@@ -82,13 +82,87 @@ struct VirtualMachineDiskImageMigrationJournalTests {
     journal.hostBootIdentifier = nil
 
     #expect(
-      throws: VirtualMachineDiskImageMigrationError.invalidJournal
+      throws: VirtualMachineDiskImageReplacementError.invalidJournal
     ) {
-      try FileVirtualMachineDiskImageMigrationJournalStore().save(
+      try FileVirtualMachineDiskImageReplacementJournalStore().save(
         journal,
         in: bundle
       )
     }
+  }
+
+  @Test
+  func decodesVersionOneRAWMigrationJournalsWithoutOperationKeys() throws {
+    let bundle = temporaryBundle()
+    defer { try? FileManager.default.removeItem(at: bundle) }
+    let operationID = UUID()
+    let journal = VirtualMachineDiskImageReplacementJournal(
+      version: VirtualMachineDiskImageReplacementJournal.legacyVersion,
+      operationID: operationID,
+      machineID: UUID(),
+      sourcePath: "Installed/Disk.img",
+      destinationPath: "Installed/Disk.asif",
+      stagingPath:
+        "Installed/.DiskImageMigration-\(operationID.uuidString.lowercased()).asif.partial",
+      sourceIdentity: identity(inode: 1),
+      sourceLogicalBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      destinationIdentity: nil,
+      phase: .planned,
+      hostBootIdentifier: UUID().uuidString.lowercased()
+    )
+    let encoded = try JSONEncoder().encode(journal)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    object.removeValue(forKey: "operation")
+    object.removeValue(forKey: "sourceFormat")
+    object.removeValue(forKey: "destinationFormat")
+    try JSONSerialization.data(withJSONObject: object).write(
+      to: bundle.appending(
+        path: FileVirtualMachineDiskImageReplacementJournalStore.filename
+      )
+    )
+
+    let decoded = try #require(
+      try FileVirtualMachineDiskImageReplacementJournalStore().load(
+        in: bundle
+      )
+    )
+
+    #expect(decoded.version == 1)
+    #expect(decoded.operation == .rawToASIF)
+    #expect(decoded.sourceFormat == .raw)
+    #expect(decoded.destinationFormat == .asif)
+  }
+
+  @Test
+  func persistsASIFRewriteOperationAndFormats() throws {
+    let bundle = temporaryBundle()
+    defer { try? FileManager.default.removeItem(at: bundle) }
+    let operationID = UUID()
+    let journal = VirtualMachineDiskImageReplacementJournal(
+      operation: .rewriteASIF,
+      operationID: operationID,
+      machineID: UUID(),
+      sourcePath: "Installed/Disk.asif",
+      destinationPath:
+        "Installed/Disk-\(operationID.uuidString.lowercased()).asif",
+      stagingPath:
+        "Installed/.DiskImageMigration-\(operationID.uuidString.lowercased()).asif.partial",
+      sourceIdentity: identity(inode: 1),
+      sourceLogicalBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      destinationIdentity: nil,
+      phase: .planned,
+      hostBootIdentifier: UUID().uuidString.lowercased()
+    )
+    let store = FileVirtualMachineDiskImageReplacementJournalStore()
+
+    try store.save(journal, in: bundle)
+
+    let decoded = try #require(try store.load(in: bundle))
+    #expect(decoded.operation == .rewriteASIF)
+    #expect(decoded.sourceFormat == .asif)
+    #expect(decoded.destinationFormat == .asif)
   }
 
   private func temporaryBundle() -> URL {
@@ -105,9 +179,9 @@ struct VirtualMachineDiskImageMigrationJournalTests {
 
   private func migrationJournal(
     operationID: UUID
-  ) -> VirtualMachineDiskImageMigrationJournal {
-    VirtualMachineDiskImageMigrationJournal(
-      version: VirtualMachineDiskImageMigrationJournal.currentVersion,
+  ) -> VirtualMachineDiskImageReplacementJournal {
+    VirtualMachineDiskImageReplacementJournal(
+      version: VirtualMachineDiskImageReplacementJournal.currentVersion,
       operationID: operationID,
       machineID: UUID(),
       sourcePath: "Installed/Disk.img",

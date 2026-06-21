@@ -45,14 +45,14 @@ struct DiskutilVirtualMachineDiskImageConverter:
       timeout: timeout
     )
     guard !result.outputWasTruncated else {
-      throw VirtualMachineDiskImageMigrationError.conversionOutputTruncated
+      throw VirtualMachineDiskImageReplacementError.conversionOutputTruncated
     }
     guard result.exitCode == 0 else {
       let diagnostic = [result.standardError, result.standardOutput]
         .filter { !$0.isEmpty }
         .joined(separator: "\n")
         .trimmingCharacters(in: .whitespacesAndNewlines)
-      throw VirtualMachineDiskImageMigrationError.conversionFailed(
+      throw VirtualMachineDiskImageReplacementError.conversionFailed(
         exitCode: result.exitCode,
         diagnostic: String(diagnostic.suffix(2_000))
       )

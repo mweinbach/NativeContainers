@@ -380,7 +380,7 @@ struct VirtualMachineDiskImageMigrationServiceTests {
     )
     journal.phase = .promoted
     try journalStore.save(journal, in: fixture.bundleURL)
-    fixture.manifest.markDiskImageMigrated(
+    fixture.manifest.markDiskImageReplaced(
       to: "Installed/Disk.asif",
       format: .asif
     )
@@ -575,7 +575,7 @@ private final class MigrationStoreDouble:
     )
   }
 
-  func acquireDiskImageMigrationRuntime(
+  func acquireDiskImageReplacementRuntime(
     id: UUID
   ) async throws -> MacVirtualMachineRuntimeLease {
     acquireCount += 1
@@ -607,7 +607,7 @@ private final class MigrationStoreDouble:
     )
   }
 
-  func commitDiskImageMigration(
+  func commitDiskImageReplacement(
     _ commit: VirtualMachineDiskImageMigrationCommit,
     for lease: MacVirtualMachineRuntimeLease
   ) async throws -> VirtualMachineManifest {
@@ -618,7 +618,7 @@ private final class MigrationStoreDouble:
       throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
     }
     commits.append(commit)
-    currentManifest.markDiskImageMigrated(
+    currentManifest.markDiskImageReplaced(
       to: commit.destinationPath,
       format: commit.destinationFormat
     )
@@ -732,7 +732,7 @@ private final class RecoveryMigrationStoreDouble:
     )
   }
 
-  func acquireDiskImageMigrationRuntime(
+  func acquireDiskImageReplacementRuntime(
     id: UUID
   ) async throws -> MacVirtualMachineRuntimeLease {
     guard let fixture = fixtures.first(where: { $0.manifest.id == id }) else {
@@ -762,7 +762,7 @@ private final class RecoveryMigrationStoreDouble:
     )
   }
 
-  func commitDiskImageMigration(
+  func commitDiskImageReplacement(
     _: VirtualMachineDiskImageMigrationCommit,
     for _: MacVirtualMachineRuntimeLease
   ) async throws -> VirtualMachineManifest {
