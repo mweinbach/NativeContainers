@@ -8,8 +8,10 @@ import Testing
   @MainActor
   struct AppleMacVirtualMachineAudioDeviceFactoryTests {
     @Test
-    func createsOneVirtioHostOutputStreamWithoutMicrophoneInput() throws {
-      let device = AppleMacVirtualMachineAudioDeviceFactory().makeOutputDevice()
+    func disconnectedMicrophoneCreatesOnlyTheHostOutputStream() throws {
+      let device = AppleMacVirtualMachineAudioDeviceFactory().makeDevice(
+        configuration: .disconnected
+      )
 
       #expect(device.streams.count == 1)
       let output = try #require(
@@ -21,6 +23,22 @@ import Testing
           $0 is VZVirtioSoundDeviceInputStreamConfiguration
         }
       )
+    }
+
+    @Test
+    func enabledMicrophoneCreatesAHostInputStream() throws {
+      let device = AppleMacVirtualMachineAudioDeviceFactory().makeDevice(
+        configuration: MacVirtualMachineAudioConfiguration(
+          revision: 1,
+          isMicrophoneEnabled: true
+        )
+      )
+
+      #expect(device.streams.count == 2)
+      let input = try #require(
+        device.streams.last as? VZVirtioSoundDeviceInputStreamConfiguration
+      )
+      #expect(input.source is VZHostAudioInputStreamSource)
     }
   }
 #endif

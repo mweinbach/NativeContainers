@@ -42,6 +42,7 @@ targets:
     entitlements:
       path: NativeContainers/NativeContainers.entitlements
       properties:
+        com.apple.security.device.audio-input: true
         com.apple.security.virtualization: true
     sources:
       - path: NativeContainers
@@ -83,6 +84,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: NativeContainers
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: >-
+          NativeContainers uses the Mac microphone only when you explicitly connect it to a macOS virtual machine.
         INFOPLIST_KEY_NSPrincipalClass: NSApplication
         ENABLE_APP_SANDBOX: NO
         DEAD_CODE_STRIPPING: YES

@@ -69,11 +69,17 @@ struct VirtualMachineModelsTests {
       resources: resources
     )
     source.markDiskImageReplaced(to: "Installed/Disk.asif", format: .asif)
+    source.audioConfiguration = MacVirtualMachineAudioConfiguration(
+      revision: 2,
+      isMicrophoneEnabled: true
+    )
 
     let clone = try VirtualMachineManifest(cloning: source, name: "ASIF Clone")
 
     #expect(clone.diskImagePath == "Installed/Disk.asif")
     #expect(clone.diskImageFormat == .asif)
     #expect(clone.effectiveDiskImageFormat == .asif)
+    #expect(clone.audioConfiguration == nil)
+    #expect(clone.effectiveAudioConfiguration == .disconnected)
   }
 }

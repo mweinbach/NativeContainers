@@ -33,6 +33,7 @@ struct MacVirtualMachineConfigurationDescriptor: Codable, Equatable, Sendable {
   let entropyDevices: [String]
   let memoryBalloonDevices: [String]
   let audioDevices: [String]?
+  let audioConfigurationRevision: UInt64?
   let directorySharingDevice: String?
   let directorySharingRevision: UInt64?
   let sharedDirectories: [MacVirtualMachineSharedDirectoryDescriptor]?
@@ -58,6 +59,11 @@ struct MacVirtualMachineConfigurationDescriptorService:
     let hasDirectorySharingHistory =
       machine.sharedDirectories.revision > 0
       || !machine.sharedDirectories.directories.isEmpty
+    let audioConfiguration = machine.manifest.effectiveAudioConfiguration
+    let audioDevices =
+      ["VirtioSound/HostOutput"]
+      + (audioConfiguration.isMicrophoneEnabled
+        ? ["VirtioSound/HostInput"] : [])
     return MacVirtualMachineConfigurationDescriptor(
       topologyVersion: MacVirtualMachineConfigurationDescriptor.currentTopologyVersion,
       cpuCount: machine.manifest.resources.cpuCount,
@@ -77,7 +83,9 @@ struct MacVirtualMachineConfigurationDescriptorService:
       pointingDevices: ["MacTrackpad", "USBScreenCoordinate"],
       entropyDevices: ["Virtio"],
       memoryBalloonDevices: ["VirtioTraditional"],
-      audioDevices: ["VirtioSound/HostOutput"],
+      audioDevices: audioDevices,
+      audioConfigurationRevision: audioConfiguration.revision > 0
+        ? audioConfiguration.revision : nil,
       directorySharingDevice: hasDirectorySharingHistory
         && !machine.sharedDirectories.directories.isEmpty
         ? "VirtioFS/macOSGuestAutomount" : nil,

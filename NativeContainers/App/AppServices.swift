@@ -54,6 +54,7 @@ struct AppServices: Sendable {
   let virtualMachineTransfer: any VirtualMachinePackageTransferring
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
+  let virtualMachineAudio: any MacVirtualMachineAudioManaging
   let virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging
   let virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices
   let virtualMachineAvailability: any MacVirtualMachineAvailabilityChecking
@@ -110,6 +111,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineAudio: any MacVirtualMachineAudioManaging =
+      UnavailableMacVirtualMachineAudioService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
@@ -159,6 +162,7 @@ struct AppServices: Sendable {
     self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
+    self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages
     self.virtualMachineAvailability = virtualMachineAvailability
@@ -205,6 +209,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineAudio: any MacVirtualMachineAudioManaging =
+      UnavailableMacVirtualMachineAudioService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
@@ -254,6 +260,7 @@ struct AppServices: Sendable {
     self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
+    self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages
     self.virtualMachineAvailability = virtualMachineAvailability
@@ -461,6 +468,11 @@ enum AppCompositionRoot {
       engine: AppleMacVirtualMachineRuntimeEngine(),
       savedStateService: virtualMachineSavedState
     )
+    let virtualMachineAudio = MacVirtualMachineAudioService(
+      leasingStore: virtualMachineLibrary,
+      persistence: virtualMachineLibrary,
+      savedStateService: virtualMachineSavedState
+    )
     let virtualMachineSharedDirectories = MacVirtualMachineSharedDirectoryService(
       leasingStore: virtualMachineLibrary,
       persistence: virtualMachineLibrary,
@@ -551,6 +563,7 @@ enum AppCompositionRoot {
       virtualMachineTransfer: virtualMachineTransfer,
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,
+      virtualMachineAudio: virtualMachineAudio,
       virtualMachineSharedDirectories: virtualMachineSharedDirectories,
       virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(
         migration: virtualMachineDiskImageMigration,

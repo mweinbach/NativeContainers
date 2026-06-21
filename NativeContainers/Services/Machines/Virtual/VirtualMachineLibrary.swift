@@ -66,6 +66,7 @@ actor VirtualMachineLibrary:
   MacVirtualMachineInstallationStoring,
   MacVirtualMachineRuntimeLeasing,
   MacVirtualMachineSharedDirectoryPersisting,
+  MacVirtualMachineAudioConfigurationPersisting,
   VirtualMachineDiskImageReplacementStoring
 {
   static let bundleExtension = "nativevm"
@@ -218,6 +219,38 @@ actor VirtualMachineLibrary:
         )
       }
     )
+  }
+
+  func macOSAudioConfiguration(
+    id: UUID
+  ) throws -> MacVirtualMachineAudioConfiguration {
+    try installationManifest(id: id).effectiveAudioConfiguration
+  }
+
+  func setMacOSMicrophoneEnabled(
+    _ isEnabled: Bool,
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> MacVirtualMachineAudioConfiguration {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try installationManifest(id: lease.target.machineID)
+    let current = manifest.effectiveAudioConfiguration
+
+    guard current == lease.machine.manifest.effectiveAudioConfiguration else {
+      throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    let updated = try current.settingMicrophoneEnabled(isEnabled)
+    guard updated != current else { return current }
+
+    manifest.audioConfiguration = updated
+    manifest.updatedAt = Date()
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
+    )
+    return updated
   }
 
   func macOSSharedDirectoryConfiguration(

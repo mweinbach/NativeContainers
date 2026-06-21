@@ -153,8 +153,11 @@ must leave a usable, test-backed product slice.
       gated by an installed guest.
 - [x] Host audio output through a focused Virtio sound-device factory and the
       Mac's current output device, with saved-state topology invalidation.
-- [ ] Clipboard, microphone input, advanced networking, and USB configuration
-      where public APIs support the guest.
+- [x] Explicit per-VM microphone input through the Mac's current input device,
+      with user-initiated permission, stopped-only edits, and saved-state
+      fingerprinting; clones and portable packages start disconnected.
+- [ ] Clipboard, advanced networking, and USB configuration where public APIs
+      support the guest.
 - [x] Stopped-only same-host clone service with APFS copy-on-write when
       available, a fresh `VZMacMachineIdentifier`, runtime/library leases,
       sparse fallback, write-level cancellation, cold-boot saved-state

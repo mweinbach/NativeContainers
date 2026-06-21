@@ -59,6 +59,17 @@ struct AppModelTests {
   }
 
   @Test
+  func macVirtualMachineAudioUsesAStableAppScopedModel() throws {
+    let model = AppModel.previewVirtualMachines
+    let machine = try #require(model.virtualMachines.first)
+
+    #expect(
+      model.makeMacVirtualMachineAudioModel(for: machine)
+        === model.makeMacVirtualMachineAudioModel(for: machine)
+    )
+  }
+
+  @Test
   func macVirtualMachineSharingUsesAStableAppScopedModel() throws {
     let model = AppModel.previewVirtualMachines
     let machine = try #require(model.virtualMachines.first)

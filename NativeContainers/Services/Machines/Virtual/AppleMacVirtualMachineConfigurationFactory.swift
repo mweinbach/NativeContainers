@@ -113,7 +113,11 @@ import Foundation
       configuration.storageDevices = [disk]
       configuration.graphicsDevices = [graphics]
       configuration.networkDevices = [network]
-      configuration.audioDevices = [audioDeviceFactory.makeOutputDevice()]
+      configuration.audioDevices = [
+        audioDeviceFactory.makeDevice(
+          configuration: machine.manifest.effectiveAudioConfiguration
+        )
+      ]
       configuration.keyboards = [
         VZMacKeyboardConfiguration(),
         VZUSBKeyboardConfiguration(),

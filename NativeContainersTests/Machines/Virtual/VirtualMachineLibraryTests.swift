@@ -423,12 +423,49 @@ struct VirtualMachineLibraryTests {
     #expect(loaded.restoreImageURL == nil)
     #expect(loaded.diskImageFormat == nil)
     #expect(loaded.effectiveDiskImageFormat == .raw)
+    #expect(loaded.audioConfiguration == nil)
+    #expect(loaded.effectiveAudioConfiguration == .disconnected)
 
     let prepared = try await library.prepareMacVM(
       id: identifier,
       restoreImageURL: root.appending(path: "LegacyRestore.ipsw")
     )
     #expect(prepared.installState == .readyToInstall)
+  }
+
+  @Test
+  func audioConfigurationPersistsOnlyUnderTheRuntimeLease() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let lease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+
+    let updated = try await fixture.library.setMacOSMicrophoneEnabled(
+      true,
+      for: lease
+    )
+
+    #expect(updated.revision == 1)
+    #expect(updated.isMicrophoneEnabled)
+    lease.release()
+
+    await #expect(throws: MacVirtualMachineRuntimeError.staleTarget(lease.target)) {
+      _ = try await fixture.library.setMacOSMicrophoneEnabled(
+        false,
+        for: lease
+      )
+    }
+
+    let manifests = try await fixture.library.list()
+    let reloaded = try #require(manifests.first)
+    #expect(reloaded.effectiveAudioConfiguration == updated)
+    let replacementLease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+    #expect(replacementLease.machine.manifest.effectiveAudioConfiguration == updated)
+    replacementLease.release()
   }
 
   @Test
@@ -693,7 +730,9 @@ private actor BlockingMacPlatformArtifactPreparer: MacPlatformArtifactPreparing 
     didStart = true
     let waiters = startWaiters
     startWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters {
+      waiter.resume()
+    }
     await withCheckedContinuation { continuation in
       resumeContinuation = continuation
     }

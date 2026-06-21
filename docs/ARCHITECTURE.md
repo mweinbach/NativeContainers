@@ -678,11 +678,16 @@ than sharing presentation state across an implied multi-window group.
   resuming a live paused session explicitly discard an older checkpoint before
   writable storage can advance.
 - macOS guest audio is produced by a focused Apple device factory, not by the
-  SwiftUI configuration view. It creates exactly one Virtio output stream backed
-  by `VZHostAudioOutputStreamSink`; no input stream or microphone permission is
-  configured. The audio device is part of configuration topology version 3, so
-  checkpoints made against the earlier no-audio topology fail fingerprint
-  validation instead of restoring against changed virtual hardware.
+  SwiftUI configuration view. Host output is always present through
+  `VZHostAudioOutputStreamSink`. A manifest-backed audio configuration service
+  owns the opt-in microphone flag, acquires the existing runtime lease, rejects
+  saved-state conflicts, and requests recording permission before persistence.
+  Only then does the factory add `VZHostAudioInputStreamSource`. Revision zero
+  preserves the original output-only topology-v3 fingerprint; later revisions
+  remain in the fingerprint so disconnecting cannot resurrect an older
+  checkpoint. Clone and portable-manifest constructors erase the host-local
+  opt-in, so copied or imported VMs require a fresh Connect action. The app model
+  and view receive only snapshots and actions.
 - Force Stop remains available during start, save, and restore. A generation-pinned
   monitor issues destructive stop as soon as Virtualization.framework reports that
   stop is available, even if the original callback is still pending. The UI reports
@@ -701,8 +706,9 @@ than sharing presentation state across an implied multi-window group.
   across the copy. A pluggable bundle copier rejects symbolic links, asks
   Darwin `copyfile` for recursive clone-on-write with sparse-copy fallback,
   cross-mount refusal, no-follow semantics, and a cancellation callback on each
-  fallback write. It then strips runtime locks, owner records, installation partials, and
-  every saved-state transaction, then atomically replaces the staged
+  fallback write. It then strips runtime locks, owner records, installation
+  partials, every saved-state transaction, and the source microphone opt-in,
+  then atomically replaces the staged
   `VZMacMachineIdentifier` through a focused generator. Commit independently
   validates required artifacts, shared-directory state, transient absence, and
   a valid identifier distinct from the source before one final rename publishes
@@ -715,7 +721,7 @@ than sharing presentation state across an implied multi-window group.
   the sanitizer removes runtime/install/save transactions; the identity policy
   either preserves a round-trip-valid `VZMacMachineIdentifier` or replaces it
   through the generator; and a portability policy removes the cached restore
-  URL plus host-local shared-folder bookmark capabilities.
+  URL, host-local shared-folder bookmark capabilities, and microphone opt-in.
 - Portable export briefly takes the library mutation lock only to resolve and
   pin a stopped source, then retains the per-VM runtime lease while a
   security-scoped destination-parent lease spans the cancellable copy. It stages

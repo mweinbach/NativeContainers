@@ -39,7 +39,8 @@ struct VirtualMachineCloneServiceTests {
     let source = try await makeStoppedMachine(
       library: library,
       root: root,
-      name: "Source Mac"
+      name: "Source Mac",
+      microphoneEnabled: true
     )
     let sourceBundle = bundleURL(root: root, id: source.id)
     let sourceDisk = sourceBundle.appending(path: source.diskImagePath)
@@ -98,6 +99,9 @@ struct VirtualMachineCloneServiceTests {
     #expect(clone.machineIdentifierPath == source.machineIdentifierPath)
     #expect(clone.installationOperationID == nil)
     #expect(clone.installationFailure == nil)
+    #expect(source.effectiveAudioConfiguration.isMicrophoneEnabled)
+    #expect(clone.audioConfiguration == nil)
+    #expect(clone.effectiveAudioConfiguration == .disconnected)
     #expect(
       try Data(contentsOf: cloneBundle.appending(path: "Notes.txt")) == Data("keep-me".utf8)
     )
@@ -335,7 +339,8 @@ struct VirtualMachineCloneServiceTests {
   private func makeStoppedMachine(
     library: VirtualMachineLibrary,
     root: URL,
-    name: String
+    name: String,
+    microphoneEnabled: Bool = false
   ) async throws -> VirtualMachineManifest {
     let draft = try await library.createDraft(
       name: name,
@@ -362,6 +367,12 @@ struct VirtualMachineCloneServiceTests {
     stopped.auxiliaryStoragePath = MacPlatformArtifactURLs.auxiliaryStorageManifestPath
     stopped.hardwareModelPath = MacPlatformArtifactURLs.hardwareModelManifestPath
     stopped.machineIdentifierPath = MacPlatformArtifactURLs.machineIdentifierManifestPath
+    if microphoneEnabled {
+      stopped.audioConfiguration = MacVirtualMachineAudioConfiguration(
+        revision: 1,
+        isMicrophoneEnabled: true
+      )
+    }
     try write(stopped, to: bundle)
     return stopped
   }

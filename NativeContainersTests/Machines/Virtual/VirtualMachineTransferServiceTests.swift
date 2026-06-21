@@ -38,6 +38,9 @@ struct VirtualMachineTransferServiceTests {
     #expect(exported.restoreImageURL == nil)
     #expect(exported.installationOperationID == nil)
     #expect(exported.installationFailure == nil)
+    #expect(source.effectiveAudioConfiguration.isMicrophoneEnabled)
+    #expect(exported.audioConfiguration == nil)
+    #expect(exported.effectiveAudioConfiguration == .disconnected)
     #expect(try fixture.machineIdentifier(in: destination, manifest: exported) == sourceIdentifier)
     #expect(
       !FileManager.default.fileExists(
@@ -228,6 +231,8 @@ struct VirtualMachineTransferServiceTests {
 
     #expect(imported == packageManifest)
     #expect(imported.id == source.id)
+    #expect(imported.audioConfiguration == nil)
+    #expect(imported.effectiveAudioConfiguration == .disconnected)
     let importedBundle = fixture.bundleURL(root: fixture.importLibraryRoot, id: imported.id)
     #expect(
       try fixture.machineIdentifier(in: importedBundle, manifest: imported)
@@ -576,6 +581,12 @@ private struct VirtualMachineTransferFixture {
     stopped.auxiliaryStoragePath = MacPlatformArtifactURLs.auxiliaryStorageManifestPath
     stopped.hardwareModelPath = MacPlatformArtifactURLs.hardwareModelManifestPath
     stopped.machineIdentifierPath = MacPlatformArtifactURLs.machineIdentifierManifestPath
+    if includeHostLocalState {
+      stopped.audioConfiguration = MacVirtualMachineAudioConfiguration(
+        revision: 1,
+        isMicrophoneEnabled: true
+      )
+    }
     try write(stopped, to: bundle)
 
     if includeHostLocalState {

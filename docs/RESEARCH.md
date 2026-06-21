@@ -451,8 +451,14 @@ The installed Apple documentation confirms:
   `VZVirtioSoundDeviceConfiguration`. An output stream using
   `VZHostAudioOutputStreamSink` follows the host's current default output
   device. Microphone input is a separate `VZHostAudioInputStreamSource` path and
-  requires `NSMicrophoneUsageDescription`; NativeContainers currently configures
-  output only and therefore does not request recording access.
+  follows the current default input device. Apple's AVFoundation documentation
+  requires both `NSMicrophoneUsageDescription` and the macOS
+  `com.apple.security.device.audio-input` entitlement before requesting access.
+  NativeContainers requests through `AVCaptureDevice.requestAccess(for: .audio)`
+  only after the user chooses Connect, then persists the per-VM setting and
+  builds the input stream. Clipboard sharing remains a SPICE-agent facility
+  documented for Linux guests; the installed docs do not establish a native
+  macOS-guest clipboard channel.
 - `VZVirtualMachineView` is the native interactive display. It supports
   automatic display reconfiguration and optional capture of system keys. SDK
   27's `VZVirtualMachineViewAdaptor` retains its VM, so a console must detach the

@@ -56,6 +56,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var restoreImageURL: URL?
   var installationOperationID: UUID? = nil
   var installationFailure: VirtualMachineInstallationFailure? = nil
+  var audioConfiguration: MacVirtualMachineAudioConfiguration? = nil
 
   init(
     id: UUID = UUID(),
@@ -115,6 +116,11 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     restoreImageURL = source.restoreImageURL
     installationOperationID = nil
     installationFailure = nil
+    audioConfiguration = nil
+  }
+
+  var effectiveAudioConfiguration: MacVirtualMachineAudioConfiguration {
+    audioConfiguration ?? .disconnected
   }
 
   mutating func markInstallationStarted(

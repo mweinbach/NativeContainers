@@ -1282,7 +1282,7 @@ a later restore falls back visibly to the preferred shell.
 
 ## ADR-046: Route macOS guest audio through an output-only Virtio device
 
-**Status:** Accepted — 2026-06-21
+**Status:** Accepted for output; microphone policy superseded by ADR-047 — 2026-06-21
 
 A focused Apple audio-device factory owns the Virtualization.framework types;
 the SwiftUI configuration surface reports the resulting capability but does not
@@ -1303,3 +1303,34 @@ validation instead of being restored against a different hardware layout.
 Virtualization.framework's configuration and save/restore validation remain the
 runtime authority. Deterministic construction and fingerprint tests cover this
 slice; audible playback still requires an installed local macOS guest.
+
+## ADR-047: Make microphone forwarding explicit, permission-first, and per-VM
+
+**Status:** Accepted — 2026-06-21
+
+Microphone forwarding is disabled by default. A user must choose Connect for a
+specific powered-off macOS VM. The audio orchestration service checks or requests
+AVFoundation recording authorization before it acquires runtime ownership, so a
+denied prompt cannot mutate the manifest, change virtual hardware, or block
+another process. The app target carries Apple's required audio-input entitlement
+and usage description, but it never prompts merely because a configuration view
+appears or a VM with output audio starts.
+
+After authorization, the service acquires the existing per-bundle runtime lease,
+requires no saved checkpoint, and commits a revisioned audio configuration in the
+VM manifest. The Virtualization factory is the only layer that translates
+that setting into `VZVirtioSoundDeviceInputStreamConfiguration` and
+`VZHostAudioInputStreamSource`; SwiftUI receives a snapshot and invokes an action.
+Disconnecting does not revoke system permission, but it removes the input stream
+on the next cold start.
+
+The connection is a host-local privacy choice rather than transferable machine
+state. Same-host clones and portable export/import representations erase the
+audio opt-in, so every new copy or restored package starts with its microphone
+disconnected while the source VM remains unchanged.
+
+Revision zero deliberately emits the same descriptor as the preceding
+output-only topology-v3 implementation. Once the setting changes, its monotonic
+revision is included in the saved-state fingerprint. An enable-then-disable cycle
+therefore cannot make an older checkpoint appear compatible merely because the
+visible device list returned to output-only.

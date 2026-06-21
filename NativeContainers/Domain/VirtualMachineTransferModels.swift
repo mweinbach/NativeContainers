@@ -7,6 +7,7 @@ extension VirtualMachineManifest {
     manifest.restoreImageURL = nil
     manifest.installationOperationID = nil
     manifest.installationFailure = nil
+    manifest.audioConfiguration = nil
     return manifest
   }
 

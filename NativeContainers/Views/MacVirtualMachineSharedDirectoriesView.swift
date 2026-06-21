@@ -18,7 +18,7 @@ struct MacVirtualMachineSharedDirectoriesView: View {
       directories: sharedDirectories.directories,
       isLoading: sharedDirectories.isLoading,
       isWorking: sharedDirectories.isWorking,
-      editBlockReason: editBlockReason,
+      editBlock: editBlock,
       chooseDirectory: { isChoosingDirectory = true },
       remove: { directoryToRemove = $0 },
       discardSavedState: discardSavedState
@@ -78,34 +78,12 @@ struct MacVirtualMachineSharedDirectoriesView: View {
     }
   }
 
-  private var editBlockReason: LocalizedStringResource? {
-    guard !diskMaintenanceIsBusy else {
-      return "Wait for virtual disk maintenance to finish."
-    }
-    guard machine.installState == .stopped else {
-      return "Finish preparing and installing this VM before adding shared folders."
-    }
-    guard runtime.snapshot.target == nil else {
-      return "Shut down this VM before changing shared folders."
-    }
-    switch runtime.snapshot.state {
-    case .stopped:
-      break
-    case .ownedElsewhere:
-      return "Another NativeContainers process owns this VM."
-    case .inspectingSavedState:
-      return "Checking the VM’s saved state…"
-    default:
-      return "Wait for this VM to finish changing state."
-    }
-    switch runtime.snapshot.savedStateStatus {
-    case .none:
-      return nil
-    case .unknown:
-      return "Checking the VM’s saved state…"
-    case .available, .incompatible:
-      return "Discard the saved state before changing shared folders."
-    }
+  private var editBlock: MacVirtualMachineConfigurationEditBlock? {
+    MacVirtualMachineConfigurationEditPolicy().block(
+      installState: machine.installState,
+      runtime: runtime.snapshot,
+      diskMaintenanceIsBusy: diskMaintenanceIsBusy
+    )
   }
 
   private func clearPendingDirectory() {
@@ -117,7 +95,7 @@ private struct MacVirtualMachineSharedDirectoriesSection: View {
   let directories: [MacVirtualMachineSharedDirectorySummary]
   let isLoading: Bool
   let isWorking: Bool
-  let editBlockReason: LocalizedStringResource?
+  let editBlock: MacVirtualMachineConfigurationEditBlock?
   let chooseDirectory: () -> Void
   let remove: (MacVirtualMachineSharedDirectorySummary) -> Void
   let discardSavedState: (() -> Void)?
@@ -125,18 +103,12 @@ private struct MacVirtualMachineSharedDirectoriesSection: View {
   var body: some View {
     GroupBox {
       VStack(alignment: .leading, spacing: 14) {
-        if let editBlockReason {
-          HStack(spacing: 10) {
-            Label(editBlockReason, systemImage: "lock.fill")
-              .font(.callout)
-              .foregroundStyle(.secondary)
-            Spacer()
-            if let discardSavedState {
-              Button("Discard Saved State…", action: discardSavedState)
-            }
-          }
-          .padding(10)
-          .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+        if let editBlock {
+          MacVirtualMachineConfigurationEditLockBanner(
+            message: editBlock.message,
+            discardSavedState: editBlock == .savedStatePresent
+              ? discardSavedState : nil
+          )
         }
 
         if isLoading {
@@ -161,7 +133,7 @@ private struct MacVirtualMachineSharedDirectoriesSection: View {
             ForEach(Array(directories.enumerated()), id: \.element.id) { index, directory in
               MacVirtualMachineSharedDirectoryRow(
                 directory: directory,
-                canRemove: editBlockReason == nil && !isWorking,
+                canRemove: editBlock == nil && !isWorking,
                 remove: { remove(directory) }
               )
               if index < directories.count - 1 {
@@ -181,7 +153,7 @@ private struct MacVirtualMachineSharedDirectoriesSection: View {
               .controlSize(.small)
           }
           Button("Add Shared Folder…", systemImage: "plus", action: chooseDirectory)
-            .disabled(editBlockReason != nil || isLoading || isWorking)
+            .disabled(editBlock != nil || isLoading || isWorking)
         }
       }
       .padding(4)

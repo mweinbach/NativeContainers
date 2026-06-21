@@ -7,8 +7,8 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 801 test declarations and 806 expanded outcomes.
-  The current full app-hosted Xcode run passed all 785 deterministic outcomes,
+- The suite currently contains 814 test declarations and 819 expanded outcomes.
+  The current full app-hosted Xcode run passed all 798 deterministic outcomes,
   with 21 destructive or external-service integrations skipped behind explicit
   live gates and no failures. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
@@ -26,8 +26,9 @@ Updated: 2026-06-21.
   scenes are suppressed in hosted tests and Preview agents so those auxiliary
   processes terminate deterministically without changing production behavior.
 - The app target is automatically Apple Development signed with
-  `com.apple.security.virtualization`, while `ENABLE_APP_SANDBOX` remains `NO`
-  as required by the checked-in project specification and the app's private
+  `com.apple.security.virtualization` and the microphone-specific
+  `com.apple.security.device.audio-input`; `ENABLE_APP_SANDBOX` remains `NO` as
+  required by the checked-in project specification and the app's private
   `/private/tmp` socket workspace. An app-hosted availability probe reports the
   Virtualization capability as available.
 - The SwiftUI overview, split container inspector, Linux-machine list,
@@ -124,12 +125,17 @@ Updated: 2026-06-21.
   diagnostics, and a generation-pinned Force Stop that queues while save/restore
   callbacks are outstanding. Deterministic store/service/runtime/model tests are
   implemented; a real save/restore still requires an installed macOS guest.
-- macOS VM configuration now includes a focused Virtio audio factory with one
-  output stream routed to `VZHostAudioOutputStreamSink`. The configuration UI
-  reports the Mac default output and the intentionally disconnected microphone;
-  no recording permission is requested. Saved-state topology advances to
-  version 3, which makes checkpoints created against the earlier no-audio
-  hardware layout incompatible instead of attempting an unsafe restore.
+- macOS VM configuration now includes a focused Virtio audio factory with host
+  output through `VZHostAudioOutputStreamSink` and explicit per-VM microphone
+  input through `VZHostAudioInputStreamSource`. Microphone input is disconnected
+  by default. Connect is a user action that checks AVFoundation authorization
+  before persistence; denial never acquires VM ownership or changes hardware.
+  The audio service reuses the stopped-only runtime lease and rejects saved-state
+  conflicts. Topology version 3 still distinguishes the earlier no-audio layout,
+  while post-default audio revisions remain fingerprinted so toggling input off
+  cannot make an older checkpoint valid again. Clones and portable packages
+  deliberately clear this host-local opt-in, so every copied or imported VM
+  requires a fresh Connect action.
 - Installed macOS VM bundles can persist shared host directories in a private,
   bounded `SharedDirectories.json` capability sidecar. A focused orchestration
   service acquires the runtime lease, rejects running or checkpointed VMs, and

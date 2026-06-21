@@ -227,6 +227,7 @@ extension AppModel {
       dockerCompatibilityService: PreviewDockerCompatibilityService(),
       dockerComposeClientService: PreviewDockerComposeClientService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: true),
+      virtualMachineAudio: PreviewMacVirtualMachineAudioService(),
       virtualMachineSharedDirectories: sharedDirectories,
       initialInventory: inventory,
       initialVirtualMachines: [macVM]
@@ -672,6 +673,30 @@ private actor PreviewVirtualMachineLibrary: VirtualMachineLibraryProtocol {
     resources: VirtualMachineResources
   ) async throws -> VirtualMachineManifest {
     try VirtualMachineManifest(name: name, guest: guest, resources: resources)
+  }
+}
+
+private actor PreviewMacVirtualMachineAudioService:
+  MacVirtualMachineAudioManaging
+{
+  private var configuration = MacVirtualMachineAudioConfiguration.disconnected
+
+  func snapshot(id: UUID) async throws -> MacVirtualMachineAudioSnapshot {
+    MacVirtualMachineAudioSnapshot(
+      configuration: configuration,
+      microphoneAuthorization: .notDetermined
+    )
+  }
+
+  func setMicrophoneEnabled(
+    _ isEnabled: Bool,
+    for machineID: UUID
+  ) async throws -> MacVirtualMachineAudioSnapshot {
+    configuration = try configuration.settingMicrophoneEnabled(isEnabled)
+    return MacVirtualMachineAudioSnapshot(
+      configuration: configuration,
+      microphoneAuthorization: .authorized
+    )
   }
 }
 

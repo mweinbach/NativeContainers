@@ -269,6 +269,14 @@ struct MacVirtualMachineSavedStateStoreTests {
         )
       )
     )
+    let microphone = try service.descriptor(
+      for: fixture.machine.withAudioConfiguration(
+        MacVirtualMachineAudioConfiguration(
+          revision: 1,
+          isMicrophoneEnabled: true
+        )
+      )
+    )
 
     #expect(
       MacVirtualMachineConfigurationDescriptor.directorySharingTopologyVersion
@@ -279,6 +287,13 @@ struct MacVirtualMachineSavedStateStoreTests {
         == MacVirtualMachineConfigurationDescriptor.currentTopologyVersion
     )
     #expect(baseline.audioDevices == ["VirtioSound/HostOutput"])
+    #expect(baseline.audioConfigurationRevision == nil)
+    #expect(
+      microphone.audioDevices
+        == ["VirtioSound/HostOutput", "VirtioSound/HostInput"]
+    )
+    #expect(microphone.audioConfigurationRevision == 1)
+    #expect(microphone.topologyVersion == baseline.topologyVersion)
     #expect(baseline.directorySharingRevision == nil)
     #expect(baseline.sharedDirectories == nil)
     #expect(
@@ -343,6 +358,22 @@ struct MacVirtualMachineSavedStateStoreTests {
 }
 
 extension ResolvedMacVirtualMachine {
+  fileprivate func withAudioConfiguration(
+    _ configuration: MacVirtualMachineAudioConfiguration
+  ) -> ResolvedMacVirtualMachine {
+    var manifest = manifest
+    manifest.audioConfiguration = configuration
+    return ResolvedMacVirtualMachine(
+      manifest: manifest,
+      bundleURL: bundleURL,
+      diskImageURL: diskImageURL,
+      auxiliaryStorageURL: auxiliaryStorageURL,
+      hardwareModelURL: hardwareModelURL,
+      machineIdentifierURL: machineIdentifierURL,
+      sharedDirectories: sharedDirectories
+    )
+  }
+
   fileprivate func withSharedDirectories(
     _ configuration: MacVirtualMachineSharedDirectoryConfiguration
   ) -> ResolvedMacVirtualMachine {
