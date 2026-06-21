@@ -964,6 +964,250 @@
 			path = Domain;
 			sourceTree = "<group>";
 		};
+		1FEC47132FE834A200DC60B2 /* Compatibility */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2BE52FE7C36D0076F5B9 /* DockerCompatibilityService.swift */,
+				1F9D2BE32FE7C3620076F5B9 /* DockerContextService.swift */,
+				1F9D2BDF2FE7C33B0076F5B9 /* SocktainerInstallService.swift */,
+				1F9D2BE12FE7C3530076F5B9 /* SocktainerProcessService.swift */,
+			);
+			path = Compatibility;
+			sourceTree = "<group>";
+		};
+		1FEC47142FE834A200DC60B2 /* Compose */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2C542FE7EC660076F5B9 /* AppleComposeProjectMutationExecutor.swift */,
+				1F9D2C5A2FE7F2B20076F5B9 /* ComposeContainerActionService.swift */,
+				1FEC46E62FE82E9E00DC60B2 /* ComposeContainerLifecyclePlanner.swift */,
+				1F9D2C362FE7E7520076F5B9 /* ComposeDesiredStateDecoder.swift */,
+				1F9D2C4E2FE7EB530076F5B9 /* ComposeExecutionWorkspace.swift */,
+				1F9D2C382FE7E7670076F5B9 /* ComposeLifecyclePlanner.swift */,
+				1FEC46EA2FE82E9F00DC60B2 /* ComposeLifecyclePolicyValidator.swift */,
+				1F9D2C4A2FE7EA4A0076F5B9 /* ComposeOperationJournal.swift */,
+				1FEC46F02FE8303500DC60B2 /* ComposeOperationJournalFileStore.swift */,
+				1FEC46F22FE8303600DC60B2 /* ComposeOperationJournalModels.swift */,
+				1FEC46F42FE8303600DC60B2 /* ComposeOperationJournalRecordCodec.swift */,
+				1F9D2C602FE7F2C90076F5B9 /* ComposePostconditionVerifier.swift */,
+				1F9D2C522FE7EC230076F5B9 /* ComposePreparedPlanStore.swift */,
+				1F9D2C3A2FE7E76F0076F5B9 /* ComposeProjectLifecycleService.swift */,
+				1F9D2C322FE7E72E0076F5B9 /* ComposeProjectSourceService.swift */,
+				1F9D2C5C2FE7F2B70076F5B9 /* ComposeResourceActionService.swift */,
+				1FEC46E82FE82E9E00DC60B2 /* ComposeResourceLifecyclePlanner.swift */,
+				1F9D2BF92FE7C81B0076F5B9 /* ComposeTopologyService.swift */,
+				1F9D2C5E2FE7F2BB0076F5B9 /* ComposeUpCommandService.swift */,
+				1F9D2C192FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift */,
+				1F9D2C342FE7E7360076F5B9 /* DockerComposeConfigService.swift */,
+				1F9D2C052FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift */,
+				1F9D2C112FE7D0B20076F5B9 /* SocktainerComposeFixtureCleanupPlanner.swift */,
+				1F9D2C152FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift */,
+				1F9D2C0F2FE7D0B20076F5B9 /* SocktainerComposeFixtureWorkspace.swift */,
+				1F9D2C132FE7D0B20076F5B9 /* SocktainerComposeLiveConformanceService.swift */,
+			);
+			path = Compose;
+			sourceTree = "<group>";
+		};
+		1FEC47152FE834A200DC60B2 /* Containers */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2B0A2FE769970076F5B9 /* AppleContainerAttachmentService.swift */,
+				1F9D2AD42FE75CAB0076F5B9 /* AppleContainerCleanupClient.swift */,
+				A1F81AEBBC3FF7CB57C90A14 /* AppleContainerConfiguration.swift */,
+				1F9D2AF62FE765700076F5B9 /* AppleContainerCreationService.swift */,
+				1F9D2B062FE7695B0076F5B9 /* AppleContainerHostAccessService.swift */,
+				1F9D2AEE2FE764AD0076F5B9 /* AppleContainerInspectionService.swift */,
+				1F9D2AEA2FE764AD0076F5B9 /* AppleContainerLifecycleService.swift */,
+				1F9D2AFA2FE765F10076F5B9 /* AppleContainerProgressRelay.swift */,
+				9C7E5028209B0DFC80B8A2C8 /* AppleContainerService.swift */,
+				1F9D2ADA2FE75FF80076F5B9 /* AppleContainerSnapshotReader.swift */,
+				1F9D2AF02FE764AD0076F5B9 /* AppleContainerTerminalService.swift */,
+				B8365227EB3D0376AFFDCEE5 /* AppleContainerTerminalSession.swift */,
+				1F9D2AF22FE764B50076F5B9 /* AppleContainerToolService.swift */,
+				1F9D2AE22FE760D80076F5B9 /* AppleOwnedContainerRecoveryService.swift */,
+				1F9D2B082FE769800076F5B9 /* ApplePublishedSocketWorkspace.swift */,
+				1F9D2ADE2FE760400076F5B9 /* AppleRuntimeInventoryService.swift */,
+				18FEBB337510AA54210882BB /* ContainerManaging.swift */,
+				1F9D2AD82FE75FC30076F5B9 /* ContainerServiceFacets.swift */,
+			);
+			path = Containers;
+			sourceTree = "<group>";
+		};
+		1FEC47162FE834A200DC60B2 /* Images */ = {
+			isa = PBXGroup;
+			children = (
+				1FEC47172FE834A200DC60B2 /* ImageBuild */,
+				1FEC47182FE834A200DC60B2 /* Management */,
+				1FEC47192FE834A200DC60B2 /* Registry */,
+				1FEC471A2FE834A200DC60B2 /* Restore */,
+			);
+			path = Images;
+			sourceTree = "<group>";
+		};
+		1FEC47172FE834A200DC60B2 /* ImageBuild */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2C2A2FE7DC0D0076F5B9 /* AppOwnedBuildCacheService.swift */,
+				4BABFAEA8A33048E447AC6E0 /* AppleContainerBuildService.swift */,
+				1F9D2B202FE770870076F5B9 /* AppleContainerBuilderManagementService.swift */,
+				1A99B5B436BE6598F322BC58 /* ContainerBuildWorkerProcess.swift */,
+				1F9D2B1E2FE7705A0076F5B9 /* ContainerBuilderManaging.swift */,
+				9738B9789CEDA681BAEF78C3 /* ImageBuildArtifactManager.swift */,
+				1F9D2C212FE7D9110076F5B9 /* ImageBuildExecutionService.swift */,
+				1F9D2B382FE77A9A0076F5B9 /* ImageBuildHistoryStore.swift */,
+				1F9D2C1F2FE7D8FE0076F5B9 /* ImageBuildLifecycleService.swift */,
+				1F9D2B472FE78A460076F5B9 /* ImageBuildOutputService.swift */,
+				1F9D2C1D2FE7D8FB0076F5B9 /* ImageBuildPlanningService.swift */,
+				1F9D2B342FE778910076F5B9 /* ImageBuildSecretVault.swift */,
+				EC5B0C0A00966333734B32C0 /* ImageBuildStore.swift */,
+				152F6805BD4ED6B4F826118E /* ImageBuilding.swift */,
+				1F9D2B422FE77DDF0076F5B9 /* PrivateImageBuildHistoryDirectory.swift */,
+				1F9D2B3A2FE77AA90076F5B9 /* RecordingImageBuildService.swift */,
+			);
+			path = ImageBuild;
+			sourceTree = "<group>";
+		};
+		1FEC47182FE834A200DC60B2 /* Management */ = {
+			isa = PBXGroup;
+			children = (
+				1FEC46FC2FE830E100DC60B2 /* AppleImageCleanupService.swift */,
+				1FEC46FA2FE830E000DC60B2 /* AppleImageInspectionService.swift */,
+				1FEC46F62FE830DF00DC60B2 /* AppleImagePolicy.swift */,
+				1F9D2AFC2FE765FB0076F5B9 /* AppleImageService.swift */,
+				1FEC46F82FE830E000DC60B2 /* AppleImageTransferService.swift */,
+			);
+			path = Management;
+			sourceTree = "<group>";
+		};
+		1FEC47192FE834A200DC60B2 /* Registry */ = {
+			isa = PBXGroup;
+			children = (
+				A7321DD3CF2A41679EBA6EFC /* AppleRegistryService.swift */,
+				F837DF4795B3D693B4C0C538 /* RegistryManaging.swift */,
+			);
+			path = Registry;
+			sourceTree = "<group>";
+		};
+		1FEC471A2FE834A200DC60B2 /* Restore */ = {
+			isa = PBXGroup;
+			children = (
+				C559BC791E8C3A91155CE7D2 /* MacRestoreImageService.swift */,
+				1F9D2CBD2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift */,
+				1F9D2CBB2FE80A7B0076F5B9 /* RestoreImageCacheService.swift */,
+				AF2DE73C2235A83091C7DFBC /* RestoreImageDownloadService.swift */,
+				1F9D2B812FE7A0E70076F5B9 /* RestoreImageImportService.swift */,
+				1F9D2CC32FE810B30076F5B9 /* RestoreImageStoreMigrationService.swift */,
+				1F9D2CC52FE810B30076F5B9 /* RestoreImageStoreRecoveryService.swift */,
+			);
+			path = Restore;
+			sourceTree = "<group>";
+		};
+		1FEC471B2FE834A200DC60B2 /* Infrastructure */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2AD02FE7564A0076F5B9 /* AppleInfrastructureClient.swift */,
+				1F9D2ADC2FE7600F0076F5B9 /* AppleInfrastructureService.swift */,
+			);
+			path = Infrastructure;
+			sourceTree = "<group>";
+		};
+		1FEC471C2FE834A200DC60B2 /* Machines */ = {
+			isa = PBXGroup;
+			children = (
+				1FEC471D2FE834A200DC60B2 /* Linux */,
+				1FEC471E2FE834A200DC60B2 /* Virtual */,
+			);
+			path = Machines;
+			sourceTree = "<group>";
+		};
+		1FEC471D2FE834A200DC60B2 /* Linux */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2B632FE796720076F5B9 /* AppleContainerProcessXPCClient.swift */,
+				1F9D2B5F2FE795870076F5B9 /* AppleLinuxMachineInventoryService.swift */,
+				1F9D2B752FE79C2C0076F5B9 /* AppleLinuxMachineProcessService.swift */,
+				1F9D2B6B2FE798E90076F5B9 /* AppleMachineImagePreparationService.swift */,
+				1F9D2B532FE792100076F5B9 /* AppleMachineManagementService.swift */,
+				1F9D2B512FE791EA0076F5B9 /* AppleMachineRuntimeClient.swift */,
+				1F9D2B5D2FE795750076F5B9 /* AppleMachineXPCTransport.swift */,
+				1F9D2B6F2FE79B4F0076F5B9 /* AppleRuntimeCommandExecutor.swift */,
+			);
+			path = Linux;
+			sourceTree = "<group>";
+		};
+		1FEC471E2FE834A200DC60B2 /* Virtual */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2BA32FE7AA240076F5B9 /* AppleMacVirtualMachineConfigurationFactory.swift */,
+				1F9D2B852FE7A1170076F5B9 /* AppleMacVirtualMachineInstallationEngine.swift */,
+				1F9D2BA92FE7AAAA0076F5B9 /* AppleMacVirtualMachineRuntimeEngine.swift */,
+				1F9D2BCD2FE7BD530076F5B9 /* AppleMacVirtualMachineSharedDirectoryDeviceFactory.swift */,
+				1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */,
+				1F9D2C6E2FE7F73C0076F5B9 /* CopyfileVirtualMachineBundleTransfer.swift */,
+				1FEC46D22FE8233300DC60B2 /* DiskutilVirtualMachineDiskImageConverter.swift */,
+				1F9D2BD32FE7BE010076F5B9 /* FileMacVirtualMachineSharedDirectoryConfigurationStore.swift */,
+				742BD26E898320625825152A /* MacPlatformArtifactPreparer.swift */,
+				1F9D2B9B2FE7A3190076F5B9 /* MacVirtualMachineAvailabilityChecker.swift */,
+				1F9D2B7F2FE7A0C20076F5B9 /* MacVirtualMachineBundleResolver.swift */,
+				1F9D2C6C2FE7F69E0076F5B9 /* MacVirtualMachineIdentifierGenerator.swift */,
+				1F9D2B832FE7A0FF0076F5B9 /* MacVirtualMachineInstallationService.swift */,
+				1FEC470D2FE8330E00DC60B2 /* MacVirtualMachineRuntimeManaging.swift */,
+				1FEC470F2FE8330F00DC60B2 /* MacVirtualMachineRuntimeObservations.swift */,
+				1F9D2BA12FE7AA0C0076F5B9 /* MacVirtualMachineRuntimeOwnershipStore.swift */,
+				1F9D2BA72FE7AAAA0076F5B9 /* MacVirtualMachineRuntimeService.swift */,
+				1F9D2BBB2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift */,
+				1F9D2BB52FE7AE2A0076F5B9 /* MacVirtualMachineSavedStateStore.swift */,
+				1F9D2BD12FE7BDF90076F5B9 /* MacVirtualMachineSharedDirectoryBookmarkService.swift */,
+				1F9D2BCB2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift */,
+				1FEC47112FE8330F00DC60B2 /* MacVirtualMachineShutdownFallbackRegistry.swift */,
+				1F9D2BD72FE7BE750076F5B9 /* MacVirtualMachineShutdownScheduler.swift */,
+				1F9D2C742FE7F9860076F5B9 /* VirtualMachineBundlePreparationService.swift */,
+				1FEC46EC2FE82F7D00DC60B2 /* VirtualMachineBundleStore.swift */,
+				1FEC46EE2FE82F7D00DC60B2 /* VirtualMachineBundleValidator.swift */,
+				1F9D2C662FE7F57C0076F5B9 /* VirtualMachineCloneService.swift */,
+				FF7D72F56C28FAC26CFCC861 /* VirtualMachineConsoleView.swift */,
+				1FEC46E42FE8265200DC60B2 /* VirtualMachineDiskImageMigrationFileOperations.swift */,
+				1FEC46D42FE8234400DC60B2 /* VirtualMachineDiskImageMigrationJournal.swift */,
+				1FEC46D62FE8237500DC60B2 /* VirtualMachineDiskImageMigrationService.swift */,
+				8425A4E68B15EEC200CBDA07 /* VirtualMachineLibrary.swift */,
+				1F9D2C7A2FE7FABC0076F5B9 /* VirtualMachinePackagePicker.swift */,
+				1F9D2C762FE7F9C20076F5B9 /* VirtualMachineTransferService.swift */,
+			);
+			path = Virtual;
+			sourceTree = "<group>";
+		};
+		1FEC471F2FE834A200DC60B2 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2C972FE801BD0076F5B9 /* AppleContainerReclamationService.swift */,
+				1F9D2C992FE801C90076F5B9 /* AppleImagePruneClient.swift */,
+				1F9D2C812FE7FCF70076F5B9 /* AppleRuntimeStorageUsageService.swift */,
+				1F9D2CA72FE8056C0076F5B9 /* MacVirtualMachineSavedStateReclamationService.swift */,
+				1F9D2CC12FE80D080076F5B9 /* RestoreImageCacheReclamationService.swift */,
+				1F9D2C912FE800AA0076F5B9 /* StorageReclamationService.swift */,
+				1F9D2C852FE7FDD60076F5B9 /* StorageUsageService.swift */,
+				1F9D2CA92FE8059E0076F5B9 /* VirtualMachineResidueReclamationService.swift */,
+				1F9D2CA52FE805510076F5B9 /* VirtualMachineStorageArtifactInspector.swift */,
+				1F9D2CAB2FE805AA0076F5B9 /* VirtualMachineStorageReclamationService.swift */,
+				1F9D2C832FE7FD2D0076F5B9 /* VirtualMachineStorageUsageService.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		1FEC47202FE834A200DC60B2 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2B9D2FE7A7660076F5B9 /* AdvisoryFileLock.swift */,
+				1F9D2AD62FE75F420076F5B9 /* AppleXPCRequestClient.swift */,
+				1F9D2BDD2FE7C3260076F5B9 /* HostProcessService.swift */,
+				34E2FB5D1DA19E2805498B0A /* RuntimeMutationCoordinator.swift */,
+				1F9D2B4F2FE791D60076F5B9 /* RuntimeProcessWaiter.swift */,
+				1F9D2BED2FE7C4760076F5B9 /* SecureFileSystemPath.swift */,
+				1F9D2BC12FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
 		216DDC96B29F43C61AB411D5 /* NativeContainersTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -1070,146 +1314,14 @@
 		29D02D7F57297D42BDD3F7A1 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				4BABFAEA8A33048E447AC6E0 /* AppleContainerBuildService.swift */,
-				A1F81AEBBC3FF7CB57C90A14 /* AppleContainerConfiguration.swift */,
-				9C7E5028209B0DFC80B8A2C8 /* AppleContainerService.swift */,
-				B8365227EB3D0376AFFDCEE5 /* AppleContainerTerminalSession.swift */,
-				A7321DD3CF2A41679EBA6EFC /* AppleRegistryService.swift */,
-				1A99B5B436BE6598F322BC58 /* ContainerBuildWorkerProcess.swift */,
-				18FEBB337510AA54210882BB /* ContainerManaging.swift */,
-				9738B9789CEDA681BAEF78C3 /* ImageBuildArtifactManager.swift */,
-				152F6805BD4ED6B4F826118E /* ImageBuilding.swift */,
-				EC5B0C0A00966333734B32C0 /* ImageBuildStore.swift */,
-				742BD26E898320625825152A /* MacPlatformArtifactPreparer.swift */,
-				C559BC791E8C3A91155CE7D2 /* MacRestoreImageService.swift */,
-				F837DF4795B3D693B4C0C538 /* RegistryManaging.swift */,
-				AF2DE73C2235A83091C7DFBC /* RestoreImageDownloadService.swift */,
-				34E2FB5D1DA19E2805498B0A /* RuntimeMutationCoordinator.swift */,
-				FF7D72F56C28FAC26CFCC861 /* VirtualMachineConsoleView.swift */,
-				8425A4E68B15EEC200CBDA07 /* VirtualMachineLibrary.swift */,
-				1F9D2AD02FE7564A0076F5B9 /* AppleInfrastructureClient.swift */,
-				1F9D2AD42FE75CAB0076F5B9 /* AppleContainerCleanupClient.swift */,
-				1F9D2AD62FE75F420076F5B9 /* AppleXPCRequestClient.swift */,
-				1F9D2AD82FE75FC30076F5B9 /* ContainerServiceFacets.swift */,
-				1F9D2ADA2FE75FF80076F5B9 /* AppleContainerSnapshotReader.swift */,
-				1F9D2ADC2FE7600F0076F5B9 /* AppleInfrastructureService.swift */,
-				1F9D2ADE2FE760400076F5B9 /* AppleRuntimeInventoryService.swift */,
-				1F9D2AE22FE760D80076F5B9 /* AppleOwnedContainerRecoveryService.swift */,
-				1F9D2AEA2FE764AD0076F5B9 /* AppleContainerLifecycleService.swift */,
-				1F9D2AEE2FE764AD0076F5B9 /* AppleContainerInspectionService.swift */,
-				1F9D2AF02FE764AD0076F5B9 /* AppleContainerTerminalService.swift */,
-				1F9D2AF22FE764B50076F5B9 /* AppleContainerToolService.swift */,
-				1F9D2AF62FE765700076F5B9 /* AppleContainerCreationService.swift */,
-				1F9D2AFA2FE765F10076F5B9 /* AppleContainerProgressRelay.swift */,
-				1F9D2AFC2FE765FB0076F5B9 /* AppleImageService.swift */,
-				1F9D2B062FE7695B0076F5B9 /* AppleContainerHostAccessService.swift */,
-				1F9D2B082FE769800076F5B9 /* ApplePublishedSocketWorkspace.swift */,
-				1F9D2B0A2FE769970076F5B9 /* AppleContainerAttachmentService.swift */,
-				1F9D2B1E2FE7705A0076F5B9 /* ContainerBuilderManaging.swift */,
-				1F9D2B202FE770870076F5B9 /* AppleContainerBuilderManagementService.swift */,
-				1F9D2B342FE778910076F5B9 /* ImageBuildSecretVault.swift */,
-				1F9D2B382FE77A9A0076F5B9 /* ImageBuildHistoryStore.swift */,
-				1F9D2B3A2FE77AA90076F5B9 /* RecordingImageBuildService.swift */,
-				1F9D2B422FE77DDF0076F5B9 /* PrivateImageBuildHistoryDirectory.swift */,
-				1F9D2B472FE78A460076F5B9 /* ImageBuildOutputService.swift */,
-				1F9D2B4F2FE791D60076F5B9 /* RuntimeProcessWaiter.swift */,
-				1F9D2B512FE791EA0076F5B9 /* AppleMachineRuntimeClient.swift */,
-				1F9D2B532FE792100076F5B9 /* AppleMachineManagementService.swift */,
-				1F9D2B5D2FE795750076F5B9 /* AppleMachineXPCTransport.swift */,
-				1F9D2B5F2FE795870076F5B9 /* AppleLinuxMachineInventoryService.swift */,
-				1F9D2B632FE796720076F5B9 /* AppleContainerProcessXPCClient.swift */,
-				1F9D2B6B2FE798E90076F5B9 /* AppleMachineImagePreparationService.swift */,
-				1F9D2B6F2FE79B4F0076F5B9 /* AppleRuntimeCommandExecutor.swift */,
-				1F9D2B752FE79C2C0076F5B9 /* AppleLinuxMachineProcessService.swift */,
-				1F9D2B7F2FE7A0C20076F5B9 /* MacVirtualMachineBundleResolver.swift */,
-				1F9D2B812FE7A0E70076F5B9 /* RestoreImageImportService.swift */,
-				1F9D2B832FE7A0FF0076F5B9 /* MacVirtualMachineInstallationService.swift */,
-				1F9D2B852FE7A1170076F5B9 /* AppleMacVirtualMachineInstallationEngine.swift */,
-				1F9D2B9B2FE7A3190076F5B9 /* MacVirtualMachineAvailabilityChecker.swift */,
-				1F9D2B9D2FE7A7660076F5B9 /* AdvisoryFileLock.swift */,
-				1F9D2BA12FE7AA0C0076F5B9 /* MacVirtualMachineRuntimeOwnershipStore.swift */,
-				1F9D2BA32FE7AA240076F5B9 /* AppleMacVirtualMachineConfigurationFactory.swift */,
-				1F9D2BA72FE7AAAA0076F5B9 /* MacVirtualMachineRuntimeService.swift */,
-				1F9D2BA92FE7AAAA0076F5B9 /* AppleMacVirtualMachineRuntimeEngine.swift */,
-				1F9D2BB52FE7AE2A0076F5B9 /* MacVirtualMachineSavedStateStore.swift */,
-				1F9D2BBB2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift */,
-				1F9D2BC12FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift */,
-				1F9D2BCB2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift */,
-				1F9D2BCD2FE7BD530076F5B9 /* AppleMacVirtualMachineSharedDirectoryDeviceFactory.swift */,
-				1F9D2BD12FE7BDF90076F5B9 /* MacVirtualMachineSharedDirectoryBookmarkService.swift */,
-				1F9D2BD32FE7BE010076F5B9 /* FileMacVirtualMachineSharedDirectoryConfigurationStore.swift */,
-				1F9D2BD72FE7BE750076F5B9 /* MacVirtualMachineShutdownScheduler.swift */,
-				1F9D2BDD2FE7C3260076F5B9 /* HostProcessService.swift */,
-				1F9D2BDF2FE7C33B0076F5B9 /* SocktainerInstallService.swift */,
-				1F9D2BE12FE7C3530076F5B9 /* SocktainerProcessService.swift */,
-				1F9D2BE32FE7C3620076F5B9 /* DockerContextService.swift */,
-				1F9D2BE52FE7C36D0076F5B9 /* DockerCompatibilityService.swift */,
-				1F9D2BED2FE7C4760076F5B9 /* SecureFileSystemPath.swift */,
-				1F9D2BF92FE7C81B0076F5B9 /* ComposeTopologyService.swift */,
-				1F9D2C052FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift */,
-				1F9D2C0F2FE7D0B20076F5B9 /* SocktainerComposeFixtureWorkspace.swift */,
-				1F9D2C112FE7D0B20076F5B9 /* SocktainerComposeFixtureCleanupPlanner.swift */,
-				1F9D2C132FE7D0B20076F5B9 /* SocktainerComposeLiveConformanceService.swift */,
-				1F9D2C152FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift */,
-				1F9D2C192FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift */,
-				1F9D2C1D2FE7D8FB0076F5B9 /* ImageBuildPlanningService.swift */,
-				1F9D2C1F2FE7D8FE0076F5B9 /* ImageBuildLifecycleService.swift */,
-				1F9D2C212FE7D9110076F5B9 /* ImageBuildExecutionService.swift */,
-				1F9D2C2A2FE7DC0D0076F5B9 /* AppOwnedBuildCacheService.swift */,
-				1F9D2C322FE7E72E0076F5B9 /* ComposeProjectSourceService.swift */,
-				1F9D2C342FE7E7360076F5B9 /* DockerComposeConfigService.swift */,
-				1F9D2C362FE7E7520076F5B9 /* ComposeDesiredStateDecoder.swift */,
-				1F9D2C382FE7E7670076F5B9 /* ComposeLifecyclePlanner.swift */,
-				1F9D2C3A2FE7E76F0076F5B9 /* ComposeProjectLifecycleService.swift */,
-				1F9D2C4A2FE7EA4A0076F5B9 /* ComposeOperationJournal.swift */,
-				1F9D2C4E2FE7EB530076F5B9 /* ComposeExecutionWorkspace.swift */,
-				1F9D2C522FE7EC230076F5B9 /* ComposePreparedPlanStore.swift */,
-				1F9D2C542FE7EC660076F5B9 /* AppleComposeProjectMutationExecutor.swift */,
-				1F9D2C5A2FE7F2B20076F5B9 /* ComposeContainerActionService.swift */,
-				1F9D2C5C2FE7F2B70076F5B9 /* ComposeResourceActionService.swift */,
-				1F9D2C5E2FE7F2BB0076F5B9 /* ComposeUpCommandService.swift */,
-				1F9D2C602FE7F2C90076F5B9 /* ComposePostconditionVerifier.swift */,
-				1F9D2C662FE7F57C0076F5B9 /* VirtualMachineCloneService.swift */,
-				1F9D2C6C2FE7F69E0076F5B9 /* MacVirtualMachineIdentifierGenerator.swift */,
-				1F9D2C6E2FE7F73C0076F5B9 /* CopyfileVirtualMachineBundleTransfer.swift */,
-				1F9D2C742FE7F9860076F5B9 /* VirtualMachineBundlePreparationService.swift */,
-				1F9D2C762FE7F9C20076F5B9 /* VirtualMachineTransferService.swift */,
-				1F9D2C7A2FE7FABC0076F5B9 /* VirtualMachinePackagePicker.swift */,
-				1F9D2C812FE7FCF70076F5B9 /* AppleRuntimeStorageUsageService.swift */,
-				1F9D2C832FE7FD2D0076F5B9 /* VirtualMachineStorageUsageService.swift */,
-				1F9D2C852FE7FDD60076F5B9 /* StorageUsageService.swift */,
-				1F9D2C912FE800AA0076F5B9 /* StorageReclamationService.swift */,
-				1F9D2C972FE801BD0076F5B9 /* AppleContainerReclamationService.swift */,
-				1F9D2C992FE801C90076F5B9 /* AppleImagePruneClient.swift */,
-				1F9D2CA52FE805510076F5B9 /* VirtualMachineStorageArtifactInspector.swift */,
-				1F9D2CA72FE8056C0076F5B9 /* MacVirtualMachineSavedStateReclamationService.swift */,
-				1F9D2CA92FE8059E0076F5B9 /* VirtualMachineResidueReclamationService.swift */,
-				1F9D2CAB2FE805AA0076F5B9 /* VirtualMachineStorageReclamationService.swift */,
-				1F9D2CBB2FE80A7B0076F5B9 /* RestoreImageCacheService.swift */,
-				1F9D2CBD2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift */,
-				1F9D2CC12FE80D080076F5B9 /* RestoreImageCacheReclamationService.swift */,
-				1F9D2CC32FE810B30076F5B9 /* RestoreImageStoreMigrationService.swift */,
-				1F9D2CC52FE810B30076F5B9 /* RestoreImageStoreRecoveryService.swift */,
-				1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */,
-				1FEC46D22FE8233300DC60B2 /* DiskutilVirtualMachineDiskImageConverter.swift */,
-				1FEC46D42FE8234400DC60B2 /* VirtualMachineDiskImageMigrationJournal.swift */,
-				1FEC46D62FE8237500DC60B2 /* VirtualMachineDiskImageMigrationService.swift */,
-				1FEC46E42FE8265200DC60B2 /* VirtualMachineDiskImageMigrationFileOperations.swift */,
-				1FEC46E62FE82E9E00DC60B2 /* ComposeContainerLifecyclePlanner.swift */,
-				1FEC46E82FE82E9E00DC60B2 /* ComposeResourceLifecyclePlanner.swift */,
-				1FEC46EA2FE82E9F00DC60B2 /* ComposeLifecyclePolicyValidator.swift */,
-				1FEC46EC2FE82F7D00DC60B2 /* VirtualMachineBundleStore.swift */,
-				1FEC46EE2FE82F7D00DC60B2 /* VirtualMachineBundleValidator.swift */,
-				1FEC46F02FE8303500DC60B2 /* ComposeOperationJournalFileStore.swift */,
-				1FEC46F22FE8303600DC60B2 /* ComposeOperationJournalModels.swift */,
-				1FEC46F42FE8303600DC60B2 /* ComposeOperationJournalRecordCodec.swift */,
-				1FEC46F62FE830DF00DC60B2 /* AppleImagePolicy.swift */,
-				1FEC46F82FE830E000DC60B2 /* AppleImageTransferService.swift */,
-				1FEC46FA2FE830E000DC60B2 /* AppleImageInspectionService.swift */,
-				1FEC46FC2FE830E100DC60B2 /* AppleImageCleanupService.swift */,
-				1FEC470D2FE8330E00DC60B2 /* MacVirtualMachineRuntimeManaging.swift */,
-				1FEC470F2FE8330F00DC60B2 /* MacVirtualMachineRuntimeObservations.swift */,
-				1FEC47112FE8330F00DC60B2 /* MacVirtualMachineShutdownFallbackRegistry.swift */,
+				1FEC47132FE834A200DC60B2 /* Compatibility */,
+				1FEC47142FE834A200DC60B2 /* Compose */,
+				1FEC47152FE834A200DC60B2 /* Containers */,
+				1FEC47162FE834A200DC60B2 /* Images */,
+				1FEC471B2FE834A200DC60B2 /* Infrastructure */,
+				1FEC471C2FE834A200DC60B2 /* Machines */,
+				1FEC471F2FE834A200DC60B2 /* Storage */,
+				1FEC47202FE834A200DC60B2 /* Support */,
 			);
 			path = Services;
 			sourceTree = "<group>";
