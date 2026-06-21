@@ -18,6 +18,8 @@ final class MacVirtualMachineRuntimeLease: @unchecked Sendable {
 
   private let stateLock = NSLock()
   private var releaseHandler: (() -> Void)?
+  private var releaseRequested = false
+  private var borrowCount = 0
 
   init(
     machine: ResolvedMacVirtualMachine,
@@ -30,9 +32,59 @@ final class MacVirtualMachineRuntimeLease: @unchecked Sendable {
   }
 
   func release() {
+    let handler: (() -> Void)? = stateLock.withLock {
+      guard !releaseRequested else { return nil }
+      releaseRequested = true
+      return takeReleaseHandlerIfPossible()
+    }
+    handler?()
+  }
+
+  func borrow() throws -> MacVirtualMachineRuntimeLeaseBorrow {
+    try stateLock.withLock {
+      guard !releaseRequested, releaseHandler != nil else {
+        throw MacVirtualMachineRuntimeError.staleTarget(target)
+      }
+      borrowCount += 1
+      return MacVirtualMachineRuntimeLeaseBorrow { [self] in
+        returnBorrow()
+      }
+    }
+  }
+
+  private func returnBorrow() {
     let handler = stateLock.withLock {
-      let handler = releaseHandler
-      releaseHandler = nil
+      precondition(borrowCount > 0, "A runtime lease borrow must be returned exactly once.")
+      borrowCount -= 1
+      return takeReleaseHandlerIfPossible()
+    }
+    handler?()
+  }
+
+  private func takeReleaseHandlerIfPossible() -> (() -> Void)? {
+    guard releaseRequested, borrowCount == 0 else { return nil }
+    let handler = releaseHandler
+    releaseHandler = nil
+    return handler
+  }
+
+  deinit {
+    release()
+  }
+}
+
+final class MacVirtualMachineRuntimeLeaseBorrow: @unchecked Sendable {
+  private let stateLock = NSLock()
+  private var returnHandler: (() -> Void)?
+
+  fileprivate init(returnHandler: @escaping () -> Void) {
+    self.returnHandler = returnHandler
+  }
+
+  func release() {
+    let handler = stateLock.withLock {
+      let handler = returnHandler
+      returnHandler = nil
       return handler
     }
     handler?()
