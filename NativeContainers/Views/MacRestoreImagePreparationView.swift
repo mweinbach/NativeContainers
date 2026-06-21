@@ -262,7 +262,7 @@ extension Error {
   let model = MacRestoreImagePreparationModel(
     machine: machine,
     discovery: PreviewRestoreImageDiscovery(),
-    downloader: PreviewRestoreImageDownloader()
+    acquisition: PreviewRestoreImageAcquisition()
   ) { _ in }
   MacRestoreImagePreparationView(model: model)
 }
@@ -282,11 +282,28 @@ private struct PreviewRestoreImageDiscovery: MacRestoreImageDiscovering {
   }
 }
 
-private struct PreviewRestoreImageDownloader: MacRestoreImageDownloading {
-  func download(
-    from sourceURL: URL,
+private struct PreviewRestoreImageAcquisition: RestoreImageAcquiring {
+  func acquire(
+    _ source: RestoreImageAcquisitionSource,
     progress: @escaping RestoreImageDownloadProgressHandler
-  ) async throws -> URL {
-    URL(filePath: "/tmp/UniversalMac.ipsw")
+  ) async throws -> RestoreImageCacheLease {
+    RestoreImageCacheLease(
+      fileURL: URL(filePath: "/tmp/UniversalMac.ipsw"),
+      purpose: source.isRemote ? .remoteDownload : .localImport,
+      abandonPolicy: source.isRemote ? .retainArtifacts : .discardArtifacts
+    )
+  }
+
+  func commit(_ lease: RestoreImageCacheLease) async {}
+  func abandon(_ lease: RestoreImageCacheLease) async throws {}
+  func recoverCache(
+    referencedURLs: @Sendable () async throws -> Set<URL>
+  ) async throws {}
+}
+
+extension RestoreImageAcquisitionSource {
+  fileprivate var isRemote: Bool {
+    if case .remote = self { return true }
+    return false
   }
 }

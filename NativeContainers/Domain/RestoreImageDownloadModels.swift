@@ -38,6 +38,8 @@ enum RestoreImageDownloadError: LocalizedError, Equatable, Sendable {
   case unsupportedSourceURL(URL)
   case nonFileDestination(URL)
   case downloadAlreadyInProgress(URL)
+  case completedFileIsNotRegularFile(URL)
+  case destinationAlreadyExists(URL)
   case partialFileIsNotRegularFile(URL)
   case unableToCreatePartialFile(URL)
   case invalidHTTPResponse
@@ -54,6 +56,10 @@ enum RestoreImageDownloadError: LocalizedError, Equatable, Sendable {
       "The restore-image destination must be a file URL: \(url.absoluteString)"
     case .downloadAlreadyInProgress(let url):
       "A restore image is already downloading to \(url.path)."
+    case .completedFileIsNotRegularFile(let url):
+      "The cached restore image is missing, empty, symbolic, or not a regular file: \(url.path)"
+    case .destinationAlreadyExists(let url):
+      "A completed restore image already exists at \(url.path)."
     case .partialFileIsNotRegularFile(let url):
       "The partial restore image is not a regular file: \(url.path)"
     case .unableToCreatePartialFile(let url):

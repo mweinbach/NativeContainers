@@ -167,8 +167,8 @@ final class AppModel {
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
     restoreImageDiscovery: any MacRestoreImageDiscovering = MacRestoreImageService(),
-    restoreImageDownloader: any MacRestoreImageDownloading = RestoreImageDownloadService(),
-    restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService(),
+    restoreImageAcquisition: any RestoreImageAcquiring =
+      RestoreImageAcquisitionService.standard(),
     initialInventory: ContainerInventory? = nil,
     initialVirtualMachines: [VirtualMachineManifest] = []
   ) {
@@ -194,8 +194,7 @@ final class AppModel {
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
         virtualMachineAvailability: virtualMachineAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
-        restoreImageDownloader: restoreImageDownloader,
-        restoreImageImporter: restoreImageImporter
+        restoreImageAcquisition: restoreImageAcquisition
       ),
       initialInventory: initialInventory,
       initialVirtualMachines: initialVirtualMachines
@@ -218,12 +217,12 @@ final class AppModel {
           "Virtual machine recovery is waiting for another NativeContainers process to finish its active operation."
         return
       }
-      let referencedRestoreImages = Set(
-        try await services.virtualMachineLibrary.list().compactMap(\.restoreImageURL)
-      )
-      try await services.restoreImageImporter.recoverPendingImports(
-        referencedURLs: referencedRestoreImages
-      )
+      try await services.restoreImageAcquisition.recoverCache {
+        Set(
+          try await services.virtualMachineLibrary.list()
+            .compactMap(\.restoreImageURL)
+        )
+      }
       virtualMachineRecoveryErrorMessage = nil
     } catch {
       virtualMachineRecoveryErrorMessage =
@@ -594,8 +593,7 @@ final class AppModel {
     MacRestoreImagePreparationModel(
       machine: machine,
       discovery: services.restoreImageDiscovery,
-      downloader: services.restoreImageDownloader,
-      importer: services.restoreImageImporter
+      acquisition: services.restoreImageAcquisition
     ) { [self] restoreImageURL in
       try await prepareMacVirtualMachine(
         id: machine.id,

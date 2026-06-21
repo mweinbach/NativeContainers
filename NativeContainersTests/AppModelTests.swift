@@ -349,16 +349,16 @@ struct AppModelTests {
       hardwareModelPath: "MacPlatform/HardwareModel",
       machineIdentifierPath: "MacPlatform/MachineIdentifier"
     )
-    let importer = RecoveryRecordingRestoreImageImporter()
+    let acquisition = RecoveryRecordingRestoreImageAcquisition()
     let model = AppModel(
       containerService: MockContainerService(inventory: emptyInventory()),
       virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [prepared]),
-      restoreImageImporter: importer
+      restoreImageAcquisition: acquisition
     )
 
     await model.loadIfNeeded()
 
-    #expect(await importer.recoveredReferences == [restoreImageURL])
+    #expect(await acquisition.recoveredReferences == [restoreImageURL])
   }
 
   @Test
@@ -432,7 +432,7 @@ struct AppModelTests {
         registry: AppleRegistryService(),
         virtualMachineLibrary: MockVirtualMachineLibrary(manifests: []),
         restoreImageDiscovery: MacRestoreImageService(),
-        restoreImageDownloader: RestoreImageDownloadService()
+        restoreImageAcquisition: RestoreImageAcquisitionService.standard()
       )
     )
 
@@ -1379,18 +1379,24 @@ private actor AppModelVirtualMachineTransferFixture:
   }
 }
 
-private actor RecoveryRecordingRestoreImageImporter: MacRestoreImageImporting {
+private actor RecoveryRecordingRestoreImageAcquisition: RestoreImageAcquiring {
   private(set) var recoveredReferences = Set<URL>()
 
-  func importImage(
-    at sourceURL: URL,
+  func acquire(
+    _ source: RestoreImageAcquisitionSource,
     progress: @escaping RestoreImageDownloadProgressHandler
-  ) async throws -> RestoreImageImportLease {
+  ) async throws -> RestoreImageCacheLease {
     throw AppModelTestError.runtimeUnavailable
   }
 
-  func recoverPendingImports(referencedURLs: Set<URL>) async throws {
-    recoveredReferences = referencedURLs
+  func commit(_ lease: RestoreImageCacheLease) async {}
+
+  func abandon(_ lease: RestoreImageCacheLease) async throws {}
+
+  func recoverCache(
+    referencedURLs: @Sendable () async throws -> Set<URL>
+  ) async throws {
+    recoveredReferences = try await referencedURLs()
   }
 }
 

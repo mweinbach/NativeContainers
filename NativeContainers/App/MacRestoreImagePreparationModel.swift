@@ -21,22 +21,19 @@ final class MacRestoreImagePreparationModel {
   private(set) var errorMessage: String?
 
   private let discovery: any MacRestoreImageDiscovering
-  private let downloader: any MacRestoreImageDownloading
-  private let importer: any MacRestoreImageImporting
-  private let prepare: @MainActor @Sendable (URL) async throws -> Void
+  private let acquisition: any RestoreImageAcquiring
+  private let prepareMachine: @MainActor @Sendable (URL) async throws -> Void
 
   init(
     machine: VirtualMachineManifest,
     discovery: any MacRestoreImageDiscovering,
-    downloader: any MacRestoreImageDownloading,
-    importer: any MacRestoreImageImporting = RestoreImageImportService(),
+    acquisition: any RestoreImageAcquiring,
     prepare: @escaping @MainActor @Sendable (URL) async throws -> Void
   ) {
     self.machine = machine
     self.discovery = discovery
-    self.downloader = downloader
-    self.importer = importer
-    self.prepare = prepare
+    self.acquisition = acquisition
+    self.prepareMachine = prepare
   }
 
   var isWorking: Bool {
@@ -100,11 +97,11 @@ final class MacRestoreImagePreparationModel {
     errorMessage = nil
 
     do {
-      let localURL = try await downloader.download(from: latestImage.url) { [weak self] update in
+      let lease = try await acquisition.acquire(.remote(latestImage.url)) {
+        [weak self] update in
         await self?.receive(update)
       }
-      try Task.checkCancellation()
-      return try await prepareDownloadedImage(at: localURL)
+      return try await prepareAcquiredImage(lease)
     } catch is CancellationError {
       stage = .idle
       errorMessage = "The download is paused. Start it again to resume from the partial file."
@@ -131,27 +128,10 @@ final class MacRestoreImagePreparationModel {
 
     do {
       try Task.checkCancellation()
-      let importLease = try await importer.importImage(at: url) { [weak self] update in
+      let lease = try await acquisition.acquire(.local(url)) { [weak self] update in
         await self?.receive(update)
       }
-      do {
-        try Task.checkCancellation()
-        stage = .preparing
-        try await prepare(importLease.fileURL)
-        await importer.commitImport(importLease)
-        stage = .finished
-        return true
-      } catch {
-        do {
-          try await importer.discardImport(importLease)
-        } catch let cleanupError {
-          throw RestoreImageImportError.cleanupFailed(
-            operation: error.localizedDescription,
-            cleanup: cleanupError.localizedDescription
-          )
-        }
-        throw error
-      }
+      return try await prepareAcquiredImage(lease)
     } catch is CancellationError {
       stage = .idle
       errorMessage = "Restore-image import or preparation was cancelled. No partial copy was kept."
@@ -171,11 +151,28 @@ final class MacRestoreImagePreparationModel {
     errorMessage = message
   }
 
-  private func prepareDownloadedImage(at url: URL) async throws -> Bool {
-    stage = .preparing
-    try await prepare(url)
-    stage = .finished
-    return true
+  private func prepareAcquiredImage(
+    _ lease: RestoreImageCacheLease
+  ) async throws -> Bool {
+    do {
+      try Task.checkCancellation()
+      stage = .preparing
+      try await prepareMachine(lease.fileURL)
+      await acquisition.commit(lease)
+      stage = .finished
+      return true
+    } catch {
+      let operationError = error
+      do {
+        try await acquisition.abandon(lease)
+      } catch {
+        throw RestoreImageAcquisitionError.cleanupFailed(
+          operation: operationError.localizedDescription,
+          cleanup: error.localizedDescription
+        )
+      }
+      throw operationError
+    }
   }
 
   private func receive(_ progress: RestoreImageDownloadProgress) {

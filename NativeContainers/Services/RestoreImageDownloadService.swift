@@ -1,14 +1,16 @@
+import CryptoKit
+import Darwin
 import Foundation
 
 protocol MacRestoreImageDownloading: Sendable {
   func download(
     from sourceURL: URL,
     progress: @escaping RestoreImageDownloadProgressHandler
-  ) async throws -> URL
+  ) async throws -> RestoreImageCacheLease
 }
 
 extension MacRestoreImageDownloading {
-  func download(from sourceURL: URL) async throws -> URL {
+  func download(from sourceURL: URL) async throws -> RestoreImageCacheLease {
     try await download(from: sourceURL) { _ in }
   }
 }
@@ -17,6 +19,7 @@ actor RestoreImageDownloadService: MacRestoreImageDownloading {
   static let partialFileExtension = "partial"
 
   private let downloadDirectoryURL: URL
+  private let cache: any RestoreImageCacheManaging
   private let sessionConfiguration: URLSessionConfiguration
   private let fileManager: FileManager
   private var activeDestinations = Set<URL>()
@@ -24,10 +27,18 @@ actor RestoreImageDownloadService: MacRestoreImageDownloading {
   init(
     downloadDirectoryURL: URL? = nil,
     sessionConfiguration: URLSessionConfiguration = .default,
-    fileManager: FileManager = .default
+    fileManager: FileManager = .default,
+    cache: (any RestoreImageCacheManaging)? = nil
   ) {
-    self.downloadDirectoryURL =
-      downloadDirectoryURL ?? RestoreImageCacheDirectory.defaultURL(fileManager: fileManager)
+    let downloadDirectoryURL =
+      (downloadDirectoryURL ?? RestoreImageCacheDirectory.defaultURL(fileManager: fileManager))
+      .standardizedFileURL
+    self.downloadDirectoryURL = downloadDirectoryURL
+    self.cache =
+      cache
+      ?? RestoreImageCacheService(
+        cacheDirectoryURL: downloadDirectoryURL
+      )
     self.sessionConfiguration = sessionConfiguration.copy() as! URLSessionConfiguration
     self.fileManager = fileManager
   }
@@ -35,12 +46,48 @@ actor RestoreImageDownloadService: MacRestoreImageDownloading {
   func download(
     from sourceURL: URL,
     progress: @escaping RestoreImageDownloadProgressHandler
-  ) async throws -> URL {
-    let destinationURL = downloadDirectoryURL.appending(
-      path: Self.filename(for: sourceURL),
-      directoryHint: .notDirectory
+  ) async throws -> RestoreImageCacheLease {
+    let destinationURL = Self.destinationURL(
+      for: sourceURL,
+      in: downloadDirectoryURL
     )
-    return try await download(from: sourceURL, to: destinationURL, progress: progress).fileURL
+    let lease = try await cache.acquireLease(
+      for: destinationURL,
+      purpose: .remoteDownload,
+      abandonPolicy: .retainArtifacts
+    )
+
+    do {
+      if fileManager.fileExists(atPath: destinationURL.path) {
+        let byteCount = try completedByteCount(at: destinationURL)
+        try removeRegularPartialIfPresent(at: lease.partialURL)
+        await progress(
+          RestoreImageDownloadProgress(
+            receivedBytes: byteCount,
+            totalBytes: byteCount
+          )
+        )
+        return lease
+      }
+
+      _ = try await download(
+        from: sourceURL,
+        to: destinationURL,
+        progress: progress
+      )
+      return lease
+    } catch {
+      let operationError = error
+      do {
+        try await cache.abandon(lease)
+      } catch {
+        throw RestoreImageAcquisitionError.cleanupFailed(
+          operation: operationError.localizedDescription,
+          cleanup: error.localizedDescription
+        )
+      }
+      throw operationError
+    }
   }
 
   func download(
@@ -93,10 +140,10 @@ actor RestoreImageDownloadService: MacRestoreImageDownloading {
       request: request,
       partialURL: partialURL,
       requestedOffset: existingByteCount,
-      fileManager: fileManager
-    ) { update in
-      _ = progressContinuation.yield(update)
-    }
+      progress: { update in
+        _ = progressContinuation.yield(update)
+      }
+    )
 
     do {
       let outcome = try await transfer.run()
@@ -127,37 +174,76 @@ actor RestoreImageDownloadService: MacRestoreImageDownloading {
   }
 
   private func partialByteCount(at url: URL) throws -> Int64 {
-    var isDirectory: ObjCBool = false
-    guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
-      return 0
-    }
-    guard !isDirectory.boolValue else {
+    var metadata = stat()
+    guard Darwin.lstat(url.path, &metadata) == 0 else {
+      if errno == ENOENT { return 0 }
       throw RestoreImageDownloadError.partialFileIsNotRegularFile(url)
     }
-
-    let attributes = try fileManager.attributesOfItem(atPath: url.path)
-    guard attributes[.type] as? FileAttributeType == .typeRegular,
-      let size = attributes[.size] as? NSNumber
+    guard metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+      metadata.st_uid == geteuid(),
+      metadata.st_nlink == 1,
+      metadata.st_size >= 0,
+      metadata.st_mode & mode_t(S_IWGRP | S_IWOTH) == 0
     else {
       throw RestoreImageDownloadError.partialFileIsNotRegularFile(url)
     }
-    return size.int64Value
+    return Int64(metadata.st_size)
+  }
+
+  private func completedByteCount(at url: URL) throws -> Int64 {
+    let descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+    guard descriptor >= 0 else {
+      throw RestoreImageDownloadError.completedFileIsNotRegularFile(url)
+    }
+    defer { Darwin.close(descriptor) }
+    var metadata = stat()
+    guard Darwin.fstat(descriptor, &metadata) == 0,
+      metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+      metadata.st_uid == geteuid(),
+      metadata.st_nlink == 1,
+      metadata.st_size > 0,
+      metadata.st_mode & mode_t(S_IWGRP | S_IWOTH) == 0
+    else {
+      throw RestoreImageDownloadError.completedFileIsNotRegularFile(url)
+    }
+    return Int64(metadata.st_size)
+  }
+
+  private func removeRegularPartialIfPresent(at url: URL) throws {
+    let byteCount = try partialByteCount(at: url)
+    guard byteCount > 0 || fileManager.fileExists(atPath: url.path) else {
+      return
+    }
+    try fileManager.removeItem(at: url)
   }
 
   private func promote(partialURL: URL, to destinationURL: URL) throws {
-    if fileManager.fileExists(atPath: destinationURL.path) {
-      _ = try fileManager.replaceItemAt(destinationURL, withItemAt: partialURL)
-    } else {
-      try fileManager.moveItem(at: partialURL, to: destinationURL)
+    guard !fileManager.fileExists(atPath: destinationURL.path) else {
+      throw RestoreImageDownloadError.destinationAlreadyExists(destinationURL)
     }
+    try fileManager.moveItem(at: partialURL, to: destinationURL)
   }
 
-  private static func filename(for sourceURL: URL) -> String {
-    let filename = sourceURL.lastPathComponent
-    guard !filename.isEmpty, filename != ".", filename != ".." else {
-      return "RestoreImage.ipsw"
+  static func destinationURL(for sourceURL: URL, in directoryURL: URL) -> URL {
+    directoryURL.appending(
+      path: filename(for: sourceURL),
+      directoryHint: .notDirectory
+    )
+  }
+
+  static func filename(for sourceURL: URL) -> String {
+    let sourceName = sourceURL.deletingPathExtension().lastPathComponent
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+    let sanitized = sourceName.unicodeScalars.map { scalar in
+      allowed.contains(scalar) ? Character(String(scalar)) : "-"
     }
-    return filename
+    let readableName = String(sanitized).trimmingCharacters(in: CharacterSet(charactersIn: "-."))
+    let prefix = readableName.isEmpty ? "RestoreImage" : String(readableName.prefix(48))
+    let digest = SHA256.hash(data: Data(sourceURL.absoluteString.utf8))
+      .prefix(10)
+      .map { String(format: "%02x", $0) }
+      .joined()
+    return "\(prefix)-\(digest).ipsw"
   }
 }
 
@@ -177,7 +263,6 @@ private final class RestoreImageTransfer: NSObject, URLSessionDataDelegate, @unc
   private let request: URLRequest
   private let partialURL: URL
   private let requestedOffset: Int64
-  private let fileManager: FileManager
   private let progress: @Sendable (RestoreImageDownloadProgress) -> Void
   private let delegateQueue: OperationQueue
   private let stateLock = NSLock()
@@ -201,14 +286,12 @@ private final class RestoreImageTransfer: NSObject, URLSessionDataDelegate, @unc
     request: URLRequest,
     partialURL: URL,
     requestedOffset: Int64,
-    fileManager: FileManager,
     progress: @escaping @Sendable (RestoreImageDownloadProgress) -> Void
   ) {
     self.configuration = configuration
     self.request = request
     self.partialURL = partialURL
     self.requestedOffset = requestedOffset
-    self.fileManager = fileManager
     self.progress = progress
     self.delegateQueue = OperationQueue()
     self.delegateQueue.maxConcurrentOperationCount = 1
@@ -387,13 +470,26 @@ private final class RestoreImageTransfer: NSObject, URLSessionDataDelegate, @unc
   }
 
   private func openPartialFile(restarting: Bool) throws -> FileHandle {
-    if !fileManager.fileExists(atPath: partialURL.path) {
-      guard fileManager.createFile(atPath: partialURL.path, contents: nil) else {
-        throw RestoreImageDownloadError.unableToCreatePartialFile(partialURL)
-      }
+    let descriptor = Darwin.open(
+      partialURL.path,
+      O_WRONLY | O_CREAT | O_CLOEXEC | O_NOFOLLOW,
+      0o600
+    )
+    guard descriptor >= 0 else {
+      throw RestoreImageDownloadError.unableToCreatePartialFile(partialURL)
+    }
+    var metadata = stat()
+    guard Darwin.fstat(descriptor, &metadata) == 0,
+      metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+      metadata.st_uid == geteuid(),
+      metadata.st_nlink == 1,
+      Darwin.fchmod(descriptor, 0o600) == 0
+    else {
+      Darwin.close(descriptor)
+      throw RestoreImageDownloadError.partialFileIsNotRegularFile(partialURL)
     }
 
-    let handle = try FileHandle(forWritingTo: partialURL)
+    let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     do {
       if restarting {
         try handle.truncate(atOffset: 0)

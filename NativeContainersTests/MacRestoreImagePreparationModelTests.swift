@@ -20,12 +20,12 @@ struct MacRestoreImagePreparationModelTests {
       minimumMemoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
       isSupported: true
     )
-    let downloader = TestRestoreImageDownloader(localURL: localURL)
+    let acquisition = TestRestoreImageAcquisition(cachedURL: localURL)
     let recorder = PreparedURLRecorder()
     let model = MacRestoreImagePreparationModel(
       machine: machine,
       discovery: TestRestoreImageDiscovery(info: info),
-      downloader: downloader
+      acquisition: acquisition
     ) { url in
       await recorder.record(url)
     }
@@ -38,8 +38,47 @@ struct MacRestoreImagePreparationModelTests {
     #expect(model.stage == .finished)
     #expect(model.downloadProgress?.fractionCompleted == 1)
     #expect(model.errorMessage == nil)
-    #expect(await downloader.requestedURLs == [remoteURL])
+    #expect(await acquisition.requestedSources == [.remote(remoteURL)])
+    #expect(await acquisition.committedURLs == [localURL])
     #expect(await recorder.urls == [localURL])
+  }
+
+  @Test
+  func cacheLeaseStaysOwnedUntilPlatformPreparationReturns() async throws {
+    let machine = try makeMachine()
+    let remoteURL = URL(string: "https://example.test/leased.ipsw")!
+    let cachedURL = URL(filePath: "/private/cache/leased.ipsw")
+    let acquisition = TestRestoreImageAcquisition(cachedURL: cachedURL)
+    let gate = RestoreImagePreparationGate()
+    let model = MacRestoreImagePreparationModel(
+      machine: machine,
+      discovery: TestRestoreImageDiscovery(
+        info: MacRestoreImageInfo(
+          url: remoteURL,
+          buildVersion: "26A123",
+          majorVersion: 26,
+          minorVersion: 0,
+          patchVersion: 0,
+          minimumCPUCount: 4,
+          minimumMemoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+          isSupported: true
+        )
+      ),
+      acquisition: acquisition
+    ) { _ in
+      await gate.pause()
+    }
+
+    await model.discoverLatest()
+    let preparation = Task { await model.downloadLatestAndPrepare() }
+    await gate.waitUntilPaused()
+
+    #expect(await acquisition.committedURLs.isEmpty)
+    #expect(await acquisition.abandonedURLs.isEmpty)
+
+    await gate.resume()
+    #expect(await preparation.value)
+    #expect(await acquisition.committedURLs == [cachedURL])
   }
 
   @Test
@@ -55,11 +94,13 @@ struct MacRestoreImagePreparationModelTests {
       minimumMemoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
       isSupported: true
     )
-    let downloader = TestRestoreImageDownloader(localURL: URL(filePath: "/tmp/macOS.ipsw"))
+    let acquisition = TestRestoreImageAcquisition(
+      cachedURL: URL(filePath: "/tmp/macOS.ipsw")
+    )
     let model = MacRestoreImagePreparationModel(
       machine: machine,
       discovery: TestRestoreImageDiscovery(info: info),
-      downloader: downloader
+      acquisition: acquisition
     ) { _ in
       Issue.record("An incompatible restore image must not be prepared.")
     }
@@ -70,7 +111,7 @@ struct MacRestoreImagePreparationModelTests {
     #expect(!succeeded)
     #expect(model.latestImageCompatibilityMessage?.contains("at least 4 CPUs") == true)
     #expect(model.errorMessage == model.latestImageCompatibilityMessage)
-    #expect(await downloader.requestedURLs.isEmpty)
+    #expect(await acquisition.requestedSources.isEmpty)
   }
 
   @Test
@@ -78,7 +119,7 @@ struct MacRestoreImagePreparationModelTests {
     let machine = try makeMachine()
     let selectedURL = URL(filePath: "/tmp/Selected.ipsw")
     let importedURL = URL(filePath: "/private/cache/Imported.ipsw")
-    let importer = TestRestoreImageImporter(importedURL: importedURL)
+    let acquisition = TestRestoreImageAcquisition(cachedURL: importedURL)
     let recorder = PreparedURLRecorder()
     let model = MacRestoreImagePreparationModel(
       machine: machine,
@@ -94,8 +135,7 @@ struct MacRestoreImagePreparationModelTests {
           isSupported: true
         )
       ),
-      downloader: TestRestoreImageDownloader(localURL: importedURL),
-      importer: importer
+      acquisition: acquisition
     ) { url in
       await recorder.record(url)
     }
@@ -104,9 +144,9 @@ struct MacRestoreImagePreparationModelTests {
 
     #expect(succeeded)
     #expect(model.stage == .finished)
-    #expect(await importer.requestedURLs == [selectedURL])
-    #expect(await importer.committedURLs == [importedURL])
-    #expect(await importer.discardedURLs.isEmpty)
+    #expect(await acquisition.requestedSources == [.local(selectedURL)])
+    #expect(await acquisition.committedURLs == [importedURL])
+    #expect(await acquisition.abandonedURLs.isEmpty)
     #expect(await recorder.urls == [importedURL])
   }
 
@@ -115,7 +155,7 @@ struct MacRestoreImagePreparationModelTests {
     let machine = try makeMachine()
     let selectedURL = URL(filePath: "/tmp/Selected.ipsw")
     let importedURL = URL(filePath: "/private/cache/Imported.ipsw")
-    let importer = TestRestoreImageImporter(importedURL: importedURL)
+    let acquisition = TestRestoreImageAcquisition(cachedURL: importedURL)
     let model = MacRestoreImagePreparationModel(
       machine: machine,
       discovery: TestRestoreImageDiscovery(
@@ -130,8 +170,7 @@ struct MacRestoreImagePreparationModelTests {
           isSupported: true
         )
       ),
-      downloader: TestRestoreImageDownloader(localURL: importedURL),
-      importer: importer
+      acquisition: acquisition
     ) { _ in
       throw TestRestoreImagePreparationError.expected
     }
@@ -139,8 +178,8 @@ struct MacRestoreImagePreparationModelTests {
     let succeeded = await model.prepareLocalImage(at: selectedURL)
 
     #expect(!succeeded)
-    #expect(await importer.discardedURLs == [importedURL])
-    #expect(await importer.committedURLs.isEmpty)
+    #expect(await acquisition.abandonedURLs == [importedURL])
+    #expect(await acquisition.committedURLs.isEmpty)
   }
 
   private func makeMachine(cpuCount: Int = 4) throws -> VirtualMachineManifest {
@@ -164,58 +203,53 @@ private struct TestRestoreImageDiscovery: MacRestoreImageDiscovering {
   }
 }
 
-private actor TestRestoreImageDownloader: MacRestoreImageDownloading {
-  let localURL: URL
-  private(set) var requestedURLs: [URL] = []
-
-  init(localURL: URL) {
-    self.localURL = localURL
-  }
-
-  func download(
-    from sourceURL: URL,
-    progress: @escaping RestoreImageDownloadProgressHandler
-  ) async throws -> URL {
-    requestedURLs.append(sourceURL)
-    await progress(
-      RestoreImageDownloadProgress(
-        receivedBytes: 8,
-        totalBytes: 8
-      )
-    )
-    return localURL
-  }
-}
-
 private enum TestRestoreImagePreparationError: Error {
   case expected
 }
 
-private actor TestRestoreImageImporter: MacRestoreImageImporting {
-  let importedURL: URL
-  private(set) var requestedURLs: [URL] = []
+private actor TestRestoreImageAcquisition: RestoreImageAcquiring {
+  let cachedURL: URL
+  private(set) var requestedSources: [RestoreImageAcquisitionSource] = []
   private(set) var committedURLs: [URL] = []
-  private(set) var discardedURLs: [URL] = []
+  private(set) var abandonedURLs: [URL] = []
 
-  init(importedURL: URL) {
-    self.importedURL = importedURL
+  init(cachedURL: URL) {
+    self.cachedURL = cachedURL
   }
 
-  func importImage(
-    at sourceURL: URL,
+  func acquire(
+    _ source: RestoreImageAcquisitionSource,
     progress: @escaping RestoreImageDownloadProgressHandler
-  ) async throws -> RestoreImageImportLease {
-    requestedURLs.append(sourceURL)
+  ) async throws -> RestoreImageCacheLease {
+    requestedSources.append(source)
     await progress(RestoreImageDownloadProgress(receivedBytes: 8, totalBytes: 8))
-    return RestoreImageImportLease(fileURL: importedURL)
+    switch source {
+    case .remote:
+      return RestoreImageCacheLease(
+        fileURL: cachedURL,
+        purpose: .remoteDownload,
+        abandonPolicy: .retainArtifacts
+      )
+    case .local:
+      return RestoreImageCacheLease(
+        fileURL: cachedURL,
+        purpose: .localImport,
+        abandonPolicy: .discardArtifacts
+      )
+    }
   }
 
-  func commitImport(_ lease: RestoreImageImportLease) {
+  func commit(_ lease: RestoreImageCacheLease) {
     committedURLs.append(lease.fileURL)
   }
 
-  func discardImport(_ lease: RestoreImageImportLease) throws {
-    discardedURLs.append(lease.fileURL)
+  func abandon(_ lease: RestoreImageCacheLease) throws {
+    abandonedURLs.append(lease.fileURL)
+  }
+
+  func recoverCache(
+    referencedURLs: @Sendable () async throws -> Set<URL>
+  ) async throws {
   }
 }
 
@@ -224,5 +258,34 @@ private actor PreparedURLRecorder {
 
   func record(_ url: URL) {
     urls.append(url)
+  }
+}
+
+private actor RestoreImagePreparationGate {
+  private var isPaused = false
+  private var pauseContinuation: CheckedContinuation<Void, Never>?
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func pause() async {
+    isPaused = true
+    let waiters = waiters
+    self.waiters.removeAll()
+    waiters.forEach { $0.resume() }
+    await withCheckedContinuation { continuation in
+      pauseContinuation = continuation
+    }
+  }
+
+  func waitUntilPaused() async {
+    guard !isPaused else { return }
+    await withCheckedContinuation { continuation in
+      waiters.append(continuation)
+    }
+  }
+
+  func resume() {
+    isPaused = false
+    pauseContinuation?.resume()
+    pauseContinuation = nil
   }
 }

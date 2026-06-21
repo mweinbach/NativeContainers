@@ -13,7 +13,11 @@ struct RestoreImageImportServiceTests {
     let payload = Data(repeating: 0xA5, count: 6 * 1_024 * 1_024)
     try payload.write(to: source)
     let recorder = ImportProgressRecorder()
-    let service = RestoreImageImportService(cacheDirectoryURL: fixture.cache)
+    let cache = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    let service = RestoreImageImportService(
+      cacheDirectoryURL: fixture.cache,
+      cache: cache
+    )
 
     let lease = try await service.importImage(at: source) { update in
       await recorder.record(update)
@@ -25,7 +29,7 @@ struct RestoreImageImportServiceTests {
     #expect(try Data(contentsOf: imported) == payload)
     #expect(FileManager.default.fileExists(atPath: source.path))
     #expect(await recorder.updates.last?.fractionCompleted == 1)
-    await service.commitImport(lease)
+    await cache.commit(lease)
     #expect(FileManager.default.fileExists(atPath: imported.path))
     #expect(!FileManager.default.fileExists(atPath: pendingMarker(for: imported).path))
   }
@@ -37,11 +41,15 @@ struct RestoreImageImportServiceTests {
 
     let source = fixture.root.appending(path: "Discarded.ipsw")
     try Data([1, 2, 3]).write(to: source)
-    let service = RestoreImageImportService(cacheDirectoryURL: fixture.cache)
+    let cache = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    let service = RestoreImageImportService(
+      cacheDirectoryURL: fixture.cache,
+      cache: cache
+    )
     let lease = try await service.importImage(at: source)
 
     #expect(FileManager.default.fileExists(atPath: lease.fileURL.path))
-    try await service.discardImport(lease)
+    try await cache.abandon(lease)
     let existsAfterDiscard = FileManager.default.fileExists(atPath: lease.fileURL.path)
     #expect(existsAfterDiscard == false)
   }
@@ -54,7 +62,11 @@ struct RestoreImageImportServiceTests {
     let source = fixture.root.appending(path: "Large.ipsw")
     try Data(repeating: 0x5A, count: 10 * 1_024 * 1_024).write(to: source)
     let pause = ImportPause()
-    let service = RestoreImageImportService(cacheDirectoryURL: fixture.cache)
+    let cache = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    let service = RestoreImageImportService(
+      cacheDirectoryURL: fixture.cache,
+      cache: cache
+    )
 
     let task = Task {
       try await service.importImage(at: source) { _ in
@@ -96,8 +108,8 @@ struct RestoreImageImportServiceTests {
     #expect(FileManager.default.fileExists(atPath: lease.fileURL.path))
     #expect(FileManager.default.fileExists(atPath: pendingMarker(for: lease.fileURL).path))
 
-    let relaunchedService = RestoreImageImportService(cacheDirectoryURL: fixture.cache)
-    try await relaunchedService.recoverPendingImports(referencedURLs: [])
+    let relaunchedCache = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    try await relaunchedCache.recover { [] }
 
     #expect(!FileManager.default.fileExists(atPath: lease.fileURL.path))
     #expect(!FileManager.default.fileExists(atPath: pendingMarker(for: lease.fileURL).path))
@@ -112,8 +124,8 @@ struct RestoreImageImportServiceTests {
     try Data([4, 5, 6]).write(to: source)
     let lease = try await createInterruptedImport(source: source, cache: fixture.cache)
 
-    let relaunchedService = RestoreImageImportService(cacheDirectoryURL: fixture.cache)
-    try await relaunchedService.recoverPendingImports(referencedURLs: [lease.fileURL])
+    let relaunchedCache = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    try await relaunchedCache.recover { [lease.fileURL] }
 
     #expect(FileManager.default.fileExists(atPath: lease.fileURL.path))
     #expect(!FileManager.default.fileExists(atPath: pendingMarker(for: lease.fileURL).path))
@@ -126,18 +138,60 @@ struct RestoreImageImportServiceTests {
 
     let source = fixture.root.appending(path: "Active.ipsw")
     try Data([7, 8, 9]).write(to: source)
-    let activeService = RestoreImageImportService(cacheDirectoryURL: fixture.cache)
+    let activeCache = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    let activeService = RestoreImageImportService(
+      cacheDirectoryURL: fixture.cache,
+      cache: activeCache
+    )
     let lease = try await activeService.importImage(at: source)
 
-    let competingService = RestoreImageImportService(cacheDirectoryURL: fixture.cache)
-    await #expect(throws: RestoreImageImportError.cacheInUse) {
+    let competingCache = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    let competingService = RestoreImageImportService(
+      cacheDirectoryURL: fixture.cache,
+      cache: competingCache
+    )
+    await #expect(throws: RestoreImageCacheError.cacheInUse) {
       _ = try await competingService.importImage(at: lease.fileURL)
     }
-    try await competingService.recoverPendingImports(referencedURLs: [])
+    await #expect(throws: RestoreImageCacheError.cacheInUse) {
+      try await competingCache.recover { [] }
+    }
 
     #expect(FileManager.default.fileExists(atPath: lease.fileURL.path))
     #expect(FileManager.default.fileExists(atPath: pendingMarker(for: lease.fileURL).path))
-    try await activeService.discardImport(lease)
+    try await activeCache.abandon(lease)
+  }
+
+  @Test
+  func imageAlreadyInPrivateCacheStillReceivesADurableLease() async throws {
+    let fixture = try ImportFixture()
+    defer { fixture.remove() }
+    try FileManager.default.createDirectory(
+      at: fixture.cache,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+    let cachedImage = fixture.cache.appending(path: "Existing.ipsw")
+    try Data([1, 2, 3]).write(to: cachedImage)
+    let owner = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    let importer = RestoreImageImportService(
+      cacheDirectoryURL: fixture.cache,
+      cache: owner
+    )
+
+    let lease = try await importer.importImage(at: cachedImage)
+    #expect(lease.purpose == .existingCachedImage)
+
+    let competitor = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    await #expect(throws: RestoreImageCacheError.cacheInUse) {
+      _ = try await competitor.acquireLease(
+        for: fixture.cache.appending(path: "Other.ipsw"),
+        purpose: .remoteDownload,
+        abandonPolicy: .retainArtifacts
+      )
+    }
+
+    await owner.commit(lease)
   }
 
   @Test
@@ -149,7 +203,11 @@ struct RestoreImageImportServiceTests {
     try Data([1]).write(to: source)
     let symbolic = fixture.root.appending(path: "Symbolic.ipsw")
     try FileManager.default.createSymbolicLink(at: symbolic, withDestinationURL: source)
-    let service = RestoreImageImportService(cacheDirectoryURL: fixture.cache)
+    let cache = RestoreImageCacheService(cacheDirectoryURL: fixture.cache)
+    let service = RestoreImageImportService(
+      cacheDirectoryURL: fixture.cache,
+      cache: cache
+    )
 
     do {
       _ = try await service.importImage(at: symbolic)
@@ -162,14 +220,18 @@ struct RestoreImageImportServiceTests {
   private func pendingMarker(for importedURL: URL) -> URL {
     importedURL.deletingLastPathComponent().appending(
       path:
-        ".\(importedURL.lastPathComponent)\(RestoreImageImportService.pendingMarkerSuffix)"
+        ".\(importedURL.lastPathComponent)\(RestoreImageCacheService.leaseMarkerSuffix)"
     )
   }
 
   private func createInterruptedImport(source: URL, cache: URL) async throws
-    -> RestoreImageImportLease
+    -> RestoreImageCacheLease
   {
-    let service = RestoreImageImportService(cacheDirectoryURL: cache)
+    let cacheService = RestoreImageCacheService(cacheDirectoryURL: cache)
+    let service = RestoreImageImportService(
+      cacheDirectoryURL: cache,
+      cache: cacheService
+    )
     return try await service.importImage(at: source)
   }
 }

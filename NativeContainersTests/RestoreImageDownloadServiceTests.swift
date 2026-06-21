@@ -17,9 +17,10 @@ struct RestoreImageDownloadServiceTests {
     )
     let progress = ProgressRecorder()
 
-    let downloadedURL = try await fixture.service.download(from: sourceURL) { update in
+    let lease = try await fixture.service.download(from: sourceURL) { update in
       await progress.record(update)
     }
+    let downloadedURL = lease.fileURL
 
     #expect(downloadedURL == fixture.destinationURL)
     #expect(try Data(contentsOf: downloadedURL) == body)
@@ -34,6 +35,7 @@ struct RestoreImageDownloadServiceTests {
       }
     )
     #expect(updates.last?.fractionCompleted == 1)
+    await fixture.cache.commit(lease)
   }
 
   @Test
@@ -156,7 +158,27 @@ struct RestoreImageDownloadServiceTests {
   }
 
   @Test
-  func successfulDownloadAtomicallyReplacesExistingFinalFile() async throws {
+  func completedImmutableDownloadIsReusedWithoutANetworkRequest() async throws {
+    let fixture = try DownloadFixture()
+    defer { fixture.remove() }
+    let sourceURL = URL(string: "https://example.test/Restore.ipsw")!
+    let completed = Data("completed-image".utf8)
+    try completed.write(to: fixture.destinationURL)
+    await StubURLProtocol.registry.register(
+      StubResponse(statusCode: 200, chunks: [Data("replacement".utf8)]),
+      for: sourceURL
+    )
+
+    let lease = try await fixture.service.download(from: sourceURL)
+
+    #expect(lease.fileURL == fixture.destinationURL)
+    #expect(try Data(contentsOf: lease.fileURL) == completed)
+    #expect(await StubURLProtocol.registry.requests(for: sourceURL).isEmpty)
+    await fixture.cache.commit(lease)
+  }
+
+  @Test
+  func transferNeverReplacesAnExistingCompletedImage() async throws {
     let fixture = try DownloadFixture()
     defer { fixture.remove() }
     try Data("old-image".utf8).write(to: fixture.destinationURL)
@@ -167,13 +189,19 @@ struct RestoreImageDownloadServiceTests {
       for: sourceURL
     )
 
-    _ = try await fixture.service.download(
-      from: sourceURL,
-      to: fixture.destinationURL
-    ) { _ in }
+    await #expect(
+      throws: RestoreImageDownloadError.destinationAlreadyExists(
+        fixture.destinationURL
+      )
+    ) {
+      _ = try await fixture.service.download(
+        from: sourceURL,
+        to: fixture.destinationURL
+      ) { _ in }
+    }
 
-    #expect(try Data(contentsOf: fixture.destinationURL) == newImage)
-    #expect(!FileManager.default.fileExists(atPath: fixture.partialURL.path))
+    #expect(try Data(contentsOf: fixture.destinationURL) == Data("old-image".utf8))
+    #expect(try Data(contentsOf: fixture.partialURL) == newImage)
   }
 }
 
@@ -181,6 +209,7 @@ private struct DownloadFixture {
   let rootURL: URL
   let destinationURL: URL
   let partialURL: URL
+  let cache: RestoreImageCacheService
   let service: RestoreImageDownloadService
 
   init() throws {
@@ -189,16 +218,23 @@ private struct DownloadFixture {
       directoryHint: .isDirectory
     )
     try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
-    let destinationURL = rootURL.appending(path: "Restore.ipsw")
+    let sourceURL = URL(string: "https://example.test/Restore.ipsw")!
+    let destinationURL = RestoreImageDownloadService.destinationURL(
+      for: sourceURL,
+      in: rootURL
+    )
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubURLProtocol.self]
+    let cache = RestoreImageCacheService(cacheDirectoryURL: rootURL)
 
     self.rootURL = rootURL
     self.destinationURL = destinationURL
     self.partialURL = RestoreImageDownloadService.partialFileURL(for: destinationURL)
+    self.cache = cache
     self.service = RestoreImageDownloadService(
       downloadDirectoryURL: rootURL,
-      sessionConfiguration: configuration
+      sessionConfiguration: configuration,
+      cache: cache
     )
   }
 
