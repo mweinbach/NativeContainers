@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct VirtualMachineRow: View {
+struct MacVirtualMachineRow: View {
   let machine: VirtualMachineManifest
   let availability: MacVirtualMachineAvailability
   let runtime: MacVirtualMachineRuntimeModel

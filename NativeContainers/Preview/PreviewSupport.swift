@@ -13,6 +13,14 @@ extension AppModel {
     return model
   }
 
+  static var previewLinuxVirtualMachine: AppModel {
+    let model = preview
+    if let machine = model.virtualMachines.first(where: { $0.guest == .linux }) {
+      _ = model.navigate(to: .macOSVirtualMachine(machine.id))
+    }
+    return model
+  }
+
   static var previewContainers: AppModel {
     let model = preview
     model.selection = .containers
@@ -188,6 +196,20 @@ extension AppModel {
         format: .asif
       )
     }
+    var linuxVM = try! VirtualMachineManifest(
+      name: "Fedora Workstation",
+      guest: .linux,
+      installState: .draft,
+      resources: machineResources
+    )
+    linuxVM.markReadyToInstallLinux(
+      configuration: LinuxVirtualMachineConfiguration(
+        efiVariableStorePath: LinuxPlatformArtifactURLs.efiVariableStoreManifestPath,
+        machineIdentifierPath: LinuxPlatformArtifactURLs.machineIdentifierManifestPath,
+        installationMediaPath: LinuxPlatformArtifactURLs.installationMediaManifestPath,
+        macAddress: "02:00:00:00:00:05"
+      )
+    )
     let sharedDirectories = PreviewMacVirtualMachineSharedDirectoryService(
       initialConfiguration: MacVirtualMachineSharedDirectoryConfiguration(
         revision: 2,
@@ -231,7 +253,7 @@ extension AppModel {
       virtualMachineNetwork: PreviewMacVirtualMachineNetworkService(),
       virtualMachineSharedDirectories: sharedDirectories,
       initialInventory: inventory,
-      initialVirtualMachines: [macVM]
+      initialVirtualMachines: [macVM, linuxVM]
     )
   }
 

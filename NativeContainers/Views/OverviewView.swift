@@ -168,7 +168,7 @@ struct ResourceSummaryGrid: View {
         action: { onNavigate(.linuxMachines) }
       )
       SummaryCard(
-        title: "macOS VMs",
+        title: "Virtual Machines",
         value: virtualMachineCount.formatted(),
         detail: "managed bundles",
         systemImage: "macwindow",

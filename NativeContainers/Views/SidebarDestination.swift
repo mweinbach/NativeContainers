@@ -67,7 +67,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
     case .volumes: "Volumes"
     case .networks: "Networks"
     case .linuxMachines: "Linux Machines"
-    case .macOSVirtualMachines: "macOS VMs"
+    case .macOSVirtualMachines: "Virtual Machines"
     case .settings: "Settings"
     }
   }

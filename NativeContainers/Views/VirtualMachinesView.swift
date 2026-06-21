@@ -31,9 +31,9 @@ struct VirtualMachinesView: View {
     VStack(spacing: 0) {
       if model.virtualMachines.isEmpty {
         ContentUnavailableView {
-          Label("No macOS VMs", systemImage: "macwindow")
+          Label("No Virtual Machines", systemImage: "display.2")
         } description: {
-          Text("Create a native Virtualization.framework bundle to begin installing macOS.")
+          Text("Create a native macOS or GUI Linux virtual machine.")
         } actions: {
           HStack {
             Button("Create VM") { isCreating = true }
@@ -43,48 +43,42 @@ struct VirtualMachinesView: View {
         }
       } else {
         HSplitView {
-          List(model.virtualMachines) { machine in
-            VirtualMachineRow(
-              machine: machine,
-              availability: model.virtualMachineAvailability,
-              runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
-              diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
-                for: machine
-              ),
-              isSelected: selectedMachineID == machine.id,
-              onSelect: {
-                model.navigate(to: .macOSVirtualMachine(machine.id))
-              },
-              prepare: { machineToPrepare = machine },
-              install: { machineToInstall = machine },
-              open: { machineToOpen = machine },
-              forceStop: { machineToForceStop = machine },
-              clone: { machineToClone = machine },
-              export: { chooseExportDestination(for: machine) },
-              discard: { machineToDiscard = machine }
-            )
+          ScrollView {
+            LazyVStack(spacing: 2) {
+              ForEach(model.virtualMachines) { machine in
+                GuestVirtualMachineRow(
+                  machine: machine,
+                  model: model,
+                  isSelected: selectedMachineID == machine.id,
+                  onSelect: {
+                    model.navigate(to: .macOSVirtualMachine(machine.id))
+                  },
+                  prepare: { machineToPrepare = machine },
+                  install: { machineToInstall = machine },
+                  open: { machineToOpen = machine },
+                  confirmForceStop: { machineToForceStop = machine },
+                  clone: { machineToClone = machine },
+                  export: { chooseExportDestination(for: machine) },
+                  discard: { machineToDiscard = machine }
+                )
+              }
+            }
+            .padding(8)
           }
+          .background(Color(nsColor: .controlBackgroundColor))
           .frame(minWidth: 360, idealWidth: 430, maxWidth: 560)
 
           if let selectedMachine {
-            MacVirtualMachineConfigurationView(
+            GuestVirtualMachineConfigurationView(
               machine: selectedMachine,
-              runtime: model.makeMacVirtualMachineRuntimeModel(for: selectedMachine),
-              audio: model.makeMacVirtualMachineAudioModel(for: selectedMachine),
-              network: model.makeMacVirtualMachineNetworkModel(for: selectedMachine),
-              sharedDirectories: model.makeMacVirtualMachineSharedDirectoriesModel(
-                for: selectedMachine
-              ),
-              diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
-                for: selectedMachine
-              )
+              model: model
             )
             .id(selectedMachine.id)
             .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
           } else {
             ContentUnavailableView(
               "Select a Virtual Machine",
-              systemImage: "macwindow",
+              systemImage: "display.2",
               description: Text("Choose a VM to inspect its configuration.")
             )
             .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
@@ -92,7 +86,7 @@ struct VirtualMachinesView: View {
         }
       }
     }
-    .navigationTitle("macOS VMs")
+    .navigationTitle("Virtual Machines")
     .onChange(of: model.virtualMachines, initial: true) {
       synchronizeSelection()
     }
@@ -116,10 +110,7 @@ struct VirtualMachinesView: View {
       MacVirtualMachineInstallationView(machine: machine, appModel: model)
     }
     .sheet(item: $machineToOpen) { machine in
-      MacVirtualMachineRuntimeView(
-        machine: machine,
-        model: model.makeMacVirtualMachineRuntimeModel(for: machine)
-      )
+      GuestVirtualMachineRuntimeView(machine: machine, model: model)
     }
     .sheet(item: $machineToClone) { machine in
       CloneVirtualMachineView(machine: machine, model: model)
@@ -172,8 +163,7 @@ struct VirtualMachinesView: View {
     ) { machine in
       Button("Force Stop \(machine.name)", role: .destructive) {
         machineToForceStop = nil
-        let runtime = model.makeMacVirtualMachineRuntimeModel(for: machine)
-        Task { await runtime.forceStop() }
+        forceStop(machine)
       }
     } message: { machine in
       Text("This immediately powers off \(machine.name) and may lose unsaved guest data.")
@@ -192,7 +182,7 @@ struct VirtualMachinesView: View {
       }
     } message: { machine in
       Text(
-        "This permanently removes \(machine.name), its virtual disk, and its platform identity. Cached restore images are retained."
+        "This permanently removes \(machine.name), its virtual disk, platform identity, and bundled installation media."
       )
     }
   }
@@ -215,6 +205,17 @@ struct VirtualMachinesView: View {
     model.navigate(to: .macOSVirtualMachine(id))
   }
 
+  private func forceStop(_ machine: VirtualMachineManifest) {
+    Task {
+      switch machine.guest {
+      case .macOS:
+        await model.makeMacVirtualMachineRuntimeModel(for: machine).forceStop()
+      case .linux:
+        await model.makeLinuxVirtualMachineRuntimeModel(for: machine).forceStop()
+      }
+    }
+  }
+
   private func chooseExportDestination(for machine: VirtualMachineManifest) {
     Task { @MainActor in
       guard
@@ -231,12 +232,112 @@ struct VirtualMachinesView: View {
   }
 }
 
-#Preview("macOS virtual machines") {
+private struct GuestVirtualMachineRow: View {
+  let machine: VirtualMachineManifest
+  let model: AppModel
+  let isSelected: Bool
+  let onSelect: () -> Void
+  let prepare: () -> Void
+  let install: () -> Void
+  let open: () -> Void
+  let confirmForceStop: () -> Void
+  let clone: () -> Void
+  let export: () -> Void
+  let discard: () -> Void
+
+  var body: some View {
+    switch machine.guest {
+    case .macOS:
+      MacVirtualMachineRow(
+        machine: machine,
+        availability: model.virtualMachineAvailability,
+        runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
+        diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
+          for: machine
+        ),
+        isSelected: isSelected,
+        onSelect: onSelect,
+        prepare: prepare,
+        install: install,
+        open: open,
+        forceStop: confirmForceStop,
+        clone: clone,
+        export: export,
+        discard: discard
+      )
+    case .linux:
+      LinuxVirtualMachineRow(
+        machine: machine,
+        runtime: model.makeLinuxVirtualMachineRuntimeModel(for: machine),
+        isSelected: isSelected,
+        onSelect: onSelect,
+        open: open,
+        confirmForceStop: confirmForceStop,
+        discard: discard
+      )
+    }
+  }
+}
+
+private struct GuestVirtualMachineConfigurationView: View {
+  let machine: VirtualMachineManifest
+  let model: AppModel
+
+  var body: some View {
+    switch machine.guest {
+    case .macOS:
+      MacVirtualMachineConfigurationView(
+        machine: machine,
+        runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
+        audio: model.makeMacVirtualMachineAudioModel(for: machine),
+        network: model.makeMacVirtualMachineNetworkModel(for: machine),
+        sharedDirectories: model.makeMacVirtualMachineSharedDirectoriesModel(
+          for: machine
+        ),
+        diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
+          for: machine
+        )
+      )
+    case .linux:
+      LinuxVirtualMachineConfigurationView(
+        machine: machine,
+        runtime: model.makeLinuxVirtualMachineRuntimeModel(for: machine)
+      )
+    }
+  }
+}
+
+private struct GuestVirtualMachineRuntimeView: View {
+  let machine: VirtualMachineManifest
+  let model: AppModel
+
+  var body: some View {
+    switch machine.guest {
+    case .macOS:
+      MacVirtualMachineRuntimeView(
+        machine: machine,
+        model: model.makeMacVirtualMachineRuntimeModel(for: machine)
+      )
+    case .linux:
+      LinuxVirtualMachineRuntimeView(
+        machine: machine,
+        model: model.makeLinuxVirtualMachineRuntimeModel(for: machine)
+      )
+    }
+  }
+}
+
+#Preview("Virtual machines") {
   RootView(model: .previewVirtualMachines)
     .frame(width: 1_080, height: 720)
 }
 
-#Preview("macOS virtual machines — ASIF") {
+#Preview("Virtual machines — ASIF") {
   RootView(model: .previewASIFVirtualMachines)
+    .frame(width: 1_080, height: 720)
+}
+
+#Preview("Linux virtual machine") {
+  RootView(model: .previewLinuxVirtualMachine)
     .frame(width: 1_080, height: 720)
 }

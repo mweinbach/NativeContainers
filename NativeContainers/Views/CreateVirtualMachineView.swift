@@ -1,20 +1,42 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct CreateVirtualMachineView: View {
   let model: AppModel
 
   @Environment(\.dismiss) private var dismiss
+  @State private var guest = VirtualMachineGuest.macOS
   @State private var name = "macOS"
-  @State private var cpuCount = min(max(ProcessInfo.processInfo.processorCount / 2, 2), 8)
+  @State private var cpuCount = min(
+    max(ProcessInfo.processInfo.processorCount / 2, 2),
+    8
+  )
   @State private var memoryGiB = 8
   @State private var diskGiB = 64
+  @State private var installationMediaURL: URL?
+  @State private var isChoosingInstallationMedia = false
   @State private var isCreating = false
   @State private var errorMessage: String?
 
+  init(
+    model: AppModel,
+    initialGuest: VirtualMachineGuest = .macOS
+  ) {
+    self.model = model
+    _guest = State(initialValue: initialGuest)
+    _name = State(initialValue: initialGuest == .macOS ? "macOS" : "Linux")
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
-      CreateVirtualMachineHeader()
+      CreateVirtualMachineHeader(guest: guest)
       Form {
+        Picker("Guest", selection: $guest) {
+          Text("macOS").tag(VirtualMachineGuest.macOS)
+          Text("Linux").tag(VirtualMachineGuest.linux)
+        }
+        .pickerStyle(.segmented)
+
         TextField("Name", text: $name)
         Stepper(
           "CPUs: \(cpuCount)",
@@ -23,13 +45,28 @@ struct CreateVirtualMachineView: View {
         )
         Stepper("Memory: \(memoryGiB) GiB", value: $memoryGiB, in: 1...128)
         Stepper("Disk: \(diskGiB) GiB", value: $diskGiB, in: 8...1024, step: 8)
+
+        if guest == .linux {
+          LabeledContent("Installation ISO") {
+            HStack(spacing: 8) {
+              if let installationMediaURL {
+                Text(installationMediaURL.lastPathComponent)
+                  .lineLimit(1)
+              } else {
+                Text("Not selected")
+                  .foregroundStyle(.secondary)
+              }
+              Button("Choose…") {
+                isChoosingInstallationMedia = true
+              }
+            }
+          }
+        }
       }
 
-      Text(
-        "This creates a sparse, self-contained VM bundle. Restore-image preparation remains a separate, cancellable operation."
-      )
-      .font(.caption)
-      .foregroundStyle(.secondary)
+      Text(creationDescription)
+        .font(.caption)
+        .foregroundStyle(.secondary)
 
       if let errorMessage {
         Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -45,11 +82,46 @@ struct CreateVirtualMachineView: View {
         }
         .keyboardShortcut(.defaultAction)
         .buttonStyle(.borderedProminent)
-        .disabled(isCreating || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(!canCreate)
       }
     }
     .padding(24)
-    .frame(width: 520)
+    .frame(width: 540)
+    .onChange(of: guest) { oldGuest, newGuest in
+      let oldDefaultName = oldGuest == .macOS ? "macOS" : "Linux"
+      if name == oldDefaultName {
+        name = newGuest == .macOS ? "macOS" : "Linux"
+      }
+      errorMessage = nil
+    }
+    .fileImporter(
+      isPresented: $isChoosingInstallationMedia,
+      allowedContentTypes: [UTType(filenameExtension: "iso") ?? .data],
+      allowsMultipleSelection: false
+    ) { result in
+      switch result {
+      case .success(let urls):
+        installationMediaURL = urls.first
+        errorMessage = nil
+      case .failure(let error):
+        errorMessage = error.localizedDescription
+      }
+    }
+  }
+
+  private var canCreate: Bool {
+    !isCreating
+      && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && (guest == .macOS || installationMediaURL != nil)
+  }
+
+  private var creationDescription: LocalizedStringResource {
+    switch guest {
+    case .macOS:
+      "Creates a sparse VM bundle. Restore-image preparation remains a separate, cancellable operation."
+    case .linux:
+      "Creates a sparse VM bundle, copies the selected ISO, and prepares persistent UEFI and machine identity artifacts as one recoverable operation."
+    }
   }
 
   private func create() {
@@ -62,11 +134,23 @@ struct CreateVirtualMachineView: View {
           memoryBytes: UInt64(memoryGiB) * VirtualMachineResources.bytesPerGiB,
           diskBytes: UInt64(diskGiB) * VirtualMachineResources.bytesPerGiB
         )
-        try await model.createVirtualMachineDraft(
-          name: name,
-          guest: .macOS,
-          resources: resources
-        )
+        switch guest {
+        case .macOS:
+          try await model.createVirtualMachineDraft(
+            name: name,
+            guest: .macOS,
+            resources: resources
+          )
+        case .linux:
+          guard let installationMediaURL else {
+            throw LinuxVirtualMachineCreationError.unavailable
+          }
+          try await model.createLinuxVirtualMachine(
+            name: name,
+            resources: resources,
+            installationMediaURL: installationMediaURL
+          )
+        }
         dismiss()
       } catch {
         errorMessage = error.localizedDescription
@@ -74,20 +158,46 @@ struct CreateVirtualMachineView: View {
       }
     }
   }
+
+}
+
+#Preview("Create macOS virtual machine") {
+  CreateVirtualMachineView(model: .previewEmpty)
+}
+
+#Preview("Create Linux virtual machine") {
+  CreateVirtualMachineView(
+    model: .previewEmpty,
+    initialGuest: .linux
+  )
 }
 
 private struct CreateVirtualMachineHeader: View {
+  let guest: VirtualMachineGuest
+
   var body: some View {
     HStack(spacing: 14) {
-      Image(systemName: "macwindow.badge.plus")
+      Image(systemName: iconName)
         .font(.largeTitle)
-        .foregroundStyle(.indigo)
+        .foregroundStyle(tint)
       VStack(alignment: .leading, spacing: 3) {
-        Text("Create macOS VM")
+        Text(title)
           .font(.title2.bold())
         Text("Native Virtualization.framework bundle")
           .foregroundStyle(.secondary)
       }
     }
+  }
+
+  private var title: LocalizedStringResource {
+    guest == .macOS ? "Create macOS VM" : "Create Linux VM"
+  }
+
+  private var iconName: String {
+    guest == .macOS ? "macwindow.badge.plus" : "display.badge.plus"
+  }
+
+  private var tint: Color {
+    guest == .macOS ? .indigo : .mint
   }
 }

@@ -99,8 +99,8 @@ private struct MenuBarQuickControlsHeader: View {
         .foregroundStyle(.secondary)
 
         Text(
-          "\(runningLinuxMachineCount)/\(totalLinuxMachineCount) Linux machines, \(virtualMachineCount) macOS VMs",
-          comment: "Menu bar Linux machine and macOS VM counts."
+          "\(runningLinuxMachineCount)/\(totalLinuxMachineCount) Linux machines, \(virtualMachineCount) virtual machines",
+          comment: "Menu bar Linux machine and native virtual machine counts."
         )
         .font(.caption)
         .foregroundStyle(.secondary)

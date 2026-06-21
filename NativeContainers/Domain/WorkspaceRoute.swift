@@ -103,6 +103,7 @@ enum WorkspaceResourceKind: Int, CaseIterable, Sendable {
   case network
   case linuxMachine
   case macOSVirtualMachine
+  case linuxVirtualMachine
 
   var title: LocalizedStringResource {
     switch self {
@@ -120,6 +121,8 @@ enum WorkspaceResourceKind: Int, CaseIterable, Sendable {
       "Linux Machine"
     case .macOSVirtualMachine:
       "macOS VM"
+    case .linuxVirtualMachine:
+      "Linux VM"
     }
   }
 
@@ -139,6 +142,8 @@ enum WorkspaceResourceKind: Int, CaseIterable, Sendable {
       "terminal"
     case .macOSVirtualMachine:
       "macwindow"
+    case .linuxVirtualMachine:
+      "display"
     }
   }
 
@@ -158,6 +163,8 @@ enum WorkspaceResourceKind: Int, CaseIterable, Sendable {
       ["linux", "machine", "vm"]
     case .macOSVirtualMachine:
       ["macos", "mac", "virtual machine", "vm"]
+    case .linuxVirtualMachine:
+      ["linux", "desktop", "gui", "virtual machine", "vm"]
     }
   }
 }

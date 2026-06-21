@@ -108,6 +108,38 @@ struct WorkspaceNavigationTests {
   }
 
   @Test
+  func catalogDistinguishesGUIVirtualMachineGuests() throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 32 * VirtualMachineResources.bytesPerGiB
+    )
+    let mac = try VirtualMachineManifest(
+      name: "macOS",
+      guest: .macOS,
+      installState: .stopped,
+      resources: resources
+    )
+    let linux = try VirtualMachineManifest(
+      name: "Fedora",
+      guest: .linux,
+      installState: .stopped,
+      resources: resources
+    )
+
+    let entries = WorkspaceResourceCatalog().entries(
+      from: WorkspaceResourceSnapshot(macOSVirtualMachines: [mac, linux])
+    )
+
+    #expect(
+      entries.first { $0.route == .macOSVirtualMachine(mac.id) }?.kind == .macOSVirtualMachine)
+    #expect(
+      entries.first { $0.route == .macOSVirtualMachine(linux.id) }?.kind
+        == .linuxVirtualMachine
+    )
+  }
+
+  @Test
   func catalogIndexesComposeProjectsAndCanonicalContainerLabels() throws {
     let fixture = try makeFixture()
     let catalog = WorkspaceResourceCatalog()

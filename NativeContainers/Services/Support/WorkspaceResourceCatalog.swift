@@ -128,7 +128,10 @@ struct WorkspaceResourceCatalog: WorkspaceResourceCataloging {
       contentsOf: snapshot.macOSVirtualMachines.map { machine in
         entry(
           route: .macOSVirtualMachine(machine.id),
-          kind: .macOSVirtualMachine,
+          kind:
+            machine.guest == .macOS
+            ? .macOSVirtualMachine
+            : .linuxVirtualMachine,
           title: machine.name,
           subtitle: machine.id.uuidString,
           terms: [
