@@ -59,6 +59,8 @@ protocol MacVirtualMachineInstallationStoring: Sendable {
 actor VirtualMachineLibrary:
   VirtualMachineLibraryProtocol,
   VirtualMachineCloneStoring,
+  VirtualMachineExportSourceLeasing,
+  VirtualMachineImportStoring,
   MacVirtualMachineInstallationStoring,
   MacVirtualMachineRuntimeLeasing,
   MacVirtualMachineSharedDirectoryPersisting
@@ -77,10 +79,16 @@ actor VirtualMachineLibrary:
   static let deletionTombstoneSuffix = ".partial"
   static let cloneStagingPrefix = ".Clone-"
   static let cloneStagingSuffix = ".partial"
+  static let importStagingPrefix = ".Import-"
+  static let importStagingSuffix = ".partial"
 
   private struct ActiveClone {
     let transaction: VirtualMachineCloneTransaction
     let runtimeLock: AdvisoryFileLockLease
+  }
+
+  private struct ActiveImport {
+    let transaction: VirtualMachineImportTransaction
   }
 
   private let rootURL: URL
@@ -95,6 +103,7 @@ actor VirtualMachineLibrary:
   private var operationAccessTokens = Set<UUID>()
   private var installationOperationIDs = Set<UUID>()
   private var activeClones: [UUID: ActiveClone] = [:]
+  private var activeImports: [UUID: ActiveImport] = [:]
 
   init(
     rootURL: URL? = nil,
@@ -441,6 +450,139 @@ actor VirtualMachineLibrary:
     try fileManager.removeItem(at: transaction.stagingBundleURL)
   }
 
+  func acquireExportSource(id: UUID) throws -> VirtualMachineExportSourceLease {
+    try ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
+    let manifest = try installationManifest(id: id)
+    guard manifest.installState == .stopped else {
+      throw VirtualMachineTransferError.invalidSourceState(manifest.installState)
+    }
+    let bundleURL = bundleURL(for: id)
+    try requireDirectory(bundleURL)
+    guard
+      let runtimeLock = try AdvisoryFileLock.acquire(
+        at: bundleURL.appending(path: Self.runtimeLockFilename)
+      )
+    else {
+      throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
+    }
+
+    do {
+      _ = try macVirtualMachineBundleResolver.resolveRuntime(manifest)
+      return VirtualMachineExportSourceLease(
+        manifest: manifest,
+        bundleURL: bundleURL
+      ) {
+        runtimeLock.release()
+      }
+    } catch {
+      runtimeLock.release()
+      throw error
+    }
+  }
+
+  func beginImport(
+    from sourceURL: URL,
+    mode: VirtualMachineImportMode
+  ) throws -> VirtualMachineImportTransaction {
+    try ensureRootExists()
+    let operationID = UUID()
+    try acquireOperationAccess(token: operationID)
+    var didBegin = false
+    defer {
+      if !didBegin {
+        releaseOperationAccess(token: operationID)
+      }
+    }
+
+    let sourceBundleURL = sourceURL.standardizedFileURL
+    guard sourceBundleURL.isFileURL,
+      sourceBundleURL.pathExtension.caseInsensitiveCompare(Self.bundleExtension)
+        == .orderedSame
+    else {
+      throw VirtualMachineTransferError.invalidPackage(
+        "the selected item is not a .\(Self.bundleExtension) package"
+      )
+    }
+    guard !isSameOrDescendant(sourceBundleURL, of: rootURL) else {
+      throw VirtualMachineTransferError.invalidPackage(
+        "packages already inside the active library cannot be imported"
+      )
+    }
+    try requireDirectory(sourceBundleURL)
+
+    let source: VirtualMachineManifest
+    do {
+      source = try readManifest(in: sourceBundleURL)
+    } catch {
+      throw VirtualMachineTransferError.invalidPackage(error.localizedDescription)
+    }
+    guard source.guest == .macOS else {
+      throw VirtualMachineTransferError.invalidPackage(
+        "only macOS virtual machine packages are supported"
+      )
+    }
+    guard source.installState == .stopped else {
+      throw VirtualMachineTransferError.invalidSourceState(source.installState)
+    }
+
+    let imported = try source.imported(using: mode)
+    let finalBundleURL = bundleURL(for: imported.id)
+    guard !fileManager.fileExists(atPath: finalBundleURL.path) else {
+      throw VirtualMachineTransferError.identityCollision(imported.id)
+    }
+    let stagingBundleURL = rootURL.appending(
+      path:
+        "\(Self.importStagingPrefix)\(imported.id.uuidString.lowercased())-\(operationID.uuidString.lowercased())\(Self.importStagingSuffix)",
+      directoryHint: .isDirectory
+    )
+    guard !fileManager.fileExists(atPath: stagingBundleURL.path) else {
+      throw VirtualMachineTransferError.invalidPackage(
+        "an import staging package already exists"
+      )
+    }
+
+    let transaction = VirtualMachineImportTransaction(
+      operationID: operationID,
+      source: source,
+      imported: imported,
+      sourceBundleURL: sourceBundleURL,
+      stagingBundleURL: stagingBundleURL,
+      finalBundleURL: finalBundleURL,
+      mode: mode
+    )
+    activeImports[operationID] = ActiveImport(transaction: transaction)
+    didBegin = true
+    return transaction
+  }
+
+  func commitImport(
+    _ transaction: VirtualMachineImportTransaction
+  ) throws -> VirtualMachineManifest {
+    _ = try activeImport(transaction)
+    try validateImportedBundle(transaction)
+    guard !fileManager.fileExists(atPath: transaction.finalBundleURL.path) else {
+      throw VirtualMachineTransferError.identityCollision(transaction.imported.id)
+    }
+    try fileManager.moveItem(
+      at: transaction.stagingBundleURL,
+      to: transaction.finalBundleURL
+    )
+    finishImport(operationID: transaction.operationID)
+    return transaction.imported
+  }
+
+  func abortImport(_ transaction: VirtualMachineImportTransaction) throws {
+    _ = try activeImport(transaction)
+    defer { finishImport(operationID: transaction.operationID) }
+    guard fileManager.fileExists(atPath: transaction.stagingBundleURL.path) else { return }
+    try requireDirectory(transaction.stagingBundleURL)
+    try fileManager.removeItem(at: transaction.stagingBundleURL)
+  }
+
   func acquireMacOSRuntime(id: UUID) throws -> MacVirtualMachineRuntimeLease {
     try ensureRootExists()
     let accessToken = UUID()
@@ -698,6 +840,7 @@ actor VirtualMachineLibrary:
 
     try removeDeletionTombstones()
     try removeCloneStagingBundles()
+    try removeImportStagingBundles()
     for var manifest in try list() {
       try removeOrphanedInstallationStagingDirectories(id: manifest.id)
       let installedDirectory = installationInstalledDirectory(id: manifest.id)
@@ -742,19 +885,89 @@ actor VirtualMachineLibrary:
     return active
   }
 
+  private func activeImport(
+    _ transaction: VirtualMachineImportTransaction
+  ) throws -> ActiveImport {
+    guard let active = activeImports[transaction.operationID],
+      active.transaction == transaction
+    else {
+      throw VirtualMachineTransferError.staleTransaction(transaction.imported.id)
+    }
+    return active
+  }
+
   private func validateCloneBundle(_ transaction: VirtualMachineCloneTransaction) throws {
-    try requireDirectory(transaction.stagingBundleURL)
-    let manifest = try readManifest(in: transaction.stagingBundleURL)
-    guard manifest == transaction.clone, manifest.installState == .stopped else {
-      throw VirtualMachineCloneError.invalidBundle(
-        "the staged manifest does not match the clone transaction"
+    do {
+      let cloneIdentifierData = try validateStagedBundle(
+        manifest: transaction.clone,
+        bundleURL: transaction.stagingBundleURL,
+        allowsSharedDirectories: true
+      )
+      guard let sourceIdentifierPath = transaction.source.machineIdentifierPath else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "the source manifest has no machine identifier path"
+        )
+      }
+      let sourceIdentifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
+        sourceIdentifierPath,
+        named: "sourceMachineIdentifierPath",
+        in: transaction.sourceBundleURL,
+        writable: false
+      )
+      let sourceIdentifierData = try Data(contentsOf: sourceIdentifierURL)
+      guard cloneIdentifierData != sourceIdentifierData,
+        try !machineIdentifierExists(cloneIdentifierData)
+      else {
+        throw VirtualMachineBundleError.duplicateMachineIdentifier
+      }
+    } catch let error as VirtualMachineCloneError {
+      throw error
+    } catch {
+      throw VirtualMachineCloneError.invalidBundle(error.localizedDescription)
+    }
+  }
+
+  private func validateImportedBundle(
+    _ transaction: VirtualMachineImportTransaction
+  ) throws {
+    do {
+      let identifierData = try validateStagedBundle(
+        manifest: transaction.imported,
+        bundleURL: transaction.stagingBundleURL,
+        allowsSharedDirectories: false
+      )
+      guard try !machineIdentifierExists(identifierData) else {
+        throw VirtualMachineTransferError.platformIdentityCollision
+      }
+    } catch let error as VirtualMachineTransferError {
+      throw error
+    } catch {
+      throw VirtualMachineTransferError.invalidPackage(error.localizedDescription)
+    }
+  }
+
+  private func validateStagedBundle(
+    manifest expectedManifest: VirtualMachineManifest,
+    bundleURL: URL,
+    allowsSharedDirectories: Bool
+  ) throws -> Data {
+    try requireDirectory(bundleURL)
+    let manifest = try readManifest(in: bundleURL)
+    guard manifest == expectedManifest,
+      manifest.guest == .macOS,
+      manifest.installState == .stopped,
+      manifest.installationOperationID == nil,
+      manifest.installationFailure == nil
+    else {
+      throw VirtualMachineBundleError.invalidBundle(
+        "the staged manifest does not match the transfer transaction"
       )
     }
 
     _ = try macVirtualMachineBundleResolver.resolveArtifact(
       manifest.diskImagePath,
       named: "diskImagePath",
-      in: transaction.stagingBundleURL,
+      in: bundleURL,
       writable: true
     )
     for (path, name, writable) in [
@@ -763,58 +976,76 @@ actor VirtualMachineLibrary:
       (manifest.machineIdentifierPath, "machineIdentifierPath", false),
     ] {
       guard let path else {
-        throw VirtualMachineCloneError.invalidBundle("the staged manifest is missing \(name)")
+        throw VirtualMachineBundleError.invalidBundle(
+          "the staged manifest is missing \(name)"
+        )
       }
       _ = try macVirtualMachineBundleResolver.resolveArtifact(
         path,
         named: name,
-        in: transaction.stagingBundleURL,
+        in: bundleURL,
         writable: writable
       )
     }
-    guard let sourceIdentifierPath = transaction.source.machineIdentifierPath,
-      let cloneIdentifierPath = manifest.machineIdentifierPath
-    else {
-      throw VirtualMachineCloneError.invalidBundle(
-        "the source or clone manifest has no machine identifier path"
+    guard let machineIdentifierPath = manifest.machineIdentifierPath else {
+      throw VirtualMachineBundleError.invalidBundle(
+        "the staged manifest has no machine identifier path"
       )
     }
-    let sourceIdentifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
-      sourceIdentifierPath,
-      named: "sourceMachineIdentifierPath",
-      in: transaction.sourceBundleURL,
-      writable: false
-    )
-    let cloneIdentifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
-      cloneIdentifierPath,
+    let identifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
+      machineIdentifierPath,
       named: "machineIdentifierPath",
-      in: transaction.stagingBundleURL,
+      in: bundleURL,
       writable: false
     )
-    let sourceIdentifierData = try Data(contentsOf: sourceIdentifierURL)
-    let cloneIdentifierData = try Data(contentsOf: cloneIdentifierURL)
-    guard cloneIdentifierData != sourceIdentifierData,
-      macMachineIdentifierValidator.isValidIdentifierData(cloneIdentifierData)
-    else {
-      throw VirtualMachineCloneError.invalidBundle(
-        "the staged machine identifier is invalid or duplicates the source"
-      )
+    let identifierData = try Data(contentsOf: identifierURL)
+    guard macMachineIdentifierValidator.isValidIdentifierData(identifierData) else {
+      throw VirtualMachineBundleError.invalidMachineIdentifier
     }
-    _ = try validatedSharedDirectoryConfiguration(in: transaction.stagingBundleURL)
+
+    if allowsSharedDirectories {
+      _ = try validatedSharedDirectoryConfiguration(in: bundleURL)
+    } else {
+      let sharedDirectoriesURL = bundleURL.appending(
+        path: FileMacVirtualMachineSharedDirectoryConfigurationStore.filename
+      )
+      guard !fileManager.fileExists(atPath: sharedDirectoriesURL.path) else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "host shared-folder capabilities remain in the portable package"
+        )
+      }
+    }
 
     let entries = try fileManager.contentsOfDirectory(
-      at: transaction.stagingBundleURL,
+      at: bundleURL,
       includingPropertiesForKeys: nil,
       options: []
     )
-    guard !entries.contains(where: { isTransientCloneEntry($0.lastPathComponent) }) else {
-      throw VirtualMachineCloneError.invalidBundle(
+    guard !entries.contains(where: { isTransientBundleEntry($0.lastPathComponent) }) else {
+      throw VirtualMachineBundleError.invalidBundle(
         "runtime, installation, or saved-state transaction data remains in the staged bundle"
       )
     }
+    return identifierData
   }
 
-  private func isTransientCloneEntry(_ name: String) -> Bool {
+  private func machineIdentifierExists(_ candidate: Data) throws -> Bool {
+    for manifest in try list() {
+      guard let path = manifest.machineIdentifierPath else { continue }
+      let identifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
+        path,
+        named: "machineIdentifierPath",
+        in: bundleURL(for: manifest.id),
+        writable: false
+      )
+      if try Data(contentsOf: identifierURL) == candidate {
+        return true
+      }
+    }
+    return false
+  }
+
+  private func isTransientBundleEntry(_ name: String) -> Bool {
     name == Self.runtimeLockFilename
       || name == Self.runtimeOwnerFilename
       || name == MacVirtualMachineSavedStateStore.directoryName
@@ -924,6 +1155,24 @@ actor VirtualMachineLibrary:
     }
   }
 
+  private func removeImportStagingBundles() throws {
+    let entries = try fileManager.contentsOfDirectory(
+      at: rootURL,
+      includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+      options: []
+    )
+    for entry in entries {
+      let name = entry.lastPathComponent
+      guard name.hasPrefix(Self.importStagingPrefix),
+        name.hasSuffix(Self.importStagingSuffix)
+      else {
+        continue
+      }
+      try requireDirectory(entry)
+      try fileManager.removeItem(at: entry)
+    }
+  }
+
   private func installationStagingDirectory(id: UUID, operationID: UUID) -> URL {
     bundleURL(for: id).appending(
       path:
@@ -1013,10 +1262,25 @@ actor VirtualMachineLibrary:
     releaseOperationAccess(token: operationID)
   }
 
+  private func finishImport(operationID: UUID) {
+    guard activeImports.removeValue(forKey: operationID) != nil else { return }
+    releaseOperationAccess(token: operationID)
+  }
+
   private func bundleURL(for id: UUID) -> URL {
     rootURL
       .appending(path: id.uuidString.lowercased(), directoryHint: .isDirectory)
       .appendingPathExtension(Self.bundleExtension)
+  }
+
+  private func isSameOrDescendant(_ candidate: URL, of directory: URL) -> Bool {
+    let resolvedDirectory = directory.resolvingSymlinksInPath().standardizedFileURL
+    let resolvedCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
+    let directoryComponents = resolvedDirectory.pathComponents
+    let candidateComponents = resolvedCandidate.pathComponents
+    guard candidateComponents.count >= directoryComponents.count else { return false }
+    return candidateComponents.prefix(directoryComponents.count)
+      .elementsEqual(directoryComponents)
   }
 
   private func readManifest(in bundleURL: URL) throws -> VirtualMachineManifest {
