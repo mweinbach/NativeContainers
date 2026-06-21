@@ -218,7 +218,11 @@ must leave a usable, test-backed product slice.
 - [x] Launch-on-login through `SMAppService.mainApp`, with approval and
       unavailable states surfaced rather than inferred.
 - [ ] Demand-started services.
-- [ ] Battery/thermal-aware defaults and idle suspension.
+- [x] Low-Power-Mode and serious/critical-thermal-aware CPU defaults for newly
+      opened container, persistent-machine, and GUI-VM creation flows, sampled
+      through an injectable Foundation adapter without changing existing work.
+- [ ] Idle suspension after an authoritative guest-activity signal is available;
+      app, window, or console inactivity alone is not treated as guest idleness.
 - [x] On-demand Apple runtime and macOS VM library storage accounting with
       category-level reclaimable estimates, sparse logical-versus-allocated
       bytes, hidden-partial attribution, and cancellable scans outside ordinary

@@ -1512,3 +1512,27 @@ file behind Xcode's back. The composition root inspects the signed process and
 injects a fail-closed unavailable service until Xcode can add and sign the
 capability normally. The full adapter, orchestration, model, and UI remain
 compiled and deterministically tested in the meantime.
+
+## ADR-054: Sample host pressure only for new editable resource defaults
+
+**Status:** Accepted — 2026-06-21
+
+NativeContainers treats host power and thermal state as input to creation
+defaults, not as authority to mutate a workload. A focused Foundation adapter
+maps `ProcessInfo.activeProcessorCount`, `isLowPowerModeEnabled`, and
+`thermalState` into a framework-free snapshot. A pure policy service derives
+separate container, persistent Linux-machine, and GUI-VM defaults and is
+injected through the app composition root.
+
+Normal and fair thermal states preserve the established user-initiated
+defaults. Low Power Mode or serious/critical thermal pressure lowers only the
+initial editable CPU count, never below one or above the active processor
+count. Memory and disk defaults remain unchanged, and the creation form states
+why the CPU value was selected. The state is sampled when the sheet is created;
+there is no continuous observer, background poller, or mid-edit value rewrite.
+
+Existing and running resources are never resized by this policy. NativeContainers
+also does not infer guest idleness from application inactivity, window
+visibility, or console attachment. Automatic idle suspension remains deferred
+until a public, authoritative guest-activity signal or an explicit guest-side
+contract can distinguish an idle VM from unattended work.

@@ -1070,6 +1070,26 @@ Updated: 2026-06-21.
   live gates skipped, and no outcome failed or remained unrun. Launch emitted
   only the known macOS 27 beta SetStore donation-service error.
 
+## Host-aware creation-default checkpoint
+
+- `ProcessInfoHostResourceStateProvider` is the only Foundation-facing adapter;
+  `HostResourceDefaultService` is a pure, injectable policy over framework-free
+  host state and workload-default domain values.
+- Container, persistent Linux-machine, and GUI-VM creation sheets sample the
+  service when opened. Low Power Mode or serious/critical thermal pressure
+  initializes each editable CPU control at two cores, clamped to the active
+  processor count; nominal and fair states preserve the established defaults.
+- A shared native notice explains constrained defaults. Memory and disk values
+  are unchanged, and existing or running workloads are never resized.
+- Eight policy cases, two draft-integration cases, and the composition-root
+  regression pass. Build-for-testing and the constrained-default Xcode Preview
+  also pass. The full Xcode plan passes all 933 outcomes: 912 deterministic
+  tests passed, 21 explicit live gates skipped, and no outcome failed or
+  remained unrun. The normal build and signed Xcode launch/stop smoke pass with
+  only the existing macOS 27 beta SetStore/CoreSpotlight donation error.
+- Idle suspension remains open because app, window, and console inactivity do
+  not prove that an unattended guest has stopped useful work.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are

@@ -22,6 +22,8 @@ flowchart LR
     Model --> BuildPort["ImageBuilding"]
     Model --> HistoryPort["ImageBuildHistoryStoring"]
     Model --> VMPort["VirtualMachineManaging"]
+    Model --> DefaultPort["WorkloadCreationDefaultsProviding"]
+    DefaultPort --> HostState["ProcessInfo host state"]
     ContainerPort --> AppleClient["apple/container Swift clients"]
     AppleClient --> XPC["Apple container XPC services"]
     BuildPort --> Recorder["Best-effort history recorder"]
@@ -38,6 +40,22 @@ flowchart LR
     VMPort --> VZ2["Virtualization.framework"]
     VZ2 --> Console["VZVirtualMachineView"]
 ```
+
+### Host resource-default lane
+
+Creation defaults cross a synchronous `WorkloadCreationDefaultsProviding`
+port. `ProcessInfoHostResourceStateProvider` is the only type that reads
+Foundation's active-processor, Low Power Mode, and thermal-state values;
+`HostResourceDefaultService` maps that small domain snapshot into separate
+container, persistent Linux-machine, and GUI-VM defaults. The service performs
+no observation or background work until a creation sheet requests a snapshot.
+
+Low Power Mode and serious or critical thermal pressure reduce only the
+initial CPU values in a newly opened sheet. The draft remains editable, memory
+and disk defaults remain stable, and no existing or running workload is
+reconfigured. Fair thermal state does not throttle a user-initiated creation.
+App inactivity, a closed window, and an unattached console are not authoritative
+guest-idle signals, so they never trigger suspension.
 
 ### Container lane
 
