@@ -22,6 +22,10 @@ struct AppModelTests {
       model.makeStorageOverviewModel()
         === model.makeStorageOverviewModel()
     )
+    #expect(
+      model.makeStorageReclamationModel()
+        === model.makeStorageReclamationModel()
+    )
   }
 
   @Test
@@ -136,6 +140,7 @@ struct AppModelTests {
     #expect(model.virtualMachines == [manifest])
     #expect(model.errorMessage == nil)
     #expect(model.lastRefresh != nil)
+    #expect(model.containerInventoryRevision == 1)
     #expect(!model.isRefreshing)
   }
 

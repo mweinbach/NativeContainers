@@ -12,6 +12,8 @@ final class StorageOverviewModel {
   private(set) var isLoadingVirtualMachines = false
   private(set) var hasAttemptedAppleRuntime = false
   private(set) var hasAttemptedVirtualMachines = false
+  private(set) var appleRuntimeRevision: UInt64 = 0
+  private(set) var isAppleRuntimeSnapshotStale = false
 
   private let service: any StorageUsageLoading
 
@@ -34,6 +36,7 @@ final class StorageOverviewModel {
       appleRuntimeUsage != nil || appleRuntimeErrorMessage != nil
     hasAttemptedVirtualMachines =
       virtualMachineUsage != nil || virtualMachineErrorMessage != nil
+    appleRuntimeRevision = appleRuntimeUsage == nil ? 0 : 1
   }
 
   var isLoading: Bool {
@@ -62,8 +65,41 @@ final class StorageOverviewModel {
     }
   }
 
+  func refreshAppleRuntimeAfterMutation() async {
+    markAppleRuntimeSnapshotStale()
+    guard operationTask == nil else {
+      return
+    }
+    let task = Task { [weak self] in
+      guard let self else { return }
+      await self.refreshAppleRuntime()
+    }
+    operationTask = task
+    await task.value
+    operationTask = nil
+  }
+
   func cancelCurrentOperation() {
     operationTask?.cancel()
+  }
+
+  func reclamationSource(
+    inventoryRevision: UInt64
+  ) -> StorageReclamationSource? {
+    guard let appleRuntimeUsage, !isAppleRuntimeSnapshotStale else { return nil }
+    return StorageReclamationSource(
+      appleRuntimeCapturedAt: appleRuntimeUsage.capturedAt,
+      appleRuntimeRevision: appleRuntimeRevision,
+      inventoryRevision: inventoryRevision,
+      images: appleRuntimeUsage.images,
+      containers: appleRuntimeUsage.containers,
+      volumes: appleRuntimeUsage.volumes
+    )
+  }
+
+  func markAppleRuntimeSnapshotStale() {
+    guard appleRuntimeUsage != nil else { return }
+    isAppleRuntimeSnapshotStale = true
   }
 
   func refresh() async {
@@ -87,6 +123,8 @@ final class StorageOverviewModel {
     switch result {
     case .success(let usage):
       appleRuntimeUsage = usage
+      appleRuntimeRevision &+= 1
+      isAppleRuntimeSnapshotStale = false
       appleRuntimeErrorMessage = nil
     case .failure(let message):
       appleRuntimeErrorMessage = message

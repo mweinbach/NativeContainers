@@ -7,13 +7,16 @@ import Foundation
 
 actor AppleImageService: ImageManaging {
   private let containerReader: any ContainerSnapshotReading
+  private let pruneTransport: any ImagePruneTransport
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator
 
   init(
     containerReader: any ContainerSnapshotReading = AppleContainerSnapshotReader(),
+    pruneTransport: any ImagePruneTransport = AppleImagePruneClient(),
     runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared
   ) {
     self.containerReader = containerReader
+    self.pruneTransport = pruneTransport
     self.runtimeMutationCoordinator = runtimeMutationCoordinator
   }
 
@@ -428,7 +431,13 @@ actor AppleImageService: ImageManaging {
       reference: current.reference,
       containerSystemConfig: configuration
     )
-    return try await removeImages([image])
+    return try await removeImages([
+      ImagePruneRecord(
+        reference: image.reference,
+        digest: image.digest,
+        indexSizeBytes: image.descriptor.size
+      )
+    ])
   }
 
   func prepareImagePrune(mode: ImagePruneMode) async throws -> ImagePrunePlan {
@@ -436,9 +445,9 @@ actor AppleImageService: ImageManaging {
     let selection = try await pruneCandidates(mode: mode, configuration: configuration)
     let estimate: UInt64?
     if mode == .allUnused {
-      estimate = try await ClientImage.calculateDiskUsage(
+      estimate = try await pruneTransport.calculateReclaimableBytes(
         activeReferences: selection.activeReferences
-      ).reclaimableSize
+      )
     } else {
       estimate = nil
     }
@@ -450,7 +459,7 @@ actor AppleImageService: ImageManaging {
         ImagePruneCandidate(
           reference: $0.reference,
           digest: $0.digest,
-          indexSizeBytes: $0.descriptor.size
+          indexSizeBytes: $0.indexSizeBytes
         )
       }.sorted { $0.reference.localizedStandardCompare($1.reference) == .orderedAscending },
       estimatedReclaimableBytes: estimate
@@ -458,8 +467,26 @@ actor AppleImageService: ImageManaging {
   }
 
   func pruneImages(_ plan: ImagePrunePlan) async throws -> ImageCleanupResult {
-    try await withRuntimeMutation {
-      try await self.pruneImagesWhileLocked(plan)
+    do {
+      return try await withRuntimeMutation {
+        try await self.pruneImagesWhileLocked(plan)
+      }
+    } catch let partial as ImageCleanupPartialCompletionError {
+      throw partial
+    } catch is CancellationError {
+      throw ImageCleanupPartialCompletionError(
+        result: ImageCleanupResult(
+          removedReferences: [],
+          failedReferences: plan.candidates.map {
+            ImageOperationFailure(
+              reference: $0.reference,
+              message: "Not removed because image cleanup was cancelled."
+            )
+          },
+          removedBlobDigests: [],
+          reclaimedBytes: 0
+        )
+      )
     }
   }
 
@@ -470,7 +497,7 @@ actor AppleImageService: ImageManaging {
     let current = try await pruneCandidates(mode: plan.mode, configuration: configuration)
     let currentByReference = Dictionary(
       uniqueKeysWithValues: current.images.map { ($0.reference, $0) })
-    var images: [ClientImage] = []
+    var images: [ImagePruneRecord] = []
     var staleFailures: [ImageOperationFailure] = []
 
     for candidate in plan.candidates {
@@ -775,8 +802,8 @@ actor AppleImageService: ImageManaging {
   private func pruneCandidates(
     mode: ImagePruneMode,
     configuration: ContainerSystemConfig
-  ) async throws -> (images: [ClientImage], activeReferences: Set<String>) {
-    async let imagesRequest = ClientImage.list()
+  ) async throws -> (images: [ImagePruneRecord], activeReferences: Set<String>) {
+    async let imagesRequest = pruneTransport.list()
     async let containersRequest = containerReader.list()
     let (allImages, containers) = try await (imagesRequest, containersRequest)
     var activeReferences = Set<String>()
@@ -820,43 +847,79 @@ actor AppleImageService: ImageManaging {
     return (candidates, activeReferences)
   }
 
-  private func removeImages(_ images: [ClientImage]) async throws -> ImageCleanupResult {
+  private func removeImages(_ images: [ImagePruneRecord]) async throws -> ImageCleanupResult {
     var removedReferences: [String] = []
     var failures: [ImageOperationFailure] = []
 
-    do {
-      for image in images {
-        try Task.checkCancellation()
-        do {
-          try await ClientImage.delete(reference: image.reference, garbageCollect: false)
-          removedReferences.append(image.reference)
-        } catch is CancellationError {
-          throw CancellationError()
-        } catch {
-          failures.append(
-            ImageOperationFailure(
-              reference: image.reference,
-              message: error.localizedDescription
-            )
-          )
-        }
+    func cancellationResult(
+      through index: Int
+    ) async -> ImageCleanupResult {
+      let currentReferences = await uncancelledImageReferences()
+      let reconciled = images.prefix(index + 1).compactMap { image in
+        currentReferences.map { references in
+          references.contains(image.reference) ? nil : image.reference
+        } ?? (removedReferences.contains(image.reference) ? image.reference : nil)
       }
-    } catch is CancellationError {
-      _ = try? await Task.detached {
-        try await ClientImage.cleanUpOrphanedBlobs()
-      }.value
-      throw CancellationError()
+      let confirmedRemoved = Set(removedReferences).union(reconciled)
+      let pending = images.filter { !confirmedRemoved.contains($0.reference) }.map {
+        ImageOperationFailure(
+          reference: $0.reference,
+          message: "Not removed because image cleanup was cancelled."
+        )
+      }
+      let cleanup = await uncancelledOrphanCleanup()
+      return ImageCleanupResult(
+        removedReferences: confirmedRemoved.sorted(),
+        failedReferences: failures + pending,
+        removedBlobDigests: cleanup?.deletedDigests.sorted() ?? [],
+        reclaimedBytes: cleanup?.reclaimedBytes ?? 0
+      )
+    }
+
+    for (index, image) in images.enumerated() {
+      guard !Task.isCancelled else {
+        throw ImageCleanupPartialCompletionError(
+          result: await cancellationResult(through: index)
+        )
+      }
+      do {
+        try await pruneTransport.delete(reference: image.reference)
+        removedReferences.append(image.reference)
+      } catch is CancellationError {
+        throw ImageCleanupPartialCompletionError(
+          result: await cancellationResult(through: index)
+        )
+      } catch {
+        failures.append(
+          ImageOperationFailure(
+            reference: image.reference,
+            message: error.localizedDescription
+          )
+        )
+      }
+      if Task.isCancelled {
+        throw ImageCleanupPartialCompletionError(
+          result: await cancellationResult(through: index)
+        )
+      }
     }
 
     var removedBlobDigests: [String] = []
     var reclaimedBytes: UInt64 = 0
     do {
-      (removedBlobDigests, reclaimedBytes) = try await ClientImage.cleanUpOrphanedBlobs()
+      let cleanup = try await pruneTransport.cleanUpOrphanedBlobs()
+      removedBlobDigests = cleanup.deletedDigests
+      reclaimedBytes = cleanup.reclaimedBytes
     } catch is CancellationError {
-      _ = try? await Task.detached {
-        try await ClientImage.cleanUpOrphanedBlobs()
-      }.value
-      throw CancellationError()
+      let cleanup = await uncancelledOrphanCleanup()
+      throw ImageCleanupPartialCompletionError(
+        result: ImageCleanupResult(
+          removedReferences: removedReferences.sorted(),
+          failedReferences: failures,
+          removedBlobDigests: cleanup?.deletedDigests.sorted() ?? [],
+          reclaimedBytes: cleanup?.reclaimedBytes ?? 0
+        )
+      )
     } catch {
       failures.append(
         ImageOperationFailure(
@@ -872,6 +935,27 @@ actor AppleImageService: ImageManaging {
       removedBlobDigests: removedBlobDigests.sorted(),
       reclaimedBytes: reclaimedBytes
     )
+  }
+
+  private func uncancelledImageReferences() async -> Set<String>? {
+    let pruneTransport = self.pruneTransport
+    return await Task.detached {
+      do {
+        return Set(try await pruneTransport.list().map(\.reference))
+      } catch {
+        return nil
+      }
+    }.value
+  }
+
+  private func uncancelledOrphanCleanup() async -> (
+    deletedDigests: [String],
+    reclaimedBytes: UInt64
+  )? {
+    let pruneTransport = self.pruneTransport
+    return await Task.detached {
+      try? await pruneTransport.cleanUpOrphanedBlobs()
+    }.value
   }
 
   private static func parseImageDate(_ value: String?) -> Date? {

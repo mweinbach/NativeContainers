@@ -107,6 +107,29 @@ struct StorageOverviewModelTests {
     #expect(await service.observedCancellationCount == 2)
   }
 
+  @Test
+  func postMutationReconciliationRefreshesOnlyAppleRuntimeLane() async {
+    let runtime = runtimeUsage(at: 2, allocatedBytes: 150)
+    let service = ScriptedStorageUsageService(
+      runtime: [.success(runtime)],
+      virtualMachines: [
+        .success(virtualMachineUsage(at: 2, allocatedBytes: 300))
+      ]
+    )
+    let model = StorageOverviewModel(
+      service: service,
+      appleRuntimeUsage: runtimeUsage(at: 1, allocatedBytes: 100),
+      virtualMachineUsage: virtualMachineUsage(at: 1, allocatedBytes: 200)
+    )
+
+    await model.refreshAppleRuntimeAfterMutation()
+
+    #expect(model.appleRuntimeUsage == runtime)
+    #expect(!model.isAppleRuntimeSnapshotStale)
+    #expect(await service.runtimeLoadCount == 1)
+    #expect(await service.virtualMachineLoadCount == 0)
+  }
+
   private func runtimeUsage(
     at timestamp: TimeInterval,
     allocatedBytes: UInt64

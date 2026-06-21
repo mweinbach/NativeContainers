@@ -3,10 +3,14 @@ import SwiftUI
 struct OverviewView: View {
   let model: AppModel
   @State private var storageModel: StorageOverviewModel
+  @State private var storageReclamationModel: StorageReclamationModel
 
   init(model: AppModel) {
     self.model = model
     _storageModel = State(initialValue: model.makeStorageOverviewModel())
+    _storageReclamationModel = State(
+      initialValue: model.makeStorageReclamationModel()
+    )
   }
 
   var body: some View {
@@ -28,7 +32,11 @@ struct OverviewView: View {
           virtualMachineCount: model.virtualMachines.count,
           onNavigate: { route in model.navigate(to: route) }
         )
-        StorageOverviewSection(model: storageModel)
+        StorageOverviewSection(
+          model: storageModel,
+          reclamationModel: storageReclamationModel,
+          inventoryRevision: model.containerInventoryRevision
+        )
         if !model.composeProjects.isEmpty {
           ComposeProjectsOverviewSection(
             projects: model.composeProjects,

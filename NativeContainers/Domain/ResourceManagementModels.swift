@@ -2,6 +2,7 @@ import Foundation
 
 enum ResourceOperationLabel {
   static let key = "com.nativecontainers.resource-operation"
+  static let applePluginKey = "com.apple.container.plugin"
   static let appleResourceRoleKey = "com.apple.container.resource.role"
 }
 
@@ -355,7 +356,10 @@ enum InfrastructureExecutionSafety {
     plan: VolumeDeletionPlan,
     current: VolumeRecord
   ) throws {
-    guard current.configurationIdentity == plan.identity else {
+    guard
+      current.id == plan.volume.id,
+      current.configurationIdentity == plan.identity
+    else {
       throw ResourceManagementError.stalePlan(plan.volume.name)
     }
     guard current.usedByContainerIDs.isEmpty else {

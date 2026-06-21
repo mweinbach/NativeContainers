@@ -167,6 +167,8 @@ struct AppleInfrastructureService: InfrastructureManaging, BuiltinNetworkProvidi
       .filter {
         $0.usedByContainerIDs.isEmpty
           && !$0.labels.keys.contains(where: { $0.hasPrefix(ComposeLabelKey.prefix) })
+          && $0.labels[ResourceOperationLabel.appleResourceRoleKey] == nil
+          && $0.labels[ResourceOperationLabel.applePluginKey] == nil
       }
       .map {
         VolumeDeletionPlan(

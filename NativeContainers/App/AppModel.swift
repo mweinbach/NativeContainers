@@ -24,6 +24,7 @@ final class AppModel {
   private(set) var isRefreshing = false
   private(set) var lastRefresh: Date?
   private(set) var errorMessage: String?
+  private(set) var containerInventoryRevision: UInt64 = 0
 
   private let services: AppServices
 
@@ -52,6 +53,21 @@ final class AppModel {
   private lazy var storageOverviewModel = StorageOverviewModel(
     service: services.storageUsage
   )
+
+  @ObservationIgnored
+  private lazy var storageReclamationModel = StorageReclamationModel(
+    service: services.storageReclamation,
+    currentSource: { [weak self] in
+      guard let self else { return nil }
+      return self.storageOverviewModel.reclamationSource(
+        inventoryRevision: self.containerInventoryRevision
+      )
+    }
+  ) { [weak self] in
+    guard let self else { return }
+    await self.refresh()
+    await self.storageOverviewModel.refreshAppleRuntimeAfterMutation()
+  }
 
   @ObservationIgnored
   private lazy var dockerCompatibilitySettingsModel = DockerCompatibilityModel(
@@ -97,6 +113,7 @@ final class AppModel {
       linuxMachines = initialInventory.machines
       virtualMachines = initialVirtualMachines
       hasLoaded = true
+      containerInventoryRevision = 1
       lastRefresh = Date()
     }
     updateWorkspaceNavigation()
@@ -106,6 +123,8 @@ final class AppModel {
     containerService: any ContainerManaging = AppleContainerService(),
     composeTopologyService: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsageService: any StorageUsageLoading = UnavailableStorageUsageService(),
+    storageReclamationService: any StorageReclamationManaging =
+      UnavailableStorageReclamationService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
     imageBuildService: any ImageBuilding = AppleContainerBuildService(),
     registryService: any RegistryManaging = AppleRegistryService(),
@@ -139,6 +158,7 @@ final class AppModel {
         containerService: containerService,
         composeTopology: composeTopologyService,
         storageUsage: storageUsageService,
+        storageReclamation: storageReclamationService,
         machineService: machineService,
         imageBuild: imageBuildService,
         registry: registryService,
@@ -231,6 +251,7 @@ final class AppModel {
       networks = inventory.networks
       linuxMachines = inventory.machines
       composeTopology = topology
+      containerInventoryRevision &+= 1
     } catch is CancellationError {
       return
     } catch {
@@ -500,6 +521,10 @@ final class AppModel {
 
   func makeStorageOverviewModel() -> StorageOverviewModel {
     storageOverviewModel
+  }
+
+  func makeStorageReclamationModel() -> StorageReclamationModel {
+    storageReclamationModel
   }
 
   func makeRegistrySettingsModel() -> RegistrySettingsModel {

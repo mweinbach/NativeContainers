@@ -2,6 +2,9 @@ import SwiftUI
 
 struct StorageOverviewSection: View {
   @Bindable var model: StorageOverviewModel
+  @Bindable var reclamationModel: StorageReclamationModel
+  let inventoryRevision: UInt64
+  @State private var isShowingReclamation = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -25,6 +28,7 @@ struct StorageOverviewSection: View {
           .keyboardShortcut(.cancelAction)
         } else {
           Button(model.hasAttempted ? "Measure Again" : "Measure Storage") {
+            reclamationModel.invalidateReview()
             model.startRefresh()
           }
           .buttonStyle(.borderedProminent)
@@ -32,7 +36,18 @@ struct StorageOverviewSection: View {
       }
 
       if model.hasAttempted {
-        AppleRuntimeStorageCard(model: model)
+        AppleRuntimeStorageCard(
+          model: model,
+          onReviewReclamation: {
+            reclamationModel.invalidateReview()
+            isShowingReclamation = true
+            reclamationModel.startPreparing()
+          },
+          onRetry: {
+            reclamationModel.invalidateReview()
+            model.startAppleRuntimeRefresh()
+          }
+        )
         VirtualMachineStorageCard(model: model)
       } else {
         ContentUnavailableView(
@@ -48,16 +63,42 @@ struct StorageOverviewSection: View {
     }
     .onDisappear {
       model.cancelCurrentOperation()
+      reclamationModel.discardReview()
+    }
+    .onChange(of: model.appleRuntimeRevision) {
+      reclamationModel.invalidateReview()
+    }
+    .onChange(of: inventoryRevision) {
+      reclamationModel.invalidateReview()
+    }
+    .sheet(
+      isPresented: $isShowingReclamation,
+      onDismiss: { reclamationModel.discardReview() }
+    ) {
+      StorageReclamationReviewSheet(model: reclamationModel)
     }
   }
 }
 
 private struct AppleRuntimeStorageCard: View {
   @Bindable var model: StorageOverviewModel
+  let onReviewReclamation: () -> Void
+  let onRetry: () -> Void
 
   var body: some View {
     StorageCard(title: "Apple runtime", systemImage: "shippingbox.and.arrow.backward") {
       if let usage = model.appleRuntimeUsage {
+        HStack {
+          if model.isAppleRuntimeSnapshotStale {
+            Label("Remeasure after recent changes", systemImage: "arrow.clockwise.circle")
+              .font(.caption)
+              .foregroundStyle(.orange)
+          }
+          Spacer()
+          Button("Review Reclamation…", action: onReviewReclamation)
+            .disabled(model.isLoading || model.isAppleRuntimeSnapshotStale)
+        }
+
         HStack(spacing: 22) {
           StorageMetric(
             title: "Allocated",
@@ -94,10 +135,8 @@ private struct AppleRuntimeStorageCard: View {
       }
 
       if let message = model.appleRuntimeErrorMessage {
-        StorageLaneErrorView(message: message) {
-          model.startAppleRuntimeRefresh()
-        }
-        .disabled(model.isLoading)
+        StorageLaneErrorView(message: message, retry: onRetry)
+          .disabled(model.isLoading)
       }
 
       Text(
@@ -433,11 +472,28 @@ private struct StorageOverviewLoadedPreview: View {
     appleRuntimeUsage: PreviewStorageUsageService.appleRuntimeUsage,
     virtualMachineUsage: PreviewStorageUsageService.virtualMachineUsage
   )
+  @State private var reclamationModel = StorageReclamationModel(
+    service: UnavailableStorageReclamationService(),
+    currentSource: {
+      StorageReclamationSource(
+        appleRuntimeCapturedAt: PreviewStorageUsageService.appleRuntimeUsage.capturedAt,
+        appleRuntimeRevision: 1,
+        inventoryRevision: 1,
+        images: PreviewStorageUsageService.appleRuntimeUsage.images,
+        containers: PreviewStorageUsageService.appleRuntimeUsage.containers,
+        volumes: PreviewStorageUsageService.appleRuntimeUsage.volumes
+      )
+    }
+  )
 
   var body: some View {
     ScrollView {
-      StorageOverviewSection(model: model)
-        .padding(28)
+      StorageOverviewSection(
+        model: model,
+        reclamationModel: reclamationModel,
+        inventoryRevision: 1
+      )
+      .padding(28)
     }
   }
 }

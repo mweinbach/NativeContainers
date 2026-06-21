@@ -134,6 +134,81 @@ struct AppleInfrastructureServiceTests {
   }
 
   @Test
+  func volumePrunePreservesAppleRoleAndPluginManagedVolumes() async throws {
+    let roleVolume = VolumeConfiguration(
+      name: "system-role",
+      source: "/tmp/system-role.img",
+      labels: [ResourceOperationLabel.appleResourceRoleKey: "system"]
+    )
+    let pluginVolume = VolumeConfiguration(
+      name: "plugin-owned",
+      source: "/tmp/plugin-owned.img",
+      labels: [ResourceOperationLabel.applePluginKey: "machine"]
+    )
+    let scratchVolume = VolumeConfiguration(
+      name: "scratch",
+      source: "/tmp/scratch.img"
+    )
+    let transport = InfrastructureTransportDouble(
+      createOutcome: .success,
+      initialVolumes: [roleVolume, pluginVolume, scratchVolume]
+    )
+    let service = AppleInfrastructureService(
+      infrastructureClient: transport,
+      containerReader: EmptyContainerSnapshotReader(),
+      runtimeMutationCoordinator: RuntimeMutationCoordinator()
+    )
+
+    let plan = try await service.prepareVolumePrune()
+
+    #expect(plan.candidates.map(\.volume.name) == ["scratch"])
+  }
+
+  @Test
+  func volumeDeletionSafetyRejectsAReusedIdentifier() {
+    let reviewed = VolumeRecord(
+      id: "reviewed-id",
+      name: "data",
+      driver: "local",
+      format: "ext4",
+      source: "/tmp/data.img",
+      createdAt: Date(timeIntervalSince1970: 1),
+      sizeBytes: 64,
+      allocatedBytes: 32,
+      labels: [:],
+      options: [:],
+      isAnonymous: false,
+      usedByContainerIDs: []
+    )
+    let current = VolumeRecord(
+      id: "replacement-id",
+      name: reviewed.name,
+      driver: reviewed.driver,
+      format: reviewed.format,
+      source: reviewed.source,
+      createdAt: reviewed.createdAt,
+      sizeBytes: reviewed.sizeBytes,
+      allocatedBytes: reviewed.allocatedBytes,
+      labels: reviewed.labels,
+      options: reviewed.options,
+      isAnonymous: reviewed.isAnonymous,
+      usedByContainerIDs: []
+    )
+    let plan = VolumeDeletionPlan(
+      volume: reviewed,
+      identity: reviewed.configurationIdentity,
+      generatedAt: .now
+    )
+
+    #expect(throws: ResourceManagementError.stalePlan("data")) {
+      try InfrastructureExecutionSafety.validateVolumeDeletion(
+        plan: plan,
+        current: current
+      )
+    }
+  }
+
+  @Test
   func networkPrunePreservesComposeLabeledNetworks() async throws {
     let composeNetwork = try makeNetwork(
       name: "demo_default",

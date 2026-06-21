@@ -5,6 +5,7 @@ struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
   let composeTopology: any ComposeTopologyDeriving
   let storageUsage: any StorageUsageLoading
+  let storageReclamation: any StorageReclamationManaging
   let containerLifecycle: any ContainerLifecycleManaging
   let containerCreator: any ContainerCreating
   let containerInspector: any ContainerInspecting
@@ -43,6 +44,8 @@ struct AppServices: Sendable {
     inventory: any ContainerInventoryLoading,
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
+    storageReclamation: any StorageReclamationManaging =
+      UnavailableStorageReclamationService(),
     containerLifecycle: any ContainerLifecycleManaging,
     containerCreator: any ContainerCreating,
     containerInspector: any ContainerInspecting,
@@ -90,6 +93,7 @@ struct AppServices: Sendable {
     self.inventory = inventory
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
+    self.storageReclamation = storageReclamation
     self.containerLifecycle = containerLifecycle
     self.containerCreator = containerCreator
     self.containerInspector = containerInspector
@@ -129,6 +133,8 @@ struct AppServices: Sendable {
     containerService: any ContainerManaging,
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
+    storageReclamation: any StorageReclamationManaging =
+      UnavailableStorageReclamationService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
     machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
     machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
@@ -165,6 +171,7 @@ struct AppServices: Sendable {
     inventory = containerService
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
+    self.storageReclamation = storageReclamation
     containerLifecycle = containerService
     containerCreator = containerService
     containerInspector = containerService
@@ -291,6 +298,16 @@ enum AppCompositionRoot {
         inventory: virtualMachineLibrary
       )
     )
+    let containerReclamation = AppleContainerReclamationService(
+      transport: AppleContainerReclamationClient(),
+      attachmentService: attachmentService,
+      runtimeMutationCoordinator: mutationCoordinator
+    )
+    let storageReclamation = StorageReclamationService(
+      containers: containerReclamation,
+      images: imageService,
+      volumes: infrastructureService
+    )
     let virtualMachineBundlePreparer = VirtualMachineBundlePreparationService()
     let virtualMachineCloner = VirtualMachineCloneService(
       store: virtualMachineLibrary,
@@ -364,6 +381,7 @@ enum AppCompositionRoot {
       inventory: inventoryService,
       composeTopology: ComposeTopologyService(),
       storageUsage: storageUsage,
+      storageReclamation: storageReclamation,
       containerLifecycle: lifecycleService,
       containerCreator: creationService,
       containerInspector: inspectionService,

@@ -111,6 +111,17 @@ struct ImageCleanupResult: Equatable, Sendable {
   var completedWithoutFailures: Bool { failedReferences.isEmpty }
 }
 
+struct ImageCleanupPartialCompletionError: LocalizedError, Sendable {
+  let result: ImageCleanupResult
+
+  var errorDescription: String? {
+    let removed = result.removedReferences.count
+    let remaining = result.failedReferences.count
+    return
+      "Image cleanup was cancelled after removing \(removed) reference(s); \(remaining) reviewed reference(s) remain."
+  }
+}
+
 enum ImageManagementError: LocalizedError, Equatable, Sendable {
   case unsupported
   case missingReference
