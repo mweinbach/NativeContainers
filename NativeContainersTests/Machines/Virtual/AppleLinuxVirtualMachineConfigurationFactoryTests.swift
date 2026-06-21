@@ -30,9 +30,12 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
     #expect(configuration.cpuCount == prepared.resources.cpuCount)
     #expect(configuration.memorySize == prepared.resources.memoryBytes)
 
-    #expect(configuration.storageDevices.count == 2)
+    #expect(configuration.usbControllers.count == 1)
+    let controller = try #require(
+      configuration.usbControllers[0] as? VZXHCIControllerConfiguration
+    )
     let installer = try #require(
-      configuration.storageDevices[0] as? VZUSBMassStorageDeviceConfiguration
+      controller.usbDevices.first as? VZUSBMassStorageDeviceConfiguration
     )
     let installerAttachment = try #require(
       installer.attachment as? VZDiskImageStorageDeviceAttachment
@@ -40,8 +43,9 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
     #expect(installerAttachment.url == machine.installationMediaURL)
     #expect(installerAttachment.isReadOnly)
 
+    #expect(configuration.storageDevices.count == 1)
     let disk = try #require(
-      configuration.storageDevices[1] as? VZVirtioBlockDeviceConfiguration
+      configuration.storageDevices[0] as? VZVirtioBlockDeviceConfiguration
     )
     let diskAttachment = try #require(
       disk.attachment as? VZDiskImageStorageDeviceAttachment

@@ -48,17 +48,18 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
       readOnly: false
     )
     let disk = VZVirtioBlockDeviceConfiguration(attachment: diskAttachment)
-    var storageDevices: [VZStorageDeviceConfiguration] = []
+    var usbControllers: [VZUSBControllerConfiguration] = []
     if let installationMediaURL = machine.installationMediaURL {
       let installationAttachment = try VZDiskImageStorageDeviceAttachment(
         url: installationMediaURL,
         readOnly: true
       )
-      storageDevices.append(
+      let controller = VZXHCIControllerConfiguration()
+      controller.usbDevices = [
         VZUSBMassStorageDeviceConfiguration(attachment: installationAttachment)
-      )
+      ]
+      usbControllers = [controller]
     }
-    storageDevices.append(disk)
 
     let graphics = VZVirtioGraphicsDeviceConfiguration()
     graphics.scanouts = [
@@ -82,7 +83,8 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     configuration.bootLoader = bootLoader
     configuration.cpuCount = resources.cpuCount
     configuration.memorySize = resources.memoryBytes
-    configuration.storageDevices = storageDevices
+    configuration.storageDevices = [disk]
+    configuration.usbControllers = usbControllers
     configuration.graphicsDevices = [graphics]
     configuration.networkDevices = [network]
     configuration.audioDevices = [sound]
