@@ -16,6 +16,7 @@ protocol MacVirtualMachineRuntimeEngineSession: AnyObject {
   var target: MacVirtualMachineRuntimeTarget { get }
   var console: MacVirtualMachineConsole? { get }
   var saveRestoreSupport: MacVirtualMachineSaveRestoreSupport { get }
+  var usbController: (any MacVirtualMachineUSBControlling)? { get }
   var canForceStop: Bool { get }
   var eventHandler: MacVirtualMachineRuntimeEventHandler? { get set }
 
@@ -31,6 +32,8 @@ protocol MacVirtualMachineRuntimeEngineSession: AnyObject {
 }
 
 extension MacVirtualMachineRuntimeEngineSession {
+  var usbController: (any MacVirtualMachineUSBControlling)? { nil }
+
   func start(provisioning: MacGuestProvisioningRequest?) async throws {
     guard provisioning == nil else {
       throw MacGuestProvisioningError.firstBootUnavailable

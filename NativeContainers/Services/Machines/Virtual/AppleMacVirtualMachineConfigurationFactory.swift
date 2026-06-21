@@ -130,6 +130,9 @@ import Foundation
       configuration.memoryBalloonDevices = [
         VZVirtioTraditionalMemoryBalloonDeviceConfiguration()
       ]
+      configuration.usbControllers = [
+        VZXHCIControllerConfiguration()
+      ]
 
       do {
         try configuration.validate()

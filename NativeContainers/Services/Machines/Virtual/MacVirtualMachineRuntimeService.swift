@@ -1,7 +1,9 @@
 import Foundation
 
 @MainActor
-final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
+final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging,
+  MacVirtualMachineUSBControllerProviding
+{
   private enum OperationKind: Equatable {
     case inspect
     case discard
@@ -76,6 +78,15 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
       return nil
     }
     return record.session.console
+  }
+
+  func usbController(
+    for target: MacVirtualMachineRuntimeTarget
+  ) -> (any MacVirtualMachineUSBControlling)? {
+    guard let record = sessions[target.machineID], record.lease.target == target else {
+      return nil
+    }
+    return record.session.usbController
   }
 
   func refreshSavedState(id: UUID) async {
@@ -259,6 +270,9 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     }
     guard operations[target.machineID] == nil else {
       throw MacVirtualMachineRuntimeError.operationInProgress(target.machineID)
+    }
+    guard record.session.usbController?.hasAttachedDevices != true else {
+      throw MacVirtualMachineUSBError.attachedDevicesBlockSuspend
     }
 
     let token = UUID()

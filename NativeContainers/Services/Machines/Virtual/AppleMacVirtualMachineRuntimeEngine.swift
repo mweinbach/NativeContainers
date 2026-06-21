@@ -30,11 +30,20 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
       let virtualMachine = VZVirtualMachine(
         configuration: runtimeConfiguration.configuration
       )
+      let usbController: (any MacVirtualMachineUSBControlling)?
+      if #available(macOS 27.0, *) {
+        usbController = try AppleMacVirtualMachineUSBController(
+          virtualMachine: virtualMachine
+        )
+      } else {
+        usbController = nil
+      }
       return AppleMacVirtualMachineRuntimeSession(
         target: target,
         virtualMachine: virtualMachine,
         saveRestoreSupport: runtimeConfiguration.saveRestoreSupport,
-        sharedDirectoryAccess: runtimeConfiguration.sharedDirectoryAccess
+        sharedDirectoryAccess: runtimeConfiguration.sharedDirectoryAccess,
+        usbController: usbController
       )
     #else
       throw MacVirtualMachineRuntimeError.requiresAppleSilicon
@@ -51,6 +60,7 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
     let target: MacVirtualMachineRuntimeTarget
     let console: MacVirtualMachineConsole?
     let saveRestoreSupport: MacVirtualMachineSaveRestoreSupport
+    let usbController: (any MacVirtualMachineUSBControlling)?
     var canForceStop: Bool { virtualMachine.canStop }
     var eventHandler: MacVirtualMachineRuntimeEventHandler?
 
@@ -61,12 +71,14 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
       target: MacVirtualMachineRuntimeTarget,
       virtualMachine: VZVirtualMachine,
       saveRestoreSupport: MacVirtualMachineSaveRestoreSupport,
-      sharedDirectoryAccess: MacVirtualMachineSharedDirectoryAccess
+      sharedDirectoryAccess: MacVirtualMachineSharedDirectoryAccess,
+      usbController: (any MacVirtualMachineUSBControlling)?
     ) {
       self.target = target
       self.virtualMachine = virtualMachine
       self.saveRestoreSupport = saveRestoreSupport
       self.sharedDirectoryAccess = sharedDirectoryAccess
+      self.usbController = usbController
       self.console = MacVirtualMachineConsole(target: target, virtualMachine: virtualMachine)
       super.init()
       virtualMachine.delegate = self
@@ -219,6 +231,7 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
     func close() {
       eventHandler = nil
       virtualMachine.delegate = nil
+      usbController?.close()
       sharedDirectoryAccess.release()
     }
 

@@ -34,6 +34,8 @@ protocol MacVirtualMachineSavedStateStoring: Sendable {
 struct MacVirtualMachineConfigurationFingerprinter:
   MacVirtualMachineConfigurationFingerprinting
 {
+  private static let runtimeConfigurationVersion = 2
+
   private struct FileIdentity: Codable {
     let device: UInt64
     let inode: UInt64
@@ -43,6 +45,7 @@ struct MacVirtualMachineConfigurationFingerprinter:
   }
 
   private struct Payload: Codable {
+    let runtimeConfigurationVersion: Int
     let descriptor: MacVirtualMachineConfigurationDescriptor
     let hardwareModelSHA256: String
     let machineIdentifierSHA256: String
@@ -62,6 +65,7 @@ struct MacVirtualMachineConfigurationFingerprinter:
 
   func fingerprint(for machine: ResolvedMacVirtualMachine) throws -> String {
     let payload = Payload(
+      runtimeConfigurationVersion: Self.runtimeConfigurationVersion,
       descriptor: try descriptorService.descriptor(for: machine),
       hardwareModelSHA256: try digest(of: machine.hardwareModelURL),
       machineIdentifierSHA256: try digest(of: machine.machineIdentifierURL),

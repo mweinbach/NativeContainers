@@ -312,6 +312,29 @@ struct MacVirtualMachineRuntimeServiceTests {
   }
 
   @Test
+  func attachedUSBDevicesBlockSuspendBeforeStateChanges() async throws {
+    let fixture = try RuntimeServiceFixture()
+    try await fixture.service.start(id: fixture.machineID)
+    let target = try #require(fixture.service.snapshot(for: fixture.machineID).target)
+    let session = fixture.engine.sessions[0]
+    session.usbController = RuntimeServiceUSBController(
+      attachedDeviceIDs: [99]
+    )
+
+    await #expect(
+      throws: MacVirtualMachineUSBError.attachedDevicesBlockSuspend
+    ) {
+      try await fixture.service.suspend(target: target)
+    }
+
+    let snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.state == .running)
+    #expect(snapshot.target == target)
+    #expect(session.pauseCount == 0)
+    #expect(fixture.savedStateService.saveCount == 0)
+  }
+
+  @Test
   func saveFailureKeepsPausedGenerationAndKillAvailable() async throws {
     let fixture = try RuntimeServiceFixture()
     try await fixture.service.start(id: fixture.machineID)
@@ -1024,6 +1047,7 @@ private final class RuntimeServiceSession: MacVirtualMachineRuntimeEngineSession
   let target: MacVirtualMachineRuntimeTarget
   let console: MacVirtualMachineConsole? = nil
   let saveRestoreSupport: MacVirtualMachineSaveRestoreSupport = .supported
+  var usbController: (any MacVirtualMachineUSBControlling)?
   var canForceStop = true
   var eventHandler: MacVirtualMachineRuntimeEventHandler?
   var forceStopError: RuntimeServiceTestError?
@@ -1103,6 +1127,29 @@ private final class RuntimeServiceSession: MacVirtualMachineRuntimeEngineSession
 
   func emit(_ event: MacVirtualMachineRuntimeEvent) {
     eventHandler?(event)
+  }
+}
+
+@MainActor
+private final class RuntimeServiceUSBController: MacVirtualMachineUSBControlling {
+  var attachedDeviceIDs: Set<UInt64>
+  var eventHandler: MacVirtualMachineUSBControllerEventHandler?
+
+  init(attachedDeviceIDs: Set<UInt64> = []) {
+    self.attachedDeviceIDs = attachedDeviceIDs
+  }
+
+  func attach(_ accessory: any MacVirtualMachineUSBAccessory) async throws {
+    attachedDeviceIDs.insert(accessory.descriptor.id)
+  }
+
+  func detach(deviceID: UInt64) async throws {
+    attachedDeviceIDs.remove(deviceID)
+  }
+
+  func close() {
+    attachedDeviceIDs.removeAll()
+    eventHandler = nil
   }
 }
 
