@@ -1279,3 +1279,27 @@ working directory. Environment values, arbitrary startup commands, terminal
 output, and history are excluded, so the native preferences store never becomes
 a secret or transcript database. Preset deletion cannot terminate a live tab;
 a later restore falls back visibly to the preferred shell.
+
+## ADR-046: Route macOS guest audio through an output-only Virtio device
+
+**Status:** Accepted — 2026-06-21
+
+A focused Apple audio-device factory owns the Virtualization.framework types;
+the SwiftUI configuration surface reports the resulting capability but does not
+construct virtual hardware. Every macOS VM configuration contains exactly one
+`VZVirtioSoundDeviceConfiguration` with one output stream backed by
+`VZHostAudioOutputStreamSink`, which follows the Mac's current default output
+device.
+
+NativeContainers does not configure an input stream. The microphone remains
+disconnected and the app does not declare `NSMicrophoneUsageDescription` or
+request recording access. Microphone support is a separate future product and
+privacy decision rather than an implicit side effect of enabling playback.
+
+Adding a virtual device changes restorable hardware topology, so new
+configurations emit topology version 3 and record the audio descriptor in the
+saved-state fingerprint. Checkpoints from versions 1 and 2 fail compatibility
+validation instead of being restored against a different hardware layout.
+Virtualization.framework's configuration and save/restore validation remain the
+runtime authority. Deterministic construction and fingerprint tests cover this
+slice; audible playback still requires an installed local macOS guest.

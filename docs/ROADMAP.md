@@ -151,8 +151,10 @@ must leave a usable, test-backed product slice.
       editing, saved-state invalidation, read-only/read-write access, and a
       selected-VM configuration inspector. Live guest mount verification remains
       gated by an installed guest.
-- [ ] Clipboard, audio, advanced networking, and USB configuration where public
-      APIs support the guest.
+- [x] Host audio output through a focused Virtio sound-device factory and the
+      Mac's current output device, with saved-state topology invalidation.
+- [ ] Clipboard, microphone input, advanced networking, and USB configuration
+      where public APIs support the guest.
 - [x] Stopped-only same-host clone service with APFS copy-on-write when
       available, a fresh `VZMacMachineIdentifier`, runtime/library leases,
       sparse fallback, write-level cancellation, cold-boot saved-state

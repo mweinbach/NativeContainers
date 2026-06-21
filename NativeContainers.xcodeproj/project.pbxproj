@@ -56,6 +56,9 @@
 		1F5E63CD2FE8765C00A430FF /* ContainerHostDirectoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63CC2FE8765C00A430FF /* ContainerHostDirectoryServiceTests.swift */; };
 		1F5E63CF2FE8766200A430FF /* ContainerSSHAgentServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63CE2FE8766200A430FF /* ContainerSSHAgentServiceTests.swift */; };
 		1F5E63D12FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63D02FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift */; };
+		1F5E63D32FE87A0B00A430FF /* AppleMacVirtualMachineAudioDeviceFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63D22FE87A0B00A430FF /* AppleMacVirtualMachineAudioDeviceFactory.swift */; };
+		1F5E63D52FE87A1C00A430FF /* AppleMacVirtualMachineAudioDeviceFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63D42FE87A1C00A430FF /* AppleMacVirtualMachineAudioDeviceFactoryTests.swift */; };
+		1F5E63D72FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E63D62FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -541,6 +544,9 @@
 		1F5E63CC2FE8765C00A430FF /* ContainerHostDirectoryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerHostDirectoryServiceTests.swift; sourceTree = "<group>"; };
 		1F5E63CE2FE8766200A430FF /* ContainerSSHAgentServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerSSHAgentServiceTests.swift; sourceTree = "<group>"; };
 		1F5E63D02FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAppleContainerAttachmentSmokeTests.swift; sourceTree = "<group>"; };
+		1F5E63D22FE87A0B00A430FF /* AppleMacVirtualMachineAudioDeviceFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMacVirtualMachineAudioDeviceFactory.swift; sourceTree = "<group>"; };
+		1F5E63D42FE87A1C00A430FF /* AppleMacVirtualMachineAudioDeviceFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMacVirtualMachineAudioDeviceFactoryTests.swift; sourceTree = "<group>"; };
+		1F5E63D62FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineAudioSection.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1032,6 +1038,7 @@
 				1F5E63BA2FE870A800A430FF /* TerminalWorkspaceSessionView.swift */,
 				1F5E63BC2FE870AC00A430FF /* TerminalPresetManagerView.swift */,
 				1F5E63CA2FE875CD00A430FF /* ContainerHostDirectoriesSection.swift */,
+				1F5E63D62FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1307,6 +1314,7 @@
 				1FEC473B2FE838D800DC60B2 /* VirtualMachineDiskImageReplacementCoordinator.swift */,
 				1FEC473D2FE838E500DC60B2 /* VirtualMachineDiskImageReplacementRecovery.swift */,
 				1FEC473F2FE838F700DC60B2 /* VirtualMachineDiskImageRewriteService.swift */,
+				1F5E63D22FE87A0B00A430FF /* AppleMacVirtualMachineAudioDeviceFactory.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -1579,6 +1587,7 @@
 				1FEC47452FE83E7600DC60B2 /* VirtualMachineDiskImageMigrationTestSupport.swift */,
 				1FEC47472FE83E7600DC60B2 /* VirtualMachineDiskImageRewriteTestSupport.swift */,
 				1FEC47492FE83E9100DC60B2 /* VirtualMachineDiskImageReplacementRecoveryTests.swift */,
+				1F5E63D42FE87A1C00A430FF /* AppleMacVirtualMachineAudioDeviceFactoryTests.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -2012,6 +2021,7 @@
 				1F9D2BE82FE7C3960076F5B9 /* SocktainerProcessServiceTests.swift in Sources */,
 				1F9D2B982FE7A1C00076F5B9 /* VirtualMachineInstallationStoreTests.swift in Sources */,
 				1F5E63B92FE86FA200A430FF /* TerminalTargetServiceTests.swift in Sources */,
+				1F5E63D52FE87A1C00A430FF /* AppleMacVirtualMachineAudioDeviceFactoryTests.swift in Sources */,
 				1F9D2BB82FE7AE5C0076F5B9 /* MacVirtualMachineSavedStateStoreTests.swift in Sources */,
 				721DCA1DC3DB4606B99080FB /* LiveAppleContainerBuildSmokeTests.swift in Sources */,
 				1F9D2B962FE7A1B60076F5B9 /* MacVirtualMachineInstallationServiceTests.swift in Sources */,
@@ -2162,6 +2172,7 @@
 				1F9D2CBE2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift in Sources */,
 				1FEC47622FE84A8A00DC60B2 /* MenuBarQuickControlsView.swift in Sources */,
 				1F5E63972FE85C7700A430FF /* AppNotificationModels.swift in Sources */,
+				1F5E63D72FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift in Sources */,
 				1F9D2BBC2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift in Sources */,
 				1F9D2B1F2FE7705A0076F5B9 /* ContainerBuilderManaging.swift in Sources */,
 				1F9D2C1A2FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift in Sources */,
@@ -2311,6 +2322,7 @@
 				1F9D2B9E2FE7A7660076F5B9 /* AdvisoryFileLock.swift in Sources */,
 				2607934497FE5507A6C92B7E /* RuntimeMutationCoordinator.swift in Sources */,
 				2D5C2947C17E439C69BD21A2 /* SecureRegularFileValidator.swift in Sources */,
+				1F5E63D32FE87A0B00A430FF /* AppleMacVirtualMachineAudioDeviceFactory.swift in Sources */,
 				1F9D2C922FE800AA0076F5B9 /* StorageReclamationService.swift in Sources */,
 				9D0A93C7B104FECF0AC7E446 /* SettingsView.swift in Sources */,
 				1F5E63C92FE8756A00A430FF /* AppleContainerSSHAgentService.swift in Sources */,

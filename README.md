@@ -42,12 +42,12 @@ outputs, one-shot reviewed file-backed build secrets, reviewed shared-builder
 Stop/Force Stop/internal-cache reset, a transactional app-owned local build
 cache with token-bound promotion and separate status/reset controls, private
 persistent build history, and macOS restore-image preparation, installation,
-generation-safe runtime/console controls, same-host suspend, persistent
-VirtioFS shares, and stopped-only VM cloning with fresh platform identity and
-cancellable APFS/sparse transfer. Portable VM package export/import now supports
-identity-preserving restore or an explicit fresh-identity copy, with cancellable
-transaction cleanup and no destination replacement. Installed macOS VMs can now
-convert a stopped RAW disk to ASIF through a journaled, out-of-place transaction;
+generation-safe runtime/console controls, host audio output, same-host suspend,
+persistent VirtioFS shares, and stopped-only VM cloning with fresh platform
+identity and cancellable APFS/sparse transfer. Portable VM package export/import
+supports identity-preserving restore or an explicit fresh-identity copy, with
+cancellable transaction cleanup and no destination replacement. Installed macOS
+VMs can now convert a stopped RAW disk to ASIF through a journaled, out-of-place transaction;
 the runtime reads logical capacity through DiskImageKit instead of mistaking the
 sparse container's host file length for guest capacity. TERM-to-KILL cancellation
 keeps uncertain exits quarantined, and pending replacement journals block runtime,

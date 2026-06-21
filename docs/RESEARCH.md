@@ -447,6 +447,12 @@ The installed Apple documentation confirms:
   administered unicast address. A restorable configuration therefore must set a
   stable address explicitly; NativeContainers derives one from the VM UUID and
   includes it in the shared topology descriptor and saved-state fingerprint.
+- Virtualization.framework exposes guest audio through
+  `VZVirtioSoundDeviceConfiguration`. An output stream using
+  `VZHostAudioOutputStreamSink` follows the host's current default output
+  device. Microphone input is a separate `VZHostAudioInputStreamSource` path and
+  requires `NSMicrophoneUsageDescription`; NativeContainers currently configures
+  output only and therefore does not request recording access.
 - `VZVirtualMachineView` is the native interactive display. It supports
   automatic display reconfiguration and optional capture of system keys. SDK
   27's `VZVirtualMachineViewAdaptor` retains its VM, so a console must detach the

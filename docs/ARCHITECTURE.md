@@ -677,6 +677,12 @@ than sharing presentation state across an implied multi-window group.
   the live VZ configuration, avoiding Apple's random default. Starting fresh and
   resuming a live paused session explicitly discard an older checkpoint before
   writable storage can advance.
+- macOS guest audio is produced by a focused Apple device factory, not by the
+  SwiftUI configuration view. It creates exactly one Virtio output stream backed
+  by `VZHostAudioOutputStreamSink`; no input stream or microphone permission is
+  configured. The audio device is part of configuration topology version 3, so
+  checkpoints made against the earlier no-audio topology fail fingerprint
+  validation instead of restoring against changed virtual hardware.
 - Force Stop remains available during start, save, and restore. A generation-pinned
   monitor issues destructive stop as soon as Virtualization.framework reports that
   stop is available, even if the original callback is still pending. The UI reports

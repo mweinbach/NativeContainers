@@ -14,6 +14,7 @@ import Foundation
     private let sharedDirectoryBookmarkService:
       any MacVirtualMachineSharedDirectoryBookmarkResolving
     private let sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory
+    private let audioDeviceFactory: AppleMacVirtualMachineAudioDeviceFactory
     private let diskImageService: any AppleVirtualMachineDiskImageServicing
 
     init(
@@ -24,12 +25,15 @@ import Foundation
         MacVirtualMachineSharedDirectoryBookmarkService(),
       sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory =
         AppleMacVirtualMachineSharedDirectoryDeviceFactory(),
+      audioDeviceFactory: AppleMacVirtualMachineAudioDeviceFactory =
+        AppleMacVirtualMachineAudioDeviceFactory(),
       diskImageService: any AppleVirtualMachineDiskImageServicing =
         AppleVirtualMachineDiskImageService()
     ) {
       self.descriptorService = descriptorService
       self.sharedDirectoryBookmarkService = sharedDirectoryBookmarkService
       self.sharedDirectoryDeviceFactory = sharedDirectoryDeviceFactory
+      self.audioDeviceFactory = audioDeviceFactory
       self.diskImageService = diskImageService
     }
 
@@ -109,6 +113,7 @@ import Foundation
       configuration.storageDevices = [disk]
       configuration.graphicsDevices = [graphics]
       configuration.networkDevices = [network]
+      configuration.audioDevices = [audioDeviceFactory.makeOutputDevice()]
       configuration.keyboards = [
         VZMacKeyboardConfiguration(),
         VZUSBKeyboardConfiguration(),

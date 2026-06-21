@@ -11,7 +11,8 @@ struct MacVirtualMachineSharedDirectoryDescriptor: Codable, Equatable, Sendable 
 
 struct MacVirtualMachineConfigurationDescriptor: Codable, Equatable, Sendable {
   static let legacyTopologyVersion = 1
-  static let currentTopologyVersion = 2
+  static let directorySharingTopologyVersion = 2
+  static let currentTopologyVersion = 3
 
   let topologyVersion: Int
   let cpuCount: Int
@@ -31,6 +32,7 @@ struct MacVirtualMachineConfigurationDescriptor: Codable, Equatable, Sendable {
   let pointingDevices: [String]
   let entropyDevices: [String]
   let memoryBalloonDevices: [String]
+  let audioDevices: [String]?
   let directorySharingDevice: String?
   let directorySharingRevision: UInt64?
   let sharedDirectories: [MacVirtualMachineSharedDirectoryDescriptor]?
@@ -57,9 +59,7 @@ struct MacVirtualMachineConfigurationDescriptorService:
       machine.sharedDirectories.revision > 0
       || !machine.sharedDirectories.directories.isEmpty
     return MacVirtualMachineConfigurationDescriptor(
-      topologyVersion: hasDirectorySharingHistory
-        ? MacVirtualMachineConfigurationDescriptor.currentTopologyVersion
-        : MacVirtualMachineConfigurationDescriptor.legacyTopologyVersion,
+      topologyVersion: MacVirtualMachineConfigurationDescriptor.currentTopologyVersion,
       cpuCount: machine.manifest.resources.cpuCount,
       memoryBytes: machine.manifest.resources.memoryBytes,
       diskBytes: machine.manifest.resources.diskBytes,
@@ -77,6 +77,7 @@ struct MacVirtualMachineConfigurationDescriptorService:
       pointingDevices: ["MacTrackpad", "USBScreenCoordinate"],
       entropyDevices: ["Virtio"],
       memoryBalloonDevices: ["VirtioTraditional"],
+      audioDevices: ["VirtioSound/HostOutput"],
       directorySharingDevice: hasDirectorySharingHistory
         && !machine.sharedDirectories.directories.isEmpty
         ? "VirtioFS/macOSGuestAutomount" : nil,

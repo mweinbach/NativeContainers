@@ -29,6 +29,7 @@ struct MacVirtualMachineConfigurationView: View {
           diskMaintenanceOperation: diskMaintenance.operation,
           isRefreshingDiskState: diskMaintenance.isRefreshing
         )
+        MacVirtualMachineAudioSection()
         MacVirtualMachineDiskImageMaintenanceView(
           machine: machine,
           runtime: runtime,

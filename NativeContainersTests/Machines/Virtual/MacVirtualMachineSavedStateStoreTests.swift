@@ -255,13 +255,13 @@ struct MacVirtualMachineSavedStateStoreTests {
   }
 
   @Test
-  func emptySharingPreservesLegacyTopologyUntilConfigurationChanges() throws {
+  func hostAudioAdvancesTopologyWhileSharingRemainsOptional() throws {
     let fixture = try SavedStateStoreFixture()
     defer { fixture.remove() }
     let service = MacVirtualMachineConfigurationDescriptorService()
 
-    let legacy = try service.descriptor(for: fixture.machine)
-    let changed = try service.descriptor(
+    let baseline = try service.descriptor(for: fixture.machine)
+    let shared = try service.descriptor(
       for: fixture.machine.withSharedDirectories(
         MacVirtualMachineSharedDirectoryConfiguration(
           revision: 1,
@@ -271,17 +271,23 @@ struct MacVirtualMachineSavedStateStoreTests {
     )
 
     #expect(
-      legacy.topologyVersion
-        == MacVirtualMachineConfigurationDescriptor.legacyTopologyVersion
+      MacVirtualMachineConfigurationDescriptor.directorySharingTopologyVersion
+        < MacVirtualMachineConfigurationDescriptor.currentTopologyVersion
     )
-    #expect(legacy.directorySharingRevision == nil)
-    #expect(legacy.sharedDirectories == nil)
     #expect(
-      changed.topologyVersion
+      baseline.topologyVersion
         == MacVirtualMachineConfigurationDescriptor.currentTopologyVersion
     )
-    #expect(changed.directorySharingRevision == 1)
-    #expect(changed.sharedDirectories == [])
+    #expect(baseline.audioDevices == ["VirtioSound/HostOutput"])
+    #expect(baseline.directorySharingRevision == nil)
+    #expect(baseline.sharedDirectories == nil)
+    #expect(
+      shared.topologyVersion
+        == MacVirtualMachineConfigurationDescriptor.currentTopologyVersion
+    )
+    #expect(shared.audioDevices == baseline.audioDevices)
+    #expect(shared.directorySharingRevision == 1)
+    #expect(shared.sharedDirectories == [])
   }
 
   @Test

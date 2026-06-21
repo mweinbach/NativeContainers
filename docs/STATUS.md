@@ -7,8 +7,8 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 800 test declarations and 805 expanded outcomes.
-  The current full app-hosted Xcode run passed all 784 deterministic outcomes,
+- The suite currently contains 801 test declarations and 806 expanded outcomes.
+  The current full app-hosted Xcode run passed all 785 deterministic outcomes,
   with 21 destructive or external-service integrations skipped behind explicit
   live gates and no failures. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
@@ -124,6 +124,12 @@ Updated: 2026-06-21.
   diagnostics, and a generation-pinned Force Stop that queues while save/restore
   callbacks are outstanding. Deterministic store/service/runtime/model tests are
   implemented; a real save/restore still requires an installed macOS guest.
+- macOS VM configuration now includes a focused Virtio audio factory with one
+  output stream routed to `VZHostAudioOutputStreamSink`. The configuration UI
+  reports the Mac default output and the intentionally disconnected microphone;
+  no recording permission is requested. Saved-state topology advances to
+  version 3, which makes checkpoints created against the earlier no-audio
+  hardware layout incompatible instead of attempting an unsafe restore.
 - Installed macOS VM bundles can persist shared host directories in a private,
   bounded `SharedDirectories.json` capability sidecar. A focused orchestration
   service acquires the runtime lease, rejects running or checkpointed VMs, and
