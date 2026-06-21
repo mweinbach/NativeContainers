@@ -1478,3 +1478,37 @@ are rejected once snapshot history exists because replacing only the base would
 invalidate parent lineage. SwiftUI receives a stable observable snapshot model
 and invokes typed create/restore actions; it owns no filesystem or DiskImageKit
 state.
+
+## ADR-053: Keep physical USB authorization host-local and generation-pinned
+
+**Status:** Accepted; live activation pending entitlement availability — 2026-06-21
+
+Physical USB passthrough is an ephemeral runtime capability, not VM
+configuration data. AccessoryAccess owns system discovery and authorization,
+and the app retains its opaque `AAUSBAccessory` references only in the
+app-scoped USB service. The manifest, clones, portable packages, and saved-state
+metadata never persist a host registry ID or authorization decision. Discovery
+starts only after an explicit user action.
+
+Each macOS runtime configuration contains one XHCI controller. The Apple runtime
+session wraps that controller behind a framework-free contract and exposes it
+only through the runtime coordinator's exact generation target. The USB service
+serializes each device's attach/detach state across all VMs, projects
+another-VM ownership without revealing framework objects, and unwinds an attach
+that completes after its target was replaced. Virtualization's physical
+disconnect delegate clears only the matching generation.
+
+Dynamic USB devices are excluded from suspend: the runtime rejects suspension
+before pausing while its controller has attachments. Stopping the VM closes the
+controller and releases its host references. Adding the base XHCI controller
+changes the VZ topology, so the saved-state configuration version advances and
+older checkpoints fail compatibility checks instead of reaching restore.
+
+The required macOS 27 capability is
+`com.apple.developer.accessory-access.usb`. The installed Xcode MCP
+capability action does not yet recognize that new entitlement, and the current
+signed app does not contain it. NativeContainers will not edit the entitlement
+file behind Xcode's back. The composition root inspects the signed process and
+injects a fail-closed unavailable service until Xcode can add and sign the
+capability normally. The full adapter, orchestration, model, and UI remain
+compiled and deterministically tested in the meantime.

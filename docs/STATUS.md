@@ -6,16 +6,18 @@ Updated: 2026-06-21.
 
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
-- Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The current full app-hosted Xcode run contains 909 expanded outcomes: all 888
+- Build-for-testing and the normal app build succeed; refreshed source
+  diagnostics and the Issue Navigator report no warnings or errors.
+- The current full app-hosted Xcode run contains 923 expanded outcomes: all 902
   deterministic outcomes passed, with 21 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
   tests. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
   none run against public services by default.
-- The app launches and stops through Xcode. A Preview-owned orphan was terminated
-  with a bounded TERM/KILL cleanup, and no residual app process remained.
+- The app launched through Xcode as PID 62221 and Xcode stopped that exact
+  process. Preview-owned PID 57859 accepted bounded TERM cleanup, and no
+  NativeContainers or Preview process remained.
 - A native menu-bar control plane shares the app-scoped `AppModel`, inventory,
   lifecycle services, routing, and error state instead of introducing a second
   poller. It reports runtime and machine counts, exposes bounded container
@@ -31,8 +33,11 @@ Updated: 2026-06-21.
   required by the checked-in project specification and the app's private
   `/private/tmp` socket workspace. Shared and host-only VM networking use public
   vmnet objects and add no entitlement; the restricted physical-bridge
-  entitlement remains absent. An app-hosted availability probe reports the
-  Virtualization capability as available.
+  entitlement remains absent. The macOS 27 Accessory Access entitlement also
+  remains absent because the current Xcode MCP capability action does not
+  recognize it; physical USB composition detects that signed-build fact and
+  fails closed. An app-hosted availability probe reports the Virtualization
+  capability as available.
 - The SwiftUI overview, split container inspector, Linux-machine list,
   Linux-machine creation and persistent-configuration forms, machine command
   runner, macOS VM list,
@@ -44,7 +49,8 @@ Updated: 2026-06-21.
   Menu-bar quick controls and App Behavior settings render successfully in both
   light and dark appearance. The macOS VM network section renders automatic NAT
   in light appearance, shared vmnet in dark appearance, and the host-only
-  saved-state lock/discard path without clipping its mode controls.
+  saved-state lock/discard path without clipping its mode controls. The physical
+  USB popover renders ready and entitlement-unavailable states without clipping.
 - A typed workspace navigator now unifies sidebar state, exact resource
   selection, Overview links, and Command-K search. Its pure catalog derives
   stable entries from live inventory, ranks exact/prefix/word/substring matches,
@@ -162,6 +168,24 @@ Updated: 2026-06-21.
   create real shared and host-only vmnet attachments without adding a target
   entitlement. Physical bridging remains unavailable because Xcode rejects its
   restricted entitlement for this target.
+- Physical USB passthrough now has a complete macOS 27 service lane:
+  AccessoryAccess discovery, immutable descriptor mapping, one XHCI controller
+  per VM, exact-generation attach/detach orchestration, physical-disconnect
+  reconciliation, a stable observable model, and a native runtime popover.
+  Discovery is explicit and host authorization is never persisted. Attachment
+  ownership is projected across VMs, a late attach is unwound after generation
+  replacement, stopping releases controller state, and suspend fails before
+  pausing while a device remains attached. The new controller topology advances
+  the saved-state configuration version. Deterministic descriptor, service,
+  runtime, model, and app-composition tests pass, and ready/unavailable previews
+  render without clipping.
+- Live USB activation remains fail-closed. Apple's documented
+  `com.apple.developer.accessory-access.usb` capability is distinct from the
+  existing sandbox USB-device entitlement. Xcode MCP's capability action does
+  not yet recognize the macOS 27 key, and the freshly signed product does not
+  contain it. The composition root checks the signed process and injects an
+  unavailable service rather than attempting an unauthorized AccessoryAccess
+  connection or editing the entitlement file outside Xcode.
 - Installed macOS VM bundles can persist shared host directories in a private,
   bounded `SharedDirectories.json` capability sidecar. A focused orchestration
   service acquires the runtime lease, rejects running or checkpointed VMs, and

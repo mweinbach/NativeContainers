@@ -174,8 +174,20 @@ must leave a usable, test-backed product slice.
       manifest-backed service, app-owned vmnet pool, and focused VZ device
       factory. Custom modes are stopped-only, saved-state-free, and reset to NAT
       in portable packages.
-- [ ] Clipboard, physical bridging, and USB configuration where public APIs and
-      distributable entitlements support the guest.
+- [ ] Complete macOS host integration where public APIs and distributable
+      entitlements support the guest.
+  - [x] Physical USB discovery, exact-generation attach/detach orchestration,
+        disconnect handling, suspend exclusion, and native controls using the
+        macOS 27 AccessoryAccess and Virtualization APIs.
+  - [ ] Enable and signing-verify
+        `com.apple.developer.accessory-access.usb`, then live-verify capture
+        against disposable physical hardware. The installed Xcode MCP
+        capability action does not yet recognize this macOS 27 entitlement, so
+        the live composition currently detects its absence and fails closed.
+  - [ ] Add macOS guest clipboard integration only if Apple publishes a
+        supported channel. The current SPICE clipboard API is Linux-specific.
+  - [ ] Add physical bridging only if the restricted entitlement becomes
+        distributable for this target.
 - [x] Stopped-only same-host clone service with APFS copy-on-write when
       available, a fresh `VZMacMachineIdentifier`, runtime/library leases,
       sparse fallback, write-level cancellation, cold-boot saved-state

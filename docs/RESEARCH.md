@@ -750,6 +750,27 @@ Primary sources:
 - macOS 27 adds DiskImageKit layers, guest provisioning, and public physical USB
   passthrough. Those remain availability-gated and are not macOS 26 foundation
   requirements.
+- The macOS 27 physical-USB path is a composition of two public frameworks.
+  `AAUSBAccessoryManager` discovers authorized devices and requires
+  `com.apple.developer.accessory-access.usb`; registering an empty matching
+  criteria array requests all eligible accessories and can present system UI on
+  behalf of an ordinary Dock app. `VZUSBPassthroughDeviceConfiguration` accepts
+  the resulting `AAUSBAccessory`, and a running VM's `VZUSBController`
+  attaches or detaches the runtime device on the VM queue. The new controller
+  delegate reports physical disconnect after Virtualization has removed the
+  device.
+- The ordinary sandbox USB-device entitlement is not a substitute for Accessory
+  Access. Apple's entitlement documentation says a missing Accessory Access
+  capability fails service communication. The installed Xcode MCP entitlement
+  action currently rejects the new key as unknown, and the freshly signed app
+  product contains `com.apple.security.device.usb` but not
+  `com.apple.developer.accessory-access.usb`. NativeContainers therefore checks
+  its signed process at composition time and exposes an unavailable service
+  rather than invoking an API that cannot succeed. It does not bypass Xcode with
+  a raw entitlement-file edit.
+- Apple documents `VZSpiceAgentPortAttachment.sharesClipboard` for Linux
+  guests with `spice-vdagent`. The current SDK exposes no corresponding public
+  macOS-guest clipboard channel, so the app does not claim clipboard support.
 
 ## Primary references added during the foundation pass
 

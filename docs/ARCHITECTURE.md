@@ -802,6 +802,29 @@ than sharing presentation state across an implied multi-window group.
   automatic NAT. Physical bridging is deliberately excluded because its
   restricted entitlement is not available through the target capability
   surface.
+- Physical USB is a separate host-local service lane. AccessoryAccess owns
+  discovery and system authorization; a focused Apple adapter parses only the
+  stable registry ID and standard device descriptor needed by the domain. The
+  orchestration service owns the accessory references, global single-VM
+  attachment state, and per-machine snapshots. It asks the runtime coordinator
+  for a USB controller only by exact
+  `MacVirtualMachineRuntimeTarget`, so a replacement generation can never
+  inherit or detach the prior generation's devices. A late successful attach is
+  immediately unwound if the target changed.
+- Every macOS VM configuration contains one XHCI controller, while the
+  macOS-27-only passthrough adapter is created only for a compatible runtime
+  session. Physical disconnect callbacks clear the matching generation's
+  attachment; stopping closes the controller and releases all host-local
+  references. Dynamic devices are never written to the VM manifest, clone, or
+  portable package. Suspend is rejected before pausing while a device is
+  attached, and the saved-state runtime-configuration version advances for the
+  new XHCI topology. SwiftUI receives a prepared snapshot and invokes typed
+  discover, attach, and detach actions.
+- Live composition first reads the signed process's
+  `com.apple.developer.accessory-access.usb` entitlement. If either macOS 27 or
+  the capability is absent, it injects an unavailable implementation with a
+  user-facing reason. This keeps the beta capability boundary in composition
+  and leaves the domain, model, and UI deterministic.
 - Force Stop remains available during start, save, and restore. A generation-pinned
   monitor issues destructive stop as soon as Virtualization.framework reports that
   stop is available, even if the original callback is still pending. The UI reports

@@ -96,7 +96,9 @@ installation, runtime, saved state, shared directories, cloning, Linux VM
 creation, installer ejection, and native console presentation are independent
 services. VM networking is likewise split across a manifest-backed configuration
 service, an app-owned vmnet pool, and a focused Virtualization device factory;
-SwiftUI only renders snapshots and invokes actions. A dedicated
+physical USB uses a separate AccessoryAccess discovery adapter,
+generation-pinned runtime controller service, and entitlement-aware composition
+gate. SwiftUI only renders snapshots and invokes actions. A dedicated
 machine-management service owns machine creation and lifecycle rather than
 routing those operations through the container compatibility facade.
 
