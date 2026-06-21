@@ -424,3 +424,52 @@ routes normal solve output to the helper’s stderr. Secret builds therefore set
 fixed suppression notice. Apple still creates `Data`, base64 string, metadata,
 and HTTP/2 copies internally, so this boundary promises non-persistence and a
 one-shot worker lifetime—not cryptographic memory zeroization.
+
+## ADR-021: Own a private, typed build-history service
+
+**Status:** Accepted — 2026-06-20
+
+Apple’s public 1.0.0 builder surface exposes no history contract. Build history
+is therefore an app-owned observation service rather than runtime inventory.
+`RecordingImageBuildService` decorates the native builder, records a running
+attempt before execution, and best-effort replaces it with a typed success,
+partial-success, failure, cancellation, or interruption outcome. Recording
+failures never mask or alter the underlying build result.
+
+`ImageBuildHistoryStore` owns one schema-versioned JSON file per attempt under a
+current-user mode-0700 Application Support directory. Writes use private
+temporary files, `fsync`, and atomic rename; records are mode 0600, corrupt
+records are isolated, terminal retention is capped at 200, and a running record
+from another app launch is reconciled to interrupted only after its advisory
+process lease is no longer held. Newer schemas are reported but retained. A
+separate private-file service retains the verified directory descriptor, uses
+descriptor-relative operations, bounded enumeration, advisory locking, and
+nonblocking reads, strips and syncs inherited ACLs, scavenges interrupted
+temporary writes, and durably syncs deletes. The store persists a terminal
+replacement before pruning retention and accepts only running-to-terminal
+replacement for the same attempt identity.
+
+Lease files are removed on graceful release and stale foreign leases are
+scavenged opportunistically. Store update streams publish mutations immediately
+within one process and sample a cheap directory token while a History view is
+visible; only token changes or a known foreign-running lease losing its lock
+trigger a record reload. Refresh requests coalesce during slow I/O, and rejected
+record counts are latched across windows until explicit clearing. This lets a
+second app process converge without pretending the files are a database.
+Additive schema-1 fields decode with explicit defaults; unsupported later schema
+versions remain on disk for a newer app rather than being treated as corruption.
+
+The Build workspace owns stable image-build and builder-management models at the
+app layer. Navigation stays on Builds while either model holds a reviewed plan or
+active operation. Every such operation has an exposed cancellation path; builder
+Stop continues to escalate TERM to KILL and Force Stop remains immediate KILL.
+
+The persistence contract intentionally omits full context and secret paths,
+build-argument and label values, secret IDs, worker logs, and arbitrary error
+messages. It retains display name, immutable fingerprints, requested/completed
+tags, platforms, option keys and flags, secret count, timestamps, digest,
+retained partial-import reference/digest pairs, and a small typed failure
+category. The SwiftUI History workspace depends on its own
+observable model and storage port, observes store updates while presented,
+warns about isolated unreadable records, and clears history without touching
+images, builder state, or cache.

@@ -6,6 +6,17 @@ import Testing
 @MainActor
 struct AppModelTests {
   @Test
+  func imageBuildWorkspaceUsesAStableNavigationGuardModel() {
+    let model = AppModel.previewEmpty
+
+    #expect(model.makeImageBuildModel() === model.makeImageBuildModel())
+    #expect(
+      model.makeContainerBuilderManagementModel()
+        === model.makeContainerBuilderManagementModel()
+    )
+  }
+
+  @Test
   func refreshPublishesContainerAndVirtualMachineInventories() async throws {
     let inventory = ContainerInventory(
       system: ContainerSystemInfo(

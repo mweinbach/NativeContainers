@@ -65,7 +65,7 @@ struct ContainerBuilderManagementView: View {
     }
     .task {
       if model.inspection == nil {
-        await model.load()
+        startOperation { await model.load() }
       }
     }
     .confirmationDialog(

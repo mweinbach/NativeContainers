@@ -251,11 +251,25 @@ release and isolating it behind an adapter are both deliberate.
   connection, and close that socket on drift. If a create attempt fails while a
   running or uncertain builder exists, cleanup must leave it intact because it
   may belong to another `container` process.
-- OCI is the only initial output. The archive carries one unique internal
+- OCI is the only initial app output. The archive carries one unique internal
   staging tag; the app applies one or more reviewed final tags after import.
-  Docker/registry exporters, arbitrary output backends, SSH forwarding, cache
-  import/export UI, structured progress, and supported cache pruning remain
-  later parity work.
+  Apple’s public 1.0.0 build configuration also models `tar` and `local`
+  exports, but the app has not yet added their destination and overwrite safety
+  contract. Docker/registry exporters and SSH forwarding remain later parity
+  work.
+- The public build configuration accepts raw BuildKit CSV strings for cache
+  import/export, but Apple’s CLI hides both flags, the builder source still
+  marks cache-to/from as TODO, and upstream has no cache contract tests. Local
+  cache paths resolve inside the builder VM; a future app UI must expose typed,
+  app-owned profiles rather than raw strings or remote credentials and must be
+  gated by a two-build live reuse/reset probe.
+- Apple’s public builder and shim protocols expose build/info operations but no
+  build-history, disk-usage, or prune endpoint. NativeContainers therefore owns
+  its small product history: schema-versioned private files record typed
+  running/terminal outcomes while excluding full paths, option values, secret
+  metadata, logs, and error text. Per-launch advisory leases distinguish an
+  abandoned attempt from another live app instance. This history is not
+  presented as BuildKit’s internal solve database.
 - [`BuildFSSync`](https://github.com/apple/container/blob/1.0.0/Sources/ContainerBuild/BuildFSSync.swift)
   accepts paths requested by the builder and is not a host security sandbox.
   The initial product stages only regular files, rejects links/special files

@@ -3,10 +3,12 @@ import SwiftUI
 struct ImageBuildsView: View {
   @State private var selection = ImageBuildWorkspaceSection.newBuild
   @State private var imageBuildModel: ImageBuildModel
+  @State private var historyModel: ImageBuildHistoryModel
   @State private var builderModel: ContainerBuilderManagementModel
 
   init(appModel: AppModel) {
     _imageBuildModel = State(initialValue: appModel.makeImageBuildModel())
+    _historyModel = State(initialValue: appModel.makeImageBuildHistoryModel())
     _builderModel = State(initialValue: appModel.makeContainerBuilderManagementModel())
   }
 
@@ -19,7 +21,13 @@ struct ImageBuildsView: View {
       }
       .pickerStyle(.segmented)
       .labelsHidden()
-      .frame(maxWidth: 420)
+      .frame(maxWidth: 560)
+      .disabled(
+        imageBuildModel.plan != nil
+          || imageBuildModel.isWorking
+          || builderModel.plan != nil
+          || builderModel.isBusy
+      )
       .padding()
 
       Divider()
@@ -27,6 +35,8 @@ struct ImageBuildsView: View {
       switch selection {
       case .newBuild:
         ImageBuildCreationView(model: imageBuildModel)
+      case .history:
+        ImageBuildHistoryView(model: historyModel)
       case .builderAndCache:
         ContainerBuilderManagementView(model: builderModel)
       }
@@ -37,13 +47,15 @@ struct ImageBuildsView: View {
 
 private enum ImageBuildWorkspaceSection: String, CaseIterable, Identifiable {
   case newBuild
+  case history
   case builderAndCache
 
   var id: Self { self }
 
-  var title: String {
+  var title: LocalizedStringResource {
     switch self {
     case .newBuild: "New Build"
+    case .history: "History"
     case .builderAndCache: "Builder & Cache"
     }
   }

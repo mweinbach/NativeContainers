@@ -20,10 +20,14 @@ flowchart LR
     UI["SwiftUI management app"] --> Model["@MainActor app model"]
     Model --> ContainerPort["ContainerManaging"]
     Model --> BuildPort["ImageBuilding"]
+    Model --> HistoryPort["ImageBuildHistoryStoring"]
     Model --> VMPort["VirtualMachineManaging"]
     ContainerPort --> AppleClient["apple/container Swift clients"]
     AppleClient --> XPC["Apple container XPC services"]
-    BuildPort --> Stage["Private reviewed context"]
+    BuildPort --> Recorder["Best-effort history recorder"]
+    Recorder --> Stage["Private reviewed context"]
+    Recorder --> HistoryPort
+    HistoryPort --> HistoryStore["Private atomic JSON records"]
     Stage --> Worker["Signed one-shot build worker"]
     Worker --> BuildKit["Apple ContainerBuild + shared BuildKit VM"]
     BuildKit --> Artifact["Isolated OCI artifact"]
@@ -166,6 +170,26 @@ preparation, consumption revalidates both path and descriptor, streams with
 `pread`, clears its bounded buffer, and destroys the one-shot lease as soon as
 the committed pipe envelope is written.
 
+Build history is deliberately outside Apple’s runtime inventory. A
+`RecordingImageBuildService` decorates the native `ImageBuilding` service and
+best-effort records a running attempt before execution and one typed terminal
+outcome afterward. History failure never changes a build result. The separate
+`ImageBuildHistoryStoring` actor owns schema-versioned, per-record atomic files,
+bounded terminal retention, corruption isolation, live update streams, and
+abandoned-launch running-to-interrupted reconciliation guarded by live process
+leases. Local notifications plus a cheap directory-token poll keep every visible
+model current across app processes; known foreign-running leases are checked for
+lock release, slow-load refreshes are coalesced, and unreadable-record warnings
+remain latched until explicit clearing. Graceful release removes the current
+lease. A separate private-directory service owns descriptor-relative
+`openat`/`renameat`/`unlinkat`, bounded enumeration, advisory locking,
+nonblocking type checks, ACL removal, file and directory synchronization, and
+crash-temp scavenging. History persists only the context display name,
+fingerprints and hashes, tags, platforms, option keys and flags, secret count,
+timestamps, typed status, digest or retained partial-import references/digests,
+and typed failure category. Full paths, argument and label values, secret IDs
+and paths, logs, and error text never cross this persistence boundary.
+
 Canonical Dockerfile and ignore paths are checked as strict descendants by
 path component, not textual prefix. This accepts directory URLs normalized with
 or without a trailing separator while rejecting the context itself and sibling
@@ -269,6 +293,15 @@ selection and lifecycle commands.
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before
   mutation.
+- Build history uses an ACL-free mode-0700 current-user directory and ACL-free
+  mode-0600 atomic records through a verified directory descriptor. Corrupt or
+  special records are isolated without blocking, newer schemas are retained,
+  live-launch leases prevent false interruption, bounded scans fail closed, and
+  retention happens after the replacement is durable while bounding terminal
+  records.
+- Image-build and builder-management workspace models have app-level identity.
+  Reviewed plans and active operations lock navigation away from Builds, while
+  the owning view exposes cancellation for every locked asynchronous action.
 - Named attachments are revalidated after review. Published sockets can only
   occupy a private operation directory, are checked before each start, and are
   removed on stop/delete or owned creation rollback.

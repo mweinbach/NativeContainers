@@ -18,6 +18,21 @@ final class AppModel {
   private(set) var errorMessage: String?
 
   private let services: AppServices
+
+  @ObservationIgnored
+  private lazy var imageBuildWorkspaceModel = ImageBuildModel(
+    service: services.imageBuild
+  ) { [weak self] in
+    await self?.refresh()
+  }
+
+  @ObservationIgnored
+  private lazy var builderWorkspaceModel = ContainerBuilderManagementModel(
+    service: services.builder
+  ) { [weak self] in
+    await self?.refresh()
+  }
+
   private var hasLoaded = false
   private var refreshRequested = false
   private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
@@ -248,16 +263,28 @@ final class AppModel {
     }
   }
 
+  var isBuildWorkspaceNavigationLocked: Bool {
+    imageBuildWorkspaceModel.plan != nil
+      || imageBuildWorkspaceModel.isWorking
+      || builderWorkspaceModel.plan != nil
+      || builderWorkspaceModel.isBusy
+  }
+
+  func selectSidebarDestination(_ destination: SidebarDestination) {
+    guard !isBuildWorkspaceNavigationLocked || destination == .builds else { return }
+    selection = destination
+  }
+
   func makeImageBuildModel() -> ImageBuildModel {
-    ImageBuildModel(service: services.imageBuild) { [weak self] in
-      await self?.refresh()
-    }
+    imageBuildWorkspaceModel
+  }
+
+  func makeImageBuildHistoryModel() -> ImageBuildHistoryModel {
+    ImageBuildHistoryModel(service: services.imageBuildHistory)
   }
 
   func makeContainerBuilderManagementModel() -> ContainerBuilderManagementModel {
-    ContainerBuilderManagementModel(service: services.builder) { [weak self] in
-      await self?.refresh()
-    }
+    builderWorkspaceModel
   }
 
   func makeRegistrySettingsModel() -> RegistrySettingsModel {

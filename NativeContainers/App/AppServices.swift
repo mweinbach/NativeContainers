@@ -1,4 +1,5 @@
 import ContainerAPIClient
+import Foundation
 import MachineAPIClient
 
 struct AppServices: Sendable {
@@ -15,6 +16,7 @@ struct AppServices: Sendable {
   let networks: any NetworkManaging
   let browser: any ContainerBrowserResolving
   let imageBuild: any ImageBuilding
+  let imageBuildHistory: any ImageBuildHistoryStoring
   let builder: any ContainerBuilderManaging
   let registry: any RegistryManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
@@ -35,6 +37,7 @@ struct AppServices: Sendable {
     networks: any NetworkManaging,
     browser: any ContainerBrowserResolving,
     imageBuild: any ImageBuilding,
+    imageBuildHistory: any ImageBuildHistoryStoring = NoopImageBuildHistoryStore(),
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
     registry: any RegistryManaging,
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
@@ -54,6 +57,7 @@ struct AppServices: Sendable {
     self.networks = networks
     self.browser = browser
     self.imageBuild = imageBuild
+    self.imageBuildHistory = imageBuildHistory
     self.builder = builder
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
@@ -64,6 +68,7 @@ struct AppServices: Sendable {
   init(
     containerService: any ContainerManaging,
     imageBuild: any ImageBuilding,
+    imageBuildHistory: any ImageBuildHistoryStoring = NoopImageBuildHistoryStore(),
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
     registry: any RegistryManaging,
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
@@ -83,6 +88,7 @@ struct AppServices: Sendable {
     networks = containerService
     browser = containerService
     self.imageBuild = imageBuild
+    self.imageBuildHistory = imageBuildHistory
     self.builder = builder
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
@@ -145,6 +151,16 @@ enum AppCompositionRoot {
       ownedContainerRecovery: recoveryService,
       runtimeMutationCoordinator: mutationCoordinator
     )
+    let launchID = UUID()
+    let imageBuildHistory = ImageBuildHistoryStore(launchID: launchID)
+    let imageBuildService = RecordingImageBuildService(
+      base: AppleContainerBuildService(
+        runtimeMutationCoordinator: mutationCoordinator,
+        buildExecutionCoordinator: buildExecutionCoordinator
+      ),
+      history: imageBuildHistory,
+      launchID: launchID
+    )
     return AppServices(
       inventory: inventoryService,
       containerLifecycle: lifecycleService,
@@ -158,10 +174,8 @@ enum AppCompositionRoot {
       volumes: infrastructureService,
       networks: infrastructureService,
       browser: infrastructureService,
-      imageBuild: AppleContainerBuildService(
-        runtimeMutationCoordinator: mutationCoordinator,
-        buildExecutionCoordinator: buildExecutionCoordinator
-      ),
+      imageBuild: imageBuildService,
+      imageBuildHistory: imageBuildHistory,
       builder: builderManagementService,
       registry: AppleRegistryService(),
       virtualMachineLibrary: VirtualMachineLibrary(),

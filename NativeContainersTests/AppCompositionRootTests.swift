@@ -20,7 +20,8 @@ struct AppCompositionRootTests {
     #expect(services.volumes is AppleInfrastructureService)
     #expect(services.networks is AppleInfrastructureService)
     #expect(services.browser is AppleInfrastructureService)
-    #expect(services.imageBuild is AppleContainerBuildService)
+    #expect(services.imageBuild is RecordingImageBuildService)
+    #expect(services.imageBuildHistory is ImageBuildHistoryStore)
     #expect(services.builder is AppleContainerBuilderManagementService)
   }
 }

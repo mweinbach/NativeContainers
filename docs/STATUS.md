@@ -7,14 +7,15 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 225 test declarations. The current full
-  app-hosted Xcode run passed all 217 deterministic tests, with eight destructive
+- The suite currently contains 271 test declarations. The current full
+  app-hosted Xcode run passed all 262 deterministic tests, with nine destructive
   or external-service integrations skipped behind explicit live gates. That run
-  includes the short-pipe framing, builder mount normalization, and strict
-  path-component-containment regressions. Existing opt-in tests pass against
-  Apple’s live runtime for provisioning, interactive PTY, and image-reference
-  behavior. The push/pull round trip remains hard-gated to a disposable
-  localhost registry and is never run against public services.
+  includes build-history privacy/durability, short-pipe framing, builder mount
+  normalization, and strict path-component-containment regressions. Existing
+  opt-in tests pass against Apple’s live runtime for provisioning, interactive
+  PTY, and image-reference behavior. The push/pull round trip remains
+  hard-gated to a disposable localhost registry and is never run against public
+  services.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview and split container inspector render successfully in
   Xcode Preview in light mode.
@@ -211,10 +212,11 @@ Updated: 2026-06-20.
   seconds after launch. The worker surfaced `CancellationError`, no final tag or
   build artifact remained, and the preexisting container/image counts were
   unchanged.
-- The Builds destination is now a modular workspace with separate New Build and
-  Builder & Cache views. A focused `ContainerBuilderManaging` service reports
-  stable runtime state and whole-bundle allocated storage, and prepares reviewed
-  Stop, explicit `KILL`, and stopped-only Delete Builder & Cache operations.
+- The Builds destination is now a modular workspace with separate New Build,
+  History, and Builder & Cache views. A focused `ContainerBuilderManaging`
+  service reports stable runtime state and whole-bundle allocated storage, and
+  prepares reviewed Stop, explicit `KILL`, and stopped-only Delete Builder &
+  Cache operations.
 - Builder maintenance takes the image-build single-flight lock before the global
   runtime mutation lock, then revalidates the exact creation date, full pinned
   identity, configuration, and runtime root before XPC mutation. Ambiguous XPC
@@ -237,6 +239,38 @@ Updated: 2026-06-20.
   request. App-side leases are released when that pipe write commits. Secret
   builds force Apple’s quiet mode, drain and discard worker stderr, sanitize
   failure events, and retain only a fixed suppression notice.
+- Private persistent build history is live behind separate recording, storage,
+  observable-model, and view boundaries. The recording decorator publishes
+  running and typed terminal outcomes without changing build results; a failed
+  terminal write removes its known-stale running record, while a post-commit
+  maintenance failure preserves the committed terminal outcome. The store
+  retains at most 200 terminal attempts, uses per-launch process leases before
+  reconciling abandoned running work as interrupted, removes leases on graceful
+  release, isolates corrupt/special records, retains newer-schema records,
+  defaults newly added schema-1 fields for existing records, scavenges partial
+  writes, and streams local plus cross-process updates to every visible History
+  model. Cross-process observation polls only a cheap directory change token and
+  known foreign-running lease locks; unchanged history performs no record scan.
+  Models coalesce updates that arrive during I/O, and unreadable-record warnings
+  remain latched across windows until Clear History. Partial-import history
+  preserves every retained reference/digest pair.
+- History I/O is confined to a verified directory descriptor. Canonical
+  record names use `openat`/`renameat`/`unlinkat`, reads use `O_NONBLOCK`, writes
+  and removals durably sync the directory, every newly created ancestor is
+  synced from its first existing parent, bounded enumeration fails closed on
+  floods, and mode-0700/0600 boundaries also strip and sync inherited macOS
+  ACLs. Persisted data excludes full paths, option values, secret IDs and paths,
+  worker logs, and arbitrary error text.
+- The Build workspace keeps one app-level image-build model and builder model.
+  A reviewed plan or active operation locks both its segmented picker and the
+  top-level sidebar, preventing view teardown from silently discarding work.
+  Builder inspection/actions expose Cancel Operation while locked; normal Stop
+  retains the documented TERM-to-KILL escalation and Force Stop remains an
+  explicit immediate KILL path.
+- The History preview renders successfully in Xcode after replacing the macOS
+  `List` path that crashed the current SDK’s outline diff with a stable
+  `ScrollView`/`LazyVStack` presentation. The full 271-test Xcode run and a
+  warning-free build-for-testing pass are green.
 
 ## Known configuration issue
 
@@ -251,9 +285,10 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add cache import/export, history, and alternate outputs only where the pinned
-   native API exposes a verifiable contract; continue tracking SSH forwarding
-   and cache-only prune as unsupported gaps.
+1. Add typed `tar`/local alternate outputs, then gate any app-owned local cache
+   profile behind a live two-build reuse/reset probe. Keep raw cache strings,
+   remote credentials, SSH forwarding, and cache-only prune out of the UI until
+   the pinned native API exposes a verifiable contract.
 2. Package a signed and notarized privileged helper if automated host-access
    mutation is still desired after the explicit command handoff is exercised.
 3. Add the entitlement through a functioning Xcode capability surface, then

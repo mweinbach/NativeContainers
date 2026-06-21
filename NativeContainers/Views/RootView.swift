@@ -7,7 +7,13 @@ struct RootView: View {
     @Bindable var model = model
 
     NavigationSplitView {
-      SidebarView(selection: $model.selection)
+      SidebarView(
+        selection: Binding(
+          get: { model.selection },
+          set: model.selectSidebarDestination
+        ),
+        lockedDestination: model.isBuildWorkspaceNavigationLocked ? .builds : nil
+      )
     } detail: {
       DestinationView(model: model, destination: model.selection)
     }

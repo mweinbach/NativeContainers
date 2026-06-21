@@ -8,6 +8,7 @@ called out rather than papered over.
 | OCI pull/push/list/tag/prune | Apple image services | M1 | Reviewed exact-platform pull/push, rich inspect, safe tag/delete, and prune are live; public push smoke is intentionally prohibited |
 | Dockerfile/Containerfile builds | Apple `ContainerBuild` + shared BuildKit VM | M2 | Reviewed exact-platform OCI builds are live through a signed worker; 1.0.0 requires Dockerfiles below 16 KiB and lacks structured progress/cache-only prune |
 | Build secrets | Reviewed file-descriptor vault + Apple BuildKit secret payload | M2 | Private files outside the context stream once over worker stdin; plans and Codable control frames contain no bytes, and secret-build diagnostics are suppressed |
+| Build history | App-owned recording decorator + private file store | M2 | Typed running/terminal outcomes, live-launch-aware crash reconciliation, token-gated cross-process refresh, coalesced slow-I/O updates, corruption/schema isolation, fail-closed bounded scans, and 200-record terminal retention are live; paths, logs, error text, secret metadata, and option values are not persisted |
 | Shared builder/cache maintenance | Container service XPC + exact snapshot adapter | M2 | Stable status, whole-bundle allocation, reviewed Stop/Force Stop, and stopped-only reset are live; external CLI activity is not observable |
 | Container lifecycle | `ContainerClient` | M1 | Foundation start/stop/delete is wired |
 | Exec, logs, copy, inspect, stats | `ContainerClient` + SwiftTerm | M1 | Non-interactive exec and native interactive PTY are live |

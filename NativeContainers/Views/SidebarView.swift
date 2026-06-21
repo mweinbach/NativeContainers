@@ -2,29 +2,37 @@ import SwiftUI
 
 struct SidebarView: View {
   @Binding var selection: SidebarDestination
+  var lockedDestination: SidebarDestination?
 
   var body: some View {
     List(selection: $selection) {
       Section("Workspace") {
-        SidebarRow(destination: .overview)
-        SidebarRow(destination: .containers)
-        SidebarRow(destination: .images)
-        SidebarRow(destination: .builds)
-        SidebarRow(destination: .volumes)
-        SidebarRow(destination: .networks)
+        row(.overview)
+        row(.containers)
+        row(.images)
+        row(.builds)
+        row(.volumes)
+        row(.networks)
       }
 
       Section("Virtual Machines") {
-        SidebarRow(destination: .linuxMachines)
-        SidebarRow(destination: .macOSVirtualMachines)
+        row(.linuxMachines)
+        row(.macOSVirtualMachines)
       }
 
       Section {
-        SidebarRow(destination: .settings)
+        row(.settings)
       }
     }
     .navigationTitle("NativeContainers")
     .listStyle(.sidebar)
+  }
+
+  private func row(_ destination: SidebarDestination) -> some View {
+    SidebarRow(destination: destination)
+      .disabled(
+        lockedDestination != nil && lockedDestination != destination
+      )
   }
 }
 

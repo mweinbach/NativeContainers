@@ -52,7 +52,12 @@ must leave a usable, test-backed product slice.
       Force Stop (`KILL`), and stopped-only builder/cache reset.
 - [x] Reviewed file-backed BuildKit secrets with one-shot descriptor leases,
       bounded private-pipe transport, and suppressed secret-build diagnostics.
-- [ ] SSH forwarding, cache import/export, alternate outputs, and history.
+- [x] Private persistent build history with typed outcomes, interrupted-build
+      reconciliation guarded by live-launch leases, bounded retention, and no
+      retained logs or secret values.
+- [x] Stable Build workspace services with navigation guards and visible cancel,
+      TERM-to-KILL, and immediate Force Stop kill points.
+- [ ] SSH forwarding, cache import/export, and alternate outputs.
 - [ ] Version-pinned Socktainer service and product-specific Docker context.
 - [ ] Compose parser and lifecycle coordinator, with conformance fixtures.
 - [ ] Automatic project detection and per-project status.
