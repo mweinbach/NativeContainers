@@ -714,10 +714,21 @@ than sharing presentation state across an implied multi-window group.
   as unsafe.
 - Installed macOS VMs use an app-scoped runtime coordinator and a short-held
   library mutation lock to acquire a per-bundle runtime lease. Runtime state is
-  ephemeral and never changes the installation manifest. Every session has a
-  fresh generation; lifecycle commands, destructive stop authorization, and
-  console attachment must match it. Delegate stop/error events are the
-  authoritative terminal signal and release the disk lease exactly once.
+  ephemeral except for the narrow first-boot transaction described below. Every
+  session has a fresh generation; lifecycle commands, destructive stop
+  authorization, and console attachment must match it. Delegate stop/error
+  events are the authoritative terminal signal and release the disk lease
+  exactly once.
+- macOS guest provisioning is split across four focused boundaries. Restore
+  preparation returns a typed guest OS identity for the manifest; a pure policy
+  gates the feature to macOS 27-or-later hosts and guests with an unclaimed first
+  boot and no saved state; a first-boot service owns only the
+  pending-to-launching-to-started persistence transition; and the Apple runtime
+  adapter is the only layer that creates VZMacGuestProvisioningOptions. The form
+  model retains the password only for the visible sheet and clears it on
+  cancellation, dismissal, or accepted start. A start error rolls launching back
+  to pending; a process crash leaves launching in place so the app fails closed
+  instead of risking a second credential submission after an ambiguous boot.
 - A graceful stop request leaves the VM in a stopping state with an explicit
   Force Stop action. Force Stop wraps Apple's destructive stop API and does not
   claim the VM stopped when the framework reports an error. A service-owned,

@@ -149,6 +149,10 @@ must leave a usable, test-backed product slice.
 - [ ] Live-verify macOS installation against a local IPSW. The entitlement and
       service/UI path, progress, supported cancellation, operation leases,
       interruption recovery, and deterministic cleanup tests are implemented.
+- [x] Automated macOS 27 first-boot account provisioning through a typed guest
+      OS identity, fail-closed first-boot transaction, transient secret form,
+      and focused Virtualization start-options adapter. Live guest verification
+      remains gated by a newly restored macOS 27 VM.
 - [x] Start, pause, resume, request stop, and explicit force stop through an
       app-scoped, generation-safe runtime service. Live guest verification still
       requires an installed macOS VM.

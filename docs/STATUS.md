@@ -120,6 +120,14 @@ Updated: 2026-06-21.
   Mac-shortcut capture, SDK 27's adaptor, and detaches stale views. Deterministic
   ownership/service/model tests pass, while real VM launch still requires an
   installed local macOS guest.
+- Newly restored macOS 27 guests now expose an optional native first-boot setup
+  sheet. Restore preparation persists the exact guest version/build, while a
+  focused policy, transaction service, and Virtualization adapter validate and
+  submit VZMacGuestProvisioningOptions only on an unclaimed cold boot. Passwords
+  remain transient UI/runtime values and are never written to the VM manifest.
+  Failed starts restore eligibility; ambiguous crash state fails closed. The
+  service, policy, rollback, model, and light/dark preview paths are verified;
+  successful in-guest account creation still requires a disposable macOS 27 VM.
 - Same-host suspend/resume is implemented behind focused runtime, saved-state
   callback, and transactional filesystem services. The live configuration uses
   a deterministic per-VM MAC and records save/restore capability independently
