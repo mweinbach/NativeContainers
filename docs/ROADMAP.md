@@ -156,8 +156,12 @@ must leave a usable, test-backed product slice.
 - [x] Explicit per-VM microphone input through the Mac's current input device,
       with user-initiated permission, stopped-only edits, and saved-state
       fingerprinting; clones and portable packages start disconnected.
-- [ ] Clipboard, advanced networking, and USB configuration where public APIs
-      support the guest.
+- [x] Per-VM automatic NAT, app-shared, and host-only networking through a
+      manifest-backed service, app-owned vmnet pool, and focused VZ device
+      factory. Custom modes are stopped-only, saved-state-free, and reset to NAT
+      in portable packages.
+- [ ] Clipboard, physical bridging, and USB configuration where public APIs and
+      distributable entitlements support the guest.
 - [x] Stopped-only same-host clone service with APFS copy-on-write when
       available, a fresh `VZMacMachineIdentifier`, runtime/library leases,
       sparse fallback, write-level cancellation, cold-boot saved-state
@@ -205,8 +209,10 @@ Potential parity gaps are tracked rather than hidden:
 
 - Apple’s container stack is OCI/Docker-image and Dockerfile compatible but has
   no Docker Engine API. Docker CLI/Compose requires a separate bridge.
-- Bridged networking and some low-level VM controls can require restricted
-  entitlements; NAT is the safe public default.
+- Physical bridged networking and some low-level VM controls require restricted
+  entitlements. NAT remains the portable default; public vmnet shared and
+  host-only logical networks provide advanced same-process modes without
+  claiming physical bridging.
 - GPU acceleration, host integration, snapshots, and dynamic device changes
   differ between Linux and macOS guests and across host OS versions.
 - Exact shared-loopback networking, arbitrary Linux GPU passthrough, portable

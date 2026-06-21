@@ -1334,3 +1334,34 @@ output-only topology-v3 implementation. Once the setting changes, its monotonic
 revision is included in the saved-state fingerprint. An enable-then-disable cycle
 therefore cannot make an older checkpoint appear compatible merely because the
 visible device list returned to output-only.
+
+## ADR-048: Use app-owned vmnet logical networks for advanced macOS VM networking
+
+**Status:** Accepted — 2026-06-21
+
+macOS VM networking exposes three explicit domain modes. Automatic NAT uses
+`VZNATNetworkDeviceAttachment` and remains the portable default. Shared and
+host-only modes create public `vmnet_network_ref` objects and attach them through
+`VZVmnetNetworkDeviceAttachment`; shared mode provides VM-to-VM, host, and
+external connectivity, while host-only omits external connectivity.
+
+One pool owned by the app composition root retains one logical network for each
+custom mode and is injected into both installation and runtime configuration
+factories. This satisfies Virtualization's same-process requirement and ensures
+VMs selecting the same mode join the same logical network. The SwiftUI section
+never constructs framework objects or discovers interfaces: it renders a
+service snapshot and invokes a typed mode-change action.
+
+Physical bridging is not part of this capability. Apple's bridge attachment
+requires `com.apple.vm.networking`, and Xcode does not expose that restricted
+entitlement for this target. NativeContainers does not manually edit the
+entitlements file or disguise a vmnet shared network as a physical bridge.
+
+Mode changes acquire the existing runtime lease, require the VM to be stopped,
+reject any saved checkpoint, and atomically persist a monotonic configuration
+revision. The revision is included in the saved-state descriptor so returning to
+an earlier visible mode cannot resurrect an older checkpoint. Custom vmnet
+objects are recreated when the process relaunches, so shared and host-only
+runtime configurations explicitly disable suspend/save-restore. Same-host clones
+preserve their selected mode, while portable package preparation clears the
+process-local choice back to automatic NAT.

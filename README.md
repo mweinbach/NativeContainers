@@ -44,7 +44,8 @@ cache with token-bound promotion and separate status/reset controls, private
 persistent build history, and macOS restore-image preparation, installation,
 generation-safe runtime/console controls, per-VM opt-in host audio input that
 resets on clone/export, host audio output, same-host suspend,
-persistent VirtioFS shares, and stopped-only VM cloning with fresh platform
+persistent VirtioFS shares, per-VM automatic NAT/shared/host-only networking,
+and stopped-only VM cloning with fresh platform
 identity and cancellable APFS/sparse transfer. Portable VM package export/import
 supports identity-preserving restore or an explicit fresh-identity copy, with
 cancellable transaction cleanup and no destination replacement. Installed macOS
@@ -83,7 +84,9 @@ container/resource action execution, command execution, postcondition proof,
 owned-resource recovery, VM bundle transactions, cancellable bundle transfer,
 portable package preparation/import/export, platform-identity generation,
 installation, runtime, saved state, shared directories, and cloning are
-independent services. A
+independent services. VM networking is likewise split across a manifest-backed
+configuration service, an app-owned vmnet pool, and a focused Virtualization
+device factory; SwiftUI only renders snapshots and invokes actions. A
 dedicated machine-management service owns machine creation and lifecycle rather
 than routing those operations through the container compatibility facade.
 

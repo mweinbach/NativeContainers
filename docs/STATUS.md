@@ -7,8 +7,8 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 814 test declarations and 819 expanded outcomes.
-  The current full app-hosted Xcode run passed all 798 deterministic outcomes,
+- The suite currently contains 829 test declarations and 834 expanded outcomes.
+  The current full app-hosted Xcode run passed all 813 deterministic outcomes,
   with 21 destructive or external-service integrations skipped behind explicit
   live gates and no failures. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
@@ -29,7 +29,9 @@ Updated: 2026-06-21.
   `com.apple.security.virtualization` and the microphone-specific
   `com.apple.security.device.audio-input`; `ENABLE_APP_SANDBOX` remains `NO` as
   required by the checked-in project specification and the app's private
-  `/private/tmp` socket workspace. An app-hosted availability probe reports the
+  `/private/tmp` socket workspace. Shared and host-only VM networking use public
+  vmnet objects and add no entitlement; the restricted physical-bridge
+  entitlement remains absent. An app-hosted availability probe reports the
   Virtualization capability as available.
 - The SwiftUI overview, split container inspector, Linux-machine list,
   Linux-machine creation form, machine command runner, macOS VM list,
@@ -39,7 +41,9 @@ Updated: 2026-06-21.
   in light mode. The app-wide Quick Open sheet, actionable Overview, and
   initial-selection paths for Volumes and Networks also render successfully.
   Menu-bar quick controls and App Behavior settings render successfully in both
-  light and dark appearance.
+  light and dark appearance. The macOS VM network section renders automatic NAT
+  in light appearance, shared vmnet in dark appearance, and the host-only
+  saved-state lock/discard path without clipping its mode controls.
 - A typed workspace navigator now unifies sidebar state, exact resource
   selection, Overview links, and Command-K search. Its pure catalog derives
   stable entries from live inventory, ranks exact/prefix/word/substring matches,
@@ -136,6 +140,19 @@ Updated: 2026-06-21.
   cannot make an older checkpoint valid again. Clones and portable packages
   deliberately clear this host-local opt-in, so every copied or imported VM
   requires a fresh Connect action.
+- macOS VM networking is split into a revisioned manifest value, a lease-aware
+  persistence service, one app-owned vmnet pool, a focused Virtualization device
+  factory, a stable observable model, and a snapshot/action-only SwiftUI section.
+  Automatic NAT remains the portable and suspend-capable default. Shared mode
+  joins participating VMs with the host and external networks; host-only joins
+  participating VMs with the host without external access. Both custom modes
+  use public same-process vmnet objects, are recreated after app relaunch, and
+  deliberately disable suspend. Edits require a stopped VM with no checkpoint,
+  advance the saved-state fingerprint revision, persist across same-host clones,
+  and reset to NAT during portable export/import preparation. Focused tests also
+  create real shared and host-only vmnet attachments without adding a target
+  entitlement. Physical bridging remains unavailable because Xcode rejects its
+  restricted entitlement for this target.
 - Installed macOS VM bundles can persist shared host directories in a private,
   bounded `SharedDirectories.json` capability sidecar. A focused orchestration
   service acquires the runtime lease, rejects running or checkpointed VMs, and

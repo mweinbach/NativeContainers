@@ -688,6 +688,24 @@ than sharing presentation state across an implied multi-window group.
   checkpoint. Clone and portable-manifest constructors erase the host-local
   opt-in, so copied or imported VMs require a fresh Connect action. The app model
   and view receive only snapshots and actions.
+- macOS VM networking follows the same boundary. A manifest-backed domain value
+  selects automatic NAT, shared, or host-only attachment; a lease-aware service
+  owns stopped-only persistence and rejects saved-state conflicts; an app-owned
+  pool creates and retains one `vmnet_network_ref` per custom mode; and a focused
+  factory is the only layer that constructs `VZNATNetworkDeviceAttachment` or
+  `VZVmnetNetworkDeviceAttachment`. The composition root shares the pool between
+  installation and runtime factories so every VM in the process joins the same
+  logical network for its selected mode. SwiftUI receives only the current mode
+  and invokes service actions.
+- Shared and host-only vmnet networks are process-owned and recreated after app
+  relaunch. Their runtime configurations therefore report save/restore as
+  unsupported rather than persisting guest memory against a vanished logical
+  network. Every mode change advances a revision included in the saved-state
+  descriptor, so toggling back cannot validate an older checkpoint. Same-host
+  clones retain the selected mode; portable package preparation clears it to
+  automatic NAT. Physical bridging is deliberately excluded because its
+  restricted entitlement is not available through the target capability
+  surface.
 - Force Stop remains available during start, save, and restore. A generation-pinned
   monitor issues destructive stop as soon as Virtualization.framework reports that
   stop is available, even if the original callback is still pending. The UI reports
@@ -721,7 +739,8 @@ than sharing presentation state across an implied multi-window group.
   the sanitizer removes runtime/install/save transactions; the identity policy
   either preserves a round-trip-valid `VZMacMachineIdentifier` or replaces it
   through the generator; and a portability policy removes the cached restore
-  URL, host-local shared-folder bookmark capabilities, and microphone opt-in.
+  URL, host-local shared-folder bookmark capabilities, microphone opt-in, and
+  process-local vmnet mode.
 - Portable export briefly takes the library mutation lock only to resolve and
   pin a stopped source, then retains the per-VM runtime lease while a
   security-scoped destination-parent lease spans the cancellable copy. It stages

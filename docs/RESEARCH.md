@@ -447,6 +447,19 @@ The installed Apple documentation confirms:
   administered unicast address. A restorable configuration therefore must set a
   stable address explicitly; NativeContainers derives one from the VM UUID and
   includes it in the shared topology descriptor and saved-state fingerprint.
+- `VZBridgedNetworkDeviceAttachment` requires the restricted
+  `com.apple.vm.networking` entitlement. Xcode's supported capability surface
+  does not expose that entitlement for this target, so NativeContainers neither
+  edits it manually nor presents physical bridging as available.
+- The public vmnet object APIs provide shared and host-only logical networks.
+  `vmnet_network_configuration_create` plus `vmnet_network_create` succeeds for
+  both modes without an additional target entitlement, and
+  `VZVmnetNetworkDeviceAttachment` accepts only a network created by the same
+  application process. NativeContainers retains one logical network per mode in
+  its composition root so participating VMs share it. Because those references
+  are recreated after relaunch, custom vmnet modes are cold-start-only and do
+  not advertise suspend/save-restore support. Automatic `VZNATNetworkDeviceAttachment`
+  remains the portable default.
 - Virtualization.framework exposes guest audio through
   `VZVirtioSoundDeviceConfiguration`. An output stream using
   `VZHostAudioOutputStreamSink` follows the host's current default output
