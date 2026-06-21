@@ -82,6 +82,9 @@ resource syntax, and port descriptors. The app owns orchestration and rollback.
 
 **Status:** Accepted — 2026-06-20
 
+ADR-040 preserves this shared-image boundary but supersedes the physical Caches
+location for new acquisitions.
+
 Downloaded IPSWs live in the app cache rather than inside every VM bundle. A
 persistent `.partial` file supports HTTP range continuation; a validated 206
 response appends at exactly the requested offset, a 200 response restarts the
@@ -1071,8 +1074,44 @@ finish an interrupted deletion. Successful macOS installation clears the
 manifest's restore-image reference, while cancelled or failed installation
 retains it for retry.
 
-The current location remains under the app's Caches directory. That directory
-is not a durable cross-launch archive and may be purged while the app is not
-running. Moving new artifacts to private Application Support therefore remains
-a separate migration: it must update legacy manifest references atomically and
-cannot silently strand prepared VMs.
+At the time of this decision the location remained under the app's Caches
+directory. ADR-040 completes the deferred move to private Application Support
+and defines the convergent legacy-reference migration.
+
+## ADR-040: Separate restore-image acquisition from durable-store maintenance
+
+**Status:** Accepted — 2026-06-21
+
+New restore-image downloads and imports live under
+`~/Library/Application Support/NativeContainers/Restore Images`, not the
+purgeable Caches directory. The store is mode 0700, its artifacts are mode 0600,
+and the directory is marked excluded from backup because the large IPSWs are
+redownloadable. `RestoreImageAcquiring` now owns acquisition leases only;
+`RestoreImageStoreRecoveryService` owns startup recovery and migration, and
+`VirtualMachineRestoreImageReferenceStoring` is the library's narrow manifest
+boundary. SwiftUI and `AppModel` no longer assemble cache-reference closures.
+
+Launch maintenance recovers the legacy authority, migrates referenced legacy
+artifacts, then recovers the durable authority. A dual-root migration holds the
+legacy Caches lock and then the Application Support store lock for the whole
+operation. It takes short VM-library operation leases for each fresh reference
+snapshot and exact replacement. Old releases hold the first store lock through
+their manifest commit, while current acquisition holds the second before
+entering the library; the library never calls back into either store.
+
+Each unique referenced legacy IPSW is validated as a current-user, single-link
+regular file and copyfile-cloned to a UUID-named partial in the durable store.
+A versioned phase journal records source and destination filesystem identities,
+exclusive promotion, manifest replacement, and completion. The library
+preflights every matching manifest under one operation lease, rejects an
+unexpected draft reference, clears obsolete stopped references, and atomically
+rewrites retryable references to the durable URL. No schema change is needed.
+
+All manifest mutation is idempotent and intentionally non-cancellable once it
+begins. Both source and destination remain present while separate bundle
+manifests are rewritten, so a hard exit between writes leaves every old and new
+URL valid; the next launch resumes from the journal. Completion removes only
+the migration control files. It retains the now-unreferenced legacy IPSW rather
+than deleting it as a hidden migration side effect. The current review service
+owns only the durable store; composite legacy-store review remains a separate
+follow-up, and the OS may purge the legacy Caches copy independently.

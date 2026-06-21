@@ -362,6 +362,84 @@ struct AppModelTests {
   }
 
   @Test
+  func refreshConvergesALateLegacyRestoreImageReference() async throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var prepared = try VirtualMachineManifest(
+      name: "Legacy Recovery Mac",
+      guest: .macOS,
+      resources: resources
+    )
+    let restoreImageURL = URL(filePath: "/private/cache/Late.ipsw")
+    prepared.markReadyToInstallMacOS(
+      restoreImageURL: restoreImageURL,
+      auxiliaryStoragePath: "MacPlatform/AuxiliaryStorage",
+      hardwareModelPath: "MacPlatform/HardwareModel",
+      machineIdentifierPath: "MacPlatform/MachineIdentifier"
+    )
+    let library = MockVirtualMachineLibrary(manifests: [prepared])
+    let recovery = ConditionalRecoveryRecordingRestoreImageStoreRecovery()
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      virtualMachineLibrary: library,
+      restoreImageStoreRecovery: recovery,
+      initialInventory: emptyInventory(),
+      initialVirtualMachines: [prepared]
+    )
+
+    await model.refresh()
+
+    #expect(await recovery.checkedReferences == [[restoreImageURL]])
+    #expect(await library.listCount == 2)
+  }
+
+  @Test
+  func refreshCancellationDuringLegacyRecoveryDoesNotPublishAStaleSnapshot() async throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var initial = try VirtualMachineManifest(
+      name: "Published Mac",
+      guest: .macOS,
+      resources: resources
+    )
+    initial.installState = .stopped
+    var stale = try VirtualMachineManifest(
+      name: "Pre-migration Mac",
+      guest: .macOS,
+      resources: resources
+    )
+    stale.markReadyToInstallMacOS(
+      restoreImageURL: URL(filePath: "/private/cache/Stale.ipsw"),
+      auxiliaryStoragePath: "MacPlatform/AuxiliaryStorage",
+      hardwareModelPath: "MacPlatform/HardwareModel",
+      machineIdentifierPath: "MacPlatform/MachineIdentifier"
+    )
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [stale]),
+      restoreImageStoreRecovery: CancellingRestoreImageStoreRecovery(),
+      initialInventory: emptyInventory(),
+      initialVirtualMachines: [initial]
+    )
+    let publishedRevision = model.virtualMachineInventoryRevision
+    let publishedRefreshDate = model.lastRefresh
+
+    await model.refresh()
+
+    #expect(model.virtualMachines == [initial])
+    #expect(model.virtualMachineInventoryRevision == publishedRevision)
+    #expect(model.lastRefresh == publishedRefreshDate)
+    #expect(model.errorMessage == nil)
+    #expect(!model.isRefreshing)
+  }
+
+  @Test
   func refreshRetriesARecoveryThatFailedDuringFirstLoad() async {
     let installer = RetryableRecoveryInstaller(failuresBeforeSuccess: 2)
     let model = AppModel(
@@ -1221,12 +1299,16 @@ private enum AppModelTestError: LocalizedError {
 
 private actor MockVirtualMachineLibrary: VirtualMachineLibraryProtocol {
   private var manifests: [VirtualMachineManifest]
+  private(set) var listCount = 0
 
   init(manifests: [VirtualMachineManifest]) {
     self.manifests = manifests
   }
 
-  func list() async throws -> [VirtualMachineManifest] { manifests }
+  func list() async throws -> [VirtualMachineManifest] {
+    listCount += 1
+    return manifests
+  }
 
   func createDraft(
     name: String,
@@ -1386,6 +1468,33 @@ private actor RecoveryRecordingRestoreImageStoreRecovery:
 
   func recover() async throws {
     recoveryCount += 1
+  }
+}
+
+private actor ConditionalRecoveryRecordingRestoreImageStoreRecovery:
+  RestoreImageStoreRecovering
+{
+  private(set) var checkedReferences: [Set<URL>] = []
+
+  func recover() async throws {}
+
+  func recoverLegacyReferencesIfNeeded(
+    _ referencedURLs: Set<URL>
+  ) async throws -> Bool {
+    checkedReferences.append(referencedURLs)
+    return true
+  }
+}
+
+private struct CancellingRestoreImageStoreRecovery:
+  RestoreImageStoreRecovering
+{
+  func recover() async throws {}
+
+  func recoverLegacyReferencesIfNeeded(
+    _ referencedURLs: Set<URL>
+  ) async throws -> Bool {
+    throw CancellationError()
   }
 }
 

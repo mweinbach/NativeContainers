@@ -125,6 +125,9 @@ must leave a usable, test-backed product slice.
 - [x] Download/import through one cache authority with resumable progress,
       immutable promotion, cross-process leases held through manifest commit,
       and launch recovery against a fresh VM-reference set.
+- [x] Store new IPSWs in private, backup-excluded Application Support and
+      journal exact legacy Caches-reference migration without deleting the old
+      copy or exposing store mechanics to SwiftUI.
 - [x] Create bundle, disk, auxiliary storage, hardware model, and identifier.
 - [ ] Live-verify macOS installation after the entitlement is available. The
       service/UI path, progress, supported cancellation, operation leases,

@@ -188,7 +188,7 @@ private struct MacRestoreImagePreparationProgress: View {
       }
     case .importing:
       transferProgress {
-        Text("Copying restore image into the private app cache")
+        Text("Copying restore image into private app storage")
       }
     case .preparing:
       HStack(spacing: 10) {

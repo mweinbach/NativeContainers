@@ -125,16 +125,23 @@ actor RestoreImageStoreMigrationService: RestoreImageStoreMigrating {
     var migratedArtifactCount = 0
     var updatedManifestCount = 0
     var retainedLegacyArtifactCount = 0
+    var referencedURLs = try await references.loadRestoreImageReferences()
 
     for journalURL in try journalURLs() {
       try Task.checkCancellation()
+      let journal = try readJournal(at: journalURL)
+      guard isJournalReferenced(journal, by: referencedURLs) else {
+        try discardUnreferencedJournal(journal, at: journalURL)
+        continue
+      }
       let result = try await resume(journalURL: journalURL)
       migratedArtifactCount += 1
       updatedManifestCount += result.updatedManifestCount
       retainedLegacyArtifactCount += 1
+      referencedURLs = try await references.loadRestoreImageReferences()
     }
 
-    let referencedURLs = try await references.loadRestoreImageReferences()
+    referencedURLs = try await references.loadRestoreImageReferences()
     let legacyReferences = try referencedURLs.compactMap { reference -> URL? in
       let reference = reference.standardizedFileURL
       guard isSameOrDescendant(reference, of: locations.legacyCache) else {
@@ -334,6 +341,62 @@ actor RestoreImageStoreMigrationService: RestoreImageStoreMigrating {
     }
   }
 
+  private func isJournalReferenced(
+    _ journal: Journal,
+    by referencedURLs: Set<URL>
+  ) -> Bool {
+    let sourcePath = locations.legacyCache.appending(
+      path: journal.sourceFilename,
+      directoryHint: .notDirectory
+    ).standardizedFileURL.path
+    let destinationPath = locations.current.appending(
+      path: journal.destinationFilename,
+      directoryHint: .notDirectory
+    ).standardizedFileURL.path
+    return referencedURLs.contains {
+      let path = $0.standardizedFileURL.path
+      return path == sourcePath || path == destinationPath
+    }
+  }
+
+  private func discardUnreferencedJournal(
+    _ journal: Journal,
+    at journalURL: URL
+  ) throws {
+    let destinationURL = locations.current.appending(
+      path: journal.destinationFilename,
+      directoryHint: .notDirectory
+    )
+    let stagingURL = locations.current.appending(
+      path: journal.stagingFilename,
+      directoryHint: .notDirectory
+    )
+    let artifactsResolved: Bool
+    if let destinationIdentity = journal.destinationIdentity {
+      let stagingResolved = try removeArtifactIfIdentityMatches(
+        destinationIdentity,
+        at: stagingURL
+      )
+      let destinationResolved = try removeArtifactIfIdentityMatches(
+        destinationIdentity,
+        at: destinationURL
+      )
+      artifactsResolved = stagingResolved && destinationResolved
+    } else {
+      artifactsResolved =
+        !fileManager.fileExists(atPath: stagingURL.path)
+        && !fileManager.fileExists(atPath: destinationURL.path)
+    }
+    guard artifactsResolved else {
+      // Keep the journal as the review/ownership record for an unsealed
+      // partial or a path that no longer has the identity we copied.
+      try synchronizeDirectory(locations.current)
+      return
+    }
+    try removeOwnedRegularArtifactIfPresent(at: journalURL)
+    try synchronizeDirectory(locations.current)
+  }
+
   private func readJournal(at journalURL: URL) throws -> Journal {
     try requireDirectChild(journalURL, of: locations.current)
     let descriptor = Darwin.open(
@@ -432,6 +495,21 @@ actor RestoreImageStoreMigrationService: RestoreImageStoreMigrating {
       throw RestoreImageStoreMigrationError.unsafeArtifact(url)
     }
     try fileManager.removeItem(at: url)
+  }
+
+  private func removeArtifactIfIdentityMatches(
+    _ expected: VirtualMachineStorageArtifactIdentity,
+    at url: URL
+  ) throws -> Bool {
+    guard fileManager.fileExists(atPath: url.path) else { return true }
+    let actual = try artifactInspector.inspect(at: url)
+    guard identitiesReferToSameStableFile(actual, expected) else {
+      // The path was replaced after the journal was written. Leave the
+      // replacement for explicit reviewed reclamation instead of deleting it.
+      return false
+    }
+    try fileManager.removeItem(at: url)
+    return true
   }
 
   private func requireDirectChild(_ url: URL, of root: URL) throws {

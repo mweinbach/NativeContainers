@@ -79,6 +79,80 @@ struct RestoreImageStoreMigrationServiceTests {
   }
 
   @Test
+  func discardsAStaleJournalAfterTheReferencingMachinesAreDeleted() async throws {
+    let fixture = try MigrationFixture(
+      referenceCount: 2,
+      failFirstMigrationAfterUpdates: 1
+    )
+    defer { fixture.remove() }
+
+    await #expect(throws: MigrationFixtureError.injectedFailure) {
+      _ = try await fixture.service.migrateLegacyReferences()
+    }
+    await fixture.references.removeAllReferences()
+    try FileManager.default.removeItem(at: fixture.sourceURL)
+
+    #expect(
+      try await fixture.service.migrateLegacyReferences()
+        == RestoreImageStoreMigrationReport.empty
+    )
+    #expect(try fixture.currentRestoreImages().isEmpty)
+    #expect(try fixture.migrationControlFiles().isEmpty)
+  }
+
+  @Test
+  func staleJournalRetainsItsRecordWhenAnArtifactWasReplaced() async throws {
+    let fixture = try MigrationFixture(
+      referenceCount: 2,
+      failFirstMigrationAfterUpdates: 1
+    )
+    defer { fixture.remove() }
+
+    await #expect(throws: MigrationFixtureError.injectedFailure) {
+      _ = try await fixture.service.migrateLegacyReferences()
+    }
+    let destination = try #require(fixture.currentRestoreImages().first)
+    try FileManager.default.removeItem(at: destination)
+    let replacement = Data("replacement".utf8)
+    try replacement.write(to: destination)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: destination.path
+    )
+    await fixture.references.removeAllReferences()
+    try FileManager.default.removeItem(at: fixture.sourceURL)
+
+    #expect(
+      try await fixture.service.migrateLegacyReferences()
+        == RestoreImageStoreMigrationReport.empty
+    )
+    #expect(try Data(contentsOf: destination) == replacement)
+    #expect(try fixture.migrationJournalFiles().count == 1)
+  }
+
+  @Test
+  func stalePlannedJournalRetainsAnUnsealedPartialForReviewedReclamation() async throws {
+    let fixture = try MigrationFixture(
+      referenceCount: 1,
+      copier: PartialFailingRestoreImageMigrationCopier()
+    )
+    defer { fixture.remove() }
+
+    await #expect(throws: MigrationFixtureError.injectedCopyFailure) {
+      _ = try await fixture.service.migrateLegacyReferences()
+    }
+    await fixture.references.removeAllReferences()
+
+    #expect(
+      try await fixture.service.migrateLegacyReferences()
+        == RestoreImageStoreMigrationReport.empty
+    )
+    let staging = try #require(fixture.migrationStagingFiles().first)
+    #expect(try Data(contentsOf: staging) == PartialFailingRestoreImageMigrationCopier.payload)
+    #expect(try fixture.migrationJournalFiles().count == 1)
+  }
+
+  @Test
   func leavesUnreferencedLegacyImagesInPlaceForReviewedReclamation() async throws {
     let fixture = try MigrationFixture(referenceCount: 0)
     defer { fixture.remove() }
@@ -125,6 +199,29 @@ struct RestoreImageStoreMigrationServiceTests {
 
     try await fixture.currentStore.abandon(lease)
   }
+
+  @Test
+  func recoveryServiceRunsMaintenanceOnlyForLegacyReferences() async throws {
+    let fixture = try MigrationFixture(referenceCount: 1)
+    defer { fixture.remove() }
+    let recovery = RestoreImageStoreRecoveryService(
+      locations: fixture.locations,
+      legacyCache: fixture.legacyStore,
+      currentCache: fixture.currentStore,
+      migration: fixture.service,
+      references: fixture.references
+    )
+
+    #expect(
+      try await recovery.recoverLegacyReferencesIfNeeded([fixture.sourceURL])
+    )
+    let migratedReferences = await fixture.references.currentReferences
+    #expect(migratedReferences.count == 1)
+    #expect(
+      try await recovery.recoverLegacyReferencesIfNeeded(migratedReferences)
+        == false
+    )
+  }
 }
 
 private struct MigrationFixture {
@@ -141,7 +238,8 @@ private struct MigrationFixture {
   init(
     referenceCount: Int,
     createsSource: Bool = true,
-    failFirstMigrationAfterUpdates: Int? = nil
+    failFirstMigrationAfterUpdates: Int? = nil,
+    copier: any RestoreImageMigrationCopying = CopyfileRestoreImageMigrationCopier()
   ) throws {
     let rootURL = FileManager.default.temporaryDirectory.appending(
       path: UUID().uuidString,
@@ -194,7 +292,8 @@ private struct MigrationFixture {
       locations: locations,
       legacyStore: legacyStore,
       currentStore: currentStore,
-      references: references
+      references: references,
+      copier: copier
     )
   }
 
@@ -220,6 +319,22 @@ private struct MigrationFixture {
       at: locations.current,
       includingPropertiesForKeys: nil
     ).filter { $0.pathExtension.lowercased() == "ipsw" }
+  }
+
+  func migrationJournalFiles() throws -> [URL] {
+    try migrationControlFiles().filter {
+      $0.lastPathComponent.hasSuffix(
+        RestoreImageStoreMigrationService.journalSuffix
+      )
+    }
+  }
+
+  func migrationStagingFiles() throws -> [URL] {
+    try migrationControlFiles().filter {
+      $0.lastPathComponent.hasSuffix(
+        RestoreImageStoreMigrationService.stagingSuffix
+      )
+    }
   }
 
   func remove() {
@@ -273,8 +388,28 @@ private actor MigrationReferenceStore:
     }
     return updateCount
   }
+
+  func removeAllReferences() {
+    referencesByMachine.removeAll()
+  }
 }
 
 private enum MigrationFixtureError: Error, Equatable {
   case injectedFailure
+  case injectedCopyFailure
+}
+
+private struct PartialFailingRestoreImageMigrationCopier:
+  RestoreImageMigrationCopying
+{
+  static let payload = Data("partial-restore-image".utf8)
+
+  func copy(from sourceURL: URL, to destinationURL: URL) async throws {
+    try Self.payload.write(to: destinationURL)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: destinationURL.path
+    )
+    throw MigrationFixtureError.injectedCopyFailure
+  }
 }

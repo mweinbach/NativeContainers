@@ -284,10 +284,27 @@ final class AppModel {
     }
 
     do {
-      virtualMachines = try await services.virtualMachineLibrary.list()
+      var loadedVirtualMachines = try await services.virtualMachineLibrary.list()
+      let referencedRestoreImages = Set(
+        loadedVirtualMachines.compactMap(\.restoreImageURL)
+      )
+      do {
+        if try await services.restoreImageStoreRecovery
+          .recoverLegacyReferencesIfNeeded(referencedRestoreImages)
+        {
+          loadedVirtualMachines = try await services.virtualMachineLibrary.list()
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        messages.append("Restore-image storage: \(error.localizedDescription)")
+      }
+      virtualMachines = loadedVirtualMachines
       didLoadVirtualMachineLibrary = true
       virtualMachineInventoryRevision &+= 1
       removeStaleMacVirtualMachineRuntimeModels()
+    } catch is CancellationError {
+      return
     } catch {
       messages.append("Virtual machine library: \(error.localizedDescription)")
     }

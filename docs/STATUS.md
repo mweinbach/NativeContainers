@@ -760,6 +760,23 @@ Updated: 2026-06-21.
   host accepted exact-PID TERM, the navigator has no issues, and no
   NativeContainers process remains. Launch emitted only the existing macOS 27
   beta `com.apple.linkd.autoShortcut` registration noise.
+- Restore-image persistence now has explicit service boundaries. Acquisition
+  handles leases only; a dedicated launch-maintenance service composes legacy
+  recovery, journaled migration, and durable-store recovery, while the VM
+  library exposes a narrow exact-reference API. New IPSWs live in private,
+  backup-excluded Application Support. Referenced Caches IPSWs are copy-first
+  migrated under legacy-store, durable-store, and library locks; every partial
+  manifest rewrite still names an existing file, relaunch resumes the phase
+  journal, and the old unreferenced copy is retained for a future composite
+  cleanup review or OS cache purging. The current reclamation review owns only
+  the durable store.
+  Focused migration, acquisition, reclamation, library, model, and composition
+  tests pass. Xcode MCP then ran the complete 689-test plan in eight bounded
+  shards: 670 passed, 19 live-environment tests skipped, 0 failed, and 0 were
+  left unrun. Build-for-testing passed in 2.739 seconds, the app launched on My
+  Mac, Xcode stopped its exact PID, and the Issue Navigator reported no warnings
+  or errors. Launch emitted only the existing macOS 27 beta
+  `com.apple.linkd.autoShortcut`/SetStore registration noise.
 
 ## Known configuration issue
 
@@ -774,17 +791,14 @@ entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Migrate newly acquired restore images from the purgeable Caches directory to
-   private Application Support, with an atomic legacy-manifest/reference
-   migration so prepared VMs are never stranded.
-2. Design an explicit RAW-to-ASIF migration path for the macOS 27 tier before
+1. Design an explicit RAW-to-ASIF migration path for the macOS 27 tier before
    offering compaction. The macOS 26 path must not use raw truncation because
    public APIs do not resize the guest filesystem and can destroy data.
-3. Add the entitlement through a functioning Xcode capability surface, then
+2. Add the entitlement through a functioning Xcode capability surface, then
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.
-4. Build the deterministic Compose external-resource overlay, stable metadata
+3. Build the deterministic Compose external-resource overlay, stable metadata
    paths, replica-prefix guard, attachment verification, and supported-key
    allowlist needed for safe create-missing Up. Keep recreation blocked until
    the pinned bridge implements rename and network attachment routes.

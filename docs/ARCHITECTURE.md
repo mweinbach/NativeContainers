@@ -444,24 +444,38 @@ VMs live as self-contained bundles in Application Support. Each bundle owns:
 - optional EFI variable storage for EFI Linux guests;
 - saved machine state and thumbnails when supported.
 
-The manifest records relative paths only, allowing a bundle to be moved or
-backed up as one unit. Runtime-only objects such as `VZVirtualMachine` never go
-into the manifest.
+Bundle-owned artifact paths are relative, allowing a bundle to be moved or
+backed up as one unit. The one host-local exception is an optional absolute
+restore-image URL while installation remains retryable. Runtime-only objects
+such as `VZVirtualMachine` never go into the manifest.
 
-Downloaded macOS IPSWs are intentionally outside this boundary in the app cache
-so multiple VMs can reuse one multi-gigabyte installer. The manifest records its
-selected local URL, while the hardware model, machine identifier, and auxiliary
-storage derived from that image remain bundle-owned and are promoted
-transactionally.
+Downloaded macOS IPSWs are intentionally outside the bundle boundary so
+multiple VMs can reuse one multi-gigabyte installer. New downloads and local
+imports live in the mode-0700, backup-excluded
+`~/Library/Application Support/NativeContainers/Restore Images` store. The
+manifest records its selected local URL, while the hardware model, machine
+identifier, and auxiliary storage derived from that image remain bundle-owned
+and are promoted transactionally.
 
-Locally selected IPSWs are imported into that same private cache while the file
-picker's security scope is active. The importer streams cancellable chunks to a
-partial file and promotes only a complete copy, so later installation never
-depends on an expired external-file grant. A durable pending marker lets launch
-recovery delete an orphaned import after a crash while preserving any image a
-persisted manifest already references. A private advisory lock prevents another
-app process—or actor-reentrant recovery—from treating an active import as
-abandoned.
+Locally selected IPSWs are copied while the file picker's security scope is
+active. The importer streams cancellable chunks to a mode-0600 partial file and
+promotes only a complete copy, so later installation never depends on an
+expired external-file grant. A versioned ownership marker and store-wide
+advisory lock let launch recovery remove an orphaned private import while
+preserving any image a persisted manifest references.
+
+`RestoreImageStoreRecoveryService` owns launch maintenance independently from
+acquisition. It first recovers the old Caches authority, asks
+`RestoreImageStoreMigrationService` to clone every still-referenced legacy IPSW
+into Application Support, and then recovers the durable authority. Migration
+holds the legacy-store lock and then the durable-store lock across the whole
+operation, taking short VM-library operation leases for fresh reference reads
+and exact replacement. A phase journal makes copy, promotion, manifest-URL
+replacement, and marker cleanup idempotent. Each manifest write is atomic; the
+old and new regular files both remain present through any partial rewrite, so a
+crash cannot leave a prepared VM naming missing media. The unreferenced legacy
+copy remains in Caches for a future composite review service or system purging
+rather than being deleted as a side effect of migration.
 
 The VM library owns only durable bundle state. A strict bundle resolver turns a
 prepared manifest into verified regular-file URLs. For each attempt the library
@@ -647,8 +661,10 @@ than sharing presentation state across an implied multi-window group.
   before an atomic same-parent rename, then finishes deletion without another
   cancellation checkpoint; any surviving tombstone remains in an existing
   recovery-recognized namespace. The restore-image service is off by default
-  and shares one cache authority with download, import, and launch recovery.
-  That authority takes the cache operation lock before loading VM references;
+  and shares the durable-store authority with download and import; launch
+  recovery composes that authority with the legacy Caches authority and the
+  migration service. A store authority takes its operation lock before loading
+  VM references;
   only unreferenced regular IPSWs and seven-day-old partials are reviewable.
   Execution reloads references and exact file identity before a same-parent
   tombstone rename. The app model binds plans to the VM accounting and library

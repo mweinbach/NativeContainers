@@ -598,11 +598,17 @@ at kickoff, so the foundation does not depend on it.
 ## Storage-accounting findings
 
 - The user Caches directory is reclaimable storage rather than a durable
-  archive. Cross-process leases prevent NativeContainers from racing itself,
-  but cannot promise that a prepared VM's referenced IPSW survives an OS cache
-  purge while the app is not running. Moving new restore images to Application
-  Support requires a deliberate legacy-manifest migration rather than a path
-  flip.
+  archive. New acquisitions therefore use private Application Support and set
+  `isExcludedFromBackup` on the restore-image directory; Apple documents both
+  Application Support as the long-lived support-file location and the backup
+  exclusion resource value for large redownloadable files.
+- Legacy Caches URLs cannot be changed with a path flip. Launch maintenance now
+  takes both store locks, copyfile-clones a referenced regular IPSW into a
+  UUID-named durable target, and asks the library to replace exact manifest URLs
+  while holding its operation lock. The journal retains both files across every
+  partial-write phase, so per-manifest atomic writes converge without claiming
+  an impossible multi-bundle filesystem transaction. The old copy is retained
+  as unreferenced Caches data rather than silently deleted.
 - A restore-image cleanup plan must acquire the cache lock before reading VM
   manifests. With the same cache-before-library order used by preparation, no
   second current-version process can add a reference between that read and the
