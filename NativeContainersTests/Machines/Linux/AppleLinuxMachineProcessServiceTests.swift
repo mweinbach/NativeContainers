@@ -375,6 +375,7 @@ private actor RecordingMachineRuntimeProcessClient: AppleRuntimeProcessCreating 
 
 private actor RecordingMachineRuntimeProcess: AppleRuntimeProcess {
   private var waitContinuation: CheckedContinuation<Int32, any Error>?
+  private var exitCode: Int32?
   private(set) var didStart = false
   private(set) var sizes: [ContainerTerminalSize] = []
   private(set) var signals: [Int32] = []
@@ -384,14 +385,19 @@ private actor RecordingMachineRuntimeProcess: AppleRuntimeProcess {
   }
 
   func wait() async throws -> Int32 {
-    try await withCheckedThrowingContinuation { continuation in
+    if let exitCode {
+      return exitCode
+    }
+    return try await withCheckedThrowingContinuation { continuation in
       waitContinuation = continuation
     }
   }
 
   func kill(_ signal: Int32) {
     signals.append(signal)
-    waitContinuation?.resume(returning: 128 + signal)
+    let code = 128 + signal
+    exitCode = code
+    waitContinuation?.resume(returning: code)
     waitContinuation = nil
   }
 
