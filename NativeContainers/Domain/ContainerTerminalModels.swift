@@ -22,7 +22,7 @@ struct ContainerTerminalSize: Equatable, Sendable {
   }
 }
 
-enum ContainerTerminalProgram: Equatable, Sendable {
+enum ContainerTerminalProgram: Codable, Equatable, Hashable, Sendable {
   case preferredShell
   case executable(String)
 }

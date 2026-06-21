@@ -29,6 +29,8 @@ struct AppServices: Sendable {
   let containerTools: any ContainerTooling
   let containerShell: any ContainerShellDiscovering
   let containerTerminal: any ContainerTerminalOpening
+  let terminalPresets: any TerminalPresetManaging
+  let terminalTargets: any TerminalTargetOpening
   let containerAttachments: any ContainerAttachmentEnvironmentLoading
   let machineCreator: any MachineCreating
   let machineLifecycle: any MachineLifecycleManaging
@@ -76,6 +78,8 @@ struct AppServices: Sendable {
     containerTools: any ContainerTooling,
     containerShell: any ContainerShellDiscovering = UnavailableContainerShellService(),
     containerTerminal: any ContainerTerminalOpening,
+    terminalPresets: any TerminalPresetManaging = EphemeralTerminalPresetStore(),
+    terminalTargets: any TerminalTargetOpening = UnavailableTerminalTargetService(),
     containerAttachments: any ContainerAttachmentEnvironmentLoading,
     machineCreator: any MachineCreating,
     machineLifecycle: any MachineLifecycleManaging,
@@ -130,6 +134,8 @@ struct AppServices: Sendable {
     self.containerTools = containerTools
     self.containerShell = containerShell
     self.containerTerminal = containerTerminal
+    self.terminalPresets = terminalPresets
+    self.terminalTargets = terminalTargets
     self.containerAttachments = containerAttachments
     self.machineCreator = machineCreator
     self.machineLifecycle = machineLifecycle
@@ -164,6 +170,8 @@ struct AppServices: Sendable {
   init(
     containerService: any ContainerManaging,
     containerShell: any ContainerShellDiscovering = UnavailableContainerShellService(),
+    terminalPresets: any TerminalPresetManaging = EphemeralTerminalPresetStore(),
+    terminalTargets: any TerminalTargetOpening = UnavailableTerminalTargetService(),
     launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
@@ -221,6 +229,8 @@ struct AppServices: Sendable {
     containerTools = containerService
     self.containerShell = containerShell
     containerTerminal = containerService
+    self.terminalPresets = terminalPresets
+    self.terminalTargets = terminalTargets
     containerAttachments = containerService
     machineCreator = machineService
     machineLifecycle = machineService
@@ -508,6 +518,12 @@ enum AppCompositionRoot {
       containerTools: toolService,
       containerShell: shellService,
       containerTerminal: terminalService,
+      terminalPresets: TerminalPresetStore.standard(),
+      terminalTargets: IdentityPinnedTerminalTargetService(
+        inventory: inventoryService,
+        containerTerminal: terminalService,
+        machineTerminal: machineProcessService
+      ),
       containerAttachments: attachmentService,
       machineCreator: machineService,
       machineLifecycle: machineService,

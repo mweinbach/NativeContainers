@@ -1245,3 +1245,37 @@ and unavailable states. Registration is not represented as a Boolean preference:
 System Settings remains authoritative, revoked approval remains visible, and
 non-installable development copies fail closed. NativeContainers does not write
 or bootstrap a parallel launch-agent plist.
+
+## ADR-045: Restore terminal workspaces as inert identity-pinned metadata
+
+**Status:** Accepted — 2026-06-21
+
+Terminal presentation uses SwiftUI's data-driven `WindowGroup` rather than a
+sheet owned by a resource inspector. Its value is a lightweight unique workspace
+UUID plus an exact container or Linux-machine identity, which lets macOS own
+detached-window and native window-tab restoration. An app-level workspace adds
+up to 12 independently closable terminal tabs. Per-scene restoration stores
+only stable tab UUIDs, selection, and optional preset UUIDs; process handles,
+pipe descriptors, output, and command history are never encoded.
+
+Restored tabs are deliberately inert. The selected shell is opened automatically
+only for a newly requested window; relaunch restoration waits for explicit tab
+selection or Start New Shell. This prevents background/login launch from
+starting a stopped Linux machine or creating child processes merely because a
+window existed previously. Closing a tab or window still uses the terminal
+session's HUP-to-KILL shutdown policy, and an unconfirmed kill keeps the tab
+visible rather than discarding ownership.
+
+Before any restored or new tab creates a process,
+`IdentityPinnedTerminalTargetService` reloads Apple inventory. Containers pin ID
+plus creation date; Linux machines pin their complete stable creation identity.
+Missing resources and same-name replacements fail before the container-terminal
+or machine-login-shell facet runs.
+
+Saved container presets are a separate injected store, not scene or view state.
+A versioned `UserDefaults` data payload is bounded to 64 entries and persists
+only a preferred or explicit shell, login-shell intent, and absolute guest
+working directory. Environment values, arbitrary startup commands, terminal
+output, and history are excluded, so the native preferences store never becomes
+a secret or transcript database. Preset deletion cannot terminate a live tab;
+a later restore falls back visibly to the preferred shell.

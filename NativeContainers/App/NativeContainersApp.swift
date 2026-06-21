@@ -28,6 +28,23 @@ struct NativeContainersApp: App {
       }
     }
 
+    WindowGroup(
+      "Terminal",
+      id: "terminal-workspace",
+      for: TerminalWindowRequest.self
+    ) { $request in
+      if let request {
+        TerminalWorkspaceWindow(request: request, appModel: model)
+      } else {
+        ContentUnavailableView(
+          "Choose a terminal target",
+          systemImage: "terminal",
+          description: Text("Open a container or Linux machine terminal from the main window.")
+        )
+      }
+    }
+    .defaultSize(width: 1_000, height: 700)
+
     Settings {
       SettingsView(model: model)
         .frame(width: 680, height: 700)

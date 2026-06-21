@@ -185,6 +185,26 @@ before they reach the process launcher, so the launcher accepts only an explicit
 executable. Persistent Linux machines intentionally bypass this policy and keep
 using Apple’s machine init helper for the configured login shell.
 
+Terminal presentation is another boundary rather than state inside resource
+detail views. Container and Linux-machine actions open a lightweight,
+`Codable`/`Hashable` target in a data-driven SwiftUI `WindowGroup`; the system
+owns detached-window restoration and native macOS window tabbing. Each window
+owns a bounded app-level tab workspace whose `SceneStorage` payload contains
+only its workspace UUID, stable tab UUIDs, selected tab, and optional preset
+UUIDs. Live process objects and output never cross restoration. A restored
+window is inert until explicit interaction, preventing relaunch from starting a
+stopped machine or creating a shell unexpectedly.
+
+`IdentityPinnedTerminalTargetService` reloads canonical Apple inventory before
+each tab opens and compares the complete persisted Linux-machine identity or the
+container ID plus creation date. Missing or same-name replacement targets fail
+before process creation. `TerminalPresetStore` is a separate bounded persistence
+facet backed by the system preferences authority. Its versioned payload stores
+only validated shell selection, login-shell intent, and an absolute guest
+working directory; environment, arbitrary startup commands, terminal output,
+and history are excluded. Views coordinate windows and tab selection but never
+call Apple container or machine adapters directly.
+
 Native builds cross a narrower `ImageBuilding` boundary. Review first copies
 the local context beneath a mode-0700 app-owned boundary, preserves the source
 POSIX modes that BuildKit exposes to `COPY`, and records a metadata-and-content

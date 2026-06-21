@@ -129,8 +129,19 @@ release and isolating it behind an adapter are both deliberate.
   hidden parity claims.
 - SwiftTerm can retain private terminal modes across process boundaries, so a
   newly opened shell must receive a full RIS reset (`ESC c`), not only a clear
-  screen. Shell-path discovery and fallback beyond the current `/bin/sh`
-  default remain a separate workflow feature.
+  screen. Shell selection is resolved before process launch by a bounded policy
+  that checks `SHELL`, a shell init process, and common fallbacks.
+- SwiftUI's data-driven `WindowGroup` accepts a lightweight `Codable` and
+  `Hashable` value, reuses an existing window for the same value, and persists
+  that binding for system restoration. NativeContainers uses a unique workspace
+  UUID plus exact resource identity, so repeated Open Terminal actions can make
+  independent windows without serializing live process state.
+- `SceneStorage` is per scene and intended to complement, not replace, the data
+  model. Its persistence timing is system-owned and Apple explicitly excludes
+  sensitive data. The terminal payload therefore contains only workspace/tab
+  UUIDs, selection, and preset UUIDs. Shell configuration lives in the separate
+  bounded preferences service; output, environment, history, and descriptors
+  never enter either restoration value.
 
 ## Native image management
 

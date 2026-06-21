@@ -221,6 +221,7 @@ extension AppModel {
     return AppModel(
       containerService: service,
       containerShellService: service,
+      terminalTargetService: service,
       machineService: service,
       registryService: PreviewRegistryService(),
       dockerCompatibilityService: PreviewDockerCompatibilityService(),
@@ -251,6 +252,7 @@ extension AppModel {
     return AppModel(
       containerService: service,
       containerShellService: service,
+      terminalTargetService: service,
       machineService: service,
       registryService: PreviewRegistryService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: false),
@@ -329,7 +331,11 @@ private actor PreviewDockerComposeClientService: DockerComposeClientInstalling {
   func install() async throws {}
 }
 
-private actor PreviewContainerService: ContainerManaging, ContainerShellDiscovering, MachineManaging
+private actor PreviewContainerService:
+  ContainerManaging,
+  ContainerShellDiscovering,
+  MachineManaging,
+  TerminalTargetOpening
 {
   let inventory: ContainerInventory
 
@@ -561,6 +567,12 @@ private actor PreviewContainerService: ContainerManaging, ContainerShellDiscover
     request: ContainerTerminalRequest
   ) async throws -> any ContainerTerminalSession {
     PreviewContainerTerminalSession(containerID: id)
+  }
+  func openTerminal(
+    for target: TerminalTargetIdentity,
+    request: ContainerTerminalRequest
+  ) async throws -> any ContainerTerminalSession {
+    PreviewContainerTerminalSession(containerID: target.id)
   }
   func copyIntoContainer(id: String, source: URL, destination: String) async throws {}
   func copyFromContainer(id: String, source: String, destination: URL) async throws {}

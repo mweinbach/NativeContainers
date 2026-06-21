@@ -162,6 +162,8 @@ final class AppModel {
   convenience init(
     containerService: any ContainerManaging = AppleContainerService(),
     containerShellService: any ContainerShellDiscovering = UnavailableContainerShellService(),
+    terminalPresetService: any TerminalPresetManaging = EphemeralTerminalPresetStore(),
+    terminalTargetService: any TerminalTargetOpening = UnavailableTerminalTargetService(),
     launchAtLoginService: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     notificationService: any AppNotificationManaging = UnavailableAppNotificationService(),
     composeTopologyService: any ComposeTopologyDeriving = ComposeTopologyService(),
@@ -206,6 +208,8 @@ final class AppModel {
       services: AppServices(
         containerService: containerService,
         containerShell: containerShellService,
+        terminalPresets: terminalPresetService,
+        terminalTargets: terminalTargetService,
         launchAtLogin: launchAtLoginService,
         notifications: notificationService,
         composeTopology: composeTopologyService,
@@ -668,6 +672,26 @@ final class AppModel {
 
   func makeContainerTerminalModel(containerID: String) -> ContainerTerminalModel {
     ContainerTerminalModel(containerID: containerID, service: services.containerTerminal)
+  }
+
+  func makeTerminalWorkspaceModel(
+    request: TerminalWindowRequest
+  ) -> TerminalWorkspaceModel {
+    TerminalWorkspaceModel(
+      windowRequest: request,
+      presetStore: services.terminalPresets
+    ) { [self] target in
+      makeIdentityPinnedTerminalModel(for: target)
+    }
+  }
+
+  func makeIdentityPinnedTerminalModel(
+    for target: TerminalTargetIdentity
+  ) -> ContainerTerminalModel {
+    let terminalTargets = services.terminalTargets
+    return ContainerTerminalModel(containerID: target.id) { _, request in
+      try await terminalTargets.openTerminal(for: target, request: request)
+    }
   }
 
   func makeMacRestoreImagePreparationModel(

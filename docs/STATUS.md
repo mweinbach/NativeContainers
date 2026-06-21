@@ -284,6 +284,19 @@ Updated: 2026-06-21.
   sheet pre-fills the same detected executable and still permits an explicit
   override. Linux machines continue to delegate login-shell selection to
   Apple’s machine init helper.
+- Container and Linux-machine terminals now leave the main management window in
+  a data-driven SwiftUI `WindowGroup`. Every window has up to 12 identity-stable
+  tabs, Command-T creation, explicit close/interrupt/HUP/TERM/KILL controls, and
+  per-scene tab/selection restoration. SwiftUI restores the lightweight window
+  target and `SceneStorage` restores only tab and preset identifiers; restored
+  tabs remain closed until selected so relaunch never silently boots a stopped
+  Linux machine. A focused terminal-target service reloads Apple inventory and
+  rejects missing or same-name replacement resources before opening any process.
+- Container shell presets are a separate injected service. The bounded schema-1
+  preferences payload accepts at most 64 validated entries. A preset contains
+  only a preferred or explicit shell, login-shell choice, and absolute container
+  working directory. Environment variables, terminal output, command history,
+  and arbitrary startup commands are not persisted.
 - Terminal shutdown closes stdin, sends hangup, allows a short graceful exit,
   and escalates to kill. Output recovery retains only the newest configured
   bytes, while the live stream preserves every byte. The pipe reader uses

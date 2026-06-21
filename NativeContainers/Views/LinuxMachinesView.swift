@@ -1,13 +1,15 @@
 import SwiftUI
 
 struct LinuxMachinesView: View {
+  @Environment(\.openWindow) private var openWindow
+
   private let appModel: AppModel
 
   @State private var managementModel: LinuxMachineManagementModel
   @State private var isPresentingCreation = false
   @State private var pendingDeletion: LinuxMachineRecord?
   @State private var pendingForceStop: LinuxMachineRecord?
-  @State private var presentedTool: LinuxMachineToolPresentation?
+  @State private var presentedCommand: LinuxMachineRecord?
 
   init(model: AppModel) {
     appModel = model
@@ -59,10 +61,14 @@ struct LinuxMachinesView: View {
               pendingForceStop = machine
             },
             onRunCommand: {
-              presentedTool = .command(machine)
+              presentedCommand = machine
             },
             onOpenTerminal: {
-              presentedTool = .terminal(machine)
+              openWindow(
+                value: TerminalWindowRequest(
+                  target: .linuxMachine(LinuxMachineIdentity(machine: machine))
+                )
+              )
             },
             onDelete: {
               pendingDeletion = machine
@@ -92,13 +98,8 @@ struct LinuxMachinesView: View {
     .sheet(isPresented: $isPresentingCreation) {
       LinuxMachineCreationView(model: managementModel)
     }
-    .sheet(item: $presentedTool) { presentation in
-      switch presentation {
-      case .command(let machine):
-        LinuxMachineCommandView(machine: machine, appModel: appModel)
-      case .terminal(let machine):
-        ContainerTerminalView(machine: machine, appModel: appModel)
-      }
+    .sheet(item: $presentedCommand) { machine in
+      LinuxMachineCommandView(machine: machine, appModel: appModel)
     }
     .confirmationDialog(
       "Force-stop Linux machine?",
@@ -264,20 +265,6 @@ struct LinuxMachineRow: View {
       return "Start the machine, then open a shell or run a command."
     case .stopping, .unknown:
       return "Wait for a stable running or stopped state."
-    }
-  }
-}
-
-private enum LinuxMachineToolPresentation: Identifiable {
-  case command(LinuxMachineRecord)
-  case terminal(LinuxMachineRecord)
-
-  var id: String {
-    switch self {
-    case .command(let machine):
-      "command-\(machine.id)"
-    case .terminal(let machine):
-      "terminal-\(machine.id)"
     }
   }
 }

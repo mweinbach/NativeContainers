@@ -61,7 +61,11 @@ a native login-shell terminal and bounded one-shot shell commands; stopped
 machines auto-start and provision before either workflow.
 Ordinary container terminals and the exec sheet share typed, bounded shell
 discovery instead of assuming `/bin/sh`, while preserving explicit executable
-overrides for minimal and custom images.
+overrides for minimal and custom images. Container and Linux-machine shells now
+open in detached, system-restorable SwiftUI windows with bounded app tabs,
+identity-pinned reconnects, and validated saved shell presets. Restored tabs stay
+disconnected until explicit interaction, so reopening the app does not silently
+start machines or shell processes.
 
 The app is composed from narrow injectable service facets. Inventory, container
 creation and lifecycle, inspection, command tools, terminal sessions, image

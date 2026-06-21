@@ -177,6 +177,8 @@ struct ContainerMetadataLine: View {
 }
 
 struct ContainerInspectorView: View {
+  @Environment(\.openWindow) private var openWindow
+
   let container: ContainerRecord
   let appModel: AppModel
   @State private var model: ContainerInspectorModel
@@ -184,7 +186,6 @@ struct ContainerInspectorView: View {
   @State private var isLive = true
   @State private var followsLogs = true
   @State private var logQuery = ""
-  @State private var isShowingTerminal = false
   @State private var isShowingExec = false
   @State private var isShowingFileTransfer = false
 
@@ -207,7 +208,13 @@ struct ContainerInspectorView: View {
           onStop: { Task { await appModel.stopContainer(id: container.id) } },
           onRestart: { Task { await appModel.restartContainer(id: container.id) } },
           onForceStop: { Task { await appModel.forceStopContainer(id: container.id) } },
-          onTerminal: { isShowingTerminal = true },
+          onTerminal: {
+            openWindow(
+              value: TerminalWindowRequest(
+                target: .container(ContainerTerminalTargetIdentity(container: container))
+              )
+            )
+          },
           onExec: { isShowingExec = true },
           onCopyFiles: { isShowingFileTransfer = true }
         )
@@ -262,9 +269,6 @@ struct ContainerInspectorView: View {
     }
     .sheet(isPresented: $isShowingExec) {
       ContainerExecView(containerID: container.id, appModel: appModel)
-    }
-    .sheet(isPresented: $isShowingTerminal) {
-      ContainerTerminalView(containerID: container.id, appModel: appModel)
     }
     .sheet(isPresented: $isShowingFileTransfer) {
       ContainerFileTransferView(containerID: container.id, appModel: appModel)

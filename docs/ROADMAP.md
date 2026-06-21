@@ -109,7 +109,7 @@ must leave a usable, test-backed product slice.
 - [x] Typed container-shell discovery that prefers the container `SHELL` and
       shell init process, then probes bounded common-shell fallbacks before
       reporting that the image has no supported interactive shell.
-- [ ] Detachable terminal windows, tabs, saved shell presets, and session
+- [x] Detachable terminal windows, tabs, saved shell presets, and session
       restoration.
 
 ## M3 — Linux machines

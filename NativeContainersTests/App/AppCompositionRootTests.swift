@@ -23,6 +23,8 @@ struct AppCompositionRootTests {
     #expect(services.containerTools is AppleContainerToolService)
     #expect(services.containerShell is AppleContainerShellService)
     #expect(services.containerTerminal is AppleContainerTerminalService)
+    #expect(services.terminalPresets is TerminalPresetStore)
+    #expect(services.terminalTargets is IdentityPinnedTerminalTargetService)
     #expect(services.containerAttachments is AppleContainerAttachmentService)
     #expect(services.machineCreator is AppleMachineManagementService)
     #expect(services.machineLifecycle is AppleMachineManagementService)
