@@ -59,6 +59,8 @@ enum DockerComposeClientError: LocalizedError, Equatable, Sendable {
   case provenanceDigestMismatch
   case binaryArchitectureInvalid
   case provenanceInvalid(String)
+  case installationRequired
+  case installationInvalid(String)
   case incompleteInstallation
   case unavailable(String)
 
@@ -78,6 +80,10 @@ enum DockerComposeClientError: LocalizedError, Equatable, Sendable {
       "The Docker Compose binary is not the pinned thin arm64 Mach-O artifact."
     case .provenanceInvalid(let reason):
       "The Docker Compose provenance is invalid: \(reason)"
+    case .installationRequired:
+      "Install the verified private Docker Compose client before using it."
+    case .installationInvalid(let reason):
+      "The private Docker Compose installation is invalid: \(reason)"
     case .incompleteInstallation:
       "The private Docker Compose installation is incomplete. Reinstall it."
     case .unavailable(let reason):

@@ -119,6 +119,13 @@ private actor RecordingDockerComposeClientService: DockerComposeClientInstalling
     state
   }
 
+  func verifiedExecutableURL() async throws -> URL {
+    guard case .ready = state else {
+      throw DockerComposeClientError.installationRequired
+    }
+    return executableURL
+  }
+
   func install() async throws {
     installCount += 1
     state = .ready(version: release.version)

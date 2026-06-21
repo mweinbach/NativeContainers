@@ -9,6 +9,7 @@ protocol DockerComposeClientInstalling: Sendable {
 
   func snapshot() async -> DockerComposeClientSnapshot
   func installationState() async -> DockerComposeClientInstallationState
+  func verifiedExecutableURL() async throws -> URL
   func install() async throws
 }
 
@@ -39,6 +40,7 @@ actor DockerComposeClientInstallService: DockerComposeClientInstalling {
 
   private let installRootURL: URL
   private let installDirectoryURL: URL
+  private let protectedInstallDirectories: [URL]
   private let downloader: any DockerComposeArtifactDownloading
   private let validator: any DockerComposeArtifactValidating
   private let fileManager: FileManager
@@ -52,12 +54,34 @@ actor DockerComposeClientInstallService: DockerComposeClientInstalling {
     fileManager: FileManager = .default
   ) {
     self.release = release
-    let root =
-      installRootURL
-      ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-      .appending(path: "NativeContainers", directoryHint: .isDirectory)
-      .appending(path: "Compatibility", directoryHint: .isDirectory)
-      .appending(path: "DockerCompose", directoryHint: .isDirectory)
+    let root: URL
+    if let installRootURL {
+      root = installRootURL
+      protectedInstallDirectories = [root]
+    } else {
+      let applicationSupportURL = fileManager.urls(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask
+      )[0]
+      let nativeContainersURL = applicationSupportURL.appending(
+        path: "NativeContainers",
+        directoryHint: .isDirectory
+      )
+      let compatibilityURL = nativeContainersURL.appending(
+        path: "Compatibility",
+        directoryHint: .isDirectory
+      )
+      root = compatibilityURL.appending(
+        path: "DockerCompose",
+        directoryHint: .isDirectory
+      )
+      protectedInstallDirectories = [
+        applicationSupportURL,
+        nativeContainersURL,
+        compatibilityURL,
+        root,
+      ]
+    }
     self.installRootURL = root
     installDirectoryURL = root.appending(path: release.version, directoryHint: .isDirectory)
     executableURL = installDirectoryURL.appending(
@@ -83,6 +107,12 @@ actor DockerComposeClientInstallService: DockerComposeClientInstalling {
   }
 
   func installationState() async -> DockerComposeClientInstallationState {
+    do {
+      try validateExistingInstallDirectories()
+    } catch {
+      return .invalid(reason: error.localizedDescription)
+    }
+
     let binaryExists = entryExists(at: executableURL)
     let provenanceExists = entryExists(at: provenanceURL)
     guard binaryExists || provenanceExists else {
@@ -102,25 +132,33 @@ actor DockerComposeClientInstallService: DockerComposeClientInstalling {
     }
   }
 
+  func verifiedExecutableURL() async throws -> URL {
+    switch await installationState() {
+    case .ready:
+      executableURL
+    case .notInstalled:
+      throw DockerComposeClientError.installationRequired
+    case .invalid(let reason):
+      throw DockerComposeClientError.installationInvalid(reason)
+    }
+  }
+
   func install() async throws {
     try ensurePrivateInstallDirectories()
 
-    async let downloadedBinary = downloader.download(
+    let binaryDownloadURL = try await downloader.download(
       from: release.binaryURL,
       artifactName: "binary",
       maximumByteCount: release.maximumBinaryByteCount
     )
-    async let downloadedProvenance = downloader.download(
+    defer { try? fileManager.removeItem(at: binaryDownloadURL) }
+
+    let provenanceDownloadURL = try await downloader.download(
       from: release.provenanceURL,
       artifactName: "provenance",
       maximumByteCount: release.maximumProvenanceByteCount
     )
-    let (binaryDownloadURL, provenanceDownloadURL) =
-      try await (downloadedBinary, downloadedProvenance)
-    defer {
-      try? fileManager.removeItem(at: binaryDownloadURL)
-      try? fileManager.removeItem(at: provenanceDownloadURL)
-    }
+    defer { try? fileManager.removeItem(at: provenanceDownloadURL) }
 
     try validator.validateProvenance(at: provenanceDownloadURL, release: release)
     try validator.validateBinary(at: binaryDownloadURL, release: release)
@@ -154,6 +192,7 @@ actor DockerComposeClientInstallService: DockerComposeClientInstalling {
   }
 
   private func ensurePrivateInstallDirectories() throws {
+    try validateExistingInstallDirectories()
     try ensureDirectory(at: installRootURL)
     try ensureDirectory(at: installDirectoryURL)
     try validateInstallDirectories()
@@ -178,8 +217,19 @@ actor DockerComposeClientInstallService: DockerComposeClientInstalling {
   }
 
   private func validateInstallDirectories() throws {
-    try validateDirectory(at: installRootURL)
+    for directoryURL in protectedInstallDirectories {
+      try validateDirectory(at: directoryURL)
+    }
     try validateDirectory(at: installDirectoryURL)
+  }
+
+  private func validateExistingInstallDirectories() throws {
+    for directoryURL in protectedInstallDirectories where entryExists(at: directoryURL) {
+      try validateDirectory(at: directoryURL)
+    }
+    if entryExists(at: installDirectoryURL) {
+      try validateDirectory(at: installDirectoryURL)
+    }
   }
 
   private func validateDirectory(at url: URL) throws {
@@ -479,6 +529,10 @@ actor UnavailableDockerComposeClientService: DockerComposeClientInstalling {
 
   func installationState() async -> DockerComposeClientInstallationState {
     .invalid(reason: reason)
+  }
+
+  func verifiedExecutableURL() async throws -> URL {
+    throw DockerComposeClientError.unavailable(reason)
   }
 
   func install() async throws {

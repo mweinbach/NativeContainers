@@ -11,7 +11,7 @@ struct LiveSocktainerCompatibilitySmokeTests {
       if: ProcessInfo.processInfo.environment[
         "NATIVECONTAINERS_LIVE_SOCKTAINER"
       ] == "1",
-      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker and standalone Compose clients installed, and the pinned bridge binary available."
+      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker installed, the verified private Compose client installed, and the pinned bridge binary available."
     )
   )
   func validatedBridgeServesIsolatedDockerContextAndCleansUp() async throws {
@@ -116,7 +116,7 @@ struct LiveSocktainerCompatibilitySmokeTests {
       if: ProcessInfo.processInfo.environment[
         "NATIVECONTAINERS_LIVE_SOCKTAINER"
       ] == "1",
-      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker and standalone Compose clients installed, and the pinned bridge binary available."
+      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker installed, the verified private Compose client installed, and the pinned bridge binary available."
     )
   )
   func composeFixturePublishesCanonicalAppleTopologyAndCleansUp() async throws {
@@ -128,7 +128,7 @@ struct LiveSocktainerCompatibilitySmokeTests {
       if: ProcessInfo.processInfo.environment[
         "NATIVECONTAINERS_LIVE_SOCKTAINER"
       ] == "1",
-      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker and standalone Compose clients installed, and the pinned bridge binary available."
+      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker installed, the verified private Compose client installed, and the pinned bridge binary available."
     )
   )
   func failedComposeDownUsesAppleNativeForceCleanup() async throws {
@@ -182,18 +182,8 @@ struct LiveSocktainerCompatibilitySmokeTests {
       commandExecutor: executor,
       environment: isolatedEnvironment
     )
-    let locator = FixedPathHostExecutableLocator()
-    var composeCandidates: [URL] = []
-    if let configuredPath = environment["NATIVECONTAINERS_DOCKER_COMPOSE_BINARY"],
-      !configuredPath.isEmpty
-    {
-      composeCandidates.append(URL(filePath: configuredPath))
-    }
-    composeCandidates.append(contentsOf: [
-      URL(filePath: "/usr/local/bin/docker-compose"),
-      URL(filePath: "/opt/homebrew/bin/docker-compose"),
-    ])
-    let installedComposeURL = try #require(locator.locate(candidates: composeCandidates))
+    let composeClient = DockerComposeClientInstallService()
+    let installedComposeURL = try await composeClient.verifiedExecutableURL()
     let composeURL: URL
     if forceComposeDownFailure {
       composeURL = rootURL.appending(

@@ -319,9 +319,20 @@ fails, a pure planner accepts only the fixture’s exact names plus canonical
 labels, freezes Apple configuration identities, and revalidates each identity
 before an Apple-native cleanup facet force-stops/deletes the container and
 deletes reviewed network and volume plans. Absence is polled through Apple
-inventory before cancellation or the original error is returned. The runner is
-not exposed as a product action until NativeContainers owns a reviewed Compose
-client instead of borrowing an unrelated application’s installation.
+inventory before cancellation or the original error is returned. The runner
+remains a conformance boundary rather than a user-project mutation action.
+
+`DockerComposeClientInstallService` is the product-owned client boundary. A
+release value pins Docker Compose 5.1.4’s official Darwin arm64 binary and SLSA
+provenance identities. Separate downloader and validator facets enforce bounded
+HTTPS acquisition, private regular-file invariants, both SHA-256 digests, the
+thin arm64 Mach-O header, and exact provenance subject/source/builder semantics.
+The actor stages and revalidates both artifacts before publishing provenance and
+then the executable into a versioned mode-0700 Application Support directory.
+It never mutates Docker CLI plugin paths and exposes a checked executable URL
+only while the complete installation validates. `AppServices` injects this
+facet into the app-scoped Docker compatibility model; Settings observes and
+installs it without merging client ownership into Socktainer process ownership.
 
 Compose observability is a separate pure service boundary, not a second runtime
 and not part of Socktainer process ownership. `AppleRuntimeInventoryService`

@@ -508,6 +508,38 @@ Updated: 2026-06-21.
 - The full Xcode plan passes all 486 outcomes: 473 deterministic tests passed
   and 13 explicitly gated live tests skipped, with no failures.
 
+## Private Docker Compose client checkpoint
+
+- `DockerComposeClientInstallService` now owns Docker Compose 5.1.4 for Darwin
+  arm64 as an independent service boundary. The official binary and SLSA
+  provenance URLs, both SHA-256 digests, source tag/revision, build type, builder
+  run, architecture, and download bounds are immutable release data.
+- Downloads require HTTPS and bounded regular files. Validation rejects links,
+  foreign ownership, extra hard links, writable group/world modes, digest drift,
+  non-arm64 Mach-O headers, and provenance whose subject/source/builder identity
+  differs from the reviewed release. The official executable is ad-hoc signed,
+  so its code signature is not treated as publisher identity.
+- Installation stages and revalidates both artifacts, publishes provenance
+  before the executable activation point, and retains mode-0700/0600 files only
+  under `~/Library/Application Support/NativeContainers/Compatibility/`
+  `DockerCompose/5.1.4`. It never writes Docker CLI plug-in directories. A
+  checked accessor returns an executable URL only while the complete install
+  still validates.
+- Settings exposes the verified state, exact version, private path, and an
+  explicit install/reinstall action through the existing app-scoped
+  compatibility model. The service remains independently injectable in tests
+  and previews.
+- Xcode installed the official artifact, revalidated both exact digests, and
+  executed `version --short` as `5.1.4`. A live run through that private binary
+  observed `ncwire-b84938f3` in `allRunning` state and removed every fixture
+  resource normally. A second run forced `down` to exit 17; the Apple-native
+  identity-revalidated fallback reported `FALLBACK=true` for
+  `ncwire-efdce9a3`. Both runs ended with zero container/volume/network residue,
+  a stopped bridge, and no socket.
+- The full Xcode plan passes all 495 outcomes: 482 deterministic tests passed
+  and 13 explicitly gated live tests skipped, with no failures. The build emits
+  only nine pre-existing warnings in macOS saved-state tests.
+
 ## Known configuration issue
 
 Apple documentation and SDK headers require
@@ -532,8 +564,6 @@ entitlement; no developer-team or provisioning-profile change should be needed.
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, and transactional same-host save/restore against a local
    IPSW.
-4. Install Docker’s Darwin arm64 Compose client into private app support from a
-   version/checksum/provenance-pinned release, without changing the user’s CLI
-   plugin directories. Then design a reviewed desired-state parser before any
-   user-project lifecycle; do not infer replicas, health, or removal intent from
-   labels.
+4. Design a reviewed Compose desired-state parser before any user-project
+   lifecycle; do not infer replicas, health, orphan removal, or volume intent
+   from observed labels.

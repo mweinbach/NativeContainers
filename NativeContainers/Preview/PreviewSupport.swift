@@ -302,6 +302,10 @@ private actor PreviewDockerComposeClientService: DockerComposeClientInstalling {
     .ready(version: release.version)
   }
 
+  func verifiedExecutableURL() async throws -> URL {
+    executableURL
+  }
+
   func install() async throws {}
 }
 

@@ -783,3 +783,30 @@ fixture cannot authorize operations on user projects, and the UI does not expose
 it until a Docker-independent, version-pinned Compose client installation path
 is reviewed. The local proof may use an externally installed standard client;
 shipping must not depend on an OrbStack-owned symlink.
+
+## ADR-031: Own and authenticate the Compose client privately
+
+**Status:** Accepted — 2026-06-21
+
+NativeContainers owns one reviewed Docker Compose client instead of resolving a
+global standalone binary or a user plugin. The pinned Docker Compose 5.1.4
+Darwin arm64 artifact is ad-hoc signed and has no Developer ID team identity, so
+macOS code signing cannot authenticate its publisher. The trust contract instead
+requires the exact HTTPS release URLs, binary and provenance SHA-256 digests,
+thin arm64 Mach-O header, and the expected in-toto/SLSA subject, source tag,
+source revision, BuildKit build type, and GitHub Actions builder run.
+
+Download, artifact validation, installation, and observable state are separate
+protocol facets. Both downloads are bounded and must be current-user regular
+files with one hard link and no group/world write access. Installation stages and
+revalidates both files, publishes provenance first and the executable last, then
+revalidates the complete private installation. A checked executable accessor
+fails closed when either file is missing or changed.
+
+The versioned files live only under NativeContainers’ Application Support tree;
+the installer never mutates system, Homebrew, Docker Desktop, or per-user Docker
+CLI plugin paths. Settings owns the explicit install/reinstall action and shows
+the verified version and path. Gated live Compose coverage now requires this
+private client, preventing an OrbStack symlink from silently satisfying product
+proof. Upgrades require a new reviewed release contract rather than a moving
+latest-version lookup.

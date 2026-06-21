@@ -88,6 +88,9 @@ struct DockerComposeClientInstallServiceTests {
       downloader: downloader
     )
 
+    await #expect(throws: DockerComposeClientError.installationRequired) {
+      try await service.verifiedExecutableURL()
+    }
     try await service.install()
 
     #expect(await downloader.downloadCount == 2)
@@ -104,6 +107,7 @@ struct DockerComposeClientInstallServiceTests {
     #expect(
       await service.installationState() == .ready(version: fixture.release.version)
     )
+    #expect(try await service.verifiedExecutableURL() == service.executableURL)
   }
 
   @Test
@@ -155,10 +159,37 @@ struct DockerComposeClientInstallServiceTests {
       downloader: downloader
     )
 
+    guard case .invalid = await service.installationState() else {
+      Issue.record("Expected an empty symlinked install root to be invalid")
+      return
+    }
     await #expect(throws: DockerComposeClientError.self) {
       try await service.install()
     }
     #expect(await downloader.downloadCount == 0)
+  }
+
+  @Test
+  func secondDownloadFailureRemovesTheRetainedFirstArtifact() async throws {
+    let fixture = try ComposeArtifactFixture()
+    defer { fixture.remove() }
+    let downloader = CopyingComposeArtifactDownloader(
+      binarySourceURL: fixture.binaryURL,
+      provenanceSourceURL: fixture.provenanceURL,
+      failProvenanceDownload: true
+    )
+    let service = DockerComposeClientInstallService(
+      release: fixture.release,
+      installRootURL: fixture.installRootURL,
+      downloader: downloader
+    )
+
+    await #expect(throws: DockerComposeClientError.self) {
+      try await service.install()
+    }
+
+    let retainedBinaryURL = try #require(await downloader.retainedBinaryURL)
+    #expect(!FileManager.default.fileExists(atPath: retainedBinaryURL.path))
   }
 }
 
@@ -260,14 +291,18 @@ private struct ComposeArtifactFixture {
 private actor CopyingComposeArtifactDownloader: DockerComposeArtifactDownloading {
   private let binarySourceURL: URL
   private let provenanceSourceURL: URL
+  private let failProvenanceDownload: Bool
   private(set) var downloadCount = 0
+  private(set) var retainedBinaryURL: URL?
 
   init(
     binarySourceURL: URL,
-    provenanceSourceURL: URL
+    provenanceSourceURL: URL,
+    failProvenanceDownload: Bool = false
   ) {
     self.binarySourceURL = binarySourceURL
     self.provenanceSourceURL = provenanceSourceURL
+    self.failProvenanceDownload = failProvenanceDownload
   }
 
   func download(
@@ -276,6 +311,12 @@ private actor CopyingComposeArtifactDownloader: DockerComposeArtifactDownloading
     maximumByteCount: Int64
   ) async throws -> URL {
     downloadCount += 1
+    if artifactName == "provenance", failProvenanceDownload {
+      throw DockerComposeClientError.downloadResponse(
+        artifact: artifactName,
+        status: 503
+      )
+    }
     let source = artifactName == "binary" ? binarySourceURL : provenanceSourceURL
     let destination = FileManager.default.temporaryDirectory.appending(
       path: "nativecontainers-compose-downloader-\(UUID().uuidString.lowercased())"
@@ -283,6 +324,9 @@ private actor CopyingComposeArtifactDownloader: DockerComposeArtifactDownloading
     try FileManager.default.copyItem(at: source, to: destination)
     guard chmod(destination.nativeContainersPOSIXPath, 0o600) == 0 else {
       throw DockerComposeClientError.unsafeInstallLocation(destination.path)
+    }
+    if artifactName == "binary" {
+      retainedBinaryURL = destination
     }
     return destination
   }

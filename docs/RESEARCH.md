@@ -495,6 +495,20 @@ The UI and marketing must not collapse those four claims into one.
   otherwise steer macOS users to Docker Desktop, so NativeContainers needs a
   private, version-pinned installer and license/signature review rather than
   modifying global CLI plugin directories.
+- The reviewed 5.1.4 Darwin arm64 executable is a thin Mach-O with an ad-hoc
+  linker signature and no Developer ID team identifier. Publisher trust
+  therefore cannot come from macOS code-signing identity. NativeContainers pins
+  the release binary SHA-256 and the separate provenance-file SHA-256, then
+  parses the in-toto/SLSA statement and requires the exact binary subject,
+  `docker/compose` v5.1.4 source tag, source revision
+  `6ce6411902e8e3c9be91be0c572b2441486357f7`, BuildKit build type, and GitHub
+  Actions builder run. The upstream repository is Apache-2.0 licensed.
+- The packaging gap is now closed without borrowing OrbStack. Xcode installed
+  the official binary and provenance into NativeContainers’ private Application
+  Support tree, confirmed version 5.1.4, and ran both the normal live fixture and
+  an intentional `down` failure through that path. Normal Compose cleanup and
+  Apple-native fallback each left no fixture resources, bridge process, or
+  socket. Global and per-user Docker CLI plugin directories were not changed.
 
 Apple maintainers treat the Engine API as a separate service/plugin concern.
 [Socktainer](https://github.com/socktainer/socktainer) is an active Apache-2.0
