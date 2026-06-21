@@ -3,6 +3,7 @@ import SwiftUI
 struct ContainerCreationView: View {
   @Environment(\.dismiss) private var dismiss
   private let appModel: AppModel
+  private let resourceConstraint: ResourceDefaultConstraint?
 
   @State private var model: ContainerProvisioningModel
   @State private var draft: ContainerCreationDraft
@@ -10,11 +11,14 @@ struct ContainerCreationView: View {
   @State private var operationTask: Task<Void, Never>?
 
   init(appModel: AppModel) {
+    let defaults = appModel.currentWorkloadCreationDefaults()
     self.appModel = appModel
+    resourceConstraint = defaults.constraint
     _model = State(initialValue: appModel.makeContainerProvisioningModel())
     _draft = State(
       initialValue: ContainerCreationDraft(
-        defaultNetworkID: appModel.networks.first(where: \.isBuiltin)?.id
+        defaultNetworkID: appModel.networks.first(where: \.isBuiltin)?.id,
+        resourceDefaults: defaults.container
       )
     )
   }
@@ -30,7 +34,8 @@ struct ContainerCreationView: View {
         ContainerResourcesSection(
           cpuCount: $draft.cpuCount,
           memoryMiB: $draft.memoryMiB,
-          maximumSuggestedCPUCount: maximumSuggestedCPUCount
+          maximumSuggestedCPUCount: maximumSuggestedCPUCount,
+          constraint: resourceConstraint
         )
         ContainerProcessSection(
           workingDirectory: $draft.workingDirectory,

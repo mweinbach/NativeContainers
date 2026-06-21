@@ -22,6 +22,7 @@ struct ContainerResourcesSection: View {
   @Binding var cpuCount: Int
   @Binding var memoryMiB: Int
   let maximumSuggestedCPUCount: Int
+  let constraint: ResourceDefaultConstraint?
 
   var body: some View {
     Section("Resources") {
@@ -33,6 +34,7 @@ struct ContainerResourcesSection: View {
           Text(memoryLabel(option)).tag(option)
         }
       }
+      WorkloadResourceConstraintNotice(constraint: constraint)
     }
   }
 

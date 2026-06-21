@@ -540,6 +540,10 @@ final class AppModel {
     errorMessage = nil
   }
 
+  func currentWorkloadCreationDefaults() -> WorkloadCreationDefaults {
+    services.workloadCreationDefaults.currentDefaults()
+  }
+
   func makeContainerInspector(for container: ContainerRecord) -> ContainerInspectorModel {
     ContainerInspectorModel(
       containerID: container.id,

@@ -4,9 +4,22 @@ struct LinuxMachineCreationView: View {
   @Environment(\.dismiss) private var dismiss
 
   let model: LinuxMachineManagementModel
-  @State private var draft = LinuxMachineCreationDraft()
+  let resourceConstraint: ResourceDefaultConstraint?
+  @State private var draft: LinuxMachineCreationDraft
   @State private var validationMessage: String?
   @State private var operationTask: Task<Void, Never>?
+
+  init(
+    model: LinuxMachineManagementModel,
+    resourceDefaults: WorkloadResourceDefaults,
+    resourceConstraint: ResourceDefaultConstraint?
+  ) {
+    self.model = model
+    self.resourceConstraint = resourceConstraint
+    _draft = State(
+      initialValue: LinuxMachineCreationDraft(resourceDefaults: resourceDefaults)
+    )
+  }
 
   var body: some View {
     NavigationStack {
@@ -40,6 +53,7 @@ struct LinuxMachineCreationView: View {
               value: Int64(draft.memoryMiB * 1_048_576).formatted(.byteCount(style: .memory))
             )
           }
+          WorkloadResourceConstraintNotice(constraint: resourceConstraint)
         }
 
         Section("Host access") {
@@ -178,5 +192,10 @@ struct LinuxMachineCreationView: View {
 
 #Preview {
   let appModel = AppModel.preview
-  LinuxMachineCreationView(model: appModel.makeLinuxMachineManagementModel())
+  let defaults = appModel.currentWorkloadCreationDefaults()
+  LinuxMachineCreationView(
+    model: appModel.makeLinuxMachineManagementModel(),
+    resourceDefaults: defaults.linuxMachine,
+    resourceConstraint: defaults.constraint
+  )
 }

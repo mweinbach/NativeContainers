@@ -3,16 +3,14 @@ import UniformTypeIdentifiers
 
 struct CreateVirtualMachineView: View {
   let model: AppModel
+  private let resourceConstraint: ResourceDefaultConstraint?
 
   @Environment(\.dismiss) private var dismiss
   @State private var guest = VirtualMachineGuest.macOS
   @State private var name = "macOS"
-  @State private var cpuCount = min(
-    max(ProcessInfo.processInfo.processorCount / 2, 2),
-    8
-  )
-  @State private var memoryGiB = 8
-  @State private var diskGiB = 64
+  @State private var cpuCount: Int
+  @State private var memoryGiB: Int
+  @State private var diskGiB: Int
   @State private var installationMediaURL: URL?
   @State private var isChoosingInstallationMedia = false
   @State private var isCreating = false
@@ -22,9 +20,14 @@ struct CreateVirtualMachineView: View {
     model: AppModel,
     initialGuest: VirtualMachineGuest = .macOS
   ) {
+    let defaults = model.currentWorkloadCreationDefaults()
     self.model = model
+    resourceConstraint = defaults.constraint
     _guest = State(initialValue: initialGuest)
     _name = State(initialValue: initialGuest == .macOS ? "macOS" : "Linux")
+    _cpuCount = State(initialValue: defaults.virtualMachine.cpuCount)
+    _memoryGiB = State(initialValue: defaults.virtualMachine.memoryGiB)
+    _diskGiB = State(initialValue: defaults.virtualMachine.diskGiB)
   }
 
   var body: some View {
@@ -45,6 +48,7 @@ struct CreateVirtualMachineView: View {
         )
         Stepper("Memory: \(memoryGiB) GiB", value: $memoryGiB, in: 1...128)
         Stepper("Disk: \(diskGiB) GiB", value: $diskGiB, in: 8...1024, step: 8)
+        WorkloadResourceConstraintNotice(constraint: resourceConstraint)
 
         if guest == .linux {
           LabeledContent("Installation ISO") {

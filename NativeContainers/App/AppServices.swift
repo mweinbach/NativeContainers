@@ -19,6 +19,7 @@ struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
   let launchAtLogin: any LaunchAtLoginManaging
   let notifications: any AppNotificationManaging
+  let workloadCreationDefaults: any WorkloadCreationDefaultsProviding
   let composeTopology: any ComposeTopologyDeriving
   let storageUsage: any StorageUsageLoading
   let storageReclamation: any StorageReclamationManaging
@@ -73,6 +74,8 @@ struct AppServices: Sendable {
     inventory: any ContainerInventoryLoading,
     launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
+    workloadCreationDefaults: any WorkloadCreationDefaultsProviding =
+      HostResourceDefaultService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -149,6 +152,7 @@ struct AppServices: Sendable {
     self.inventory = inventory
     self.launchAtLogin = launchAtLogin
     self.notifications = notifications
+    self.workloadCreationDefaults = workloadCreationDefaults
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
@@ -207,6 +211,8 @@ struct AppServices: Sendable {
     terminalTargets: any TerminalTargetOpening = UnavailableTerminalTargetService(),
     launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
+    workloadCreationDefaults: any WorkloadCreationDefaultsProviding =
+      HostResourceDefaultService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -269,6 +275,7 @@ struct AppServices: Sendable {
     inventory = containerService
     self.launchAtLogin = launchAtLogin
     self.notifications = notifications
+    self.workloadCreationDefaults = workloadCreationDefaults
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation

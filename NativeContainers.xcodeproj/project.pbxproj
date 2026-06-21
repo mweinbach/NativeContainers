@@ -144,6 +144,8 @@
 		1F5E647F2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E647E2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift */; };
 		1F5E64812FE8A60300A430FF /* HostResourceDefaultService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64802FE8A60300A430FF /* HostResourceDefaultService.swift */; };
 		1F5E64832FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64822FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift */; };
+		1F5E64852FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64842FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift */; };
+		1F5E64872FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64862FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -717,6 +719,8 @@
 		1F5E647E2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessInfoHostResourceStateProvider.swift; sourceTree = "<group>"; };
 		1F5E64802FE8A60300A430FF /* HostResourceDefaultService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResourceDefaultService.swift; sourceTree = "<group>"; };
 		1F5E64822FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResourceDefaultServiceTests.swift; sourceTree = "<group>"; };
+		1F5E64842FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkloadResourceConstraintNotice.swift; sourceTree = "<group>"; };
+		1F5E64862FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkloadCreationDefaultsIntegrationTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1219,6 +1223,7 @@
 				1F5E644E2FE8988A00A430FF /* MacGuestProvisioningView.swift */,
 				1F5E64602FE89D1600A430FF /* MacVirtualMachineDiskSnapshotsSection.swift */,
 				1F5E64762FE8A2AF00A430FF /* MacVirtualMachineUSBControl.swift */,
+				1F5E64842FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1632,6 +1637,7 @@
 				1F5E63FE2FE883AE00A430FF /* MacVirtualMachineNetworkModelTests.swift */,
 				1F5E64622FE89D8000A430FF /* MacVirtualMachineDiskSnapshotModelTests.swift */,
 				1F5E64782FE8A39400A430FF /* MacVirtualMachineUSBModelTests.swift */,
+				1F5E64862FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2260,6 +2266,7 @@
 				1F5E63A72FE8612700A430FF /* AppleContainerShellServiceTests.swift in Sources */,
 				1F9D2C4D2FE7EA920076F5B9 /* ComposeOperationJournalTests.swift in Sources */,
 				1F9D2B782FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift in Sources */,
+				1F5E64872FE8A68C00A430FF /* WorkloadCreationDefaultsIntegrationTests.swift in Sources */,
 				1F5E64832FE8A60A00A430FF /* HostResourceDefaultServiceTests.swift in Sources */,
 				1F5E640D2FE8875A00A430FF /* LinuxPlatformArtifactPreparerTests.swift in Sources */,
 				1F9D2BF62FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift in Sources */,
@@ -2447,6 +2454,7 @@
 				1FEC473A2FE8388D00DC60B2 /* VirtualMachineDiskImageReplacementModels.swift in Sources */,
 				1F9D2B582FE7923F0076F5B9 /* LinuxMachineCreationDraft.swift in Sources */,
 				1F9D2CB42FE806960076F5B9 /* StorageFormatting.swift in Sources */,
+				1F5E64852FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift in Sources */,
 				1F9D2B882FE7A1440076F5B9 /* MacVirtualMachineInstallationModel.swift in Sources */,
 				1FEC474C2FE841A400DC60B2 /* ComposeCanonicalModelValidator.swift in Sources */,
 				EDB26DFD01272D05145851C1 /* ContainerProvisioningModel.swift in Sources */,

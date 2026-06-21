@@ -91,7 +91,12 @@ struct LinuxMachinesView: View {
       }
     }
     .sheet(isPresented: $isPresentingCreation) {
-      LinuxMachineCreationView(model: managementModel)
+      let defaults = appModel.currentWorkloadCreationDefaults()
+      LinuxMachineCreationView(
+        model: managementModel,
+        resourceDefaults: defaults.linuxMachine,
+        resourceConstraint: defaults.constraint
+      )
     }
     .sheet(item: $presentedConfiguration) { machine in
       LinuxMachineConfigurationEditor(machine: machine, model: managementModel)

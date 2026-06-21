@@ -24,7 +24,14 @@ struct ContainerCreationDraft {
   var readOnlyRootFilesystem = false
   var useInitProcess = true
 
-  init(defaultNetworkID: String? = nil) {
+  init(
+    defaultNetworkID: String? = nil,
+    resourceDefaults: WorkloadResourceDefaults? = nil
+  ) {
+    if let resourceDefaults {
+      cpuCount = resourceDefaults.cpuCount
+      memoryMiB = resourceDefaults.memoryMiB
+    }
     networkAttachments =
       defaultNetworkID.map {
         [ContainerNetworkAttachmentDraft(networkID: $0)]

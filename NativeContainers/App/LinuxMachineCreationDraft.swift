@@ -10,6 +10,13 @@ struct LinuxMachineCreationDraft {
   var allowsWritableHomeMount = false
   var startAfterCreation = true
 
+  init(resourceDefaults: WorkloadResourceDefaults? = nil) {
+    if let resourceDefaults {
+      cpuCount = resourceDefaults.cpuCount
+      memoryMiB = resourceDefaults.memoryMiB
+    }
+  }
+
   func makeRequest() throws -> LinuxMachineCreationRequest {
     try LinuxMachineCreationRequest(
       name: name,

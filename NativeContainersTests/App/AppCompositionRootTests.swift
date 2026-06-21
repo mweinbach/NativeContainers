@@ -10,6 +10,7 @@ struct AppCompositionRootTests {
     let services = AppCompositionRoot.live()
 
     #expect(services.inventory is AppleRuntimeInventoryService)
+    #expect(services.workloadCreationDefaults is HostResourceDefaultService)
     #expect(services.composeTopology is ComposeTopologyService)
     #expect(services.storageUsage is StorageUsageService)
     #expect(services.storageReclamation is StorageReclamationService)
