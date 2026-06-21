@@ -33,6 +33,7 @@ struct AppCompositionRootTests {
     #expect(services.composeBridgeConformance is SocktainerComposeConformanceService)
     #expect(services.dockerComposeClient is DockerComposeClientInstallService)
     #expect(services.virtualMachineLibrary is VirtualMachineLibrary)
+    #expect(services.virtualMachineTransfer is VirtualMachineTransferService)
     #expect(services.virtualMachineInstaller is MacVirtualMachineInstallationService)
     #expect(services.virtualMachineRuntime is MacVirtualMachineRuntimeService)
     #expect(

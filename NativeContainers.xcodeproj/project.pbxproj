@@ -240,6 +240,8 @@
 		1F9D2C752FE7F9860076F5B9 /* VirtualMachineBundlePreparationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C742FE7F9860076F5B9 /* VirtualMachineBundlePreparationService.swift */; };
 		1F9D2C772FE7F9C20076F5B9 /* VirtualMachineTransferService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C762FE7F9C20076F5B9 /* VirtualMachineTransferService.swift */; };
 		1F9D2C792FE7FA620076F5B9 /* VirtualMachineTransferServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C782FE7FA620076F5B9 /* VirtualMachineTransferServiceTests.swift */; };
+		1F9D2C7B2FE7FABC0076F5B9 /* VirtualMachinePackagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C7A2FE7FABC0076F5B9 /* VirtualMachinePackagePicker.swift */; };
+		1F9D2C7E2FE7FAD00076F5B9 /* VirtualMachineTransferViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C7D2FE7FAD00076F5B9 /* VirtualMachineTransferViews.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -590,6 +592,9 @@
 		1F9D2C742FE7F9860076F5B9 /* VirtualMachineBundlePreparationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineBundlePreparationService.swift; sourceTree = "<group>"; };
 		1F9D2C762FE7F9C20076F5B9 /* VirtualMachineTransferService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineTransferService.swift; sourceTree = "<group>"; };
 		1F9D2C782FE7FA620076F5B9 /* VirtualMachineTransferServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineTransferServiceTests.swift; sourceTree = "<group>"; };
+		1F9D2C7A2FE7FABC0076F5B9 /* VirtualMachinePackagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachinePackagePicker.swift; sourceTree = "<group>"; };
+		1F9D2C7C2FE7FABF0076F5B9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1F9D2C7D2FE7FAD00076F5B9 /* VirtualMachineTransferViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineTransferViews.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -762,6 +767,7 @@
 				1F9D2BFF2FE7C8AB0076F5B9 /* ComposeProjectsView.swift */,
 				1F9D2C462FE7E8330076F5B9 /* ComposeProjectManagementView.swift */,
 				1F9D2C682FE7F5AD0076F5B9 /* CloneVirtualMachineView.swift */,
+				1F9D2C7D2FE7FAD00076F5B9 /* VirtualMachineTransferViews.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -997,6 +1003,7 @@
 				1F9D2C6E2FE7F73C0076F5B9 /* CopyfileVirtualMachineBundleTransfer.swift */,
 				1F9D2C742FE7F9860076F5B9 /* VirtualMachineBundlePreparationService.swift */,
 				1F9D2C762FE7F9C20076F5B9 /* VirtualMachineTransferService.swift */,
+				1F9D2C7A2FE7FABC0076F5B9 /* VirtualMachinePackagePicker.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1071,6 +1078,7 @@
 		BF96B46CD17CCDF42F8ACC64 /* NativeContainers */ = {
 			isa = PBXGroup;
 			children = (
+				1F9D2C7C2FE7FABF0076F5B9 /* Info.plist */,
 				B8C280A6A4149D7ADFCA8A58 /* App */,
 				0A9D8F50BAE0E2EDD346D8E3 /* Domain */,
 				AAA4D7C97DD6DEEE929A6968 /* Preview */,
@@ -1474,6 +1482,7 @@
 				78D8757B9A4FE8F19E8883AF /* MacPlatformArtifactPreparer.swift in Sources */,
 				1F9D2BA02FE7AA010076F5B9 /* MacVirtualMachineRuntimeModels.swift in Sources */,
 				1F9D2BC62FE7B73E0076F5B9 /* ResourceQuickOpenView.swift in Sources */,
+				1F9D2C7E2FE7FAD00076F5B9 /* VirtualMachineTransferViews.swift in Sources */,
 				1F9D2C002FE7C8AB0076F5B9 /* ComposeProjectsView.swift in Sources */,
 				1F9D2C472FE7E8330076F5B9 /* ComposeProjectManagementView.swift in Sources */,
 				ABEE87307ABFB2C102B3C269 /* MacRestoreImagePreparationModel.swift in Sources */,
@@ -1530,6 +1539,7 @@
 				1F9D2C5B2FE7F2B20076F5B9 /* ComposeContainerActionService.swift in Sources */,
 				1F9D2BB62FE7AE2A0076F5B9 /* MacVirtualMachineSavedStateStore.swift in Sources */,
 				1F9D2B9C2FE7A3190076F5B9 /* MacVirtualMachineAvailabilityChecker.swift in Sources */,
+				1F9D2C7B2FE7FABC0076F5B9 /* VirtualMachinePackagePicker.swift in Sources */,
 				1F9D2BA82FE7AAAA0076F5B9 /* MacVirtualMachineRuntimeService.swift in Sources */,
 				1F9D2AD92FE75FC30076F5B9 /* ContainerServiceFacets.swift in Sources */,
 				544A5C0316B516173A705366 /* SidebarView.swift in Sources */,
@@ -1603,6 +1613,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NativeContainers/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NativeContainers;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -1753,6 +1764,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NativeContainers/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NativeContainers;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;

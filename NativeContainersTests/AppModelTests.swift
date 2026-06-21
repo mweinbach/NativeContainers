@@ -224,6 +224,89 @@ struct AppModelTests {
   }
 
   @Test
+  func exportForwardsToFocusedServiceWithoutChangingInventoryOrRoute() async throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var source = try VirtualMachineManifest(
+      name: "Export Source",
+      guest: .macOS,
+      resources: resources
+    )
+    source.installState = .stopped
+    let transfer = AppModelVirtualMachineTransferFixture(imported: source)
+    let library = AppModelVirtualMachineCloneFixture(source: source)
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      virtualMachineLibrary: library,
+      virtualMachineTransfer: transfer,
+      initialInventory: emptyInventory(),
+      initialVirtualMachines: [source]
+    )
+    model.navigate(to: .macOSVirtualMachine(source.id))
+    let destination = FileManager.default.temporaryDirectory
+      .appending(path: "Export Source.nativevm")
+
+    let receipt = try await model.exportVirtualMachine(
+      id: source.id,
+      to: destination
+    )
+
+    #expect(
+      receipt == VirtualMachineExportReceipt(machineID: source.id, destinationURL: destination))
+    #expect(await transfer.requests == [.export(id: source.id, destinationURL: destination)])
+    #expect(model.virtualMachines == [source])
+    #expect(model.workspaceRoute == .macOSVirtualMachine(source.id))
+  }
+
+  @Test
+  func importPublishesReturnedManifestAndSelectsItWithoutASecondLibraryRead() async throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var source = try VirtualMachineManifest(
+      name: "Zulu Source",
+      guest: .macOS,
+      resources: resources
+    )
+    source.installState = .stopped
+    var imported = try VirtualMachineManifest(
+      name: "Alpha Imported",
+      guest: .macOS,
+      resources: resources
+    )
+    imported.installState = .stopped
+    let transfer = AppModelVirtualMachineTransferFixture(imported: imported)
+    let library = AppModelVirtualMachineCloneFixture(source: source)
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      virtualMachineLibrary: library,
+      virtualMachineTransfer: transfer,
+      initialInventory: emptyInventory(),
+      initialVirtualMachines: [source]
+    )
+    let package = FileManager.default.temporaryDirectory
+      .appending(path: "Imported.nativevm")
+
+    let result = try await model.importVirtualMachine(
+      from: package,
+      mode: .clone(name: imported.name)
+    )
+
+    #expect(result == imported)
+    #expect(
+      await transfer.requests
+        == [.importPackage(sourceURL: package, mode: .clone(name: imported.name))]
+    )
+    #expect(model.virtualMachines == [imported, source])
+    #expect(model.workspaceRoute == .macOSVirtualMachine(imported.id))
+  }
+
+  @Test
   func firstLoadRecoversPendingImportsAgainstPersistedRestoreImageReferences() async throws {
     let resources = try VirtualMachineResources(
       cpuCount: 4,
@@ -1215,6 +1298,41 @@ private actor AppModelVirtualMachineCloneFixture:
     let clone = try VirtualMachineManifest(cloning: source, name: name)
     manifests.append(clone)
     return clone
+  }
+}
+
+private actor AppModelVirtualMachineTransferFixture:
+  VirtualMachinePackageTransferring
+{
+  enum Request: Equatable, Sendable {
+    case export(id: UUID, destinationURL: URL)
+    case importPackage(sourceURL: URL, mode: VirtualMachineImportMode)
+  }
+
+  let imported: VirtualMachineManifest
+  private(set) var requests: [Request] = []
+
+  init(imported: VirtualMachineManifest) {
+    self.imported = imported
+  }
+
+  func exportVirtualMachine(
+    id: UUID,
+    to destinationURL: URL
+  ) -> VirtualMachineExportReceipt {
+    requests.append(.export(id: id, destinationURL: destinationURL))
+    return VirtualMachineExportReceipt(
+      machineID: id,
+      destinationURL: destinationURL
+    )
+  }
+
+  func importVirtualMachine(
+    from sourceURL: URL,
+    mode: VirtualMachineImportMode
+  ) -> VirtualMachineManifest {
+    requests.append(.importPackage(sourceURL: sourceURL, mode: mode))
+    return imported
   }
 }
 

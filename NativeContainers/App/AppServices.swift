@@ -29,6 +29,7 @@ struct AppServices: Sendable {
   let composeProjectLifecycle: any ComposeProjectLifecycleManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   let virtualMachineCloner: any VirtualMachineCloning
+  let virtualMachineTransfer: any VirtualMachinePackageTransferring
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
   let virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging
@@ -69,6 +70,8 @@ struct AppServices: Sendable {
       UnavailableComposeProjectLifecycleService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
+    virtualMachineTransfer: any VirtualMachinePackageTransferring =
+      UnavailableVirtualMachineTransferService(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
@@ -109,6 +112,7 @@ struct AppServices: Sendable {
     self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineCloner = virtualMachineCloner
+    self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
@@ -139,6 +143,8 @@ struct AppServices: Sendable {
       UnavailableComposeProjectLifecycleService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
+    virtualMachineTransfer: any VirtualMachinePackageTransferring =
+      UnavailableVirtualMachineTransferService(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
@@ -179,6 +185,7 @@ struct AppServices: Sendable {
     self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineCloner = virtualMachineCloner
+    self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
@@ -273,7 +280,16 @@ enum AppCompositionRoot {
     let launchID = UUID()
     let imageBuildHistory = ImageBuildHistoryStore(launchID: launchID)
     let virtualMachineLibrary = VirtualMachineLibrary()
-    let virtualMachineCloner = VirtualMachineCloneService(store: virtualMachineLibrary)
+    let virtualMachineBundlePreparer = VirtualMachineBundlePreparationService()
+    let virtualMachineCloner = VirtualMachineCloneService(
+      store: virtualMachineLibrary,
+      copier: FileVirtualMachineBundleCopier(preparer: virtualMachineBundlePreparer)
+    )
+    let virtualMachineTransfer = VirtualMachineTransferService(
+      exportStore: virtualMachineLibrary,
+      importStore: virtualMachineLibrary,
+      preparer: virtualMachineBundlePreparer
+    )
     let virtualMachineInstaller = MacVirtualMachineInstallationService(
       store: virtualMachineLibrary,
       engine: AppleMacVirtualMachineInstallationEngine()
@@ -361,6 +377,7 @@ enum AppCompositionRoot {
       composeProjectLifecycle: composeProjectLifecycle,
       virtualMachineLibrary: virtualMachineLibrary,
       virtualMachineCloner: virtualMachineCloner,
+      virtualMachineTransfer: virtualMachineTransfer,
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,
       virtualMachineSharedDirectories: virtualMachineSharedDirectories,

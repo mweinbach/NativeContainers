@@ -111,6 +111,8 @@ final class AppModel {
       UnavailableDockerComposeClientService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
     virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
+    virtualMachineTransfer: any VirtualMachinePackageTransferring =
+      UnavailableVirtualMachineTransferService(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
@@ -138,6 +140,7 @@ final class AppModel {
         dockerComposeClient: dockerComposeClientService,
         virtualMachineLibrary: virtualMachineLibrary,
         virtualMachineCloner: virtualMachineCloner,
+        virtualMachineTransfer: virtualMachineTransfer,
         virtualMachineInstaller: virtualMachineInstaller,
         virtualMachineRuntime: virtualMachineRuntime,
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
@@ -314,6 +317,39 @@ final class AppModel {
     updateWorkspaceNavigation()
     navigate(to: .macOSVirtualMachine(clone.id))
     return clone
+  }
+
+  @discardableResult
+  func exportVirtualMachine(
+    id: UUID,
+    to destinationURL: URL
+  ) async throws -> VirtualMachineExportReceipt {
+    try await services.virtualMachineTransfer.exportVirtualMachine(
+      id: id,
+      to: destinationURL
+    )
+  }
+
+  @discardableResult
+  func importVirtualMachine(
+    from sourceURL: URL,
+    mode: VirtualMachineImportMode
+  ) async throws -> VirtualMachineManifest {
+    let imported = try await services.virtualMachineTransfer.importVirtualMachine(
+      from: sourceURL,
+      mode: mode
+    )
+    if let index = virtualMachines.firstIndex(where: { $0.id == imported.id }) {
+      virtualMachines[index] = imported
+    } else {
+      virtualMachines.append(imported)
+    }
+    virtualMachines.sort {
+      $0.name.localizedStandardCompare($1.name) == .orderedAscending
+    }
+    updateWorkspaceNavigation()
+    navigate(to: .macOSVirtualMachine(imported.id))
+    return imported
   }
 
   func prepareMacVirtualMachine(id: UUID, restoreImageURL: URL) async throws {

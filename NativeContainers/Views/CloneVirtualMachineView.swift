@@ -90,6 +90,7 @@ struct CloneVirtualMachineView: View {
     }
     .padding(24)
     .frame(width: 540)
+    .interactiveDismissDisabled(isCloning)
     .onDisappear {
       cloneTask?.cancel()
     }
