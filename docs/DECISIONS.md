@@ -730,3 +730,28 @@ review and revalidation boundaries. A future project lifecycle coordinator
 requires explicit compatibility fixtures for the pinned bridge first. Generic
 volume prune preserves every resource carrying the reserved Compose label prefix;
 named-volume removal requires an explicit reviewed deletion path.
+
+## ADR-029: Publish pinned Compose bridge conformance as a pure service
+
+**Status:** Accepted — 2026-06-21
+
+The optional Docker bridge and the Compose compatibility claim have different
+owners. Process installation, health, exact-PID TERM-to-KILL, Force Stop, socket
+cleanup, and Docker context repair remain in `DockerCompatibilityService` and
+its focused collaborators. A separate synchronous
+`SocktainerComposeConformanceService` owns the source-pinned capability report.
+
+The report is generated from immutable fixtures tied to Socktainer 1.0.0,
+Docker Engine API 1.51, and release revision `876c2fc`. Each fixture declares
+the Engine operations required for one Compose behavior. Missing operations
+make that fixture unsupported; known semantic gaps such as network aliases,
+health checks, restart policies, configs, and secrets cannot become supported
+merely because create/inspect routes exist. Project lifecycle is a distinct
+policy-blocked fixture until a reviewed Compose model supplies desired replicas,
+orphan handling, volume intent, and frozen resource identities.
+
+Settings may display the report as source-pinned evidence, including partial
+and blocked results, but must not present it as a live Compose run. The service
+does not touch the socket or Apple runtime and remains independently injectable
+for previews and tests. Adding a future Engine operation does not update the
+pinned manifest automatically; support must be reviewed and added explicitly.

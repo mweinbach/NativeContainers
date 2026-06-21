@@ -460,6 +460,25 @@ Updated: 2026-06-21.
 - The full Xcode plan passes all 476 outcomes: 465 deterministic tests passed
   and 11 explicitly gated live tests skipped, with no failures.
 
+## Compose bridge conformance checkpoint
+
+- `SocktainerComposeConformanceService` is a pure, injected service independent
+  from bridge process ownership and Apple-inventory topology. It evaluates an
+  immutable contract pinned to Socktainer 1.0.0, Engine API 1.51, and release
+  revision `876c2fc`.
+- Nine explicit fixtures describe required Engine operations, source evidence,
+  semantic limitations, unsupported behavior, and application-policy blocks.
+  Missing operations fail closed. Network aliases are partial; health checks,
+  restart policies, configs, and secrets remain unsupported even when generic
+  create/inspect routes exist.
+- Settings shows four supported capabilities and five gaps in a disclosure
+  report that identifies itself as source-pinned rather than a live Compose run.
+  Bridge install/start/stop/Force Stop/context controls remain owned by their
+  existing services.
+- Project lifecycle is explicitly policy-blocked until a reviewed Compose model
+  supplies desired replicas, orphan handling, volume intent, and frozen resource
+  identities. No project mutation action was added.
+
 ## Known configuration issue
 
 Apple documentation and SDK headers require
@@ -484,7 +503,7 @@ entitlement; no developer-team or provisioning-profile change should be needed.
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, and transactional same-host save/restore against a local
    IPSW.
-4. Add explicit Socktainer 1.0.0 Compose conformance fixtures for the supported
-   Engine subset before considering a project lifecycle coordinator. Keep the
-   read-only Apple-inventory topology independent from bridge availability and
-   do not infer desired replicas, health, or parity from labels or sparse events.
+4. Run an isolated live-wire Compose fixture against Socktainer 1.0.0 for the
+   source-pinned supported subset, with unique resources and bounded cleanup.
+   Then design a reviewed desired-state parser before considering project
+   lifecycle; do not infer replicas, health, or removal intent from labels.

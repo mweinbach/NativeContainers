@@ -454,10 +454,10 @@ The UI and marketing must not collapse those four claims into one.
   required lifecycle step rather than an optimization.
 - Exact v1.0.0 Compose parity is incomplete: aliases, health checks, restart
   policies, several resource settings, and network connect/disconnect behavior
-  cannot support a broad Compose claim. The next safe slice is read-only project
-  observability from canonical Compose labels and authoritative Apple inventory,
-  followed by explicit conformance fixtures. That read-only slice now ships as
-  a pure service: it validates the Compose project and logical-resource naming
+  cannot support a broad Compose claim. The first safe slice was read-only
+  project observability from canonical Compose labels and authoritative Apple
+  inventory. That slice now ships as a pure service: it validates the Compose
+  project and logical-resource naming
   grammars, requires resource-specific labels for volumes and networks, excludes
   Apple built-in networks, and keeps incomplete label evidence out of runtime
   counts and reverse membership indexes. A live Apple-infrastructure probe then
@@ -470,6 +470,13 @@ The UI and marketing must not collapse those four claims into one.
   volume prune protects all resources with the reserved Compose prefix; future
   project lifecycle needs reviewed Compose-model conformance and frozen resource
   identities rather than label-only inference.
+- The next conformance boundary now ships as a second pure service rather than
+  being folded into process management or topology. Its immutable 1.0.0
+  manifest explicitly requires the reviewed container, volume, and network
+  route surface; known alias, health, restart, config, and secret gaps override
+  route presence. Settings labels the result as source-pinned rather than live,
+  and the project-lifecycle fixture remains policy-blocked. A future isolated
+  wire fixture must still prove the supported subset against the real socket.
 
 Apple maintainers treat the Engine API as a separate service/plugin concern.
 [Socktainer](https://github.com/socktainer/socktainer) is an active Apache-2.0

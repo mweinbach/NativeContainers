@@ -67,7 +67,10 @@ must leave a usable, test-backed product slice.
       HTTP-level readiness, exact-PID TERM-to-KILL/Force Stop recovery, stale
       socket cleanup, and a product-specific Docker context that never becomes
       the active context implicitly.
-- [ ] Compose parser and lifecycle coordinator, with conformance fixtures.
+- [x] Source-pinned Socktainer 1.0.0 Compose conformance manifest with explicit
+      route requirements, semantic gaps, and a visible policy block.
+- [ ] Compose parser and lifecycle coordinator after an isolated live-wire
+      fixture and reviewed desired-state/resource-identity model.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [ ] SSH agent forwarding and safe host-directory sharing.

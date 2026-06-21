@@ -294,6 +294,16 @@ identity. Docker context setup uses supported `docker context create/update`
 commands, strips shell context/host overrides for the operation, and confirms
 that the user’s active context did not change.
 
+Compose bridge conformance is another independent pure service facet.
+`SocktainerComposeConformanceService` evaluates an immutable manifest pinned to
+Socktainer 1.0.0, Docker Engine API 1.51, and release revision `876c2fc`.
+Each fixture names the exact Engine operations it requires and separately
+records semantic limitations or application-policy blocks. Missing operations
+fail closed, and new operation cases are not accepted implicitly. The resulting
+report is visible in Settings but is explicitly source-pinned evidence rather
+than a live Compose execution result. It does not start the bridge, inspect
+Apple inventory, or authorize project mutation.
+
 Compose observability is a separate pure service boundary, not a second runtime
 and not part of Socktainer process ownership. `AppleRuntimeInventoryService`
 preserves container labels verbatim alongside the existing volume and network
