@@ -397,6 +397,42 @@ than being resolved implicitly. All project views are read-only and link back
 to authoritative resource screens. Generic volume prune preserves any resource
 with a reserved Compose label.
 
+Reviewed Compose mutation uses a separate typed contract. The planner emits an
+ordered list of container, network, and volume actions plus exact preservation
+identities; declared services, one-offs, and true orphans never share an
+untyped deletion bucket. `AppleComposeProjectMutationExecutor` only coordinates
+the journal and shared runtime lock. `ComposeContainerActionService`,
+`ComposeResourceActionService`, `ComposeUpCommandService`, and
+`ComposePostconditionVerifier` own the independently testable mutation and proof
+boundaries.
+
+Fresh Up executes the pinned private Compose client from a descriptor-checked
+canonical workspace. Existing-project Up is narrower: when every reviewed
+replica already exists with matching config, reference, actual digest, and
+resource identities, NativeContainers starts the exact stopped IDs directly and
+preserves running IDs. Mixed create/reuse convergence is blocked. Compose 5.1.4
+still scales down and reconciles managed resources under `--no-recreate`, and
+its replacement flow deletes the old container before a rename that Socktainer
+1.0.0 does not implement. A future create-missing path therefore needs a
+deterministic overlay that converts frozen resources to exact external
+references and proves unchanged service hashes.
+
+Crash recovery journals contain only opaque ordered step tokens. Schema v3
+requires every completed token to be the next reviewed step and requires all
+steps before postcondition verification. Schema v2 files remain readable as
+redacted, manual-only evidence but cannot authorize execution. Exact network
+deletion is ID based. Named-volume deletion revalidates a frozen configuration
+identity and empty consumers immediately before Apple's name-only delete and
+confirms that both the old ID and runtime name are absent afterward; this is an
+app-level safety boundary, not a runtime CAS primitive.
+
+`LiveComposeProjectLifecycleSmokeTests` is an independent, doubly gated wire
+proof. It assembles the production renderer, planner, lifecycle coordinator,
+journal, execution services, Apple inventory, pinned Compose client, and an
+isolated Socktainer context for Up, Stop, Start, and Down. Cleanup runs in a
+detached task, revalidates fixture labels and identities before native deletion,
+and removes recovery evidence only after Apple inventory proves absence.
+
 ### General VM lane
 
 VMs live as self-contained bundles in Application Support. Each bundle owns:

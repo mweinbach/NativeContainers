@@ -55,8 +55,9 @@ host-access discovery, build-secret review/consumption, shared-builder
 management, build-history recording and persistence, machine lifecycle, bounded
 XPC/process transport, machine image preparation, machine process-target
 resolution, machine commands/terminals, canonical Compose topology derivation,
-source-pinned and isolated live Compose conformance, and owned-resource recovery
-are independent services. A
+source-pinned and isolated live Compose conformance, reviewed Compose planning,
+container/resource action execution, command execution, postcondition proof,
+and owned-resource recovery are independent services. A
 dedicated machine-management service owns machine creation and lifecycle rather
 than routing those operations through the container compatibility facade.
 
@@ -89,3 +90,9 @@ unique Alpine-derived image through the signed embedded worker, verify its
 snapshot and marker in a running container, and remove the test resources.
 The longer cancellation probe requires
 `NATIVECONTAINERS_LIVE_BUILD_CANCELLATION_TESTS=1`.
+
+The reviewed Compose lifecycle wire probe is separately destructive and remains
+double gated. Set `NATIVECONTAINERS_LIVE_SOCKTAINER=1`,
+`NATIVECONTAINERS_LIVE_COMPOSE_LIFECYCLE=1`, and explicitly point
+`NATIVECONTAINERS_SOCKTAINER_BINARY` at the pinned bridge to exercise isolated
+Up, Stop, Start, and Down with Apple-inventory proof and exact cleanup.

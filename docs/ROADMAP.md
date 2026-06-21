@@ -87,6 +87,16 @@ must leave a usable, test-backed product slice.
       store, private canonical execution workspace, crash-safe operation journal,
       explicit TERM-to-KILL policy, and manual-only recovery records for the
       reviewed executable subset.
+- [x] Replace loose Compose resource-name arrays with ordered identity-bound
+      container/network/volume/orphan actions; split execution into focused
+      action, command, and postcondition services; enable exact-count native Up
+      plus exact reviewed orphan/network/named-volume Down.
+- [x] Add journal schema v3 opaque step membership/order checks, manual-only v2
+      recovery compatibility, and a doubly gated real Up/Stop/Start/Down lifecycle
+      probe with detached exact-identity cleanup.
+- [ ] Add a deterministic external-resource execution overlay and supported-key
+      allowlist before enabling create-missing Up. Keep Compose recreation blocked
+      while Socktainer 1.0.0 lacks rename and network connect/disconnect routes.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [ ] SSH agent forwarding and safe host-directory sharing.

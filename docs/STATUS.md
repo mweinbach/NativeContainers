@@ -624,26 +624,43 @@ Updated: 2026-06-21.
   blockers. The complete facade then reviewed a fresh project against current
   Apple inventory, found no observed containers or parser blockers, and retained
   the expected execution-policy lock.
-- The executable subset is now split across an opaque prepared-plan store,
-  commit-time revalidation coordinator, exact-ID Apple mutation transport,
-  private canonical execution workspace, and durable operation journal. Fresh
-  Up uses the verified private Compose client; Start, Stop, and declared-service
-  Down use exact Apple container IDs in dependency order. Graceful stop sends the
-  configured signal, then optionally revalidates and sends KILL after the bounded
-  timeout.
-- Journal entries contain redacted fingerprints, typed phases, and cumulative
-  completed resource IDs. Interrupted or uncertain work is never auto-resumed or
-  rolled back; the workspace shows a manual reconciliation record that requires
-  explicit reviewed discard.
-- Existing-project Up/convergence, named-volume deletion, orphan deletion,
-  health/restart dependencies, configs, secrets, bind mounts, and other
-  unsupported features remain policy blockers. Apple 1.0 stop/kill/delete APIs
-  accept no expected-identity/CAS token, so the app-level mutation lock and final
-  revalidation cannot eliminate a same-ID replacement race from an external CLI
-  or XPC client.
-- The full Xcode plan passes all 577 outcomes: 559 deterministic tests passed
-  and 18 explicitly gated live tests skipped, with no failures. Xcode also built
-  for testing and rendered the Compose workspace preview without errors.
+- The reviewed execution contract now consists of ordered, typed container,
+  network, volume, orphan, and preservation actions. Exact container identity
+  includes the actual descriptor digest, platform, CPU, memory, ports, creation
+  time, and labels; mutable state is deliberately excluded. Commit-time replans
+  compare the complete typed contract rather than lossy name arrays.
+- The mutation coordinator is a thin orchestrator over separately injectable
+  container-action, resource-action, Compose-command, and postcondition services.
+  Fresh Up remains command-backed. Exact-count existing-project Up reuses the
+  frozen IDs and natively starts only stopped containers; it never invokes
+  Compose convergence. Start, Stop, declared Down, and separately typed orphan
+  Down execute the planner's frozen dependency order directly.
+- Down can delete reviewed managed networks and named volumes after immediate
+  identity and consumer revalidation. Container and network deletion use exact
+  IDs; Apple 1.0 exposes volume deletion by name only, so the executor confirms
+  both the frozen ID and runtime name before and after the call but cannot claim
+  a runtime-level CAS guarantee against an external same-name replacement.
+- Journal schema v3 stores only deterministic opaque step tokens and validates
+  membership, order, monotonic progress, and full completion before verification.
+  It never writes resource IDs or names as progress. Existing v2 records load as
+  redacted manual-only recovery snapshots and cannot be resumed automatically.
+- Create-missing Up and recreation remain policy blockers. Docker Compose 5.1.4
+  can scale down and reconcile resources even under `--no-recreate`, while
+  Socktainer 1.0.0 returns `NotImplemented` for container rename and network
+  connect/disconnect. A deterministic execution overlay that freezes existing
+  resources as external is required before widening this boundary. The pinned
+  conformance manifest now reports the connect/disconnect routes accurately.
+- A separate doubly gated lifecycle smoke now wires the real source renderer,
+  planner, journal, execution workspace, Apple inventory, exact mutation
+  services, pinned Compose client, and isolated Socktainer context through Up,
+  Stop, Start, and Down. Its cleanup is detached, identity checked, and discards
+  a journal record only after exact absence. It built and registered in this
+  checkpoint; runtime execution remains intentionally gated by both
+  `NATIVECONTAINERS_LIVE_SOCKTAINER=1` and
+  `NATIVECONTAINERS_LIVE_COMPOSE_LIFECYCLE=1`.
+- The full Xcode plan passes all 587 outcomes: 568 deterministic tests passed
+  and 19 explicitly gated live tests skipped, with no failures. Xcode also built
+  for testing successfully.
 
 ## Known configuration issue
 
@@ -667,6 +684,8 @@ entitlement; no developer-team or provisioning-profile change should be needed.
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, and transactional same-host save/restore against a local
    IPSW.
-4. Extend the typed Compose action model to existing-project convergence,
-   separately reviewed orphan deletion, and exact named-volume deletion; add a
-   gated live project lifecycle probe before widening any current policy block.
+4. Build the deterministic external-resource execution overlay and explicit
+   supported-key allowlist needed for safe create-missing Compose Up; keep
+   recreation blocked until the pinned bridge implements rename and network
+   attachment routes. Run the new lifecycle smoke only with both explicit live
+   gates and retain its cleanup evidence.
