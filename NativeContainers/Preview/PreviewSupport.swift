@@ -149,12 +149,42 @@ extension AppModel {
       installState: .stopped,
       resources: machineResources
     )
+    let sharedDirectories = PreviewMacVirtualMachineSharedDirectoryService(
+      initialConfiguration: MacVirtualMachineSharedDirectoryConfiguration(
+        revision: 2,
+        directories: [
+          MacVirtualMachineSharedDirectory(
+            id: UUID(),
+            guestName: "Projects",
+            bookmarkData: Data(),
+            lastKnownPath: "/Users/example/Projects",
+            sourceIdentity: MacVirtualMachineSharedDirectorySourceIdentity(
+              device: 1,
+              inode: 42
+            ),
+            readOnly: false
+          ),
+          MacVirtualMachineSharedDirectory(
+            id: UUID(),
+            guestName: "Reference",
+            bookmarkData: Data(),
+            lastKnownPath: "/Users/example/Documents/Reference",
+            sourceIdentity: MacVirtualMachineSharedDirectorySourceIdentity(
+              device: 1,
+              inode: 84
+            ),
+            readOnly: true
+          ),
+        ]
+      )
+    )
     let service = PreviewContainerService(inventory: inventory)
     return AppModel(
       containerService: service,
       machineService: service,
       registryService: PreviewRegistryService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: true),
+      virtualMachineSharedDirectories: sharedDirectories,
       initialInventory: inventory,
       initialVirtualMachines: [macVM]
     )
@@ -526,5 +556,54 @@ private actor PreviewVirtualMachineLibrary: VirtualMachineLibraryProtocol {
     resources: VirtualMachineResources
   ) async throws -> VirtualMachineManifest {
     try VirtualMachineManifest(name: name, guest: guest, resources: resources)
+  }
+}
+
+private actor PreviewMacVirtualMachineSharedDirectoryService:
+  MacVirtualMachineSharedDirectoryManaging
+{
+  private var current: MacVirtualMachineSharedDirectoryConfiguration
+
+  init(initialConfiguration: MacVirtualMachineSharedDirectoryConfiguration) {
+    current = initialConfiguration
+  }
+
+  func configuration(
+    id: UUID
+  ) -> MacVirtualMachineSharedDirectoryConfiguration {
+    current
+  }
+
+  func add(
+    to machineID: UUID,
+    request: MacVirtualMachineSharedDirectoryRequest
+  ) -> MacVirtualMachineSharedDirectoryConfiguration {
+    let next = MacVirtualMachineSharedDirectory(
+      id: UUID(),
+      guestName: request.guestName,
+      bookmarkData: Data(),
+      lastKnownPath: request.sourceURL.path(percentEncoded: false),
+      sourceIdentity: MacVirtualMachineSharedDirectorySourceIdentity(
+        device: 1,
+        inode: UInt64(current.directories.count + 100)
+      ),
+      readOnly: request.readOnly
+    )
+    current = MacVirtualMachineSharedDirectoryConfiguration(
+      revision: current.revision + 1,
+      directories: current.directories + [next]
+    )
+    return current
+  }
+
+  func remove(
+    from machineID: UUID,
+    sharedDirectoryID: UUID
+  ) -> MacVirtualMachineSharedDirectoryConfiguration {
+    current = MacVirtualMachineSharedDirectoryConfiguration(
+      revision: current.revision + 1,
+      directories: current.directories.filter { $0.id != sharedDirectoryID }
+    )
+    return current
   }
 }

@@ -215,6 +215,103 @@ struct MacVirtualMachineSavedStateStoreTests {
     let firstOctet = try #require(UInt8(first.macAddress.prefix(2), radix: 16))
     #expect(firstOctet & 0b0000_0011 == 0b0000_0010)
   }
+
+  @Test
+  func emptySharingPreservesLegacyTopologyUntilConfigurationChanges() throws {
+    let fixture = try SavedStateStoreFixture()
+    defer { fixture.remove() }
+    let service = MacVirtualMachineConfigurationDescriptorService()
+
+    let legacy = try service.descriptor(for: fixture.machine)
+    let changed = try service.descriptor(
+      for: fixture.machine.withSharedDirectories(
+        MacVirtualMachineSharedDirectoryConfiguration(
+          revision: 1,
+          directories: []
+        )
+      )
+    )
+
+    #expect(
+      legacy.topologyVersion
+        == MacVirtualMachineConfigurationDescriptor.legacyTopologyVersion
+    )
+    #expect(legacy.directorySharingRevision == nil)
+    #expect(legacy.sharedDirectories == nil)
+    #expect(
+      changed.topologyVersion
+        == MacVirtualMachineConfigurationDescriptor.currentTopologyVersion
+    )
+    #expect(changed.directorySharingRevision == 1)
+    #expect(changed.sharedDirectories == [])
+  }
+
+  @Test
+  func sharingFingerprintTracksSemanticsButNotBookmarkRenewal() throws {
+    let fixture = try SavedStateStoreFixture()
+    defer { fixture.remove() }
+    let fingerprinter = MacVirtualMachineConfigurationFingerprinter()
+    let identifier = UUID()
+    let original = MacVirtualMachineSharedDirectory(
+      id: identifier,
+      guestName: "Projects",
+      bookmarkData: Data("first-bookmark".utf8),
+      lastKnownPath: "/old/Projects",
+      sourceIdentity: .init(device: 2, inode: 3),
+      readOnly: false
+    )
+    let renewed = MacVirtualMachineSharedDirectory(
+      id: identifier,
+      guestName: "Projects",
+      bookmarkData: Data("renewed-bookmark".utf8),
+      lastKnownPath: "/new/Projects",
+      sourceIdentity: .init(device: 2, inode: 3),
+      readOnly: false
+    )
+    let originalMachine = fixture.machine.withSharedDirectories(
+      MacVirtualMachineSharedDirectoryConfiguration(
+        revision: 1,
+        directories: [original]
+      )
+    )
+    let renewedMachine = fixture.machine.withSharedDirectories(
+      MacVirtualMachineSharedDirectoryConfiguration(
+        revision: 1,
+        directories: [renewed]
+      )
+    )
+    let revisedMachine = fixture.machine.withSharedDirectories(
+      MacVirtualMachineSharedDirectoryConfiguration(
+        revision: 2,
+        directories: [renewed]
+      )
+    )
+
+    let baseline = try fingerprinter.fingerprint(for: fixture.machine)
+    let originalFingerprint = try fingerprinter.fingerprint(for: originalMachine)
+    let renewedFingerprint = try fingerprinter.fingerprint(for: renewedMachine)
+    let revisedFingerprint = try fingerprinter.fingerprint(for: revisedMachine)
+
+    #expect(originalFingerprint != baseline)
+    #expect(renewedFingerprint == originalFingerprint)
+    #expect(revisedFingerprint != originalFingerprint)
+  }
+}
+
+extension ResolvedMacVirtualMachine {
+  fileprivate func withSharedDirectories(
+    _ configuration: MacVirtualMachineSharedDirectoryConfiguration
+  ) -> ResolvedMacVirtualMachine {
+    ResolvedMacVirtualMachine(
+      manifest: manifest,
+      bundleURL: bundleURL,
+      diskImageURL: diskImageURL,
+      auxiliaryStorageURL: auxiliaryStorageURL,
+      hardwareModelURL: hardwareModelURL,
+      machineIdentifierURL: machineIdentifierURL,
+      sharedDirectories: configuration
+    )
+  }
 }
 
 private struct SavedStateStoreFixture {

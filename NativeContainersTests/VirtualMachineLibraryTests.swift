@@ -365,6 +365,113 @@ struct VirtualMachineLibraryTests {
     #expect(prepared.installState == .readyToInstall)
   }
 
+  @Test
+  func sharedDirectorySidecarLoadsAndMutatesUnderRuntimeLease() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let store = FileMacVirtualMachineSharedDirectoryConfigurationStore()
+    let first = librarySharedDirectory(name: "Projects", inode: 1)
+    try store.save(
+      MacVirtualMachineSharedDirectoryConfiguration(
+        revision: 1,
+        directories: [first]
+      ),
+      to: fixture.bundle
+    )
+
+    let lease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+    #expect(lease.machine.sharedDirectories.revision == 1)
+    #expect(lease.machine.sharedDirectories.directories == [first])
+    await #expect(
+      throws: MacVirtualMachineRuntimeError.ownedElsewhere(fixture.manifest.id)
+    ) {
+      _ = try await fixture.library.acquireMacOSRuntime(id: fixture.manifest.id)
+    }
+
+    let second = librarySharedDirectory(name: "Reference", inode: 2)
+    let updated = try await fixture.library.addMacOSSharedDirectory(
+      second,
+      for: lease
+    )
+    #expect(updated.revision == 2)
+    #expect(Set(updated.directories.map(\.guestName)) == ["Projects", "Reference"])
+    lease.release()
+
+    await #expect(throws: MacVirtualMachineRuntimeError.staleTarget(lease.target)) {
+      _ = try await fixture.library.removeMacOSSharedDirectory(
+        id: first.id,
+        for: lease
+      )
+    }
+
+    let replacementLease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+    #expect(replacementLease.machine.sharedDirectories == updated)
+    replacementLease.release()
+  }
+
+  private func installedLibraryFixture(
+    root: URL
+  ) throws -> (
+    library: VirtualMachineLibrary,
+    manifest: VirtualMachineManifest,
+    bundle: URL
+  ) {
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 8 * VirtualMachineResources.bytesPerGiB
+    )
+    var manifest = try VirtualMachineManifest(
+      name: "Installed Mac",
+      guest: .macOS,
+      installState: .stopped,
+      resources: resources
+    )
+    manifest.auxiliaryStoragePath = "AuxiliaryStorage"
+    manifest.hardwareModelPath = "HardwareModel"
+    manifest.machineIdentifierPath = "MachineIdentifier"
+    let bundle = bundleURL(root: root, id: manifest.id)
+    try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
+    for filename in [
+      manifest.diskImagePath,
+      "AuxiliaryStorage",
+      "HardwareModel",
+      "MachineIdentifier",
+    ] {
+      try Data(filename.utf8).write(to: bundle.appending(path: filename))
+    }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(manifest).write(
+      to: bundle.appending(path: VirtualMachineLibrary.manifestFilename)
+    )
+    return (
+      VirtualMachineLibrary(rootURL: root),
+      manifest,
+      bundle
+    )
+  }
+
+  private func librarySharedDirectory(
+    name: String,
+    inode: UInt64
+  ) -> MacVirtualMachineSharedDirectory {
+    MacVirtualMachineSharedDirectory(
+      id: UUID(),
+      guestName: name,
+      bookmarkData: Data("bookmark-\(inode)".utf8),
+      lastKnownPath: "/tmp/\(name)",
+      sourceIdentity: .init(device: 1, inode: inode),
+      readOnly: true
+    )
+  }
+
   private func temporaryRoot() -> URL {
     FileManager.default.temporaryDirectory
       .appending(path: UUID().uuidString, directoryHint: .isDirectory)

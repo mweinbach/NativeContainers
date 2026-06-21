@@ -5,17 +5,28 @@ import Foundation
   struct AppleMacVirtualMachineRuntimeConfiguration {
     let configuration: VZVirtualMachineConfiguration
     let saveRestoreSupport: MacVirtualMachineSaveRestoreSupport
+    let sharedDirectoryAccess: MacVirtualMachineSharedDirectoryAccess
   }
 
   @MainActor
   struct AppleMacVirtualMachineConfigurationFactory {
     private let descriptorService: any MacVirtualMachineConfigurationDescribing
+    private let sharedDirectoryBookmarkService:
+      any MacVirtualMachineSharedDirectoryBookmarkResolving
+    private let sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory
 
     init(
       descriptorService: any MacVirtualMachineConfigurationDescribing =
-        MacVirtualMachineConfigurationDescriptorService()
+        MacVirtualMachineConfigurationDescriptorService(),
+      sharedDirectoryBookmarkService:
+        any MacVirtualMachineSharedDirectoryBookmarkResolving =
+        MacVirtualMachineSharedDirectoryBookmarkService(),
+      sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory =
+        AppleMacVirtualMachineSharedDirectoryDeviceFactory()
     ) {
       self.descriptorService = descriptorService
+      self.sharedDirectoryBookmarkService = sharedDirectoryBookmarkService
+      self.sharedDirectoryDeviceFactory = sharedDirectoryDeviceFactory
     }
 
     func makeConfiguration(
@@ -120,6 +131,20 @@ import Foundation
       for machine: ResolvedMacVirtualMachine
     ) throws -> AppleMacVirtualMachineRuntimeConfiguration {
       let configuration = try makeConfiguration(for: machine)
+      let sharedDirectoryAccess = try sharedDirectoryBookmarkService.resolve(
+        machine.sharedDirectories.directories
+      )
+      do {
+        if let directorySharingDevice = try sharedDirectoryDeviceFactory.makeDevice(
+          for: sharedDirectoryAccess.directories
+        ) {
+          configuration.directorySharingDevices = [directorySharingDevice]
+          try configuration.validate()
+        }
+      } catch {
+        sharedDirectoryAccess.release()
+        throw error
+      }
       let saveRestoreSupport: MacVirtualMachineSaveRestoreSupport
       do {
         try configuration.validateSaveRestoreSupport()
@@ -129,7 +154,8 @@ import Foundation
       }
       return AppleMacVirtualMachineRuntimeConfiguration(
         configuration: configuration,
-        saveRestoreSupport: saveRestoreSupport
+        saveRestoreSupport: saveRestoreSupport,
+        sharedDirectoryAccess: sharedDirectoryAccess
       )
     }
 

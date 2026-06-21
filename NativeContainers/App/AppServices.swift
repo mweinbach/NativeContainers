@@ -24,6 +24,7 @@ struct AppServices: Sendable {
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
+  let virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging
   let virtualMachineAvailability: any MacVirtualMachineAvailabilityChecking
   let restoreImageDiscovery: any MacRestoreImageDiscovering
   let restoreImageDownloader: any MacRestoreImageDownloading
@@ -54,6 +55,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
+      UnavailableMacVirtualMachineSharedDirectoryService(),
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -83,6 +86,7 @@ struct AppServices: Sendable {
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
+    self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageDownloader = restoreImageDownloader
@@ -103,6 +107,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
+      UnavailableMacVirtualMachineSharedDirectoryService(),
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -132,6 +138,7 @@ struct AppServices: Sendable {
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
+    self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageDownloader = restoreImageDownloader
@@ -232,6 +239,11 @@ enum AppCompositionRoot {
       engine: AppleMacVirtualMachineRuntimeEngine(),
       savedStateService: virtualMachineSavedState
     )
+    let virtualMachineSharedDirectories = MacVirtualMachineSharedDirectoryService(
+      leasingStore: virtualMachineLibrary,
+      persistence: virtualMachineLibrary,
+      savedStateService: virtualMachineSavedState
+    )
     let imageBuildService = RecordingImageBuildService(
       base: AppleContainerBuildService(
         runtimeMutationCoordinator: mutationCoordinator,
@@ -263,6 +275,7 @@ enum AppCompositionRoot {
       virtualMachineLibrary: virtualMachineLibrary,
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,
+      virtualMachineSharedDirectories: virtualMachineSharedDirectories,
       virtualMachineAvailability:
         AppleMacVirtualMachineAvailabilityChecker(),
       restoreImageDiscovery: MacRestoreImageService(),

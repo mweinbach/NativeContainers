@@ -28,6 +28,17 @@ struct AppModelTests {
   }
 
   @Test
+  func macVirtualMachineSharingUsesAStableAppScopedModel() throws {
+    let model = AppModel.previewVirtualMachines
+    let machine = try #require(model.virtualMachines.first)
+
+    #expect(
+      model.makeMacVirtualMachineSharedDirectoriesModel(for: machine)
+        === model.makeMacVirtualMachineSharedDirectoriesModel(for: machine)
+    )
+  }
+
+  @Test
   func refreshPublishesContainerAndVirtualMachineInventories() async throws {
     let inventory = ContainerInventory(
       system: ContainerSystemInfo(

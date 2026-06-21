@@ -22,21 +22,43 @@ struct VirtualMachinesView: View {
             .buttonStyle(.borderedProminent)
         }
       } else {
-        List(model.virtualMachines) { machine in
-          VirtualMachineRow(
-            machine: machine,
-            availability: model.virtualMachineAvailability,
-            runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
-            isSelected: selectedMachineID == machine.id,
-            onSelect: {
-              model.navigate(to: .macOSVirtualMachine(machine.id))
-            },
-            prepare: { machineToPrepare = machine },
-            install: { machineToInstall = machine },
-            open: { machineToOpen = machine },
-            forceStop: { machineToForceStop = machine },
-            discard: { machineToDiscard = machine }
-          )
+        HSplitView {
+          List(model.virtualMachines) { machine in
+            VirtualMachineRow(
+              machine: machine,
+              availability: model.virtualMachineAvailability,
+              runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
+              isSelected: selectedMachineID == machine.id,
+              onSelect: {
+                model.navigate(to: .macOSVirtualMachine(machine.id))
+              },
+              prepare: { machineToPrepare = machine },
+              install: { machineToInstall = machine },
+              open: { machineToOpen = machine },
+              forceStop: { machineToForceStop = machine },
+              discard: { machineToDiscard = machine }
+            )
+          }
+          .frame(minWidth: 360, idealWidth: 430, maxWidth: 560)
+
+          if let selectedMachine {
+            MacVirtualMachineConfigurationView(
+              machine: selectedMachine,
+              runtime: model.makeMacVirtualMachineRuntimeModel(for: selectedMachine),
+              sharedDirectories: model.makeMacVirtualMachineSharedDirectoriesModel(
+                for: selectedMachine
+              )
+            )
+            .id(selectedMachine.id)
+            .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+          } else {
+            ContentUnavailableView(
+              "Select a Virtual Machine",
+              systemImage: "macwindow",
+              description: Text("Choose a VM to inspect its configuration.")
+            )
+            .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+          }
         }
       }
     }
@@ -104,6 +126,11 @@ struct VirtualMachinesView: View {
   private var selectedMachineID: VirtualMachineManifest.ID? {
     guard case .macOSVirtualMachine(let id) = model.workspaceRoute else { return nil }
     return id
+  }
+
+  private var selectedMachine: VirtualMachineManifest? {
+    guard let selectedMachineID else { return nil }
+    return model.virtualMachines.first { $0.id == selectedMachineID }
   }
 
   private func synchronizeSelection() {

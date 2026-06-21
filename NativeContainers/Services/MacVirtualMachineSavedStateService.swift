@@ -1,10 +1,16 @@
 import Foundation
 
 @MainActor
-protocol MacVirtualMachineSavedStateManaging: Sendable {
+protocol MacVirtualMachineSavedStateInspecting: Sendable {
   func inspect(
     for lease: MacVirtualMachineRuntimeLease
   ) async throws -> MacVirtualMachineSavedStateStatus
+}
+
+@MainActor
+protocol MacVirtualMachineSavedStateManaging:
+  MacVirtualMachineSavedStateInspecting
+{
   func saveCheckpoint(
     session: any MacVirtualMachineRuntimeEngineSession,
     lease: MacVirtualMachineRuntimeLease

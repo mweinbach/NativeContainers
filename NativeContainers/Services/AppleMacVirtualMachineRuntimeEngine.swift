@@ -47,7 +47,8 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
       return AppleMacVirtualMachineRuntimeSession(
         target: target,
         virtualMachine: virtualMachine,
-        saveRestoreSupport: runtimeConfiguration.saveRestoreSupport
+        saveRestoreSupport: runtimeConfiguration.saveRestoreSupport,
+        sharedDirectoryAccess: runtimeConfiguration.sharedDirectoryAccess
       )
     #else
       throw MacVirtualMachineRuntimeError.requiresAppleSilicon
@@ -68,15 +69,18 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
     var eventHandler: MacVirtualMachineRuntimeEventHandler?
 
     private let virtualMachine: VZVirtualMachine
+    private let sharedDirectoryAccess: MacVirtualMachineSharedDirectoryAccess
 
     init(
       target: MacVirtualMachineRuntimeTarget,
       virtualMachine: VZVirtualMachine,
-      saveRestoreSupport: MacVirtualMachineSaveRestoreSupport
+      saveRestoreSupport: MacVirtualMachineSaveRestoreSupport,
+      sharedDirectoryAccess: MacVirtualMachineSharedDirectoryAccess
     ) {
       self.target = target
       self.virtualMachine = virtualMachine
       self.saveRestoreSupport = saveRestoreSupport
+      self.sharedDirectoryAccess = sharedDirectoryAccess
       self.console = MacVirtualMachineConsole(target: target, virtualMachine: virtualMachine)
       super.init()
       virtualMachine.delegate = self
@@ -186,6 +190,12 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
         }
       }
       try await operation.value
+    }
+
+    func close() {
+      eventHandler = nil
+      virtualMachine.delegate = nil
+      sharedDirectoryAccess.release()
     }
 
     private func requireSaveRestoreSupport() throws {

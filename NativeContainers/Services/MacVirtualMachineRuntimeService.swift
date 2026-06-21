@@ -26,6 +26,11 @@ protocol MacVirtualMachineRuntimeEngineSession: AnyObject {
   func resume() async throws
   func requestStop() throws
   func forceStop() async throws
+  func close()
+}
+
+extension MacVirtualMachineRuntimeEngineSession {
+  func close() {}
 }
 
 @MainActor
@@ -74,11 +79,20 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     let session: any MacVirtualMachineRuntimeEngineSession
   }
 
+  private struct ShutdownFallback {
+    let target: MacVirtualMachineRuntimeTarget
+    let token: UUID
+    let scheduledShutdown: MacVirtualMachineScheduledShutdown
+  }
+
   private let leasingStore: any MacVirtualMachineRuntimeLeasing
   private let engine: any MacVirtualMachineRuntimeEngine
   private let savedStateService: any MacVirtualMachineSavedStateManaging
+  private let shutdownPolicy: MacVirtualMachineShutdownPolicy
+  private let shutdownScheduler: any MacVirtualMachineShutdownScheduling
   private var sessions: [UUID: SessionRecord] = [:]
   private var operations: [UUID: InFlightOperation] = [:]
+  private var shutdownFallbacks: [UUID: ShutdownFallback] = [:]
   private var snapshots: [UUID: MacVirtualMachineRuntimeSnapshot] = [:]
   private var subscribers:
     [UUID: [UUID: AsyncStream<MacVirtualMachineRuntimeSnapshot>.Continuation]] = [:]
@@ -86,11 +100,16 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   init(
     leasingStore: any MacVirtualMachineRuntimeLeasing,
     engine: any MacVirtualMachineRuntimeEngine,
-    savedStateService: any MacVirtualMachineSavedStateManaging
+    savedStateService: any MacVirtualMachineSavedStateManaging,
+    shutdownPolicy: MacVirtualMachineShutdownPolicy = .standard,
+    shutdownScheduler: any MacVirtualMachineShutdownScheduling =
+      ContinuousClockMacVirtualMachineShutdownScheduler()
   ) {
     self.leasingStore = leasingStore
     self.engine = engine
     self.savedStateService = savedStateService
+    self.shutdownPolicy = shutdownPolicy
+    self.shutdownScheduler = shutdownScheduler
   }
 
   func snapshot(for machineID: UUID) -> MacVirtualMachineRuntimeSnapshot {
@@ -381,7 +400,9 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
 
     do {
       try record.session.requestStop()
+      guard isCurrent(target) else { return }
       publish(machineID: target.machineID, target: target, state: .stopping)
+      scheduleShutdownFallback(for: target)
     } catch {
       publish(
         machineID: target.machineID,
@@ -399,6 +420,7 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     guard current.canForceStop else {
       throw MacVirtualMachineRuntimeError.invalidState(target.machineID, current.state)
     }
+    cancelShutdownFallback(for: target)
 
     if var operation = operations[target.machineID] {
       guard operation.target == target else {
@@ -810,6 +832,55 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     }
   }
 
+  private func scheduleShutdownFallback(
+    for target: MacVirtualMachineRuntimeTarget
+  ) {
+    cancelShutdownFallback(machineID: target.machineID)
+    let token = UUID()
+    let scheduledShutdown = shutdownScheduler.schedule(
+      after: shutdownPolicy.gracefulStopTimeout
+    ) { [weak self] in
+      await self?.performAutomaticForceStop(target: target, token: token)
+    }
+    shutdownFallbacks[target.machineID] = ShutdownFallback(
+      target: target,
+      token: token,
+      scheduledShutdown: scheduledShutdown
+    )
+  }
+
+  private func performAutomaticForceStop(
+    target: MacVirtualMachineRuntimeTarget,
+    token: UUID
+  ) async {
+    guard let fallback = shutdownFallbacks[target.machineID],
+      fallback.target == target,
+      fallback.token == token,
+      isCurrent(target),
+      snapshot(for: target.machineID).state == .stopping
+    else {
+      return
+    }
+    shutdownFallbacks[target.machineID] = nil
+    do {
+      try await forceStop(target: target)
+    } catch {
+      // forceStop publishes the failure while preserving the live session so a
+      // user can retry explicitly. Automatic shutdown never loops.
+    }
+  }
+
+  private func cancelShutdownFallback(
+    for target: MacVirtualMachineRuntimeTarget
+  ) {
+    guard shutdownFallbacks[target.machineID]?.target == target else { return }
+    cancelShutdownFallback(machineID: target.machineID)
+  }
+
+  private func cancelShutdownFallback(machineID: UUID) {
+    shutdownFallbacks.removeValue(forKey: machineID)?.scheduledShutdown.cancel()
+  }
+
   private func clearFailedQueuedForceStop(
     target: MacVirtualMachineRuntimeTarget,
     token: UUID,
@@ -900,10 +971,12 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     guard let record = sessions[target.machineID], record.lease.target == target else {
       return
     }
+    cancelShutdownFallback(for: target)
     sessions[target.machineID] = nil
     operations[target.machineID]?.forceStopTask?.cancel()
     operations[target.machineID] = nil
     record.session.eventHandler = nil
+    record.session.close()
     record.lease.release()
     publish(
       machineID: target.machineID,

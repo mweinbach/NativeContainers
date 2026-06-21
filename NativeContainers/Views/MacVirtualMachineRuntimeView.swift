@@ -108,6 +108,9 @@ private struct MacVirtualMachineRuntimeHeader: View {
           } else if snapshot.isForceStopQueued {
             Text("Force Stop Queued")
               .foregroundStyle(.orange)
+          } else if snapshot.state == .stopping {
+            Text("Automatic Force Stop Armed")
+              .foregroundStyle(.orange)
           }
         }
         .font(.caption)
@@ -331,7 +334,7 @@ private struct MacVirtualMachineConsoleContent: View {
   }
 }
 
-private struct MacVirtualMachineRuntimeStatusIndicator: View {
+struct MacVirtualMachineRuntimeStatusIndicator: View {
   let state: MacVirtualMachineRuntimeState
 
   var body: some View {

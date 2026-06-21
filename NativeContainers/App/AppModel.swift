@@ -43,6 +43,10 @@ final class AppModel {
   @ObservationIgnored
   private var macVirtualMachineRuntimeModels: [UUID: MacVirtualMachineRuntimeModel] = [:]
 
+  @ObservationIgnored
+  private var macVirtualMachineSharedDirectoryModels:
+    [UUID: MacVirtualMachineSharedDirectoriesModel] = [:]
+
   private var hasLoaded = false
   private var refreshRequested = false
   private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
@@ -80,6 +84,8 @@ final class AppModel {
       UnavailableMacVirtualMachineInstaller(),
     virtualMachineRuntime: any MacVirtualMachineRuntimeManaging =
       UnavailableMacVirtualMachineRuntimeService(),
+    virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
+      UnavailableMacVirtualMachineSharedDirectoryService(),
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -98,6 +104,7 @@ final class AppModel {
         virtualMachineLibrary: virtualMachineLibrary,
         virtualMachineInstaller: virtualMachineInstaller,
         virtualMachineRuntime: virtualMachineRuntime,
+        virtualMachineSharedDirectories: virtualMachineSharedDirectories,
         virtualMachineAvailability: virtualMachineAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
         restoreImageDownloader: restoreImageDownloader,
@@ -449,11 +456,29 @@ final class AppModel {
     return model
   }
 
+  func makeMacVirtualMachineSharedDirectoriesModel(
+    for machine: VirtualMachineManifest
+  ) -> MacVirtualMachineSharedDirectoriesModel {
+    if let model = macVirtualMachineSharedDirectoryModels[machine.id] {
+      return model
+    }
+    let model = MacVirtualMachineSharedDirectoriesModel(
+      machineID: machine.id,
+      service: services.virtualMachineSharedDirectories
+    )
+    macVirtualMachineSharedDirectoryModels[machine.id] = model
+    return model
+  }
+
   private func removeStaleMacVirtualMachineRuntimeModels() {
     let currentIdentifiers = Set(virtualMachines.map(\.id))
     for identifier in Array(macVirtualMachineRuntimeModels.keys)
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineRuntimeModels.removeValue(forKey: identifier)?.stopObserving()
+    }
+    for identifier in Array(macVirtualMachineSharedDirectoryModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      macVirtualMachineSharedDirectoryModels.removeValue(forKey: identifier)
     }
   }
 

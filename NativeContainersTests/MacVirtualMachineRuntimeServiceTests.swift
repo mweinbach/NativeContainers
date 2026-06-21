@@ -34,6 +34,68 @@ struct MacVirtualMachineRuntimeServiceTests {
     snapshot = fixture.service.snapshot(for: fixture.machineID)
     #expect(snapshot.state == .stopped)
     #expect(snapshot.target == nil)
+    #expect(fixture.shutdownScheduler.pendingCount == 0)
+    #expect(fixture.engine.sessions[0].closeCount == 1)
+    #expect(fixture.releaseRecorder.count == 1)
+  }
+
+  @Test
+  func gracefulStopTimeoutAutomaticallyForceStopsHungGuest() async throws {
+    let fixture = try RuntimeServiceFixture()
+    try await fixture.service.start(id: fixture.machineID)
+    let target = try #require(fixture.service.snapshot(for: fixture.machineID).target)
+
+    try fixture.service.requestStop(target: target)
+    #expect(fixture.shutdownScheduler.pendingCount == 1)
+    #expect(fixture.engine.sessions[0].forceStopCount == 0)
+
+    await fixture.shutdownScheduler.fireNext()
+
+    let snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.state == .stopped)
+    #expect(snapshot.target == nil)
+    #expect(fixture.engine.sessions[0].forceStopCount == 1)
+    #expect(fixture.releaseRecorder.count == 1)
+  }
+
+  @Test
+  func guestStopCancelsAutomaticForceStop() async throws {
+    let fixture = try RuntimeServiceFixture()
+    try await fixture.service.start(id: fixture.machineID)
+    let target = try #require(fixture.service.snapshot(for: fixture.machineID).target)
+
+    try fixture.service.requestStop(target: target)
+    fixture.engine.sessions[0].emit(.guestStopped)
+    await fixture.shutdownScheduler.fireNext()
+
+    #expect(fixture.engine.sessions[0].forceStopCount == 0)
+    #expect(fixture.shutdownScheduler.pendingCount == 0)
+    #expect(fixture.releaseRecorder.count == 1)
+  }
+
+  @Test
+  func failedAutomaticForceStopKeepsManualRecoveryAvailable() async throws {
+    let fixture = try RuntimeServiceFixture()
+    try await fixture.service.start(id: fixture.machineID)
+    let target = try #require(fixture.service.snapshot(for: fixture.machineID).target)
+    let session = fixture.engine.sessions[0]
+    session.forceStopError = .expected
+
+    try fixture.service.requestStop(target: target)
+    await fixture.shutdownScheduler.fireNext()
+
+    var snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.state == .stopping)
+    #expect(snapshot.target == target)
+    #expect(snapshot.canForceStop)
+    #expect(session.forceStopCount == 1)
+    #expect(fixture.releaseRecorder.count == 0)
+
+    session.forceStopError = nil
+    try await fixture.service.forceStop(target: target)
+    snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.state == .stopped)
+    #expect(session.forceStopCount == 2)
     #expect(fixture.releaseRecorder.count == 1)
   }
 
@@ -98,6 +160,7 @@ struct MacVirtualMachineRuntimeServiceTests {
     let snapshot = fixture.service.snapshot(for: fixture.machineID)
     #expect(snapshot.state == .stopped)
     #expect(snapshot.errorMessage == nil)
+    #expect(session.closeCount == 1)
     #expect(fixture.releaseRecorder.count == 1)
   }
 
@@ -499,6 +562,7 @@ private struct RuntimeServiceFixture {
   let store: RuntimeServiceLeaseStore
   let engine: RuntimeServiceEngine
   let savedStateService: RuntimeServiceSavedStateService
+  let shutdownScheduler: RuntimeServiceShutdownScheduler
   let service: MacVirtualMachineRuntimeService
 
   var machineID: UUID { machine.manifest.id }
@@ -514,11 +578,63 @@ private struct RuntimeServiceFixture {
       resumeError: resumeError
     )
     savedStateService = RuntimeServiceSavedStateService()
+    shutdownScheduler = RuntimeServiceShutdownScheduler()
     service = MacVirtualMachineRuntimeService(
       leasingStore: store,
       engine: engine,
-      savedStateService: savedStateService
+      savedStateService: savedStateService,
+      shutdownPolicy: MacVirtualMachineShutdownPolicy(
+        gracefulStopTimeout: .seconds(1)
+      ),
+      shutdownScheduler: shutdownScheduler
     )
+  }
+}
+
+@MainActor
+private final class RuntimeServiceShutdownScheduler:
+  MacVirtualMachineShutdownScheduling
+{
+  private struct Entry {
+    let state: RuntimeServiceScheduledShutdownState
+    let operation: @MainActor @Sendable () async -> Void
+  }
+
+  private var entries: [Entry] = []
+
+  var pendingCount: Int {
+    entries.count { !$0.state.isCancelled }
+  }
+
+  func schedule(
+    after delay: Duration,
+    operation: @escaping @MainActor @Sendable () async -> Void
+  ) -> MacVirtualMachineScheduledShutdown {
+    let state = RuntimeServiceScheduledShutdownState()
+    entries.append(Entry(state: state, operation: operation))
+    return MacVirtualMachineScheduledShutdown {
+      state.cancel()
+    }
+  }
+
+  func fireNext() async {
+    while !entries.isEmpty {
+      let entry = entries.removeFirst()
+      guard !entry.state.isCancelled else { continue }
+      await entry.operation()
+      return
+    }
+  }
+}
+
+private final class RuntimeServiceScheduledShutdownState: @unchecked Sendable {
+  private let lock = NSLock()
+  private var cancelled = false
+
+  var isCancelled: Bool { lock.withLock { cancelled } }
+
+  func cancel() {
+    lock.withLock { cancelled = true }
   }
 }
 
@@ -728,6 +844,7 @@ private final class RuntimeServiceSession: MacVirtualMachineRuntimeEngineSession
   private(set) var resumeCount = 0
   private(set) var requestStopCount = 0
   private(set) var forceStopCount = 0
+  private(set) var closeCount = 0
 
   private let startWaits: Bool
   private let resumeError: RuntimeServiceTestError?
@@ -775,6 +892,10 @@ private final class RuntimeServiceSession: MacVirtualMachineRuntimeEngineSession
   func forceStop() async throws {
     forceStopCount += 1
     if let forceStopError { throw forceStopError }
+  }
+
+  func close() {
+    closeCount += 1
   }
 
   func completeStart() {

@@ -1,8 +1,17 @@
 import CryptoKit
 import Foundation
 
+struct MacVirtualMachineSharedDirectoryDescriptor: Codable, Equatable, Sendable {
+  let id: UUID
+  let guestName: String
+  let readOnly: Bool
+  let sourceDevice: UInt64
+  let sourceInode: UInt64
+}
+
 struct MacVirtualMachineConfigurationDescriptor: Codable, Equatable, Sendable {
-  static let currentTopologyVersion = 1
+  static let legacyTopologyVersion = 1
+  static let currentTopologyVersion = 2
 
   let topologyVersion: Int
   let cpuCount: Int
@@ -22,6 +31,9 @@ struct MacVirtualMachineConfigurationDescriptor: Codable, Equatable, Sendable {
   let pointingDevices: [String]
   let entropyDevices: [String]
   let memoryBalloonDevices: [String]
+  let directorySharingDevice: String?
+  let directorySharingRevision: UInt64?
+  let sharedDirectories: [MacVirtualMachineSharedDirectoryDescriptor]?
 }
 
 protocol MacVirtualMachineConfigurationDescribing: Sendable {
@@ -41,8 +53,13 @@ struct MacVirtualMachineConfigurationDescriptorService:
         "auxiliaryStoragePath"
       )
     }
+    let hasDirectorySharingHistory =
+      machine.sharedDirectories.revision > 0
+      || !machine.sharedDirectories.directories.isEmpty
     return MacVirtualMachineConfigurationDescriptor(
-      topologyVersion: MacVirtualMachineConfigurationDescriptor.currentTopologyVersion,
+      topologyVersion: hasDirectorySharingHistory
+        ? MacVirtualMachineConfigurationDescriptor.currentTopologyVersion
+        : MacVirtualMachineConfigurationDescriptor.legacyTopologyVersion,
       cpuCount: machine.manifest.resources.cpuCount,
       memoryBytes: machine.manifest.resources.memoryBytes,
       diskBytes: machine.manifest.resources.diskBytes,
@@ -59,7 +76,22 @@ struct MacVirtualMachineConfigurationDescriptorService:
       keyboardDevices: ["Mac", "USB"],
       pointingDevices: ["MacTrackpad", "USBScreenCoordinate"],
       entropyDevices: ["Virtio"],
-      memoryBalloonDevices: ["VirtioTraditional"]
+      memoryBalloonDevices: ["VirtioTraditional"],
+      directorySharingDevice: hasDirectorySharingHistory
+        && !machine.sharedDirectories.directories.isEmpty
+        ? "VirtioFS/macOSGuestAutomount" : nil,
+      directorySharingRevision: hasDirectorySharingHistory
+        ? machine.sharedDirectories.revision : nil,
+      sharedDirectories: hasDirectorySharingHistory
+        ? machine.sharedDirectories.directories.map { directory in
+          MacVirtualMachineSharedDirectoryDescriptor(
+            id: directory.id,
+            guestName: directory.guestName,
+            readOnly: directory.readOnly,
+            sourceDevice: directory.sourceIdentity.device,
+            sourceInode: directory.sourceIdentity.inode
+          )
+        } : nil
     )
   }
 

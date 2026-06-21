@@ -7,6 +7,25 @@ struct ResolvedMacVirtualMachine: Equatable, Sendable {
   let auxiliaryStorageURL: URL
   let hardwareModelURL: URL
   let machineIdentifierURL: URL
+  let sharedDirectories: MacVirtualMachineSharedDirectoryConfiguration
+
+  init(
+    manifest: VirtualMachineManifest,
+    bundleURL: URL,
+    diskImageURL: URL,
+    auxiliaryStorageURL: URL,
+    hardwareModelURL: URL,
+    machineIdentifierURL: URL,
+    sharedDirectories: MacVirtualMachineSharedDirectoryConfiguration = .empty
+  ) {
+    self.manifest = manifest
+    self.bundleURL = bundleURL
+    self.diskImageURL = diskImageURL
+    self.auxiliaryStorageURL = auxiliaryStorageURL
+    self.hardwareModelURL = hardwareModelURL
+    self.machineIdentifierURL = machineIdentifierURL
+    self.sharedDirectories = sharedDirectories
+  }
 }
 
 extension PreparedMacVirtualMachine {
@@ -17,7 +36,8 @@ extension PreparedMacVirtualMachine {
       diskImageURL: diskImageURL,
       auxiliaryStorageURL: auxiliaryStorageURL,
       hardwareModelURL: hardwareModelURL,
-      machineIdentifierURL: machineIdentifierURL
+      machineIdentifierURL: machineIdentifierURL,
+      sharedDirectories: .empty
     )
   }
 }
