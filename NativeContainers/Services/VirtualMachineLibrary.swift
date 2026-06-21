@@ -65,7 +65,8 @@ actor VirtualMachineLibrary:
   VirtualMachineRestoreImageReferenceStoring,
   MacVirtualMachineInstallationStoring,
   MacVirtualMachineRuntimeLeasing,
-  MacVirtualMachineSharedDirectoryPersisting
+  MacVirtualMachineSharedDirectoryPersisting,
+  VirtualMachineDiskImageMigrationStoring
 {
   static let bundleExtension = "nativevm"
   static let manifestFilename = "manifest.json"
@@ -294,6 +295,58 @@ actor VirtualMachineLibrary:
     )
     try sharedDirectoryStore.save(updated, to: bundleURL)
     return updated
+  }
+
+  func commitDiskImageMigration(
+    _ commit: VirtualMachineDiskImageMigrationCommit,
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineManifest {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try installationManifest(id: lease.target.machineID)
+
+    guard manifest.diskImagePath == commit.sourcePath,
+      manifest.effectiveDiskImageFormat == commit.sourceFormat,
+      lease.machine.manifest.diskImagePath == commit.sourcePath,
+      lease.machine.manifest.effectiveDiskImageFormat == commit.sourceFormat,
+      commit.sourcePath != commit.destinationPath
+    else {
+      throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    let sourceURL = try macVirtualMachineBundleResolver.resolveArtifact(
+      commit.sourcePath,
+      named: "diskImagePath",
+      in: bundleURL,
+      writable: true
+    )
+    let destinationURL = try macVirtualMachineBundleResolver.resolveArtifact(
+      commit.destinationPath,
+      named: "migrationDestinationPath",
+      in: bundleURL,
+      writable: true
+    )
+    guard sourceURL.standardizedFileURL == lease.machine.diskImageURL.standardizedFileURL else {
+      throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    let artifactInspector = FileVirtualMachineStorageArtifactInspector()
+    guard
+      try artifactInspector.inspect(at: sourceURL)
+        .refersToSameStableFile(as: commit.sourceIdentity),
+      try artifactInspector.inspect(at: destinationURL)
+        .refersToSameStableFile(as: commit.destinationIdentity)
+    else {
+      throw VirtualMachineDiskImageMigrationError.staleSource
+    }
+
+    manifest.markDiskImageMigrated(
+      to: commit.destinationPath,
+      format: commit.destinationFormat
+    )
+    try write(manifest, to: manifestURL(for: manifest.id))
+    return manifest
   }
 
   func createDraft(

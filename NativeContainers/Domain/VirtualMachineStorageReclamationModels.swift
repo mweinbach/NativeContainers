@@ -92,6 +92,23 @@ struct VirtualMachineStorageArtifactIdentity: Codable, Equatable, Sendable {
   let treeFingerprint: String
 }
 
+extension VirtualMachineStorageArtifactIdentity {
+  func refersToSameStableFile(
+    as other: VirtualMachineStorageArtifactIdentity
+  ) -> Bool {
+    device == other.device
+      && inode == other.inode
+      && fileType == other.fileType
+      && ownerUserID == other.ownerUserID
+      && linkCount == other.linkCount
+      && logicalBytes == other.logicalBytes
+      && allocatedBytes == other.allocatedBytes
+      && entryCount == other.entryCount
+      && modificationSeconds == other.modificationSeconds
+      && modificationNanoseconds == other.modificationNanoseconds
+  }
+}
+
 struct VirtualMachineSavedStateReclamationCandidate:
   Equatable,
   Sendable,

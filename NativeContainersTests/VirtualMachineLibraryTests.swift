@@ -480,6 +480,40 @@ struct VirtualMachineLibraryTests {
     replacementLease.release()
   }
 
+  @Test
+  func commitsASIFManifestOnlyForTheSealedRuntimeLeaseArtifacts() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let destinationPath = "Disk.asif"
+    let destinationURL = fixture.bundle.appending(path: destinationPath)
+    try Data("asif".utf8).write(to: destinationURL)
+    let inspector = FileVirtualMachineStorageArtifactInspector()
+    let sourceURL = fixture.bundle.appending(path: fixture.manifest.diskImagePath)
+    let lease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+    defer { lease.release() }
+
+    let updated = try await fixture.library.commitDiskImageMigration(
+      VirtualMachineDiskImageMigrationCommit(
+        sourcePath: fixture.manifest.diskImagePath,
+        destinationPath: destinationPath,
+        sourceFormat: .raw,
+        destinationFormat: .asif,
+        sourceIdentity: try inspector.inspect(at: sourceURL),
+        destinationIdentity: try inspector.inspect(at: destinationURL)
+      ),
+      for: lease
+    )
+
+    #expect(updated.diskImagePath == destinationPath)
+    #expect(updated.effectiveDiskImageFormat == .asif)
+    #expect(try await fixture.library.list() == [updated])
+    #expect(FileManager.default.fileExists(atPath: sourceURL.path))
+    #expect(FileManager.default.fileExists(atPath: destinationURL.path))
+  }
+
   private func installedLibraryFixture(
     root: URL
   ) throws -> (
