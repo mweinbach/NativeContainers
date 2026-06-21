@@ -283,7 +283,7 @@ struct FileVirtualMachineBundleSanitizer:
     where isTransient(entry.lastPathComponent)
       || (portability == .portable
         && entry.lastPathComponent
-          == FileMacVirtualMachineSharedDirectoryConfigurationStore.filename)
+          == FileVirtualMachineSharedDirectoryConfigurationStore.filename)
     {
       try fileManager.removeItem(at: entry)
     }

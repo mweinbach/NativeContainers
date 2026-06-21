@@ -1,61 +1,5 @@
 import Foundation
 
-protocol VirtualMachineSharedDirectoryNameValidating: Sendable {
-  func canonicalName(from proposedName: String) throws -> String
-  func validatePersistedName(_ name: String) throws
-}
-
-protocol VirtualMachineSharedDirectoryBookmarkCreating: Sendable {
-  func makeRecord(
-    request: VirtualMachineSharedDirectoryRequest,
-    canonicalGuestName: String
-  ) throws -> VirtualMachineSharedDirectory
-}
-
-protocol VirtualMachineSharedDirectoryBookmarkResolving: Sendable {
-  func resolve(
-    _ directories: [VirtualMachineSharedDirectory]
-  ) throws -> VirtualMachineSharedDirectoryAccess
-}
-
-protocol VirtualMachineSharedDirectoryBookmarking:
-  VirtualMachineSharedDirectoryBookmarkCreating,
-  VirtualMachineSharedDirectoryBookmarkResolving
-{}
-
-protocol VirtualMachineSharedDirectoryConfigurationStoring: Sendable {
-  func load(
-    from bundleURL: URL
-  ) throws -> VirtualMachineSharedDirectoryConfiguration
-
-  func save(
-    _ configuration: VirtualMachineSharedDirectoryConfiguration,
-    to bundleURL: URL
-  ) throws
-}
-
-typealias MacVirtualMachineSharedDirectoryNameValidating =
-  VirtualMachineSharedDirectoryNameValidating
-typealias MacVirtualMachineSharedDirectoryBookmarkCreating =
-  VirtualMachineSharedDirectoryBookmarkCreating
-typealias MacVirtualMachineSharedDirectoryBookmarkResolving =
-  VirtualMachineSharedDirectoryBookmarkResolving
-typealias MacVirtualMachineSharedDirectoryBookmarking =
-  VirtualMachineSharedDirectoryBookmarking
-typealias MacVirtualMachineSharedDirectoryConfigurationStoring =
-  VirtualMachineSharedDirectoryConfigurationStoring
-
-typealias LinuxVirtualMachineSharedDirectoryNameValidating =
-  VirtualMachineSharedDirectoryNameValidating
-typealias LinuxVirtualMachineSharedDirectoryBookmarkCreating =
-  VirtualMachineSharedDirectoryBookmarkCreating
-typealias LinuxVirtualMachineSharedDirectoryBookmarkResolving =
-  VirtualMachineSharedDirectoryBookmarkResolving
-typealias LinuxVirtualMachineSharedDirectoryBookmarking =
-  VirtualMachineSharedDirectoryBookmarking
-typealias LinuxVirtualMachineSharedDirectoryConfigurationStoring =
-  VirtualMachineSharedDirectoryConfigurationStoring
-
 protocol MacVirtualMachineSharedDirectoryPersisting: Sendable {
   func macOSSharedDirectoryConfiguration(
     id: UUID
@@ -69,22 +13,6 @@ protocol MacVirtualMachineSharedDirectoryPersisting: Sendable {
   func removeMacOSSharedDirectory(
     id: UUID,
     for lease: MacVirtualMachineRuntimeLease
-  ) async throws -> MacVirtualMachineSharedDirectoryConfiguration
-}
-
-protocol MacVirtualMachineSharedDirectoryManaging: Sendable {
-  func configuration(
-    id: UUID
-  ) async throws -> MacVirtualMachineSharedDirectoryConfiguration
-
-  func add(
-    to machineID: UUID,
-    request: MacVirtualMachineSharedDirectoryRequest
-  ) async throws -> MacVirtualMachineSharedDirectoryConfiguration
-
-  func remove(
-    from machineID: UUID,
-    sharedDirectoryID: UUID
   ) async throws -> MacVirtualMachineSharedDirectoryConfiguration
 }
 

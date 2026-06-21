@@ -3,34 +3,24 @@ import Observation
 
 @MainActor
 @Observable
-final class MacVirtualMachineSharedDirectoriesModel {
+final class VirtualMachineSharedDirectoriesModel {
   let machineID: UUID
 
-  private var configuration: MacVirtualMachineSharedDirectoryConfiguration
+  private(set) var directories: [VirtualMachineSharedDirectorySummary]
   private(set) var isLoading = false
   private(set) var isWorking = false
   private(set) var errorMessage: String?
 
-  private let service: any MacVirtualMachineSharedDirectoryManaging
+  private let service: any VirtualMachineSharedDirectoryManaging
 
   init(
     machineID: UUID,
-    initialConfiguration: MacVirtualMachineSharedDirectoryConfiguration = .empty,
-    service: any MacVirtualMachineSharedDirectoryManaging
+    initialConfiguration: VirtualMachineSharedDirectoryConfiguration = .empty,
+    service: any VirtualMachineSharedDirectoryManaging
   ) {
     self.machineID = machineID
-    self.configuration = initialConfiguration
     self.service = service
-  }
-
-  var directories: [MacVirtualMachineSharedDirectorySummary] {
-    configuration.directories.map(\.summary).sorted {
-      let comparison = $0.guestName.localizedStandardCompare($1.guestName)
-      if comparison != .orderedSame {
-        return comparison == .orderedAscending
-      }
-      return $0.id.uuidString < $1.id.uuidString
-    }
+    directories = Self.sortedSummaries(from: initialConfiguration)
   }
 
   func load() async {
@@ -39,7 +29,7 @@ final class MacVirtualMachineSharedDirectoriesModel {
     errorMessage = nil
     defer { isLoading = false }
     do {
-      configuration = try await service.configuration(id: machineID)
+      apply(try await service.configuration(id: machineID))
     } catch {
       errorMessage = error.localizedDescription
     }
@@ -53,7 +43,7 @@ final class MacVirtualMachineSharedDirectoriesModel {
     await mutate {
       try await self.service.add(
         to: self.machineID,
-        request: MacVirtualMachineSharedDirectoryRequest(
+        request: VirtualMachineSharedDirectoryRequest(
           sourceURL: sourceURL,
           guestName: guestName,
           readOnly: readOnly
@@ -82,18 +72,39 @@ final class MacVirtualMachineSharedDirectoriesModel {
   private func mutate(
     _ operation:
       @escaping @MainActor @Sendable ()
-      async throws -> MacVirtualMachineSharedDirectoryConfiguration
+      async throws -> VirtualMachineSharedDirectoryConfiguration
   ) async -> Bool {
     guard !isLoading, !isWorking else { return false }
     isWorking = true
     errorMessage = nil
     defer { isWorking = false }
     do {
-      configuration = try await operation()
+      apply(try await operation())
       return true
     } catch {
       errorMessage = error.localizedDescription
       return false
     }
   }
+
+  private func apply(_ configuration: VirtualMachineSharedDirectoryConfiguration) {
+    directories = Self.sortedSummaries(from: configuration)
+  }
+
+  private static func sortedSummaries(
+    from configuration: VirtualMachineSharedDirectoryConfiguration
+  ) -> [VirtualMachineSharedDirectorySummary] {
+    configuration.directories.map(\.summary).sorted {
+      let comparison = $0.guestName.localizedStandardCompare($1.guestName)
+      if comparison != .orderedSame {
+        return comparison == .orderedAscending
+      }
+      return $0.id.uuidString < $1.id.uuidString
+    }
+  }
 }
+
+typealias MacVirtualMachineSharedDirectoriesModel =
+  VirtualMachineSharedDirectoriesModel
+typealias LinuxVirtualMachineSharedDirectoriesModel =
+  VirtualMachineSharedDirectoriesModel

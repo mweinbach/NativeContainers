@@ -117,8 +117,7 @@ final class AppModel {
   private var macVirtualMachineRuntimeModels: [UUID: MacVirtualMachineRuntimeModel] = [:]
 
   @ObservationIgnored
-  private var linuxVirtualMachineRuntimeModels:
-    [UUID: LinuxVirtualMachineRuntimeModel] = [:]
+  private var linuxVirtualMachineRuntimeModels: [UUID: LinuxVirtualMachineRuntimeModel] = [:]
 
   @ObservationIgnored
   private var macVirtualMachineAudioModels: [UUID: MacVirtualMachineAudioModel] = [:]
@@ -129,6 +128,10 @@ final class AppModel {
   @ObservationIgnored
   private var macVirtualMachineSharedDirectoryModels:
     [UUID: MacVirtualMachineSharedDirectoriesModel] = [:]
+
+  @ObservationIgnored
+  private var linuxVirtualMachineSharedDirectoryModels:
+    [UUID: LinuxVirtualMachineSharedDirectoriesModel] = [:]
 
   @ObservationIgnored
   private var virtualMachineDiskImageMaintenanceModels:
@@ -206,6 +209,9 @@ final class AppModel {
       UnavailableMacVirtualMachineNetworkService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
+    linuxVirtualMachineSharedDirectories:
+      any LinuxVirtualMachineSharedDirectoryManaging =
+      UnavailableLinuxVirtualMachineSharedDirectoryService(),
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
@@ -245,6 +251,7 @@ final class AppModel {
         virtualMachineAudio: virtualMachineAudio,
         virtualMachineNetwork: virtualMachineNetwork,
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
+        linuxVirtualMachineSharedDirectories: linuxVirtualMachineSharedDirectories,
         virtualMachineDiskImages: virtualMachineDiskImages,
         virtualMachineAvailability: virtualMachineAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
@@ -835,6 +842,20 @@ final class AppModel {
     return model
   }
 
+  func makeLinuxVirtualMachineSharedDirectoriesModel(
+    for machine: VirtualMachineManifest
+  ) -> LinuxVirtualMachineSharedDirectoriesModel {
+    if let model = linuxVirtualMachineSharedDirectoryModels[machine.id] {
+      return model
+    }
+    let model = LinuxVirtualMachineSharedDirectoriesModel(
+      machineID: machine.id,
+      service: services.linuxVirtualMachineSharedDirectories
+    )
+    linuxVirtualMachineSharedDirectoryModels[machine.id] = model
+    return model
+  }
+
   private func publishVirtualMachineManifest(
     _ manifest: VirtualMachineManifest
   ) {
@@ -870,6 +891,10 @@ final class AppModel {
     for identifier in Array(macVirtualMachineSharedDirectoryModels.keys)
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineSharedDirectoryModels.removeValue(forKey: identifier)
+    }
+    for identifier in Array(linuxVirtualMachineSharedDirectoryModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      linuxVirtualMachineSharedDirectoryModels.removeValue(forKey: identifier)
     }
     for identifier in Array(virtualMachineDiskImageMaintenanceModels.keys)
     where !currentIdentifiers.contains(identifier) {

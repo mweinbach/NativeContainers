@@ -85,6 +85,7 @@ actor VirtualMachineLibrary:
   LinuxVirtualMachineRuntimeLeasing,
   LinuxVirtualMachineInstallationCompleting,
   MacVirtualMachineSharedDirectoryPersisting,
+  LinuxVirtualMachineSharedDirectoryPersisting,
   MacVirtualMachineAudioConfigurationPersisting,
   MacVirtualMachineNetworkConfigurationPersisting,
   VirtualMachineDiskImageReplacementStoring
@@ -124,8 +125,8 @@ actor VirtualMachineLibrary:
   private let linuxPlatformArtifactPreparer: any LinuxPlatformArtifactPreparing
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
   private let linuxVirtualMachineBundleResolver: any LinuxVirtualMachineBundleResolving
-  private let sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring
-  private let sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating
+  private let sharedDirectoryStore: any VirtualMachineSharedDirectoryConfigurationStoring
+  private let sharedDirectoryNameValidator: any VirtualMachineSharedDirectoryNameValidating
   private var operationLockLease: AdvisoryFileLockLease?
   private var operationAccessTokens = Set<UUID>()
   private var installationOperationIDs = Set<UUID>()
@@ -141,10 +142,10 @@ actor VirtualMachineLibrary:
       LinuxPlatformArtifactPreparer(),
     macMachineIdentifierValidator: any MacVirtualMachineIdentifierValidating =
       AppleMacVirtualMachineIdentifierGenerator(),
-    sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring =
-      FileMacVirtualMachineSharedDirectoryConfigurationStore(),
-    sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating =
-      AppleMacVirtualMachineSharedDirectoryNameValidator()
+    sharedDirectoryStore: any VirtualMachineSharedDirectoryConfigurationStoring =
+      FileVirtualMachineSharedDirectoryConfigurationStore(),
+    sharedDirectoryNameValidator: any VirtualMachineSharedDirectoryNameValidating =
+      AppleVirtualMachineSharedDirectoryNameValidator()
   ) {
     let resolvedRootURL =
       rootURL
@@ -319,9 +320,14 @@ actor VirtualMachineLibrary:
     id: UUID
   ) throws -> MacVirtualMachineSharedDirectoryConfiguration {
     let manifest = try installationManifest(id: id)
-    let bundleURL = bundleStore.bundleURL(for: manifest.id)
-    try bundleStore.requireDirectory(bundleURL)
-    return try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
+    return try sharedDirectoryConfiguration(for: manifest)
+  }
+
+  func linuxSharedDirectoryConfiguration(
+    id: UUID
+  ) throws -> LinuxVirtualMachineSharedDirectoryConfiguration {
+    let manifest = try linuxRuntimeManifest(id: id)
+    return try sharedDirectoryConfiguration(for: manifest)
   }
 
   func addMacOSSharedDirectory(
@@ -331,37 +337,23 @@ actor VirtualMachineLibrary:
     let borrow = try lease.borrow()
     defer { borrow.release() }
     let bundleURL = try requireConfigurationMutationLease(lease)
-    var current = try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
+    let current = try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
+    let updated = try addingSharedDirectory(directory, to: current)
+    try sharedDirectoryStore.save(updated, to: bundleURL)
+    return updated
+  }
 
-    try sharedDirectoryNameValidator.validatePersistedName(directory.guestName)
-    let normalizedName = MacVirtualMachineSharedDirectoryNameNormalizer.normalized(
-      directory.guestName
-    )
-    guard
-      !current.directories.contains(where: {
-        MacVirtualMachineSharedDirectoryNameNormalizer.normalized($0.guestName)
-          == normalizedName
-      })
-    else {
-      throw MacVirtualMachineSharedDirectoryError.duplicateName(
-        directory.guestName
-      )
-    }
-    guard !current.directories.contains(where: { $0.id == directory.id }) else {
-      throw MacVirtualMachineSharedDirectoryError.invalidStore(
-        "the shared-folder identifier already exists"
-      )
-    }
-    guard current.revision < UInt64.max else {
-      throw MacVirtualMachineSharedDirectoryError.configurationRevisionOverflow
-    }
-
-    current = MacVirtualMachineSharedDirectoryConfiguration(
-      revision: current.revision + 1,
-      directories: current.directories + [directory]
-    )
-    try sharedDirectoryStore.save(current, to: bundleURL)
-    return current
+  func addLinuxSharedDirectory(
+    _ directory: LinuxVirtualMachineSharedDirectory,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) throws -> LinuxVirtualMachineSharedDirectoryConfiguration {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    let current = try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
+    let updated = try addingSharedDirectory(directory, to: current)
+    try sharedDirectoryStore.save(updated, to: bundleURL)
+    return updated
   }
 
   func removeMacOSSharedDirectory(
@@ -372,19 +364,78 @@ actor VirtualMachineLibrary:
     defer { borrow.release() }
     let bundleURL = try requireConfigurationMutationLease(lease)
     let current = try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
-    guard current.directories.contains(where: { $0.id == id }) else {
-      throw MacVirtualMachineSharedDirectoryError.sharedDirectoryNotFound(id)
+    let updated = try removingSharedDirectory(id: id, from: current)
+    try sharedDirectoryStore.save(updated, to: bundleURL)
+    return updated
+  }
+
+  func removeLinuxSharedDirectory(
+    id: UUID,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) throws -> LinuxVirtualMachineSharedDirectoryConfiguration {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    let current = try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
+    let updated = try removingSharedDirectory(id: id, from: current)
+    try sharedDirectoryStore.save(updated, to: bundleURL)
+    return updated
+  }
+
+  private func sharedDirectoryConfiguration(
+    for manifest: VirtualMachineManifest
+  ) throws -> VirtualMachineSharedDirectoryConfiguration {
+    let bundleURL = bundleStore.bundleURL(for: manifest.id)
+    try bundleStore.requireDirectory(bundleURL)
+    return try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
+  }
+
+  private func addingSharedDirectory(
+    _ directory: VirtualMachineSharedDirectory,
+    to current: VirtualMachineSharedDirectoryConfiguration
+  ) throws -> VirtualMachineSharedDirectoryConfiguration {
+    try sharedDirectoryNameValidator.validatePersistedName(directory.guestName)
+    let normalizedName = VirtualMachineSharedDirectoryNameNormalizer.normalized(
+      directory.guestName
+    )
+    guard
+      !current.directories.contains(where: {
+        VirtualMachineSharedDirectoryNameNormalizer.normalized($0.guestName)
+          == normalizedName
+      })
+    else {
+      throw VirtualMachineSharedDirectoryError.duplicateName(directory.guestName)
+    }
+    guard !current.directories.contains(where: { $0.id == directory.id }) else {
+      throw VirtualMachineSharedDirectoryError.invalidStore(
+        "the shared-folder identifier already exists"
+      )
     }
     guard current.revision < UInt64.max else {
-      throw MacVirtualMachineSharedDirectoryError.configurationRevisionOverflow
+      throw VirtualMachineSharedDirectoryError.configurationRevisionOverflow
     }
 
-    let updated = MacVirtualMachineSharedDirectoryConfiguration(
+    return VirtualMachineSharedDirectoryConfiguration(
+      revision: current.revision + 1,
+      directories: current.directories + [directory]
+    )
+  }
+
+  private func removingSharedDirectory(
+    id: UUID,
+    from current: VirtualMachineSharedDirectoryConfiguration
+  ) throws -> VirtualMachineSharedDirectoryConfiguration {
+    guard current.directories.contains(where: { $0.id == id }) else {
+      throw VirtualMachineSharedDirectoryError.sharedDirectoryNotFound(id)
+    }
+    guard current.revision < UInt64.max else {
+      throw VirtualMachineSharedDirectoryError.configurationRevisionOverflow
+    }
+
+    return VirtualMachineSharedDirectoryConfiguration(
       revision: current.revision + 1,
       directories: current.directories.filter { $0.id != id }
     )
-    try sharedDirectoryStore.save(updated, to: bundleURL)
-    return updated
   }
 
   func commitDiskImageReplacement(
@@ -957,7 +1008,18 @@ actor VirtualMachineLibrary:
     }
 
     do {
-      let machine = try linuxVirtualMachineBundleResolver.resolve(manifest)
+      let resolvedMachine = try linuxVirtualMachineBundleResolver.resolve(manifest)
+      let machine = ResolvedLinuxVirtualMachine(
+        manifest: resolvedMachine.manifest,
+        bundleURL: resolvedMachine.bundleURL,
+        diskImageURL: resolvedMachine.diskImageURL,
+        efiVariableStoreURL: resolvedMachine.efiVariableStoreURL,
+        machineIdentifierURL: resolvedMachine.machineIdentifierURL,
+        installationMediaURL: resolvedMachine.installationMediaURL,
+        sharedDirectories: try bundleValidator.sharedDirectoryConfiguration(
+          in: resolvedMachine.bundleURL
+        )
+      )
       let target = LinuxVirtualMachineRuntimeTarget(machineID: id, generation: UUID())
       let ownerURL = try writeRuntimeOwner(for: target, in: machine.bundleURL)
       let fileManager = fileManager
@@ -1352,6 +1414,23 @@ actor VirtualMachineLibrary:
       lease.machine.manifest.id == manifest.id
     else {
       throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+    try bundleStore.requireDirectory(bundleURL)
+    return bundleURL
+  }
+
+  private func requireConfigurationMutationLease(
+    _ lease: LinuxVirtualMachineRuntimeLease
+  ) throws -> URL {
+    let manifest = try linuxRuntimeManifest(id: lease.target.machineID)
+    guard manifest.installState == .readyToInstall || manifest.installState == .stopped else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+    let bundleURL = bundleStore.bundleURL(for: manifest.id).standardizedFileURL
+    guard bundleURL == lease.machine.bundleURL.standardizedFileURL,
+      lease.machine.manifest.id == manifest.id
+    else {
+      throw LinuxVirtualMachineRuntimeError.staleTarget(lease.target)
     }
     try bundleStore.requireDirectory(bundleURL)
     return bundleURL

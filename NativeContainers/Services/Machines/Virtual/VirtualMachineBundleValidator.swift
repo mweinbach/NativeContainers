@@ -5,16 +5,16 @@ struct VirtualMachineBundleValidator {
   private let fileManager: FileManager
   private let resolver: any MacVirtualMachineBundleResolving
   private let machineIdentifierValidator: any MacVirtualMachineIdentifierValidating
-  private let sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring
-  private let sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating
+  private let sharedDirectoryStore: any VirtualMachineSharedDirectoryConfigurationStoring
+  private let sharedDirectoryNameValidator: any VirtualMachineSharedDirectoryNameValidating
 
   init(
     bundleStore: VirtualMachineBundleStore,
     fileManager: FileManager,
     resolver: any MacVirtualMachineBundleResolving,
     machineIdentifierValidator: any MacVirtualMachineIdentifierValidating,
-    sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring,
-    sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating
+    sharedDirectoryStore: any VirtualMachineSharedDirectoryConfigurationStoring,
+    sharedDirectoryNameValidator: any VirtualMachineSharedDirectoryNameValidating
   ) {
     self.bundleStore = bundleStore
     self.fileManager = fileManager
@@ -76,7 +76,7 @@ struct VirtualMachineBundleValidator {
 
   func sharedDirectoryConfiguration(
     in bundleURL: URL
-  ) throws -> MacVirtualMachineSharedDirectoryConfiguration {
+  ) throws -> VirtualMachineSharedDirectoryConfiguration {
     let configuration = try sharedDirectoryStore.load(from: bundleURL)
     for directory in configuration.directories {
       try sharedDirectoryNameValidator.validatePersistedName(
@@ -147,7 +147,7 @@ struct VirtualMachineBundleValidator {
       _ = try sharedDirectoryConfiguration(in: bundleURL)
     } else {
       let sharedDirectoriesURL = bundleURL.appending(
-        path: FileMacVirtualMachineSharedDirectoryConfigurationStore.filename
+        path: FileVirtualMachineSharedDirectoryConfigurationStore.filename
       )
       guard !fileManager.fileExists(atPath: sharedDirectoriesURL.path) else {
         throw VirtualMachineBundleError.invalidBundle(

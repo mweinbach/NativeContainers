@@ -137,6 +137,49 @@ struct LinuxVirtualMachineLibraryTests {
     }
   }
 
+  @Test
+  func linuxRuntimeLeasePersistsAndReloadsSharedDirectories() async throws {
+    let fixture = try LinuxLibraryFixture()
+    defer { fixture.remove() }
+    let library = VirtualMachineLibrary(
+      rootURL: fixture.root,
+      linuxPlatformArtifactPreparer: TestLinuxPlatformArtifactPreparer(
+        behavior: .success
+      )
+    )
+    let draft = try await library.createDraft(
+      name: "Shared Linux",
+      guest: .linux,
+      resources: fixture.resources
+    )
+    _ = try await library.prepareLinuxVM(
+      id: draft.id,
+      installationMediaURL: fixture.installationMedia
+    )
+    let directory = LinuxVirtualMachineSharedDirectory(
+      id: UUID(),
+      guestName: "Projects",
+      bookmarkData: Data("bookmark".utf8),
+      lastKnownPath: "/tmp/Projects",
+      sourceIdentity: .init(device: 1, inode: 2),
+      readOnly: false
+    )
+
+    let firstLease = try await library.acquireLinuxRuntime(id: draft.id)
+    let configuration = try await library.addLinuxSharedDirectory(
+      directory,
+      for: firstLease
+    )
+    firstLease.release()
+
+    let secondLease = try await library.acquireLinuxRuntime(id: draft.id)
+    defer { secondLease.release() }
+
+    #expect(configuration.revision == 1)
+    #expect(configuration.directories == [directory])
+    #expect(secondLease.machine.sharedDirectories == configuration)
+  }
+
   private func expectNoPartialDirectories(in bundleURL: URL) throws {
     let entries = try FileManager.default.contentsOfDirectory(
       at: bundleURL,

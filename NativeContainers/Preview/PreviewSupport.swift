@@ -252,6 +252,7 @@ extension AppModel {
       virtualMachineAudio: PreviewMacVirtualMachineAudioService(),
       virtualMachineNetwork: PreviewMacVirtualMachineNetworkService(),
       virtualMachineSharedDirectories: sharedDirectories,
+      linuxVirtualMachineSharedDirectories: sharedDirectories,
       initialInventory: inventory,
       initialVirtualMachines: [macVM, linuxVM]
     )

@@ -1,10 +1,31 @@
 import Foundation
 @preconcurrency import Virtualization
 
+struct AppleLinuxVirtualMachineRuntimeConfiguration {
+  let configuration: VZVirtualMachineConfiguration
+  let sharedDirectoryAccess: LinuxVirtualMachineSharedDirectoryAccess
+}
+
 @MainActor
 struct AppleLinuxVirtualMachineConfigurationFactory {
   static let defaultDisplayWidth = 1_280
   static let defaultDisplayHeight = 800
+
+  private let sharedDirectoryBookmarkService:
+    any LinuxVirtualMachineSharedDirectoryBookmarkResolving
+  private let sharedDirectoryDeviceFactory: AppleLinuxVirtualMachineSharedDirectoryDeviceFactory
+
+  init(
+    sharedDirectoryBookmarkService:
+      any LinuxVirtualMachineSharedDirectoryBookmarkResolving =
+      LinuxVirtualMachineSharedDirectoryBookmarkService(),
+    sharedDirectoryDeviceFactory:
+      AppleLinuxVirtualMachineSharedDirectoryDeviceFactory =
+      AppleLinuxVirtualMachineSharedDirectoryDeviceFactory()
+  ) {
+    self.sharedDirectoryBookmarkService = sharedDirectoryBookmarkService
+    self.sharedDirectoryDeviceFactory = sharedDirectoryDeviceFactory
+  }
 
   func makeConfiguration(
     for machine: ResolvedLinuxVirtualMachine
@@ -108,6 +129,30 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
       )
     }
     return configuration
+  }
+
+  func makeRuntimeConfiguration(
+    for machine: ResolvedLinuxVirtualMachine
+  ) throws -> AppleLinuxVirtualMachineRuntimeConfiguration {
+    let configuration = try makeConfiguration(for: machine)
+    let sharedDirectoryAccess = try sharedDirectoryBookmarkService.resolve(
+      machine.sharedDirectories.directories
+    )
+    do {
+      if let directorySharingDevice = try sharedDirectoryDeviceFactory.makeDevice(
+        for: sharedDirectoryAccess.directories
+      ) {
+        configuration.directorySharingDevices = [directorySharingDevice]
+        try configuration.validate()
+      }
+      return AppleLinuxVirtualMachineRuntimeConfiguration(
+        configuration: configuration,
+        sharedDirectoryAccess: sharedDirectoryAccess
+      )
+    } catch {
+      sharedDirectoryAccess.release()
+      throw error
+    }
   }
 
   private func makeSpiceConsole() -> VZVirtioConsoleDeviceConfiguration {

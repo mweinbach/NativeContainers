@@ -33,6 +33,25 @@ struct ResolvedLinuxVirtualMachine: Sendable {
   let efiVariableStoreURL: URL
   let machineIdentifierURL: URL
   let installationMediaURL: URL?
+  let sharedDirectories: LinuxVirtualMachineSharedDirectoryConfiguration
+
+  init(
+    manifest: VirtualMachineManifest,
+    bundleURL: URL,
+    diskImageURL: URL,
+    efiVariableStoreURL: URL,
+    machineIdentifierURL: URL,
+    installationMediaURL: URL?,
+    sharedDirectories: LinuxVirtualMachineSharedDirectoryConfiguration = .empty
+  ) {
+    self.manifest = manifest
+    self.bundleURL = bundleURL
+    self.diskImageURL = diskImageURL
+    self.efiVariableStoreURL = efiVariableStoreURL
+    self.machineIdentifierURL = machineIdentifierURL
+    self.installationMediaURL = installationMediaURL
+    self.sharedDirectories = sharedDirectories
+  }
 }
 
 enum LinuxVirtualMachineError: LocalizedError, Equatable {

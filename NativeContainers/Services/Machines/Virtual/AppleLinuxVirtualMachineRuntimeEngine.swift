@@ -19,12 +19,17 @@ final class AppleLinuxVirtualMachineRuntimeEngine: LinuxVirtualMachineRuntimeEng
     guard machine.manifest.id == target.machineID else {
       throw LinuxVirtualMachineRuntimeError.staleTarget(target)
     }
-    let configuration = try configurationFactory.makeConfiguration(for: machine)
-    let virtualMachine = VZVirtualMachine(configuration: configuration)
+    let runtimeConfiguration = try configurationFactory.makeRuntimeConfiguration(
+      for: machine
+    )
+    let virtualMachine = VZVirtualMachine(
+      configuration: runtimeConfiguration.configuration
+    )
     return AppleLinuxVirtualMachineRuntimeSession(
       target: target,
       virtualMachine: virtualMachine,
-      hasInstallationMedia: machine.installationMediaURL != nil
+      hasInstallationMedia: machine.installationMediaURL != nil,
+      sharedDirectoryAccess: runtimeConfiguration.sharedDirectoryAccess
     )
   }
 }
@@ -41,15 +46,18 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
   var eventHandler: LinuxVirtualMachineRuntimeEventHandler?
 
   private let virtualMachine: VZVirtualMachine
+  private let sharedDirectoryAccess: LinuxVirtualMachineSharedDirectoryAccess
 
   init(
     target: LinuxVirtualMachineRuntimeTarget,
     virtualMachine: VZVirtualMachine,
-    hasInstallationMedia: Bool
+    hasInstallationMedia: Bool,
+    sharedDirectoryAccess: LinuxVirtualMachineSharedDirectoryAccess
   ) {
     self.target = target
     self.virtualMachine = virtualMachine
     self.hasInstallationMedia = hasInstallationMedia
+    self.sharedDirectoryAccess = sharedDirectoryAccess
     console = LinuxVirtualMachineConsole(
       target: target,
       virtualMachine: virtualMachine
@@ -153,6 +161,7 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
   func close() {
     eventHandler = nil
     virtualMachine.delegate = nil
+    sharedDirectoryAccess.release()
   }
 
   func guestDidStop(_ virtualMachine: VZVirtualMachine) {

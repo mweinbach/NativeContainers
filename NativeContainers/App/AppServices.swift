@@ -59,6 +59,7 @@ struct AppServices: Sendable {
   let virtualMachineAudio: any MacVirtualMachineAudioManaging
   let virtualMachineNetwork: any MacVirtualMachineNetworkManaging
   let virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging
+  let linuxVirtualMachineSharedDirectories: any LinuxVirtualMachineSharedDirectoryManaging
   let virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices
   let virtualMachineAvailability: any MacVirtualMachineAvailabilityChecking
   let restoreImageDiscovery: any MacRestoreImageDiscovering
@@ -124,6 +125,9 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineNetworkService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
+    linuxVirtualMachineSharedDirectories:
+      any LinuxVirtualMachineSharedDirectoryManaging =
+      UnavailableLinuxVirtualMachineSharedDirectoryService(),
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
@@ -176,6 +180,7 @@ struct AppServices: Sendable {
     self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineNetwork = virtualMachineNetwork
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
+    self.linuxVirtualMachineSharedDirectories = linuxVirtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
@@ -231,6 +236,9 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineNetworkService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
+    linuxVirtualMachineSharedDirectories:
+      any LinuxVirtualMachineSharedDirectoryManaging =
+      UnavailableLinuxVirtualMachineSharedDirectoryService(),
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
@@ -283,6 +291,7 @@ struct AppServices: Sendable {
     self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineNetwork = virtualMachineNetwork
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
+    self.linuxVirtualMachineSharedDirectories = linuxVirtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
@@ -522,6 +531,11 @@ enum AppCompositionRoot {
       persistence: virtualMachineLibrary,
       savedStateService: virtualMachineSavedState
     )
+    let linuxVirtualMachineSharedDirectories =
+      LinuxVirtualMachineSharedDirectoryService(
+        leasingStore: virtualMachineLibrary,
+        persistence: virtualMachineLibrary
+      )
     let socktainerInstaller = SocktainerInstallService()
     let socktainerProcess = SocktainerProcessService()
     let dockerCompatibility = DockerCompatibilityService(
@@ -612,6 +626,7 @@ enum AppCompositionRoot {
       virtualMachineAudio: virtualMachineAudio,
       virtualMachineNetwork: virtualMachineNetwork,
       virtualMachineSharedDirectories: virtualMachineSharedDirectories,
+      linuxVirtualMachineSharedDirectories: linuxVirtualMachineSharedDirectories,
       virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(
         migration: virtualMachineDiskImageMigration,
         rewrite: virtualMachineDiskImageRewrite,

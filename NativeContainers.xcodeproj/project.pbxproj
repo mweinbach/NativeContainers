@@ -104,6 +104,10 @@
 		1F5E642F2FE88B7200A430FF /* LinuxVirtualMachineRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E642E2FE88B7200A430FF /* LinuxVirtualMachineRow.swift */; };
 		1F5E64312FE88B7C00A430FF /* LinuxVirtualMachineConfigurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64302FE88B7C00A430FF /* LinuxVirtualMachineConfigurationView.swift */; };
 		1F5E64332FE88B8900A430FF /* LinuxVirtualMachineRuntimeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64322FE88B8900A430FF /* LinuxVirtualMachineRuntimeView.swift */; };
+		1F5E64352FE88F6600A430FF /* LinuxVirtualMachineSharedDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64342FE88F6600A430FF /* LinuxVirtualMachineSharedDirectoryService.swift */; };
+		1F5E64372FE88FB300A430FF /* LinuxVirtualMachineSharedDirectoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64362FE88FB300A430FF /* LinuxVirtualMachineSharedDirectoryServiceTests.swift */; };
+		1F5E64392FE8907500A430FF /* LinuxVirtualMachineSharedDirectoriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64382FE8907500A430FF /* LinuxVirtualMachineSharedDirectoriesView.swift */; };
+		1F5E643B2FE8912A00A430FF /* VirtualMachineSharedDirectoryProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E643A2FE8912A00A430FF /* VirtualMachineSharedDirectoryProtocols.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -235,7 +239,7 @@
 		1F9D2BCA2FE7BD260076F5B9 /* VirtualMachineSharedDirectoryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC92FE7BD260076F5B9 /* VirtualMachineSharedDirectoryModels.swift */; };
 		1F9D2BCC2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BCB2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift */; };
 		1F9D2BCE2FE7BD530076F5B9 /* AppleVirtualMachineSharedDirectoryDeviceFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BCD2FE7BD530076F5B9 /* AppleVirtualMachineSharedDirectoryDeviceFactory.swift */; };
-		1F9D2BD02FE7BD880076F5B9 /* MacVirtualMachineSharedDirectoriesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BCF2FE7BD880076F5B9 /* MacVirtualMachineSharedDirectoriesModel.swift */; };
+		1F9D2BD02FE7BD880076F5B9 /* VirtualMachineSharedDirectoriesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BCF2FE7BD880076F5B9 /* VirtualMachineSharedDirectoriesModel.swift */; };
 		1F9D2BD22FE7BDF90076F5B9 /* VirtualMachineSharedDirectoryBookmarkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD12FE7BDF90076F5B9 /* VirtualMachineSharedDirectoryBookmarkService.swift */; };
 		1F9D2BD42FE7BE010076F5B9 /* FileVirtualMachineSharedDirectoryConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD32FE7BE010076F5B9 /* FileVirtualMachineSharedDirectoryConfigurationStore.swift */; };
 		1F9D2BD62FE7BE380076F5B9 /* MacVirtualMachineSharedDirectoriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BD52FE7BE380076F5B9 /* MacVirtualMachineSharedDirectoriesView.swift */; };
@@ -637,6 +641,10 @@
 		1F5E642E2FE88B7200A430FF /* LinuxVirtualMachineRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineRow.swift; sourceTree = "<group>"; };
 		1F5E64302FE88B7C00A430FF /* LinuxVirtualMachineConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineConfigurationView.swift; sourceTree = "<group>"; };
 		1F5E64322FE88B8900A430FF /* LinuxVirtualMachineRuntimeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineRuntimeView.swift; sourceTree = "<group>"; };
+		1F5E64342FE88F6600A430FF /* LinuxVirtualMachineSharedDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineSharedDirectoryService.swift; sourceTree = "<group>"; };
+		1F5E64362FE88FB300A430FF /* LinuxVirtualMachineSharedDirectoryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineSharedDirectoryServiceTests.swift; sourceTree = "<group>"; };
+		1F5E64382FE8907500A430FF /* LinuxVirtualMachineSharedDirectoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineSharedDirectoriesView.swift; sourceTree = "<group>"; };
+		1F5E643A2FE8912A00A430FF /* VirtualMachineSharedDirectoryProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineSharedDirectoryProtocols.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -764,7 +772,7 @@
 		1F9D2BC92FE7BD260076F5B9 /* VirtualMachineSharedDirectoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineSharedDirectoryModels.swift; sourceTree = "<group>"; };
 		1F9D2BCB2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSharedDirectoryService.swift; sourceTree = "<group>"; };
 		1F9D2BCD2FE7BD530076F5B9 /* AppleVirtualMachineSharedDirectoryDeviceFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineSharedDirectoryDeviceFactory.swift; sourceTree = "<group>"; };
-		1F9D2BCF2FE7BD880076F5B9 /* MacVirtualMachineSharedDirectoriesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSharedDirectoriesModel.swift; sourceTree = "<group>"; };
+		1F9D2BCF2FE7BD880076F5B9 /* VirtualMachineSharedDirectoriesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineSharedDirectoriesModel.swift; sourceTree = "<group>"; };
 		1F9D2BD12FE7BDF90076F5B9 /* VirtualMachineSharedDirectoryBookmarkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineSharedDirectoryBookmarkService.swift; sourceTree = "<group>"; };
 		1F9D2BD32FE7BE010076F5B9 /* FileVirtualMachineSharedDirectoryConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileVirtualMachineSharedDirectoryConfigurationStore.swift; sourceTree = "<group>"; };
 		1F9D2BD52FE7BE380076F5B9 /* MacVirtualMachineSharedDirectoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSharedDirectoriesView.swift; sourceTree = "<group>"; };
@@ -1134,6 +1142,7 @@
 				1F5E642E2FE88B7200A430FF /* LinuxVirtualMachineRow.swift */,
 				1F5E64302FE88B7C00A430FF /* LinuxVirtualMachineConfigurationView.swift */,
 				1F5E64322FE88B8900A430FF /* LinuxVirtualMachineRuntimeView.swift */,
+				1F5E64382FE8907500A430FF /* LinuxVirtualMachineSharedDirectoriesView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1432,6 +1441,8 @@
 				1F5E64222FE88A3500A430FF /* LinuxVirtualMachineRuntimeObservations.swift */,
 				1F5E64242FE88A7900A430FF /* LinuxVirtualMachineRuntimeService.swift */,
 				1F5E642A2FE88AEB00A430FF /* LinuxVirtualMachineCreationService.swift */,
+				1F5E64342FE88F6600A430FF /* LinuxVirtualMachineSharedDirectoryService.swift */,
+				1F5E643A2FE8912A00A430FF /* VirtualMachineSharedDirectoryProtocols.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -1720,6 +1731,7 @@
 				1F5E641A2FE889D200A430FF /* LinuxVirtualMachineRuntimeOwnershipStoreTests.swift */,
 				1F5E64262FE88AAF00A430FF /* LinuxVirtualMachineRuntimeServiceTests.swift */,
 				1F5E642C2FE88B2800A430FF /* LinuxVirtualMachineCreationServiceTests.swift */,
+				1F5E64362FE88FB300A430FF /* LinuxVirtualMachineSharedDirectoryServiceTests.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -1877,7 +1889,7 @@
 				1F9D2B872FE7A1440076F5B9 /* MacVirtualMachineInstallationModel.swift */,
 				1F9D2BAD2FE7AB360076F5B9 /* MacVirtualMachineRuntimeModel.swift */,
 				1F9D2BC32FE7B7100076F5B9 /* WorkspaceNavigationModel.swift */,
-				1F9D2BCF2FE7BD880076F5B9 /* MacVirtualMachineSharedDirectoriesModel.swift */,
+				1F9D2BCF2FE7BD880076F5B9 /* VirtualMachineSharedDirectoriesModel.swift */,
 				1F9D2BF12FE7C4E40076F5B9 /* DockerCompatibilityModel.swift */,
 				1F9D2C2C2FE7DD9F0076F5B9 /* AppOwnedBuildCacheModel.swift */,
 				1F9D2C442FE7E81D0076F5B9 /* ComposeProjectWorkspaceModel.swift */,
@@ -2177,6 +2189,7 @@
 				1F9D2C1C2FE7D3150076F5B9 /* DockerComposeClientInstallServiceTests.swift in Sources */,
 				1F9D2BEA2FE7C3A20076F5B9 /* DockerContextServiceTests.swift in Sources */,
 				1F5E63FF2FE883AE00A430FF /* MacVirtualMachineNetworkModelTests.swift in Sources */,
+				1F5E64372FE88FB300A430FF /* LinuxVirtualMachineSharedDirectoryServiceTests.swift in Sources */,
 				1F5E63A92FE8616300A430FF /* ContainerToolsModelTests.swift in Sources */,
 				1FEC46D12FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift in Sources */,
 				1F9D2ACF2FE754CA0076F5B9 /* InfrastructureManagementTests.swift in Sources */,
@@ -2325,6 +2338,7 @@
 				1F9D2B092FE769800076F5B9 /* ApplePublishedSocketWorkspace.swift in Sources */,
 				1F9D2CC22FE80D080076F5B9 /* RestoreImageCacheReclamationService.swift in Sources */,
 				1F9D2C2D2FE7DD9F0076F5B9 /* AppOwnedBuildCacheModel.swift in Sources */,
+				1F5E64352FE88F6600A430FF /* LinuxVirtualMachineSharedDirectoryService.swift in Sources */,
 				1F9D2AD12FE7564A0076F5B9 /* AppleInfrastructureClient.swift in Sources */,
 				1FEC46D72FE8237500DC60B2 /* VirtualMachineDiskImageMigrationService.swift in Sources */,
 				1F9D2ADD2FE7600F0076F5B9 /* AppleInfrastructureService.swift in Sources */,
@@ -2342,6 +2356,7 @@
 				97A0664149C8957C65DD1674 /* ContainerToolModels.swift in Sources */,
 				1F9D2B272FE771840076F5B9 /* ImageBuildsView.swift in Sources */,
 				1FEC475A2FE849FA00DC60B2 /* LaunchAtLoginModel.swift in Sources */,
+				1F5E643B2FE8912A00A430FF /* VirtualMachineSharedDirectoryProtocols.swift in Sources */,
 				1F9D2B232FE770E70076F5B9 /* ContainerBuilderManagementModel.swift in Sources */,
 				1F5E63932FE8539300A430FF /* AppExecutionContext.swift in Sources */,
 				1F9D2BDC2FE7C30F0076F5B9 /* DockerCompatibilityModels.swift in Sources */,
@@ -2401,7 +2416,7 @@
 				1FEC47022FE831A300DC60B2 /* BuildContextFingerprint.swift in Sources */,
 				1F9D2B902FE7A1700076F5B9 /* MacVirtualMachineInstallationView.swift in Sources */,
 				1F9D2AE12FE760790076F5B9 /* AppServices.swift in Sources */,
-				1F9D2BD02FE7BD880076F5B9 /* MacVirtualMachineSharedDirectoriesModel.swift in Sources */,
+				1F9D2BD02FE7BD880076F5B9 /* VirtualMachineSharedDirectoriesModel.swift in Sources */,
 				1F5E64332FE88B8900A430FF /* LinuxVirtualMachineRuntimeView.swift in Sources */,
 				1F9D2B3F2FE77B840076F5B9 /* ImageBuildHistoryView.swift in Sources */,
 				21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */,
@@ -2435,6 +2450,7 @@
 				6D997CBC0773804955C7F048 /* NativeContainersApp.swift in Sources */,
 				1F9D2BCC2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift in Sources */,
 				1F5E63992FE85C9300A430FF /* AppNotificationService.swift in Sources */,
+				1F5E64392FE8907500A430FF /* LinuxVirtualMachineSharedDirectoriesView.swift in Sources */,
 				1F9D2B1D2FE770390076F5B9 /* ContainerBuilderSnapshotAdapter.swift in Sources */,
 				1F5E63D92FE87C0000A430FF /* MacVirtualMachineAudioModels.swift in Sources */,
 				1F5E64312FE88B7C00A430FF /* LinuxVirtualMachineConfigurationView.swift in Sources */,

@@ -112,6 +112,50 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
   }
 
   @Test
+  func runtimeConfigurationAttachesResolvedVirtioFSShare() async throws {
+    let fixture = try LinuxConfigurationFixture()
+    defer { fixture.remove() }
+    let prepared = try await fixture.prepare()
+    let machine = try LinuxVirtualMachineBundleResolver(
+      rootURL: fixture.root
+    ).resolve(prepared)
+    let source = fixture.root.appending(
+      path: "Shared",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: source,
+      withIntermediateDirectories: false
+    )
+    let directory = ResolvedLinuxVirtualMachineSharedDirectory(
+      id: UUID(),
+      guestName: "Projects",
+      sourceURL: source,
+      sourceIdentity: .init(device: 1, inode: 2),
+      readOnly: false
+    )
+    let factory = AppleLinuxVirtualMachineConfigurationFactory(
+      sharedDirectoryBookmarkService: LinuxConfigurationSharedDirectoryResolver(
+        directories: [directory]
+      )
+    )
+
+    let runtime = try factory.makeRuntimeConfiguration(for: machine)
+    defer { runtime.sharedDirectoryAccess.release() }
+    let device = try #require(
+      runtime.configuration.directorySharingDevices.first
+        as? VZVirtioFileSystemDeviceConfiguration
+    )
+    let share = try #require(device.share as? VZMultipleDirectoryShare)
+
+    #expect(
+      device.tag == AppleLinuxVirtualMachineSharedDirectoryDeviceFactory.mountTag
+    )
+    #expect(Set(share.directories.keys) == ["Projects"])
+    #expect(share.directories["Projects"]?.url == source)
+  }
+
+  @Test
   func resolverRejectsLinuxArtifactPathTraversal() async throws {
     let fixture = try LinuxConfigurationFixture()
     defer { fixture.remove() }
@@ -129,6 +173,21 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
     ) {
       try LinuxVirtualMachineBundleResolver(rootURL: fixture.root).resolve(prepared)
     }
+  }
+}
+
+private struct LinuxConfigurationSharedDirectoryResolver:
+  LinuxVirtualMachineSharedDirectoryBookmarkResolving
+{
+  let directories: [ResolvedLinuxVirtualMachineSharedDirectory]
+
+  func resolve(
+    _ records: [LinuxVirtualMachineSharedDirectory]
+  ) -> LinuxVirtualMachineSharedDirectoryAccess {
+    LinuxVirtualMachineSharedDirectoryAccess(
+      directories: directories,
+      accessedURLs: []
+    )
   }
 }
 

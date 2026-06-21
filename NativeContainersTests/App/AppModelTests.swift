@@ -112,6 +112,19 @@ struct AppModelTests {
   }
 
   @Test
+  func linuxVirtualMachineSharingUsesAStableAppScopedModel() throws {
+    let model = AppModel.previewVirtualMachines
+    let machine = try #require(
+      model.virtualMachines.first(where: { $0.guest == .linux })
+    )
+
+    #expect(
+      model.makeLinuxVirtualMachineSharedDirectoriesModel(for: machine)
+        === model.makeLinuxVirtualMachineSharedDirectoriesModel(for: machine)
+    )
+  }
+
+  @Test
   func diskMaintenanceUsesAStableAppScopedModel() throws {
     let model = AppModel.previewVirtualMachines
     let machine = try #require(model.virtualMachines.first)

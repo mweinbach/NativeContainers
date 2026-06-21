@@ -3,6 +3,7 @@ import SwiftUI
 struct LinuxVirtualMachineConfigurationView: View {
   let machine: VirtualMachineManifest
   let runtime: LinuxVirtualMachineRuntimeModel
+  let sharedDirectories: LinuxVirtualMachineSharedDirectoriesModel
 
   var body: some View {
     ScrollView {
@@ -19,6 +20,11 @@ struct LinuxVirtualMachineConfigurationView: View {
         )
         LinuxVirtualMachineConnectivitySection(
           configuration: machine.linuxConfiguration
+        )
+        LinuxVirtualMachineSharedDirectoriesView(
+          runtimeState: runtime.snapshot.state,
+          hasActiveRuntime: runtime.snapshot.target != nil,
+          sharedDirectories: sharedDirectories
         )
         if let errorMessage = runtime.errorMessage {
           LinuxVirtualMachineConfigurationErrorBanner(
