@@ -48,8 +48,10 @@ must leave a usable, test-backed product slice.
 
 - [x] Reviewed Dockerfile/Containerfile build workflow through Apple’s public
       builder API and an isolated signed worker.
+- [x] Reviewed shared-builder status, whole-bundle allocation, Stop, explicit
+      Force Stop (`KILL`), and stopped-only builder/cache reset.
 - [ ] Build secrets, SSH forwarding, cache import/export, alternate outputs,
-      history, and explicit builder-cache management.
+      and history.
 - [ ] Version-pinned Socktainer service and product-specific Docker context.
 - [ ] Compose parser and lifecycle coordinator, with conformance fixtures.
 - [ ] Automatic project detection and per-project status.

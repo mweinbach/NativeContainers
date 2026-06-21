@@ -165,6 +165,17 @@ failures by re-listing committed state, verifies snapshots, and tags under the
 same mutation coordinator as image CRUD. Build execution is cancellation-aware
 single-flight, while the long solve stays outside the global mutation lock.
 
+Builder maintenance crosses a separate `ContainerBuilderManaging` service
+boundary. Read-only inspection reports stable runtime state and whole-bundle
+allocation. Stop, explicit `KILL`, and stopped-only deletion are prepared from
+the shared snapshot adapter used by the build worker, then execute under the
+image-build lock followed by the global runtime lock. Execution revalidates the
+runtime root, creation date, complete pinned identity, and configuration before
+the XPC call. Because an XPC mutation may commit before its reply fails,
+reconciliation runs in a fresh uncancelled task. Deletion additionally requires
+both inventory and the exact builder bundle path to be absent; the service never
+manually removes an orphaned bundle or the separate builder-export directory.
+
 The worker protocol reserves stdout for capped length-prefixed control frames
 and stderr for a bounded plain BuildKit log. The parent keeps stdin open as a
 lifetime lease and escalates TERM to KILL on cancellation. Cleanup removes both

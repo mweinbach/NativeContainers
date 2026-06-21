@@ -6,7 +6,8 @@ called out rather than papered over.
 | Capability | Native implementation | Phase | Constraint |
 | --- | --- | --- | --- |
 | OCI pull/push/list/tag/prune | Apple image services | M1 | Reviewed exact-platform pull/push, rich inspect, safe tag/delete, and prune are live; public push smoke is intentionally prohibited |
-| Dockerfile/Containerfile builds | Apple `ContainerBuild` + shared BuildKit VM | M2 | Reviewed exact-platform OCI builds are live through a signed worker; 1.0.0 requires Dockerfiles below 16 KiB and lacks structured progress/cache prune |
+| Dockerfile/Containerfile builds | Apple `ContainerBuild` + shared BuildKit VM | M2 | Reviewed exact-platform OCI builds are live through a signed worker; 1.0.0 requires Dockerfiles below 16 KiB and lacks structured progress/cache-only prune |
+| Shared builder/cache maintenance | Container service XPC + exact snapshot adapter | M2 | Stable status, whole-bundle allocation, reviewed Stop/Force Stop, and stopped-only reset are live; external CLI activity is not observable |
 | Container lifecycle | `ContainerClient` | M1 | Foundation start/stop/delete is wired |
 | Exec, logs, copy, inspect, stats | `ContainerClient` + SwiftTerm | M1 | Non-interactive exec and native interactive PTY are live |
 | Volumes and named networks | Apple services | M1 | Reviewed create/delete/prune, capacity versus allocated usage, built-in protection, and configured-container use checks are live; Apple 1.0 has no conditional delete token |

@@ -7,8 +7,8 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 216 test declarations. The current full
-  app-hosted Xcode run passed all 208 deterministic tests, with eight destructive
+- The suite currently contains 225 test declarations. The current full
+  app-hosted Xcode run passed all 217 deterministic tests, with eight destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes the short-pipe framing, builder mount normalization, and strict
   path-component-containment regressions. Existing opt-in tests pass against
@@ -211,6 +211,22 @@ Updated: 2026-06-20.
   seconds after launch. The worker surfaced `CancellationError`, no final tag or
   build artifact remained, and the preexisting container/image counts were
   unchanged.
+- The Builds destination is now a modular workspace with separate New Build and
+  Builder & Cache views. A focused `ContainerBuilderManaging` service reports
+  stable runtime state and whole-bundle allocated storage, and prepares reviewed
+  Stop, explicit `KILL`, and stopped-only Delete Builder & Cache operations.
+- Builder maintenance takes the image-build single-flight lock before the global
+  runtime mutation lock, then revalidates the exact creation date, full pinned
+  identity, configuration, and runtime root before XPC mutation. Ambiguous XPC
+  replies are reconciled in an uncancelled bounded read loop.
+- A builder delete is successful only when Apple’s inventory no longer contains
+  `buildkit` and `lstat(<appRoot>/containers/buildkit)` reports absence. An
+  orphaned bundle is surfaced as incomplete cleanup; the app never removes it
+  directly and never treats `<appRoot>/builder` exports as cache.
+- A live read-only Xcode probe exercised the new service against Apple’s 1.0.0
+  runtime and observed the running builder as exact/trusted with its bundle
+  present and 530,751,488 allocated bytes. Stop, `KILL`, and deletion were not
+  invoked because external CLI build activity cannot be observed safely.
 
 ## Known configuration issue
 
@@ -225,10 +241,13 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add explicit builder-cache management plus build secrets, SSH forwarding,
-   cache import/export, history, and alternate outputs.
-2. Package a signed and notarized privileged helper if automated host-access
+1. Add reviewed build secrets using the pinned public BuildKit secret payload,
+   without persisting secret bytes in plans, logs, or app state.
+2. Add cache import/export, history, and alternate outputs only where the pinned
+   native API exposes a verifiable contract; continue tracking SSH forwarding
+   and cache-only prune as unsupported gaps.
+3. Package a signed and notarized privileged helper if automated host-access
    mutation is still desired after the explicit command handoff is exercised.
-3. Add the entitlement through a functioning Xcode capability surface, then
+4. Add the entitlement through a functioning Xcode capability surface, then
    implement and live-verify macOS installation and VM lifecycle.
-4. Spike a pinned Socktainer process and a product-specific Docker context.
+5. Spike a pinned Socktainer process and a product-specific Docker context.

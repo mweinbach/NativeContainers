@@ -367,3 +367,29 @@ only recognizes exact root-owned, non-writable resolver and packet-filter files
 and exposes Apple's fixed setup command. It does not run `sudo` or report PF as
 active from disk state alone. Any future mutation path must be a separately
 signed and notarized helper with a narrow authorization contract.
+
+## ADR-019: Manage the shared builder through a reviewed service boundary
+
+**Status:** Accepted — 2026-06-20
+
+Builder maintenance is independent from image-build orchestration. A narrow
+`ContainerBuilderManaging` service owns inspection, action review, mutation,
+and reconciliation; the build form and Builder & Cache view depend on separate
+models. The service and signed build worker share one snapshot adapter and pure
+identity policy so they cannot drift on what qualifies as Apple’s reserved
+`buildkit` container.
+
+Stop, explicit `KILL`, and stopped-only deletion take the image-build
+single-flight lock before the global runtime mutation lock. Immediately before
+mutation the service re-fetches the runtime root, creation date, full identity,
+and configuration frozen by review. Running never implies idle because the
+native API cannot observe an external CLI solve; both stop paths require a
+destructive confirmation that states this limitation.
+
+Mutation errors do not imply rollback. Reconciliation uses fresh uncancelled
+reads and accepts only the requested postcondition for the same reviewed
+identity. Deletion uses Apple’s non-force route and succeeds only when inventory
+is absent and the exact `<appRoot>/containers/buildkit` bundle fails `lstat`
+with `ENOENT`. A remaining bundle is an explicit incomplete-cleanup state. The
+app never deletes that bundle manually and never touches `<appRoot>/builder`,
+which holds exports rather than the container’s BuildKit cache.

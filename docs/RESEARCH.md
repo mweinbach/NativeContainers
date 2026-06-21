@@ -284,8 +284,18 @@ release and isolating it behind an adapter are both deliberate.
 - Builder cache has no supported prune command in 1.0.0 and can become hard to
   stop/delete ([#1159](https://github.com/apple/container/issues/1159),
   [#932](https://github.com/apple/container/issues/932)). Builder lifecycle and
-  cache deletion therefore remain explicit management operations, never
-  automatic cleanup after each build.
+  cache deletion are therefore explicit management operations, never automatic
+  cleanup after each build. `ContainerClient.diskUsage("buildkit")` reports the
+  whole container bundle allocation, not a cache-only size.
+- NativeContainers exposes Stop, explicit `KILL`, and stopped-only non-force
+  deletion behind a focused reviewed service. It takes the same image-build and
+  runtime mutation locks as build execution, freezes and revalidates the full
+  builder snapshot, and reconciles every mutation reply by re-reading state.
+- Apple’s delete server can remove inventory even if bundle cleanup fails. A
+  reset therefore requires both inventory absence and `lstat` absence for
+  `<appRoot>/containers/buildkit`. The app reports an orphaned bundle instead of
+  deleting it manually, and it never removes `<appRoot>/builder`, which contains
+  build exports rather than the builder cache.
 
 ## Virtualization.framework
 

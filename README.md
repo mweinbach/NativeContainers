@@ -36,14 +36,16 @@ reviewed named-volume and ordered-network attachments, private Unix-socket
 publishing, read-only host-access discovery,
 Apple Keychain-backed registry login management, reviewed native pull/push
 transfers, reviewed Dockerfile/Containerfile builds through Apple’s public
-BuildKit APIs, and macOS restore-image preparation.
+BuildKit APIs, reviewed shared-builder Stop/Force Stop/cache reset, and macOS
+restore-image preparation.
 
 The app is composed from narrow injectable service facets. Inventory, container
 creation and lifecycle, inspection, command tools, terminal sessions, image
 management, infrastructure, attachment resolution, private socket workspace,
-host-access discovery, machine lifecycle, bounded XPC transport, and
-owned-resource recovery are independent services. A forwarding-only
-compatibility facade preserves callers that still need the complete API.
+host-access discovery, shared-builder management, machine lifecycle, bounded
+XPC transport, and owned-resource recovery are independent services. A
+forwarding-only compatibility facade preserves callers that still need the
+complete API.
 
 ## Build
 
