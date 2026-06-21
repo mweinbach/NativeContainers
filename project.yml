@@ -39,6 +39,10 @@ targets:
   NativeContainers:
     type: application
     platform: macOS
+    entitlements:
+      path: NativeContainers/NativeContainers.entitlements
+      properties:
+        com.apple.security.virtualization: true
     sources:
       - path: NativeContainers
       - path: NativeContainersShared
