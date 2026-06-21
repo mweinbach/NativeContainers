@@ -111,6 +111,7 @@ enum MacVirtualMachineRuntimeError: LocalizedError, Equatable, Sendable {
   case requiresAppleSilicon
   case ownedElsewhere(UUID)
   case duplicateSession(UUID)
+  case operationInProgress(UUID)
   case noActiveSession(UUID)
   case invalidState(UUID, MacVirtualMachineRuntimeState)
   case staleTarget(MacVirtualMachineRuntimeTarget)
@@ -126,6 +127,8 @@ enum MacVirtualMachineRuntimeError: LocalizedError, Equatable, Sendable {
       "Virtual machine \(identifier.uuidString) is active in another NativeContainers process."
     case .duplicateSession(let identifier):
       "Virtual machine \(identifier.uuidString) already has an active runtime session."
+    case .operationInProgress(let identifier):
+      "Virtual machine \(identifier.uuidString) is already changing runtime state."
     case .noActiveSession(let identifier):
       "Virtual machine \(identifier.uuidString) does not have an active runtime session."
     case .invalidState(let identifier, let state):

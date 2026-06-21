@@ -1,0 +1,144 @@
+import Foundation
+@preconcurrency import Virtualization
+
+@MainActor
+final class MacVirtualMachineConsole {
+  let target: MacVirtualMachineRuntimeTarget
+
+  #if arch(arm64)
+    let virtualMachine: VZVirtualMachine
+
+    init(target: MacVirtualMachineRuntimeTarget, virtualMachine: VZVirtualMachine) {
+      self.target = target
+      self.virtualMachine = virtualMachine
+    }
+  #endif
+}
+
+@MainActor
+final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine {
+  #if arch(arm64)
+    private let configurationFactory: AppleMacVirtualMachineConfigurationFactory
+
+    init(
+      configurationFactory: AppleMacVirtualMachineConfigurationFactory =
+        AppleMacVirtualMachineConfigurationFactory()
+    ) {
+      self.configurationFactory = configurationFactory
+    }
+  #else
+    init() {}
+  #endif
+
+  func makeSession(
+    for machine: ResolvedMacVirtualMachine,
+    target: MacVirtualMachineRuntimeTarget
+  ) throws -> any MacVirtualMachineRuntimeEngineSession {
+    #if arch(arm64)
+      guard machine.manifest.id == target.machineID else {
+        throw MacVirtualMachineRuntimeError.staleTarget(target)
+      }
+      let configuration = try configurationFactory.makeConfiguration(for: machine)
+      let virtualMachine = VZVirtualMachine(configuration: configuration)
+      return AppleMacVirtualMachineRuntimeSession(
+        target: target,
+        virtualMachine: virtualMachine
+      )
+    #else
+      throw MacVirtualMachineRuntimeError.requiresAppleSilicon
+    #endif
+  }
+}
+
+#if arch(arm64)
+  @MainActor
+  private final class AppleMacVirtualMachineRuntimeSession: NSObject,
+    MacVirtualMachineRuntimeEngineSession,
+    @preconcurrency VZVirtualMachineDelegate
+  {
+    let target: MacVirtualMachineRuntimeTarget
+    let console: MacVirtualMachineConsole?
+    var eventHandler: MacVirtualMachineRuntimeEventHandler?
+
+    private let virtualMachine: VZVirtualMachine
+
+    init(target: MacVirtualMachineRuntimeTarget, virtualMachine: VZVirtualMachine) {
+      self.target = target
+      self.virtualMachine = virtualMachine
+      self.console = MacVirtualMachineConsole(target: target, virtualMachine: virtualMachine)
+      super.init()
+      virtualMachine.delegate = self
+    }
+
+    func start() async throws {
+      guard virtualMachine.canStart else {
+        throw MacVirtualMachineRuntimeError.operationUnavailable("start")
+      }
+      let virtualMachine = virtualMachine
+      let operation = Task { @MainActor in
+        try await virtualMachine.start()
+      }
+      try await operation.value
+    }
+
+    func pause() async throws {
+      guard virtualMachine.canPause else {
+        throw MacVirtualMachineRuntimeError.operationUnavailable("pause")
+      }
+      let virtualMachine = virtualMachine
+      let operation = Task { @MainActor in
+        try await virtualMachine.pause()
+      }
+      try await operation.value
+    }
+
+    func resume() async throws {
+      guard virtualMachine.canResume else {
+        throw MacVirtualMachineRuntimeError.operationUnavailable("resume")
+      }
+      let virtualMachine = virtualMachine
+      let operation = Task { @MainActor in
+        try await virtualMachine.resume()
+      }
+      try await operation.value
+    }
+
+    func requestStop() throws {
+      guard virtualMachine.canRequestStop else {
+        throw MacVirtualMachineRuntimeError.operationUnavailable("request a graceful stop for")
+      }
+      try virtualMachine.requestStop()
+    }
+
+    func forceStop() async throws {
+      guard virtualMachine.canStop else {
+        throw MacVirtualMachineRuntimeError.operationUnavailable("force stop")
+      }
+      let virtualMachine = virtualMachine
+      let operation = Task { @MainActor in
+        try await withCheckedThrowingContinuation {
+          (continuation: CheckedContinuation<Void, any Error>) in
+          virtualMachine.stop { error in
+            if let error {
+              continuation.resume(throwing: error)
+            } else {
+              continuation.resume()
+            }
+          }
+        }
+      }
+      try await operation.value
+    }
+
+    func guestDidStop(_ virtualMachine: VZVirtualMachine) {
+      eventHandler?(.guestStopped)
+    }
+
+    func virtualMachine(
+      _ virtualMachine: VZVirtualMachine,
+      didStopWithError error: any Error
+    ) {
+      eventHandler?(.stoppedWithError(error.localizedDescription))
+    }
+  }
+#endif
