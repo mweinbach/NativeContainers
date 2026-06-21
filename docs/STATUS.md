@@ -939,6 +939,10 @@ Updated: 2026-06-21.
   transaction commit/rollback, missing artifacts, guest separation, safe ISO
   copy, path traversal, clipboard topology, and the validated Apple
   configuration. The runtime/console/UI lane is intentionally still hidden.
+- The full Xcode plan passes all 847 outcomes: 826 deterministic tests passed,
+  21 explicitly gated live tests skipped, and no outcome failed or remained
+  unrun. A normal build and app launch also passed; launch emitted only the
+  known macOS 27 beta SetStore donation-service noise, and the app was stopped.
 
 ## Remaining live verification gap
 
