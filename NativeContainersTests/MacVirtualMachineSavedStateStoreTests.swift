@@ -39,7 +39,7 @@ struct MacVirtualMachineSavedStateStoreTests {
   func writableStorageMutationMakesSavedStateIncompatible() async throws {
     let fixture = try SavedStateStoreFixture()
     defer { fixture.remove() }
-    try await fixture.commitState(Data("state".utf8))
+    _ = try await fixture.commitState(Data("state".utf8))
 
     let disk = try FileHandle(forWritingTo: fixture.machine.diskImageURL)
     try disk.seekToEnd()
@@ -61,7 +61,7 @@ struct MacVirtualMachineSavedStateStoreTests {
   func hostOperatingSystemChangeIsRejectedBeforeRestoreAttempt() async throws {
     let fixture = try SavedStateStoreFixture()
     defer { fixture.remove() }
-    try await fixture.commitState(Data("state".utf8))
+    _ = try await fixture.commitState(Data("state".utf8))
     let metadataURL = fixture.savedStateDirectory.appending(
       path: MacVirtualMachineSavedStateStore.metadataFilename
     )
@@ -92,7 +92,7 @@ struct MacVirtualMachineSavedStateStoreTests {
   func recoveryDeletesInterruptedSaveRestoreAndDiscardTransactions() async throws {
     let fixture = try SavedStateStoreFixture()
     defer { fixture.remove() }
-    try await fixture.commitState(Data("single-use".utf8))
+    _ = try await fixture.commitState(Data("single-use".utf8))
 
     let restoringDirectory = fixture.transactionDirectory(
       suffix: MacVirtualMachineSavedStateStore.restoringSuffix
@@ -146,7 +146,7 @@ struct MacVirtualMachineSavedStateStoreTests {
   func committedCheckpointMustBeConsumedBeforeAnotherSave() async throws {
     let fixture = try SavedStateStoreFixture()
     defer { fixture.remove() }
-    try await fixture.commitState(Data("checkpoint".utf8))
+    _ = try await fixture.commitState(Data("checkpoint".utf8))
 
     await #expect(
       throws: MacVirtualMachineSavedStateError.checkpointAlreadyExists(
@@ -161,12 +161,50 @@ struct MacVirtualMachineSavedStateStoreTests {
   func discardAtomicallyRemovesCommittedCheckpoint() async throws {
     let fixture = try SavedStateStoreFixture()
     defer { fixture.remove() }
-    try await fixture.commitState(Data("checkpoint".utf8))
+    _ = try await fixture.commitState(Data("checkpoint".utf8))
 
     try await fixture.store.discard(for: fixture.lease)
 
     #expect(try await fixture.store.inspect(for: fixture.lease) == .none)
     #expect(!FileManager.default.fileExists(atPath: fixture.savedStateDirectory.path))
+  }
+
+  @Test
+  func reviewedReclamationRemovesOnlyTheUnchangedCheckpoint() async throws {
+    let fixture = try SavedStateStoreFixture()
+    defer { fixture.remove() }
+    _ = try await fixture.commitState(Data("reviewed-checkpoint".utf8))
+    let candidate = try #require(
+      try await fixture.store.prepareSavedStateReclamation(for: fixture.lease)
+    )
+
+    let removed = try await fixture.store.reclaimSavedState(
+      candidate,
+      for: fixture.lease
+    )
+
+    #expect(removed)
+    #expect(try await fixture.store.inspect(for: fixture.lease) == .none)
+  }
+
+  @Test
+  func reviewedReclamationRejectsAReplacementCheckpoint() async throws {
+    let fixture = try SavedStateStoreFixture()
+    defer { fixture.remove() }
+    _ = try await fixture.commitState(Data("first-checkpoint".utf8))
+    let candidate = try #require(
+      try await fixture.store.prepareSavedStateReclamation(for: fixture.lease)
+    )
+    try await fixture.store.discard(for: fixture.lease)
+    let replacement = try await fixture.commitState(Data("replacement-checkpoint".utf8))
+
+    let removed = try await fixture.store.reclaimSavedState(
+      candidate,
+      for: fixture.lease
+    )
+
+    #expect(!removed)
+    #expect(try await fixture.store.inspect(for: fixture.lease) == .available(replacement))
   }
 
   @Test

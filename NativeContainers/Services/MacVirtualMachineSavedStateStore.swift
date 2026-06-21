@@ -116,16 +116,20 @@ actor MacVirtualMachineSavedStateStore: MacVirtualMachineSavedStateStoring {
 
   private let fileManager: FileManager
   private let fingerprinter: any MacVirtualMachineConfigurationFingerprinting
+  private let artifactInspector: any VirtualMachineStorageArtifactInspecting
   private var activeSaves: [UUID: ActiveSave] = [:]
   private var activeRestores: [UUID: ActiveRestore] = [:]
 
   init(
     fileManager: FileManager = .default,
     fingerprinter: any MacVirtualMachineConfigurationFingerprinting =
-      MacVirtualMachineConfigurationFingerprinter()
+      MacVirtualMachineConfigurationFingerprinter(),
+    artifactInspector: any VirtualMachineStorageArtifactInspecting =
+      FileVirtualMachineStorageArtifactInspector()
   ) {
     self.fileManager = fileManager
     self.fingerprinter = fingerprinter
+    self.artifactInspector = artifactInspector
   }
 
   func inspect(
@@ -341,6 +345,94 @@ actor MacVirtualMachineSavedStateStore: MacVirtualMachineSavedStateStoring {
     try syncDirectory(at: lease.machine.bundleURL)
     try fileManager.removeItem(at: tombstone)
     try syncDirectory(at: lease.machine.bundleURL)
+  }
+
+  func prepareSavedStateReclamation(
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineSavedStateReclamationCandidate? {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    try ensureNoActiveTransaction(for: lease.target.machineID)
+    return try savedStateReclamationCandidate(for: lease)
+  }
+
+  func reclaimSavedState(
+    _ candidate: VirtualMachineSavedStateReclamationCandidate,
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> Bool {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    try ensureNoActiveTransaction(for: lease.target.machineID)
+    guard candidate.machineID == lease.target.machineID,
+      try savedStateReclamationCandidate(for: lease) == candidate
+    else {
+      return false
+    }
+
+    try Task.checkCancellation()
+    let finalDirectory = savedStateDirectory(in: lease.machine.bundleURL)
+    let tombstone = lease.machine.bundleURL.appending(
+      path: Self.transactionName(
+        operationID: UUID(),
+        suffix: Self.discardingSuffix
+      ),
+      directoryHint: .isDirectory
+    )
+    try fileManager.moveItem(at: finalDirectory, to: tombstone)
+    try syncDirectory(at: lease.machine.bundleURL)
+
+    // The atomic rename commits this cleanup. Caller cancellation must not
+    // abandon a committed tombstone halfway through reconciliation.
+    try fileManager.removeItem(at: tombstone)
+    try syncDirectory(at: lease.machine.bundleURL)
+    return true
+  }
+
+  private func savedStateReclamationCandidate(
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineSavedStateReclamationCandidate? {
+    let directory = savedStateDirectory(in: lease.machine.bundleURL)
+    guard fileManager.fileExists(atPath: directory.path) else { return nil }
+    let identity = try artifactInspector.inspect(at: directory)
+    guard identity.fileType == .directory else {
+      throw MacVirtualMachineSavedStateError.invalidBundle(
+        "SavedState is not a directory"
+      )
+    }
+
+    let metadataURL = directory.appending(path: Self.metadataFilename)
+    _ = try requireRegularFile(metadataURL, nonempty: true)
+    let metadata = try JSONDecoder().decode(
+      MacVirtualMachineSavedStateMetadata.self,
+      from: Data(contentsOf: metadataURL)
+    )
+    guard metadata.schemaVersion == MacVirtualMachineSavedStateMetadata.currentSchemaVersion else {
+      throw MacVirtualMachineSavedStateError.unsupportedSchema(metadata.schemaVersion)
+    }
+    guard metadata.machineID == lease.target.machineID,
+      metadata.stateFilename == Self.stateFilename
+    else {
+      throw MacVirtualMachineSavedStateError.invalidBundle(
+        "metadata does not belong to this virtual machine"
+      )
+    }
+    let stateSize = try requireRegularFile(
+      directory.appending(path: Self.stateFilename),
+      nonempty: true
+    )
+    guard stateSize == metadata.stateSizeBytes else {
+      throw MacVirtualMachineSavedStateError.invalidBundle(
+        "the saved-state file size changed"
+      )
+    }
+    return VirtualMachineSavedStateReclamationCandidate(
+      machineID: lease.target.machineID,
+      machineName: lease.machine.manifest.name,
+      createdAt: metadata.createdAt,
+      stateSizeBytes: metadata.stateSizeBytes,
+      configurationFingerprint: metadata.configurationFingerprint,
+      artifactIdentity: identity
+    )
   }
 
   private func validatedArtifact(
