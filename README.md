@@ -52,7 +52,8 @@ management, infrastructure, attachment resolution, private socket workspace,
 host-access discovery, build-secret review/consumption, shared-builder
 management, build-history recording and persistence, machine lifecycle, bounded
 XPC/process transport, machine image preparation, machine process-target
-resolution, machine commands/terminals, and owned-resource recovery are
+resolution, machine commands/terminals, canonical Compose topology derivation,
+and owned-resource recovery are
 independent services. A
 dedicated machine-management service owns machine creation and lifecycle rather
 than routing those operations through the container compatibility facade.

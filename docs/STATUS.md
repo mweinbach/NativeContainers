@@ -428,6 +428,38 @@ Updated: 2026-06-21.
 - The full Xcode plan passes 463/463 outcomes: 452 deterministic tests passed
   and 11 explicitly gated live tests skipped, with no failures or warnings.
 
+## Compose observability checkpoint
+
+- Container labels now survive the Apple `ContainerSnapshot` adapter verbatim;
+  volumes and networks already retained their Apple inventory labels.
+- An injected, pure `ComposeTopologyService` derives deterministic projects,
+  services, replicas, one-off markers, objective running counts, canonical
+  volumes and networks, typed reverse associations, and provenance metadata from
+  one completed inventory refresh. Logical Compose volume/network keys remain
+  distinct from runtime resource names, and absent/valid/invalid optional labels
+  remain distinguishable. The service does not require Socktainer or the Docker
+  CLI to be running.
+- Canonical membership validates Compose naming rules and exact project/service,
+  volume, and network labels. Anonymous volumes, built-in Apple networks,
+  missing labels, invalid optional or identity values, and cross-project
+  consumers are excluded or surfaced as expandable evidence notices.
+  Project-only containers cannot affect project counts, observed state, or
+  membership links.
+- Compose now has a first-class read-only workspace with exact Quick Open routes,
+  service/replica views, canonical volume/network links, and best-effort source
+  metadata. Overview shows observed projects, while container, volume, and
+  network inspectors link back to their canonical project.
+- No project lifecycle action was added. Existing prepare/re-read resource
+  services remain the only authority for starts, stops, force stops, and
+  destructive changes. Generic volume prune now preserves every volume carrying
+  a reserved Compose label; explicit reviewed deletion remains available.
+- A production-path Xcode snippet created unique canonically labeled Apple volume
+  and network resources, observed one resource-only project with the logical
+  names preserved separately from runtime names and zero evidence notices, then
+  deleted both resources and confirmed the project disappeared on refresh.
+- The full Xcode plan passes all 476 outcomes: 465 deterministic tests passed
+  and 11 explicitly gated live tests skipped, with no failures.
+
 ## Known configuration issue
 
 Apple documentation and SDK headers require
@@ -452,6 +484,7 @@ entitlement; no developer-team or provisioning-profile change should be needed.
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, and transactional same-host save/restore against a local
    IPSW.
-4. Add read-only Compose project observability from canonical project/service
-   labels and authoritative Apple inventory. Keep lifecycle claims behind
-   explicit v1.0.0 conformance fixtures; do not infer parity from sparse events.
+4. Add explicit Socktainer 1.0.0 Compose conformance fixtures for the supported
+   Engine subset before considering a project lifecycle coordinator. Keep the
+   read-only Apple-inventory topology independent from bridge availability and
+   do not infer desired replicas, health, or parity from labels or sparse events.

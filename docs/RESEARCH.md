@@ -456,7 +456,20 @@ The UI and marketing must not collapse those four claims into one.
   policies, several resource settings, and network connect/disconnect behavior
   cannot support a broad Compose claim. The next safe slice is read-only project
   observability from canonical Compose labels and authoritative Apple inventory,
-  followed by explicit conformance fixtures.
+  followed by explicit conformance fixtures. That read-only slice now ships as
+  a pure service: it validates the Compose project and logical-resource naming
+  grammars, requires resource-specific labels for volumes and networks, excludes
+  Apple built-in networks, and keeps incomplete label evidence out of runtime
+  counts and reverse membership indexes. A live Apple-infrastructure probe then
+  created isolated volume/network resources, preserved distinct logical and
+  runtime names through inventory, derived a resource-only project with no
+  notices, deleted both resources, and confirmed the project disappeared.
+- Labels are writable metadata, not ownership proof. The topology therefore
+  retains suspect evidence for invalid optional labels and cross-project
+  consumers, excludes anonymous volumes, and exposes no mutation API. Generic
+  volume prune protects all resources with the reserved Compose prefix; future
+  project lifecycle needs reviewed Compose-model conformance and frozen resource
+  identities rather than label-only inference.
 
 Apple maintainers treat the Engine API as a separate service/plugin concern.
 [Socktainer](https://github.com/socktainer/socktainer) is an active Apache-2.0

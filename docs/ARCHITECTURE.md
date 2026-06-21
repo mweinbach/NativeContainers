@@ -294,6 +294,28 @@ identity. Docker context setup uses supported `docker context create/update`
 commands, strips shell context/host overrides for the operation, and confirms
 that the user’s active context did not change.
 
+Compose observability is a separate pure service boundary, not a second runtime
+and not part of Socktainer process ownership. `AppleRuntimeInventoryService`
+preserves container labels verbatim alongside the existing volume and network
+labels. One `ComposeTopologyService` derives a deterministic topology from each
+completed inventory refresh and publishes it through `AppModel`. The service is
+injectable and synchronous, so previews and tests can replace it without
+starting Apple services or the Docker bridge.
+
+Canonical membership requires the Compose project-name grammar plus exact
+`com.docker.compose.*` evidence: project and valid service for containers,
+project and valid logical-volume name for volumes, and project and valid
+logical-network name for non-built-in networks. Project-only containers are
+retained as excluded evidence but cannot change counts, observed state, reverse
+associations, or lifecycle affordances. Anonymous volumes, invalid optional
+labels, built-in networks, and cross-project consumers become visible evidence
+notices. Typed associations retain logical Compose keys separately from runtime
+resource names. Working-directory and config-file metadata is accepted only
+from canonical service containers; conflicting values remain visible rather
+than being resolved implicitly. All project views are read-only and link back
+to authoritative resource screens. Generic volume prune preserves any resource
+with a reserved Compose label.
+
 ### General VM lane
 
 VMs live as self-contained bundles in Application Support. Each bundle owns:

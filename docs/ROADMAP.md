@@ -68,7 +68,8 @@ must leave a usable, test-backed product slice.
       socket cleanup, and a product-specific Docker context that never becomes
       the active context implicitly.
 - [ ] Compose parser and lifecycle coordinator, with conformance fixtures.
-- [ ] Automatic project detection and per-project status.
+- [x] Read-only automatic project detection and objective per-project status
+      from canonical Compose labels in Apple inventory.
 - [ ] SSH agent forwarding and safe host-directory sharing.
 - [ ] Native notifications and menu-bar quick controls.
 - [ ] Shell discovery and fallback beyond `/bin/sh`.

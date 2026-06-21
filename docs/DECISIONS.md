@@ -697,3 +697,36 @@ available. Waiting for Apple’s destructive-stop capability is itself bounded,
 and a terminal delegate event finalizes that wait immediately. There is no
 process-level PID kill fallback because the public,
 state-aware `VZVirtualMachine.stop` API is the only safe destructive boundary.
+
+## ADR-028: Derive Compose topology as read-only application state
+
+**Status:** Accepted — 2026-06-21
+
+Compose project observability is derived by a pure, injected service from one
+completed Apple inventory refresh. It is not coupled to Socktainer availability,
+Docker CLI state, or a polling/event stream. The topology is recomputed alongside
+the authoritative container inventory and cleared when that inventory refresh
+fails, so containers, services, volumes, and networks cannot be mixed across
+different app refreshes.
+
+Canonical containers require valid project and service labels. Canonical volumes
+and non-built-in networks additionally require their resource-specific Compose
+labels. Project and logical-resource names are grammar-validated. Project-only
+or malformed container evidence may be displayed as excluded evidence, but it
+does not affect project status, canonical reverse indexes, or lifecycle links.
+Built-in Apple networks and incomplete or malformed resource labels are notices,
+not membership. Anonymous volumes are excluded. Typed reverse associations keep
+logical Compose volume/network keys distinct from runtime names and preserve
+absent, valid, or invalid optional container labels. Cross-project consumer
+references are advisory evidence and never reassign a resource. Source paths are
+accepted only from canonical service-container labels, and conflicting values
+remain visible.
+
+The Compose workspace and Overview report objective observed facts such as
+“1 of 2 containers running.” They make no claim about health, desired replicas,
+or Engine parity. Project views are navigation-only; all lifecycle and deletion
+operations stay on the existing Apple-backed resource services with their own
+review and revalidation boundaries. A future project lifecycle coordinator
+requires explicit compatibility fixtures for the pinned bridge first. Generic
+volume prune preserves every resource carrying the reserved Compose label prefix;
+named-volume removal requires an explicit reviewed deletion path.
