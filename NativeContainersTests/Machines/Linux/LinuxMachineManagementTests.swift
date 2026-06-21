@@ -108,6 +108,48 @@ struct LinuxMachineManagementModelTests {
     #expect(model.errorMessage?.contains("automatically stopped") == true)
     #expect(await refresh.count == 1)
   }
+
+  @Test
+  func configurationPublishesVerifiedResultAndRefreshesInventory() async throws {
+    let service = RecordingMachineService()
+    let refresh = RefreshRecorder()
+    let model = LinuxMachineManagementModel(
+      creator: service,
+      lifecycle: service,
+      configuration: service
+    ) {
+      await refresh.record()
+    }
+    let machine = LinuxMachineRecord(
+      id: "dev",
+      imageReference: "alpine:3.22",
+      platform: "linux/arm64",
+      state: .running,
+      ipAddress: "192.0.2.2",
+      createdAt: Date(timeIntervalSince1970: 1),
+      startedAt: Date(timeIntervalSince1970: 2),
+      diskSizeBytes: nil,
+      cpuCount: 4,
+      memoryBytes: 2_048 * LinuxMachineConfiguration.bytesPerMiB,
+      homeMount: .none,
+      isInitialized: true
+    )
+    let request = try LinuxMachineConfigurationUpdateRequest(
+      cpuCount: 6,
+      memoryBytes: 4_096 * LinuxMachineConfiguration.bytesPerMiB,
+      homeMount: .readOnly,
+      allowsWritableHomeMount: false
+    )
+
+    let succeeded = await model.updateConfiguration(for: machine, request: request)
+
+    #expect(succeeded)
+    #expect(model.configurationUpdate?.configuration == request.configuration)
+    #expect(model.configurationUpdate?.requiresRestart == true)
+    #expect(model.errorMessage == nil)
+    #expect(await service.configurationTargets == [LinuxMachineIdentity(machine: machine)])
+    #expect(await refresh.count == 1)
+  }
 }
 
 @Suite("Apple machine management service")
@@ -503,8 +545,9 @@ private actor RefreshRecorder {
   }
 }
 
-private actor RecordingMachineService: MachineManaging {
+private actor RecordingMachineService: MachineManaging, MachineConfigurationManaging {
   private let returnsPartialCompletion: Bool
+  private(set) var configurationTargets: [LinuxMachineIdentity] = []
 
   init(returnsPartialCompletion: Bool = false) {
     self.returnsPartialCompletion = returnsPartialCompletion
@@ -544,6 +587,18 @@ private actor RecordingMachineService: MachineManaging {
     authorization: LinuxMachineForceStopAuthorization
   ) async throws {}
   func deleteMachine(_ target: LinuxMachineIdentity) async throws {}
+
+  func updateConfiguration(
+    for target: LinuxMachineIdentity,
+    request: LinuxMachineConfigurationUpdateRequest
+  ) async throws -> LinuxMachineConfigurationUpdateResult {
+    configurationTargets.append(target)
+    return LinuxMachineConfigurationUpdateResult(
+      target: target,
+      configuration: request.configuration,
+      state: .running
+    )
+  }
 }
 
 private enum MockMachineRuntimeError: Error {

@@ -462,7 +462,8 @@ private func makeLinuxMachine(id: String) -> LinuxMachineRecord {
     startedAt: nil,
     diskSizeBytes: 32 * VirtualMachineResources.bytesPerGiB,
     cpuCount: 4,
-    memoryDescription: "8 GiB",
+    memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+    homeMount: .none,
     isInitialized: true
   )
 }

@@ -119,8 +119,16 @@ struct LinuxMachineRecord: Codable, Equatable, Sendable, Identifiable {
   let startedAt: Date?
   let diskSizeBytes: UInt64?
   let cpuCount: Int
-  let memoryDescription: String
+  let memoryBytes: UInt64
+  let homeMount: LinuxMachineHomeMount
   let isInitialized: Bool
+
+  var memoryDescription: String {
+    ByteCountFormatter.string(
+      fromByteCount: Int64(min(memoryBytes, UInt64(Int64.max))),
+      countStyle: .memory
+    )
+  }
 }
 
 struct ContainerInventory: Equatable, Sendable {

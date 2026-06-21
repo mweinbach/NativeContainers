@@ -112,6 +112,10 @@ private actor MachineRuntimeTransportDouble: AppleMachineTransport {
     throw MachineRuntimeDoubleError.unsupported
   }
 
+  func setConfig(id: String, bootConfig: MachineConfig) throws {
+    throw MachineRuntimeDoubleError.unsupported
+  }
+
   func stop(id: String) throws {
     throw MachineRuntimeDoubleError.unsupported
   }

@@ -1,3 +1,4 @@
+import ContainerPersistence
 import ContainerXPC
 import Foundation
 import MachineAPIClient
@@ -24,18 +25,22 @@ struct AppleMachineXPCTransportTests {
       id: "dev",
       dynamicEnvironment: ["SSH_AUTH_SOCK": "/tmp/agent"]
     )
+    try await transport.setConfig(id: "dev", bootConfig: snapshot.bootConfig)
     try await transport.stop(id: "dev")
     try await transport.delete(id: "dev")
 
     #expect(listed.map(\.id) == ["dev"])
     #expect(inspected.initialized)
     #expect(booted.id == "dev")
+    #expect(await sender.configurationIDs == ["dev"])
+    #expect(await sender.bootConfigurations.first?.cpus == snapshot.bootConfig.cpus)
     #expect(
       await sender.routes == [
         MachineRoutes.listMachine.rawValue,
         MachineRoutes.inspectMachine.rawValue,
         MachineRoutes.createMachine.rawValue,
         MachineRoutes.bootMachine.rawValue,
+        MachineRoutes.setConfig.rawValue,
         MachineRoutes.stopMachine.rawValue,
         MachineRoutes.deleteMachine.rawValue,
       ]
@@ -46,6 +51,8 @@ struct AppleMachineXPCTransportTests {
 private actor RecordingMachineXPCSender: AppleXPCRequestSending {
   private let snapshot: MachineSnapshot
   private(set) var routes: [String] = []
+  private(set) var configurationIDs: [String] = []
+  private(set) var bootConfigurations: [MachineConfig] = []
 
   init(snapshot: MachineSnapshot) {
     self.snapshot = snapshot
@@ -67,6 +74,13 @@ private actor RecordingMachineXPCSender: AppleXPCRequestSending {
         key: MachineKeys.snapshot.rawValue,
         value: try JSONEncoder().encode(snapshot)
       )
+    case MachineRoutes.setConfig.rawValue:
+      if let id = message.string(key: MachineKeys.id.rawValue) {
+        configurationIDs.append(id)
+      }
+      if let data = message.dataNoCopy(key: MachineKeys.bootConfig.rawValue) {
+        bootConfigurations.append(try JSONDecoder().decode(MachineConfig.self, from: data))
+      }
     default:
       break
     }

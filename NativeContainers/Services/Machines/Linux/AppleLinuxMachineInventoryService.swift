@@ -16,18 +16,22 @@ struct AppleLinuxMachineInventoryService: LinuxMachineInventoryLoading {
     for machine in listed {
       try Task.checkCancellation()
       guard !machine.initialized else {
-        records.append(Self.record(from: machine))
+        records.append(try AppleLinuxMachineSnapshotMapper.record(from: machine))
         continue
       }
 
       do {
-        records.append(Self.record(from: try await machineTransport.inspect(id: machine.id)))
+        records.append(
+          try AppleLinuxMachineSnapshotMapper.record(
+            from: try await machineTransport.inspect(id: machine.id)
+          )
+        )
       } catch is CancellationError {
         throw CancellationError()
       } catch {
         // A list snapshot can lag the first-boot marker. If inspection itself
         // is unavailable, keep the listed machine visible and retry next refresh.
-        records.append(Self.record(from: machine))
+        records.append(try AppleLinuxMachineSnapshotMapper.record(from: machine))
       }
     }
 
@@ -36,19 +40,4 @@ struct AppleLinuxMachineInventoryService: LinuxMachineInventoryLoading {
     }
   }
 
-  private static func record(from machine: MachineSnapshot) -> LinuxMachineRecord {
-    LinuxMachineRecord(
-      id: machine.id,
-      imageReference: machine.configuration.image.reference,
-      platform: String(describing: machine.platform),
-      state: RuntimeState(rawValue: machine.status.rawValue) ?? .unknown,
-      ipAddress: machine.ipAddress,
-      createdAt: machine.createdDate,
-      startedAt: machine.startedDate,
-      diskSizeBytes: machine.diskSize,
-      cpuCount: machine.bootConfig.cpus,
-      memoryDescription: String(describing: machine.bootConfig.memory),
-      isInitialized: machine.initialized
-    )
-  }
 }

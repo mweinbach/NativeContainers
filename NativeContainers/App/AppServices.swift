@@ -34,6 +34,7 @@ struct AppServices: Sendable {
   let containerAttachments: any ContainerAttachmentPreparing
   let machineCreator: any MachineCreating
   let machineLifecycle: any MachineLifecycleManaging
+  let machineConfiguration: any MachineConfigurationManaging
   let machineCommands: any MachineCommandRunning
   let machineTerminal: any MachineTerminalOpening
   let images: any ImageManaging
@@ -88,6 +89,8 @@ struct AppServices: Sendable {
     containerAttachments: any ContainerAttachmentPreparing,
     machineCreator: any MachineCreating,
     machineLifecycle: any MachineLifecycleManaging,
+    machineConfiguration: any MachineConfigurationManaging =
+      UnavailableLinuxMachineConfigurationService(),
     machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
     machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
     images: any ImageManaging,
@@ -155,6 +158,7 @@ struct AppServices: Sendable {
     self.containerAttachments = containerAttachments
     self.machineCreator = machineCreator
     self.machineLifecycle = machineLifecycle
+    self.machineConfiguration = machineConfiguration
     self.machineCommands = machineCommands
     self.machineTerminal = machineTerminal
     self.images = images
@@ -203,6 +207,8 @@ struct AppServices: Sendable {
       any VirtualMachineStorageReclamationManaging =
       UnavailableVirtualMachineStorageReclamationService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
+    machineConfiguration: any MachineConfigurationManaging =
+      UnavailableLinuxMachineConfigurationService(),
     machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
     machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
     imageBuild: any ImageBuilding,
@@ -266,6 +272,7 @@ struct AppServices: Sendable {
     containerAttachments = containerService
     machineCreator = machineService
     machineLifecycle = machineService
+    self.machineConfiguration = machineConfiguration
     self.machineCommands = machineCommands
     self.machineTerminal = machineTerminal
     images = containerService
@@ -367,6 +374,10 @@ enum AppCompositionRoot {
         processClient: processClient,
         containerKillClient: cleanupClient
       ),
+      runtimeMutationCoordinator: mutationCoordinator
+    )
+    let machineConfigurationService = AppleLinuxMachineConfigurationService(
+      machineTransport: machineTransport,
       runtimeMutationCoordinator: mutationCoordinator
     )
     let machineProcessService = AppleLinuxMachineProcessService(
@@ -601,6 +612,7 @@ enum AppCompositionRoot {
       containerAttachments: attachmentService,
       machineCreator: machineService,
       machineLifecycle: machineService,
+      machineConfiguration: machineConfigurationService,
       machineCommands: machineProcessService,
       machineTerminal: machineProcessService,
       images: imageService,

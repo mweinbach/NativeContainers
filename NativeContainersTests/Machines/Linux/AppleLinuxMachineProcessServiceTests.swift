@@ -24,7 +24,8 @@ struct LinuxMachineCommandModelTests {
       startedAt: nil,
       diskSizeBytes: 1,
       cpuCount: 2,
-      memoryDescription: "2 GiB",
+      memoryBytes: 2 * 1_024 * LinuxMachineConfiguration.bytesPerMiB,
+      homeMount: .none,
       isInitialized: false
     )
     let model = LinuxMachineCommandModel(machine: machine, service: service) {
@@ -315,6 +316,7 @@ private actor ResolvingMachineTransport: AppleMachineTransport {
     snapshot
   }
 
+  func setConfig(id: String, bootConfig: MachineConfig) {}
   func stop(id: String) {}
   func delete(id: String) {}
 }

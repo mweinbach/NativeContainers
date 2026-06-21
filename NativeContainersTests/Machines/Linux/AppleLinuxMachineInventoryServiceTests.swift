@@ -22,6 +22,9 @@ struct AppleLinuxMachineInventoryServiceTests {
     let machines = try await service.loadMachines()
 
     #expect(machines.map(\.isInitialized) == [true])
+    #expect(machines.map(\.cpuCount) == [refreshed.bootConfig.cpus])
+    #expect(machines.map(\.memoryBytes) == [refreshed.bootConfig.memory.toUInt64(unit: .bytes)])
+    #expect(machines.map(\.homeMount) == [.none])
     #expect(await transport.inspectCalls == ["dev"])
   }
 
@@ -95,6 +98,10 @@ private actor MachineInventoryTransportDouble: AppleMachineTransport {
     id: String,
     dynamicEnvironment: [String: String]
   ) throws -> MachineSnapshot {
+    throw MachineInventoryTransportError.unsupported
+  }
+
+  func setConfig(id: String, bootConfig: MachineConfig) throws {
     throw MachineInventoryTransportError.unsupported
   }
 

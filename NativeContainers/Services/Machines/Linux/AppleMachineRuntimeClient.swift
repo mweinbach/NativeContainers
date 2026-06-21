@@ -147,13 +147,8 @@ actor AppleMachineRuntimeClient: LinuxMachineRuntime {
 
   private static func snapshot(from machine: MachineSnapshot) -> LinuxMachineRuntimeSnapshot {
     LinuxMachineRuntimeSnapshot(
-      identity: LinuxMachineIdentity(
-        id: machine.id,
-        imageReference: machine.configuration.image.reference,
-        platform: String(describing: machine.platform),
-        createdAt: machine.createdDate
-      ),
-      state: RuntimeState(rawValue: machine.status.rawValue) ?? .unknown,
+      identity: AppleLinuxMachineSnapshotMapper.identity(from: machine),
+      state: AppleLinuxMachineSnapshotMapper.state(from: machine),
       backingContainerID: machine.containerId,
       isInitialized: machine.initialized
     )

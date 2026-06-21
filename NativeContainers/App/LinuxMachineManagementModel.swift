@@ -8,18 +8,23 @@ final class LinuxMachineManagementModel {
   private(set) var progress: ContainerOperationProgress?
   private(set) var errorMessage: String?
   private(set) var partialCreation: LinuxMachineCreationResult?
+  private(set) var configurationUpdate: LinuxMachineConfigurationUpdateResult?
 
   private let creator: any MachineCreating
   private let lifecycle: any MachineLifecycleManaging
+  private let configuration: any MachineConfigurationManaging
   private let didMutate: @MainActor @Sendable () async -> Void
 
   init(
     creator: any MachineCreating,
     lifecycle: any MachineLifecycleManaging,
+    configuration: any MachineConfigurationManaging =
+      UnavailableLinuxMachineConfigurationService(),
     didMutate: @escaping @MainActor @Sendable () async -> Void
   ) {
     self.creator = creator
     self.lifecycle = lifecycle
+    self.configuration = configuration
     self.didMutate = didMutate
   }
 
@@ -29,6 +34,7 @@ final class LinuxMachineManagementModel {
     progress = nil
     errorMessage = nil
     partialCreation = nil
+    configurationUpdate = nil
     defer { isWorking = false }
 
     do {
@@ -81,10 +87,51 @@ final class LinuxMachineManagementModel {
     }
   }
 
+  func updateConfiguration(
+    for machine: LinuxMachineRecord,
+    request: LinuxMachineConfigurationUpdateRequest
+  ) async -> Bool {
+    guard !isWorking else { return false }
+    isWorking = true
+    errorMessage = nil
+    configurationUpdate = nil
+    defer { isWorking = false }
+
+    do {
+      configurationUpdate = try await configuration.updateConfiguration(
+        for: LinuxMachineIdentity(machine: machine),
+        request: request
+      )
+      await refreshIgnoringCancellation()
+      return true
+    } catch is CancellationError {
+      await refreshIgnoringCancellation()
+      return false
+    } catch {
+      errorMessage = error.localizedDescription
+      await refreshIgnoringCancellation()
+      return false
+    }
+  }
+
   func beginCreationSession() {
     progress = nil
     errorMessage = nil
     partialCreation = nil
+    configurationUpdate = nil
+  }
+
+  func beginConfigurationSession() {
+    errorMessage = nil
+    configurationUpdate = nil
+  }
+
+  func report(_ error: any Error) {
+    errorMessage = error.localizedDescription
+  }
+
+  func clearConfigurationUpdate() {
+    configurationUpdate = nil
   }
 
   func clearError() {
@@ -98,6 +145,7 @@ final class LinuxMachineManagementModel {
     guard !isWorking else { return false }
     isWorking = true
     errorMessage = nil
+    configurationUpdate = nil
     defer { isWorking = false }
 
     do {

@@ -174,7 +174,8 @@ extension AppModel {
           startedAt: now.addingTimeInterval(-1_200),
           diskSizeBytes: 20 * VirtualMachineResources.bytesPerGiB,
           cpuCount: 6,
-          memoryDescription: "8 GiB",
+          memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+          homeMount: .readWrite,
           isInitialized: true
         )
       ]
@@ -245,6 +246,7 @@ extension AppModel {
       containerShellService: service,
       terminalTargetService: service,
       machineService: service,
+      machineConfigurationService: service,
       registryService: PreviewRegistryService(),
       dockerCompatibilityService: PreviewDockerCompatibilityService(),
       dockerComposeClientService: PreviewDockerComposeClientService(),
@@ -279,6 +281,7 @@ extension AppModel {
       containerShellService: service,
       terminalTargetService: service,
       machineService: service,
+      machineConfigurationService: service,
       registryService: PreviewRegistryService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: false),
       initialInventory: inventory
@@ -360,6 +363,7 @@ private actor PreviewContainerService:
   ContainerManaging,
   ContainerShellDiscovering,
   MachineManaging,
+  MachineConfigurationManaging,
   TerminalTargetOpening
 {
   let inventory: ContainerInventory
@@ -626,6 +630,17 @@ private actor PreviewContainerService:
     authorization: LinuxMachineForceStopAuthorization
   ) async throws {}
   func deleteMachine(_ target: LinuxMachineIdentity) async throws {}
+
+  func updateConfiguration(
+    for target: LinuxMachineIdentity,
+    request: LinuxMachineConfigurationUpdateRequest
+  ) async throws -> LinuxMachineConfigurationUpdateResult {
+    LinuxMachineConfigurationUpdateResult(
+      target: target,
+      configuration: request.configuration,
+      state: inventory.machines.first(where: { $0.id == target.id })?.state ?? .stopped
+    )
+  }
 }
 
 private actor PreviewContainerTerminalSession: ContainerTerminalSession {

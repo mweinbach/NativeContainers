@@ -187,6 +187,8 @@ final class AppModel {
       any VirtualMachineStorageReclamationManaging =
       UnavailableVirtualMachineStorageReclamationService(),
     machineService: any MachineManaging = AppleMachineManagementService(),
+    machineConfigurationService: any MachineConfigurationManaging =
+      UnavailableLinuxMachineConfigurationService(),
     imageBuildService: any ImageBuilding = AppleContainerBuildService(),
     registryService: any RegistryManaging = AppleRegistryService(),
     dockerCompatibilityService: any DockerCompatibilityManaging =
@@ -238,6 +240,7 @@ final class AppModel {
         virtualMachineStorageReclamation:
           virtualMachineStorageReclamationService,
         machineService: machineService,
+        machineConfiguration: machineConfigurationService,
         imageBuild: imageBuildService,
         registry: registryService,
         dockerCompatibility: dockerCompatibilityService,
@@ -535,7 +538,8 @@ final class AppModel {
   func makeLinuxMachineManagementModel() -> LinuxMachineManagementModel {
     LinuxMachineManagementModel(
       creator: services.machineCreator,
-      lifecycle: services.machineLifecycle
+      lifecycle: services.machineLifecycle,
+      configuration: services.machineConfiguration
     ) { [weak self] in
       await self?.refresh()
     }

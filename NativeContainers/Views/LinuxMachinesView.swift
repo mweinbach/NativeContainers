@@ -9,6 +9,7 @@ struct LinuxMachinesView: View {
   @State private var isPresentingCreation = false
   @State private var pendingDeletion: LinuxMachineRecord?
   @State private var pendingForceStop: LinuxMachineRecord?
+  @State private var presentedConfiguration: LinuxMachineRecord?
   @State private var presentedCommand: LinuxMachineRecord?
 
   init(model: AppModel) {
@@ -18,22 +19,12 @@ struct LinuxMachinesView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if let errorMessage = managementModel.errorMessage {
-        HStack(alignment: .top, spacing: 10) {
-          Image(systemName: "exclamationmark.triangle.fill")
-            .foregroundStyle(.orange)
-          Text(errorMessage)
-            .textSelection(.enabled)
-          Spacer()
-          Button("Dismiss", systemImage: "xmark") {
-            managementModel.clearError()
-          }
-          .labelStyle(.iconOnly)
-          .buttonStyle(.plain)
-        }
-        .padding(12)
-        .background(.orange.opacity(0.08))
-      }
+      LinuxMachineManagementFeedback(
+        errorMessage: managementModel.errorMessage,
+        configurationUpdate: managementModel.configurationUpdate,
+        onDismissError: managementModel.clearError,
+        onDismissConfiguration: managementModel.clearConfigurationUpdate
+      )
 
       if appModel.linuxMachines.isEmpty {
         ContentUnavailableView(
@@ -59,6 +50,10 @@ struct LinuxMachinesView: View {
             },
             onForceStop: {
               pendingForceStop = machine
+            },
+            onConfigure: {
+              managementModel.beginConfigurationSession()
+              presentedConfiguration = machine
             },
             onRunCommand: {
               presentedCommand = machine
@@ -97,6 +92,9 @@ struct LinuxMachinesView: View {
     }
     .sheet(isPresented: $isPresentingCreation) {
       LinuxMachineCreationView(model: managementModel)
+    }
+    .sheet(item: $presentedConfiguration) { machine in
+      LinuxMachineConfigurationEditor(machine: machine, model: managementModel)
     }
     .sheet(item: $presentedCommand) { machine in
       LinuxMachineCommandView(machine: machine, appModel: appModel)
@@ -158,6 +156,54 @@ struct LinuxMachinesView: View {
   }
 }
 
+private struct LinuxMachineManagementFeedback: View {
+  let errorMessage: String?
+  let configurationUpdate: LinuxMachineConfigurationUpdateResult?
+  let onDismissError: () -> Void
+  let onDismissConfiguration: () -> Void
+
+  var body: some View {
+    if let errorMessage {
+      HStack(alignment: .top, spacing: 10) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundStyle(.orange)
+        Text(errorMessage)
+          .textSelection(.enabled)
+        Spacer()
+        dismissButton(action: onDismissError)
+      }
+      .padding(12)
+      .background(.orange.opacity(0.08))
+    }
+
+    if let configurationUpdate {
+      HStack(alignment: .top, spacing: 10) {
+        Image(systemName: "checkmark.circle.fill")
+          .foregroundStyle(.green)
+        if configurationUpdate.requiresRestart {
+          Text(
+            "Configuration for \(configurationUpdate.target.id) is saved. Restart the machine to apply it."
+          )
+        } else {
+          Text(
+            "Configuration for \(configurationUpdate.target.id) is saved and will apply on its next start."
+          )
+        }
+        Spacer()
+        dismissButton(action: onDismissConfiguration)
+      }
+      .padding(12)
+      .background(.green.opacity(0.08))
+    }
+  }
+
+  private func dismissButton(action: @escaping () -> Void) -> some View {
+    Button("Dismiss", systemImage: "xmark", action: action)
+      .labelStyle(.iconOnly)
+      .buttonStyle(.plain)
+  }
+}
+
 #Preview {
   NavigationStack {
     LinuxMachinesView(model: .preview)
@@ -172,6 +218,7 @@ struct LinuxMachineRow: View {
   let onStart: () -> Void
   let onStop: () -> Void
   let onForceStop: () -> Void
+  let onConfigure: () -> Void
   let onRunCommand: () -> Void
   let onOpenTerminal: () -> Void
   let onDelete: () -> Void
@@ -213,7 +260,11 @@ struct LinuxMachineRow: View {
       .buttonStyle(.plain)
       .accessibilityValue(isSelected ? "Selected" : "Not selected")
 
-      Menu("Machine Tools", systemImage: "terminal") {
+      Menu("Machine Tools", systemImage: "ellipsis.circle") {
+        Button("Configure", systemImage: "gearshape") {
+          onConfigure()
+        }
+        Divider()
         Button(
           machine.state == .stopped ? "Start & Open Terminal" : "Open Terminal",
           systemImage: "terminal"
@@ -260,9 +311,9 @@ struct LinuxMachineRow: View {
     }
     switch machine.state {
     case .running:
-      return "Open a shell or run a one-shot command."
+      return "Configure the machine, open a shell, or run a one-shot command."
     case .stopped:
-      return "Start the machine, then open a shell or run a command."
+      return "Configure the machine, or start it to open a shell or run a command."
     case .stopping, .unknown:
       return "Wait for a stable running or stopped state."
     }

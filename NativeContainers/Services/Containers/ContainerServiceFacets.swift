@@ -164,6 +164,22 @@ protocol MachineLifecycleManaging: Sendable {
 
 protocol MachineManaging: MachineCreating, MachineLifecycleManaging {}
 
+protocol MachineConfigurationManaging: Sendable {
+  func updateConfiguration(
+    for target: LinuxMachineIdentity,
+    request: LinuxMachineConfigurationUpdateRequest
+  ) async throws -> LinuxMachineConfigurationUpdateResult
+}
+
+struct UnavailableLinuxMachineConfigurationService: MachineConfigurationManaging {
+  func updateConfiguration(
+    for target: LinuxMachineIdentity,
+    request: LinuxMachineConfigurationUpdateRequest
+  ) async throws -> LinuxMachineConfigurationUpdateResult {
+    throw LinuxMachineConfigurationError.unavailable
+  }
+}
+
 protocol MachineCommandRunning: Sendable {
   func executeCommand(
     in target: LinuxMachineIdentity,

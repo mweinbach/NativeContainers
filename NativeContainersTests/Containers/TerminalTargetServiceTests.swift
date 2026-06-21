@@ -124,7 +124,8 @@ struct TerminalTargetServiceTests {
       startedAt: nil,
       diskSizeBytes: nil,
       cpuCount: 4,
-      memoryDescription: "4 GiB",
+      memoryBytes: 4 * 1_024 * LinuxMachineConfiguration.bytesPerMiB,
+      homeMount: .none,
       isInitialized: true
     )
   }

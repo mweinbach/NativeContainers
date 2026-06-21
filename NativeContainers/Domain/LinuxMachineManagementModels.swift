@@ -7,7 +7,7 @@ enum LinuxMachineHomeMount: String, CaseIterable, Codable, Identifiable, Sendabl
 
   var id: Self { self }
 
-  var title: String {
+  var title: LocalizedStringResource {
     switch self {
     case .none:
       "None"
@@ -19,9 +19,98 @@ enum LinuxMachineHomeMount: String, CaseIterable, Codable, Identifiable, Sendabl
   }
 }
 
-struct LinuxMachineCreationRequest: Equatable, Sendable {
+struct LinuxMachineConfiguration: Equatable, Sendable {
   static let bytesPerMiB: UInt64 = 1_048_576
   static let minimumMemoryBytes: UInt64 = 1_024 * bytesPerMiB
+  static let maximumCPUCount = 256
+
+  let cpuCount: Int
+  let memoryBytes: UInt64
+  let homeMount: LinuxMachineHomeMount
+
+  init(
+    cpuCount: Int,
+    memoryBytes: UInt64,
+    homeMount: LinuxMachineHomeMount
+  ) throws {
+    guard (1...Self.maximumCPUCount).contains(cpuCount) else {
+      throw LinuxMachineValidationError.invalidCPUCount
+    }
+    guard
+      memoryBytes >= Self.minimumMemoryBytes,
+      memoryBytes.isMultiple(of: Self.bytesPerMiB)
+    else {
+      throw LinuxMachineValidationError.invalidMemory
+    }
+
+    self.cpuCount = cpuCount
+    self.memoryBytes = memoryBytes
+    self.homeMount = homeMount
+  }
+}
+
+struct LinuxMachineConfigurationUpdateRequest: Equatable, Sendable {
+  let configuration: LinuxMachineConfiguration
+
+  init(
+    cpuCount: Int,
+    memoryBytes: UInt64,
+    homeMount: LinuxMachineHomeMount,
+    allowsWritableHomeMount: Bool
+  ) throws {
+    guard homeMount != .readWrite || allowsWritableHomeMount else {
+      throw LinuxMachineValidationError.writableHomeMountRequiresAuthorization
+    }
+    configuration = try LinuxMachineConfiguration(
+      cpuCount: cpuCount,
+      memoryBytes: memoryBytes,
+      homeMount: homeMount
+    )
+  }
+}
+
+struct LinuxMachineConfigurationUpdateResult: Equatable, Sendable {
+  let target: LinuxMachineIdentity
+  let configuration: LinuxMachineConfiguration
+  let state: RuntimeState
+
+  var requiresRestart: Bool {
+    state != .stopped
+  }
+}
+
+enum LinuxMachineConfigurationError: LocalizedError, Equatable, Sendable {
+  case unavailable
+  case missing(String)
+  case staleTarget(String)
+  case stableIdentityRequired(String)
+  case unsupportedHomeMount(String)
+  case updateNotConfirmed(String)
+  case updateOutcomeUnknown(id: String, operation: String, reconciliation: String)
+
+  var errorDescription: String? {
+    switch self {
+    case .unavailable:
+      "Linux machine configuration is unavailable."
+    case .missing(let id):
+      "Linux machine “\(id)” no longer exists."
+    case .staleTarget(let id):
+      "Linux machine “\(id)” changed after it was displayed. Refresh and review it again."
+    case .stableIdentityRequired(let id):
+      "Linux machine “\(id)” has no creation timestamp, so configuration changes were refused."
+    case .unsupportedHomeMount(let value):
+      "Apple’s machine service returned an unsupported home-mount policy: \(value)."
+    case .updateNotConfirmed(let id):
+      "Linux machine “\(id)” did not confirm the requested configuration. Refresh before trying again."
+    case .updateOutcomeUnknown(let id, let operation, let reconciliation):
+      "Configuration for Linux machine “\(id)” may have changed. The request failed: \(operation) Verification also failed: \(reconciliation)"
+    }
+  }
+}
+
+struct LinuxMachineCreationRequest: Equatable, Sendable {
+  static let bytesPerMiB = LinuxMachineConfiguration.bytesPerMiB
+  static let minimumMemoryBytes = LinuxMachineConfiguration.minimumMemoryBytes
   static let maximumNameLength = 57
 
   let name: String
@@ -60,15 +149,11 @@ struct LinuxMachineCreationRequest: Equatable, Sendable {
     guard !imageReference.isEmpty else {
       throw LinuxMachineValidationError.missingImageReference
     }
-    guard (1...256).contains(cpuCount) else {
-      throw LinuxMachineValidationError.invalidCPUCount
-    }
-    guard
-      memoryBytes >= Self.minimumMemoryBytes,
-      memoryBytes.isMultiple(of: Self.bytesPerMiB)
-    else {
-      throw LinuxMachineValidationError.invalidMemory
-    }
+    _ = try LinuxMachineConfiguration(
+      cpuCount: cpuCount,
+      memoryBytes: memoryBytes,
+      homeMount: homeMount
+    )
     guard homeMount != .readWrite || allowsWritableHomeMount else {
       throw LinuxMachineValidationError.writableHomeMountRequiresAuthorization
     }

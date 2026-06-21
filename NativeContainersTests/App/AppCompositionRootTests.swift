@@ -28,6 +28,7 @@ struct AppCompositionRootTests {
     #expect(services.containerAttachments is AppleContainerAttachmentService)
     #expect(services.machineCreator is AppleMachineManagementService)
     #expect(services.machineLifecycle is AppleMachineManagementService)
+    #expect(services.machineConfiguration is AppleLinuxMachineConfigurationService)
     #expect(services.machineCommands is AppleLinuxMachineProcessService)
     #expect(services.machineTerminal is AppleLinuxMachineProcessService)
     #expect(services.images is AppleImageService)

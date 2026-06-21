@@ -13,6 +13,7 @@ protocol AppleMachineTransport: Sendable {
     bootConfig: MachineConfig
   ) async throws
   func boot(id: String, dynamicEnvironment: [String: String]) async throws -> MachineSnapshot
+  func setConfig(id: String, bootConfig: MachineConfig) async throws
   func stop(id: String) async throws
   func delete(id: String) async throws
 }
@@ -90,6 +91,16 @@ struct AppleMachineXPCTransport: AppleMachineTransport {
       throw ResourceManagementError.invalidInfrastructureResponse
     }
     return try JSONDecoder().decode(MachineSnapshot.self, from: data)
+  }
+
+  func setConfig(id: String, bootConfig: MachineConfig) async throws {
+    let message = XPCMessage(route: MachineRoutes.setConfig.rawValue)
+    message.set(key: MachineKeys.id.rawValue, value: id)
+    message.set(
+      key: MachineKeys.bootConfig.rawValue,
+      value: try JSONEncoder().encode(bootConfig)
+    )
+    _ = try await send(message, operation: "Configure Linux machine \(id)")
   }
 
   func stop(id: String) async throws {
