@@ -100,6 +100,10 @@ enum AppCompositionRoot {
       containerReader: containerReader,
       runtimeMutationCoordinator: mutationCoordinator
     )
+    let imageService = AppleImageService(
+      containerReader: containerReader,
+      runtimeMutationCoordinator: mutationCoordinator
+    )
     let recoveryService = AppleOwnedContainerRecoveryService(
       cleanupClient: cleanupClient,
       ownershipLabel: AppleContainerOwnership.creationOperationLabel
@@ -133,6 +137,7 @@ enum AppCompositionRoot {
       terminalService: terminalService,
       machineLifecycleService: machineLifecycleService,
       creationService: creationService,
+      imageService: imageService,
       ownedContainerRecovery: recoveryService,
       runtimeMutationCoordinator: mutationCoordinator
     )
@@ -145,7 +150,7 @@ enum AppCompositionRoot {
       containerTools: toolService,
       containerTerminal: terminalService,
       machineLifecycle: machineLifecycleService,
-      images: containerService,
+      images: imageService,
       volumes: infrastructureService,
       networks: infrastructureService,
       browser: infrastructureService,
