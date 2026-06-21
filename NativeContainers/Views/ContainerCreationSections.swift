@@ -512,8 +512,7 @@ private struct ContainerAttachmentsPreview: View {
     volumes = model.volumes
     networks = model.networks
     environment = ContainerAttachmentEnvironment(
-      publishedSocketRootPath:
-        "/Users/example/Library/Application Support/NativeContainers/PublishedSockets",
+      publishedSocketRootPath: "/private/tmp/nativecontainers-501",
       hostAccess: ContainerHostAccessCatalog(
         configurations: [hostAccess],
         warnings: []
