@@ -5,6 +5,9 @@ struct ComposeProjectManagementView: View {
   @Environment(\.dismiss) private var dismiss
   @Bindable var model: ComposeProjectWorkspaceModel
   @State private var reviewTask: Task<Void, Never>?
+  @State private var executionTask: Task<Void, Never>?
+  @State private var confirmExecution = false
+  @State private var recoveryToDiscard: ComposeOperationRecoverySnapshot?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -12,6 +15,9 @@ struct ComposeProjectManagementView: View {
       Divider()
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
+          if !model.pendingRecoveries.isEmpty {
+            recoverySection
+          }
           sourceSection
           intentSection
           if let errorMessage = model.errorMessage {
@@ -22,6 +28,9 @@ struct ComposeProjectManagementView: View {
           } else {
             reviewPlaceholder
           }
+          if let result = model.executionResult {
+            executionResultSection(result)
+          }
         }
         .padding(24)
       }
@@ -30,8 +39,47 @@ struct ComposeProjectManagementView: View {
     }
     .background(.background)
     .frame(minWidth: 720, minHeight: 660)
+    .task {
+      await model.loadRecoveries()
+    }
+    .alert("Execute reviewed Compose operation?", isPresented: $confirmExecution) {
+      Button("Cancel", role: .cancel) {}
+      Button("Execute", role: .destructive) {
+        executionTask = Task {
+          await model.execute()
+          executionTask = nil
+        }
+      }
+    } message: {
+      Text(
+        "The source, Compose binary, controlled environment, and Apple inventory will be revalidated before mutation. Cancellation may leave a manual recovery record."
+      )
+    }
+    .alert(
+      "Discard reviewed recovery record?",
+      isPresented: Binding(
+        get: { recoveryToDiscard != nil },
+        set: { if !$0 { recoveryToDiscard = nil } }
+      )
+    ) {
+      Button("Cancel", role: .cancel) {
+        recoveryToDiscard = nil
+      }
+      Button("Discard Record", role: .destructive) {
+        guard let operationID = recoveryToDiscard?.operationID else { return }
+        recoveryToDiscard = nil
+        Task {
+          await model.discardRecoveryAfterReview(operationID: operationID)
+        }
+      }
+    } message: {
+      Text(
+        "Only discard this record after manually reconciling the listed operation against current Apple container inventory. Discarding never resumes or rolls back work."
+      )
+    }
     .onDisappear {
       reviewTask?.cancel()
+      executionTask?.cancel()
     }
   }
 
@@ -50,6 +98,7 @@ struct ComposeProjectManagementView: View {
       Spacer()
       Button("Close") {
         reviewTask?.cancel()
+        executionTask?.cancel()
         dismiss()
       }
       .keyboardShortcut(.cancelAction)
@@ -82,7 +131,7 @@ struct ComposeProjectManagementView: View {
         }
         Spacer()
         Button("Choose Folder…", action: chooseFolder)
-          .disabled(model.isReviewing)
+          .disabled(model.isReviewing || model.isExecuting)
       }
       .padding(10)
     }
@@ -133,15 +182,60 @@ struct ComposeProjectManagementView: View {
       Divider()
 
       VStack(alignment: .leading, spacing: 10) {
-        Toggle("Include reviewed true orphans", isOn: $model.removeOrphans)
         if model.action == .down {
-          Toggle("Include managed named volumes", isOn: $model.removeVolumes)
+          Toggle("Include reviewed true orphans (review only)", isOn: $model.removeOrphans)
+          Toggle("Include managed named volumes (review only)", isOn: $model.removeVolumes)
+        }
+        if model.action == .stop || model.action == .down {
+          Toggle(
+            "Automatically send KILL after the graceful stop timeout",
+            isOn: $model.killStuckContainers
+          )
         }
         Text(
-          "External volumes and networks are always lookup-only. Inactive-profile services remain inside the full declaration boundary and are never classified as orphans."
+          "Fresh Up, exact-ID Start, Stop, and declared-service Down are executable when review has no blockers. Named-volume and orphan deletion remain review-only. External resources are always lookup-only."
         )
         .font(.caption)
         .foregroundStyle(.secondary)
+      }
+      .padding(10)
+    }
+  }
+
+  private var recoverySection: some View {
+    GroupBox("Manual recovery required") {
+      VStack(alignment: .leading, spacing: 12) {
+        Text(
+          "NativeContainers never auto-resumes an interrupted Compose mutation. Reconcile each operation against current inventory, then explicitly discard its record."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+        ForEach(model.pendingRecoveries) { recovery in
+          HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+              .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 3) {
+              Text("\(recovery.projectName) · \(recovery.action.rawValue.capitalized)")
+                .font(.headline)
+              Text(
+                "Phase: \(recovery.phase.rawValue) · Containers \(recovery.completedContainerIDs.count)/\(recovery.affectedContainerCount) · Networks \(recovery.completedNetworkNames.count)/\(recovery.affectedNetworkCount)"
+              )
+              .font(.caption.monospaced())
+              .foregroundStyle(.secondary)
+              Text(recovery.operationID.uuidString.lowercased())
+                .font(.caption2.monospaced())
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+            }
+            Spacer()
+            Button("Reviewed…") {
+              recoveryToDiscard = recovery
+            }
+          }
+          .padding(10)
+          .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+        }
       }
       .padding(10)
     }
@@ -233,6 +327,27 @@ struct ComposeProjectManagementView: View {
     }
   }
 
+  private func executionResultSection(_ result: ComposeProjectExecutionResult) -> some View {
+    Label {
+      VStack(alignment: .leading, spacing: 3) {
+        Text("Compose \(result.action.rawValue.capitalized) confirmed")
+          .font(.headline)
+        Text(
+          "Apple inventory now reports \(result.remainingContainerCount) project container(s), \(result.remainingVolumeCount) volume(s), and \(result.remainingNetworkCount) network(s)."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      }
+    } icon: {
+      Image(systemName: "checkmark.circle.fill")
+        .font(.title2)
+        .foregroundStyle(.green)
+    }
+    .padding(14)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+  }
+
   private func issuesSection(_ plan: ComposeProjectPlan) -> some View {
     GroupBox("Review findings") {
       VStack(alignment: .leading, spacing: 10) {
@@ -287,28 +402,42 @@ struct ComposeProjectManagementView: View {
   private var footer: some View {
     HStack {
       Label(
-        "Review-only: execution stays locked until exact-ID mutation and crash-safe journaling land.",
-        systemImage: "lock.fill"
+        "Execution revalidates the reviewed source and identities; pending journals require manual reconciliation.",
+        systemImage: "checkmark.shield.fill"
       )
       .font(.caption)
       .foregroundStyle(.secondary)
 
       Spacer()
 
-      if model.isReviewing {
+      if model.isExecuting {
+        ProgressView()
+          .controlSize(.small)
+        Button("Cancel Execution", role: .destructive) {
+          executionTask?.cancel()
+        }
+      } else if model.isReviewing {
         ProgressView()
           .controlSize(.small)
         Button("Cancel Review") {
           reviewTask?.cancel()
         }
       } else {
+        if model.plan != nil {
+          Button("Execute Reviewed \(model.action.rawValue.capitalized)") {
+            confirmExecution = true
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(.red)
+          .disabled(!model.canExecute)
+        }
         Button("Review Desired State") {
           reviewTask = Task {
             await model.review()
             reviewTask = nil
           }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.bordered)
         .disabled(!model.canReview)
         .keyboardShortcut(.defaultAction)
       }

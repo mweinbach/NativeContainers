@@ -58,7 +58,9 @@ final class AppModel {
   @ObservationIgnored
   private lazy var composeProjectWorkspaceModel = ComposeProjectWorkspaceModel(
     service: services.composeProjectLifecycle
-  )
+  ) { [weak self] in
+    await self?.refresh()
+  }
 
   @ObservationIgnored
   private var macVirtualMachineRuntimeModels: [UUID: MacVirtualMachineRuntimeModel] = [:]

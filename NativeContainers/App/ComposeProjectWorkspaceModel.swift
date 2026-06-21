@@ -6,8 +6,9 @@ import Observation
 final class ComposeProjectWorkspaceModel {
   var action: ComposeProjectLifecycleAction = .up {
     didSet {
-      if action == .up {
+      if action != .down {
         removeVolumes = false
+        removeOrphans = false
       }
       invalidateReview()
     }
@@ -27,20 +28,31 @@ final class ComposeProjectWorkspaceModel {
   var removeVolumes = false {
     didSet { invalidateReview() }
   }
+  var killStuckContainers = true {
+    didSet { invalidateReview() }
+  }
 
   private(set) var selectedDirectoryURL: URL?
   private(set) var plan: ComposeProjectPlan?
   private(set) var isReviewing = false
+  private(set) var isExecuting = false
+  private(set) var isLoadingRecoveries = false
+  private(set) var executionResult: ComposeProjectExecutionResult?
+  private(set) var pendingRecoveries: [ComposeOperationRecoverySnapshot] = []
   private(set) var errorMessage: String?
 
   @ObservationIgnored
   private let service: any ComposeProjectLifecycleManaging
+  @ObservationIgnored
+  private let didMutate: @MainActor @Sendable () async -> Void
 
   init(
     service: any ComposeProjectLifecycleManaging,
-    initialPlan: ComposeProjectPlan? = nil
+    initialPlan: ComposeProjectPlan? = nil,
+    didMutate: @escaping @MainActor @Sendable () async -> Void = {}
   ) {
     self.service = service
+    self.didMutate = didMutate
     plan = initialPlan
   }
 
@@ -62,6 +74,15 @@ final class ComposeProjectWorkspaceModel {
       && isValidComposeProjectName(projectName)
       && profiles.allSatisfy(isValidComposeProfileName)
       && !isReviewing
+      && !isExecuting
+  }
+
+  var canExecute: Bool {
+    plan?.canExecute == true
+      && executionResult == nil
+      && !isReviewing
+      && !isExecuting
+      && pendingRecoveries.isEmpty
   }
 
   var sourceDisplayName: String {
@@ -75,8 +96,10 @@ final class ComposeProjectWorkspaceModel {
     pullPolicy = .never
     removeOrphans = false
     removeVolumes = false
+    killStuckContainers = true
     selectedDirectoryURL = nil
     plan = nil
+    executionResult = nil
     errorMessage = nil
   }
 
@@ -101,10 +124,12 @@ final class ComposeProjectWorkspaceModel {
       profiles: profiles,
       pullPolicy: pullPolicy,
       removeOrphans: removeOrphans,
-      removeVolumes: removeVolumes
+      removeVolumes: removeVolumes,
+      killStuckContainers: killStuckContainers
     )
     isReviewing = true
     plan = nil
+    executionResult = nil
     errorMessage = nil
     defer { isReviewing = false }
 
@@ -120,12 +145,67 @@ final class ComposeProjectWorkspaceModel {
     }
   }
 
+  func execute() async {
+    guard let plan, plan.canExecute else {
+      errorMessage = "Review a Compose operation with no blockers before execution."
+      return
+    }
+    guard pendingRecoveries.isEmpty else {
+      errorMessage = "Review and discard the pending Compose recovery record first."
+      return
+    }
+    isExecuting = true
+    executionResult = nil
+    errorMessage = nil
+    defer { isExecuting = false }
+
+    do {
+      executionResult = try await service.execute(plan)
+      await didMutate()
+      await loadRecoveries()
+    } catch is CancellationError {
+      self.plan = nil
+      errorMessage =
+        "Compose execution was cancelled. Reconcile the pending recovery record before another mutation."
+      await loadRecoveries()
+    } catch {
+      self.plan = nil
+      errorMessage = error.localizedDescription
+      await loadRecoveries()
+    }
+  }
+
+  func loadRecoveries() async {
+    guard !isLoadingRecoveries else { return }
+    isLoadingRecoveries = true
+    defer { isLoadingRecoveries = false }
+    do {
+      pendingRecoveries = try await service.pendingRecoverySnapshots()
+    } catch is CancellationError {
+      return
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  func discardRecoveryAfterReview(operationID: UUID) async {
+    do {
+      try await service.discardRecoveryAfterReview(operationID: operationID)
+      await loadRecoveries()
+    } catch is CancellationError {
+      return
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
   func clearError() {
     errorMessage = nil
   }
 
   private func invalidateReview() {
     plan = nil
+    executionResult = nil
     errorMessage = nil
   }
 

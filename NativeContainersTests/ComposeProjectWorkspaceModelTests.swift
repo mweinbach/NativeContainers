@@ -56,6 +56,46 @@ struct ComposeProjectWorkspaceModelTests {
 
     #expect(!model.removeVolumes)
   }
+
+  @Test
+  func executableReviewRunsThroughServiceAndRefreshesInventory() async throws {
+    let service = WorkspaceComposeServiceDouble()
+    let mutationRecorder = WorkspaceMutationRecorder()
+    let model = ComposeProjectWorkspaceModel(service: service) {
+      mutationRecorder.count += 1
+    }
+    model.begin()
+    model.selectDirectory(URL(filePath: "/tmp/demo", directoryHint: .isDirectory))
+    await model.review()
+    #expect(model.canExecute)
+
+    await model.execute()
+
+    #expect(model.executionResult?.action == .up)
+    #expect(await service.executedPlans.count == 1)
+    #expect(mutationRecorder.count == 1)
+    #expect(model.errorMessage == nil)
+  }
+
+  @Test
+  func pendingRecoveryBlocksExecutionUntilExplicitReviewedDiscard() async throws {
+    let recovery = workspaceRecoverySnapshot()
+    let service = WorkspaceComposeServiceDouble(recoveries: [recovery])
+    let model = ComposeProjectWorkspaceModel(service: service)
+    model.begin()
+    model.selectDirectory(URL(filePath: "/tmp/demo", directoryHint: .isDirectory))
+    await model.review()
+    await model.loadRecoveries()
+
+    #expect(!model.canExecute)
+    #expect(model.pendingRecoveries.map(\.operationID) == [recovery.operationID])
+
+    await model.discardRecoveryAfterReview(operationID: recovery.operationID)
+
+    #expect(model.pendingRecoveries.isEmpty)
+    #expect(model.canExecute)
+    #expect(await service.discardedOperationIDs == [recovery.operationID])
+  }
 }
 
 private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
@@ -65,6 +105,13 @@ private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
   }
 
   private(set) var requests: [Request] = []
+  private(set) var executedPlans: [ComposeProjectPlan] = []
+  private(set) var discardedOperationIDs: [UUID] = []
+  private var recoveries: [ComposeOperationRecoverySnapshot]
+
+  init(recoveries: [ComposeOperationRecoverySnapshot] = []) {
+    self.recoveries = recoveries
+  }
 
   func review(
     directoryURL: URL,
@@ -94,6 +141,7 @@ private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
       desiredState: ComposeDesiredState(
         projectName: options.projectName,
         declaredServiceNames: [],
+        serviceDependencies: [:],
         activeServices: [],
         volumes: [],
         networks: []
@@ -101,6 +149,10 @@ private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
       fullConfigurationSHA256: String(repeating: "b", count: 64),
       activeConfigurationSHA256: String(repeating: "c", count: 64),
       composeReleaseVersion: "5.1.4",
+      composeBinarySHA256: String(repeating: "d", count: 64),
+      composeSourceRevision: "source-revision",
+      environmentSHA256: String(repeating: "e", count: 64),
+      serviceConfigurationHashes: [:],
       observedIdentity: .empty,
       issues: [],
       affectedContainerIDs: [],
@@ -112,6 +164,54 @@ private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
   }
 
   func execute(_ plan: ComposeProjectPlan) async throws -> ComposeProjectExecutionResult {
-    throw ComposeProjectLifecycleError.unavailable("Not used by workspace model tests.")
+    executedPlans.append(plan)
+    return ComposeProjectExecutionResult(
+      action: plan.options.action,
+      projectName: plan.options.projectName,
+      observedState: nil,
+      remainingContainerCount: 1,
+      remainingVolumeCount: 0,
+      remainingNetworkCount: 1
+    )
   }
+
+  func pendingRecoverySnapshots() async throws -> [ComposeOperationRecoverySnapshot] {
+    recoveries
+  }
+
+  func discardRecoveryAfterReview(operationID: UUID) async throws {
+    discardedOperationIDs.append(operationID)
+    recoveries.removeAll { $0.operationID == operationID }
+  }
+}
+
+@MainActor
+private final class WorkspaceMutationRecorder {
+  var count = 0
+}
+
+private func workspaceRecoverySnapshot() -> ComposeOperationRecoverySnapshot {
+  ComposeOperationRecoverySnapshot(
+    operationID: UUID(),
+    planID: UUID(),
+    action: .down,
+    projectName: "demo",
+    preparedAt: Date(timeIntervalSince1970: 1_000),
+    sourceFileSHA256: String(repeating: "a", count: 64),
+    fullConfigurationSHA256: String(repeating: "b", count: 64),
+    activeConfigurationSHA256: String(repeating: "c", count: 64),
+    composeBinarySHA256: String(repeating: "d", count: 64),
+    composeSourceRevision: "source-revision",
+    environmentSHA256: String(repeating: "e", count: 64),
+    removeOrphans: false,
+    removeVolumes: false,
+    affectedContainerCount: 1,
+    affectedVolumeCount: 0,
+    affectedNetworkCount: 1,
+    orphanContainerCount: 0,
+    phase: .executing,
+    completedContainerIDs: [],
+    completedNetworkNames: [],
+    completedVolumeNames: []
+  )
 }
