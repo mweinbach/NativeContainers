@@ -164,9 +164,12 @@ final class AppModel {
 
   private func performRefreshPass() async {
     var messages = virtualMachineRecoveryErrorMessage.map { [$0] } ?? []
+    var didLoadContainerInventory = false
+    var didLoadVirtualMachineLibrary = false
 
     do {
       let inventory = try await services.inventory.loadInventory()
+      didLoadContainerInventory = true
       systemInfo = inventory.system
       containers = inventory.containers
       images = inventory.images
@@ -187,12 +190,18 @@ final class AppModel {
 
     do {
       virtualMachines = try await services.virtualMachineLibrary.list()
+      didLoadVirtualMachineLibrary = true
       removeStaleMacVirtualMachineRuntimeModels()
     } catch {
       messages.append("Virtual machine library: \(error.localizedDescription)")
     }
 
-    updateWorkspaceNavigation()
+    updateWorkspaceNavigation(
+      reconcileMissingRoute: shouldReconcileWorkspaceRoute(
+        didLoadContainerInventory: didLoadContainerInventory,
+        didLoadVirtualMachineLibrary: didLoadVirtualMachineLibrary
+      )
+    )
 
     errorMessage = messages.isEmpty ? nil : messages.joined(separator: "\n")
     lastRefresh = Date()
@@ -448,7 +457,7 @@ final class AppModel {
     }
   }
 
-  private func updateWorkspaceNavigation() {
+  private func updateWorkspaceNavigation(reconcileMissingRoute: Bool = true) {
     workspaceNavigation.update(
       WorkspaceResourceSnapshot(
         containers: containers,
@@ -457,8 +466,24 @@ final class AppModel {
         networks: networks,
         linuxMachines: linuxMachines,
         macOSVirtualMachines: virtualMachines
-      )
+      ),
+      reconcileMissingRoute: reconcileMissingRoute
     )
+  }
+
+  private func shouldReconcileWorkspaceRoute(
+    didLoadContainerInventory: Bool,
+    didLoadVirtualMachineLibrary: Bool
+  ) -> Bool {
+    switch workspaceRoute {
+    case .container, .image, .volume, .network, .linuxMachine:
+      didLoadContainerInventory
+    case .macOSVirtualMachine:
+      didLoadVirtualMachineLibrary
+    case .overview, .containers, .images, .builds, .volumes, .networks,
+      .linuxMachines, .macOSVirtualMachines, .settings:
+      true
+    }
   }
 
   private func performMutation(

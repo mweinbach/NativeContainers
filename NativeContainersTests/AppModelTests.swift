@@ -645,6 +645,53 @@ struct AppModelTests {
   }
 
   @Test
+  func transientRuntimeRefreshFailurePreservesExactRouteThroughRecovery() async {
+    let initial = ContainerInventory(
+      system: emptyInventory().system,
+      containers: [
+        ContainerRecord(
+          id: "db",
+          imageReference: "example/db:latest",
+          platform: "linux/arm64",
+          state: .running,
+          ipAddress: nil,
+          createdAt: Date(timeIntervalSince1970: 1),
+          startedAt: Date(timeIntervalSince1970: 2),
+          cpuCount: 2,
+          memoryBytes: VirtualMachineResources.bytesPerGiB,
+          ports: []
+        )
+      ],
+      images: [],
+      volumes: [],
+      networks: [],
+      machines: []
+    )
+    let service = MockContainerService(
+      inventory: initial,
+      loadError: AppModelTestError.runtimeUnavailable,
+      subsequentLoadErrors: [nil]
+    )
+    let model = AppModel(
+      containerService: service,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: []),
+      initialInventory: initial
+    )
+    #expect(model.navigate(to: .container("db")))
+
+    await model.refresh()
+
+    #expect(model.containers.isEmpty)
+    #expect(model.workspaceRoute == .container("db"))
+
+    await model.refresh()
+
+    #expect(model.containers == initial.containers)
+    #expect(model.workspaceRoute == .container("db"))
+    #expect(model.errorMessage == nil)
+  }
+
+  @Test
   func toolsModelExecutesCommandAndCopiesBothDirections() async throws {
     let service = MockContainerService(inventory: emptyInventory())
     let model = ContainerToolsModel(containerID: "web", service: service)
@@ -743,8 +790,8 @@ private func inventoryWithImage(digest: String) -> ContainerInventory {
 
 private actor MockContainerService: ContainerManaging, MachineManaging {
   private var inventories: [ContainerInventory]
+  private var loadErrors: [(any Error)?]
   let inspection: ContainerInspection
-  let loadError: (any Error)?
   let pullError: (any Error)?
   let attachmentEnvironment: ContainerAttachmentEnvironment
   private(set) var startedContainerIDs: [String] = []
@@ -765,6 +812,7 @@ private actor MockContainerService: ContainerManaging, MachineManaging {
     inventory: ContainerInventory,
     subsequentInventories: [ContainerInventory] = [],
     loadError: (any Error)? = nil,
+    subsequentLoadErrors: [(any Error)?] = [],
     pullError: (any Error)? = nil,
     attachmentEnvironment: ContainerAttachmentEnvironment = ContainerAttachmentEnvironment(
       publishedSocketRootPath: "",
@@ -779,7 +827,7 @@ private actor MockContainerService: ContainerManaging, MachineManaging {
     )
   ) {
     inventories = [inventory] + subsequentInventories
-    self.loadError = loadError
+    loadErrors = [loadError] + subsequentLoadErrors
     self.pullError = pullError
     self.attachmentEnvironment = attachmentEnvironment
     self.inspection = inspection
@@ -792,6 +840,12 @@ private actor MockContainerService: ContainerManaging, MachineManaging {
 
   func loadInventory() async throws -> ContainerInventory {
     loadCount += 1
+    let loadError: (any Error)?
+    if loadErrors.count > 1 {
+      loadError = loadErrors.removeFirst()
+    } else {
+      loadError = loadErrors[0]
+    }
     if let loadError { throw loadError }
     if inventories.count > 1 {
       return inventories.removeFirst()

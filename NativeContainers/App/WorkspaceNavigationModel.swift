@@ -36,10 +36,15 @@ final class WorkspaceNavigationModel {
     reconcileRoute()
   }
 
-  func update(_ snapshot: WorkspaceResourceSnapshot) {
+  func update(
+    _ snapshot: WorkspaceResourceSnapshot,
+    reconcileMissingRoute: Bool = true
+  ) {
     entries = catalog.entries(from: snapshot)
     recomputeResults()
-    reconcileRoute()
+    if reconcileMissingRoute {
+      reconcileRoute()
+    }
   }
 
   @discardableResult

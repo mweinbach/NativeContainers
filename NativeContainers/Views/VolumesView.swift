@@ -80,7 +80,7 @@ struct VolumesView: View {
             .frame(minWidth: 430)
           }
         }
-        .onChange(of: appModel.volumes) {
+        .onChange(of: appModel.volumes, initial: true) {
           synchronizeSelection()
         }
       }

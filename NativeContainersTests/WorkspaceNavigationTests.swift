@@ -88,6 +88,19 @@ struct WorkspaceNavigationTests {
   }
 
   @Test
+  func catalogIndexesLocalizedResourceKindTitles() {
+    let catalog = WorkspaceResourceCatalog(
+      locale: Locale(identifier: "fr_FR"),
+      localizedKindTitles: [.container: "Conteneur"]
+    )
+    let entries = catalog.entries(
+      from: WorkspaceResourceSnapshot(containers: [makeContainer(id: "api")])
+    )
+
+    #expect(catalog.search("conteneur", in: entries, limit: 10).map(\.route) == [.container("api")])
+  }
+
+  @Test
   func catalogDedupeIsStableAcrossInputOrdering() {
     let catalog = WorkspaceResourceCatalog()
     let alphabeticWinner = makeVolume(id: "shared", name: "Alpha")
@@ -137,6 +150,23 @@ struct WorkspaceNavigationTests {
     #expect(navigation.route == .containers)
     #expect(navigation.entries.isEmpty)
     #expect(navigation.results.isEmpty)
+  }
+
+  @Test
+  func navigationRetainsAnExactRouteWhenRefreshIsNotAuthoritative() {
+    let route = WorkspaceRoute.container("api")
+    let navigation = WorkspaceNavigationModel(
+      snapshot: WorkspaceResourceSnapshot(containers: [makeContainer(id: "api")])
+    )
+    #expect(navigation.navigate(to: route))
+
+    navigation.update(
+      WorkspaceResourceSnapshot(),
+      reconcileMissingRoute: false
+    )
+
+    #expect(navigation.route == route)
+    #expect(navigation.entries.isEmpty)
   }
 
   @Test

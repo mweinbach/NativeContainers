@@ -81,7 +81,7 @@ struct NetworksView: View {
             .frame(minWidth: 430)
           }
         }
-        .onChange(of: appModel.networks) {
+        .onChange(of: appModel.networks, initial: true) {
           synchronizeSelection()
         }
       }

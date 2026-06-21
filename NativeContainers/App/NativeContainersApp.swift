@@ -5,7 +5,7 @@ struct NativeContainersApp: App {
   @State private var model = AppModel(services: AppCompositionRoot.live())
 
   var body: some Scene {
-    WindowGroup {
+    Window("NativeContainers", id: "main") {
       RootView(model: model)
         .frame(minWidth: 940, minHeight: 620)
     }

@@ -11,6 +11,17 @@ protocol WorkspaceResourceCataloging: Sendable {
 }
 
 struct WorkspaceResourceCatalog: WorkspaceResourceCataloging {
+  private let locale: Locale
+  private let localizedKindTitles: [WorkspaceResourceKind: String]
+
+  init(
+    locale: Locale = .current,
+    localizedKindTitles: [WorkspaceResourceKind: String] = [:]
+  ) {
+    self.locale = locale
+    self.localizedKindTitles = localizedKindTitles
+  }
+
   func entries(from snapshot: WorkspaceResourceSnapshot) -> [WorkspaceResourceEntry] {
     var entries: [WorkspaceResourceEntry] = []
 
@@ -155,7 +166,7 @@ struct WorkspaceResourceCatalog: WorkspaceResourceCataloging {
       kind: kind,
       title: title,
       subtitle: subtitle,
-      searchTerms: kind.searchTerms
+      searchTerms: [localizedTitle(for: kind)] + kind.searchTerms
         + terms.compactMap { value in
           guard let value, !value.isEmpty else { return nil }
           return value
@@ -167,6 +178,15 @@ struct WorkspaceResourceCatalog: WorkspaceResourceCataloging {
     metadata.keys.sorted().map { key in
       "\(key) \(metadata[key, default: ""])"
     }.joined(separator: " ")
+  }
+
+  private func localizedTitle(for kind: WorkspaceResourceKind) -> String {
+    if let title = localizedKindTitles[kind] {
+      return title
+    }
+    var resource = kind.title
+    resource.locale = locale
+    return String(localized: resource)
   }
 
   private func score(
@@ -207,7 +227,7 @@ struct WorkspaceResourceCatalog: WorkspaceResourceCataloging {
     value
       .folding(
         options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
-        locale: Locale(identifier: "en_US_POSIX")
+        locale: locale
       )
       .lowercased()
   }
