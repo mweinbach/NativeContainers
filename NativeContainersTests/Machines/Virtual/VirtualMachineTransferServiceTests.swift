@@ -41,6 +41,9 @@ struct VirtualMachineTransferServiceTests {
     #expect(source.effectiveAudioConfiguration.isMicrophoneEnabled)
     #expect(exported.audioConfiguration == nil)
     #expect(exported.effectiveAudioConfiguration == .disconnected)
+    #expect(source.effectiveNetworkConfiguration.attachment == .hostOnly)
+    #expect(exported.networkConfiguration == nil)
+    #expect(exported.effectiveNetworkConfiguration == .nat)
     #expect(try fixture.machineIdentifier(in: destination, manifest: exported) == sourceIdentifier)
     #expect(
       !FileManager.default.fileExists(
@@ -233,6 +236,8 @@ struct VirtualMachineTransferServiceTests {
     #expect(imported.id == source.id)
     #expect(imported.audioConfiguration == nil)
     #expect(imported.effectiveAudioConfiguration == .disconnected)
+    #expect(imported.networkConfiguration == nil)
+    #expect(imported.effectiveNetworkConfiguration == .nat)
     let importedBundle = fixture.bundleURL(root: fixture.importLibraryRoot, id: imported.id)
     #expect(
       try fixture.machineIdentifier(in: importedBundle, manifest: imported)
@@ -585,6 +590,10 @@ private struct VirtualMachineTransferFixture {
       stopped.audioConfiguration = MacVirtualMachineAudioConfiguration(
         revision: 1,
         isMicrophoneEnabled: true
+      )
+      stopped.networkConfiguration = MacVirtualMachineNetworkConfiguration(
+        revision: 1,
+        attachment: .hostOnly
       )
     }
     try write(stopped, to: bundle)

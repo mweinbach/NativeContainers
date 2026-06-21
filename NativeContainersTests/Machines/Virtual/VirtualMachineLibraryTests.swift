@@ -425,6 +425,8 @@ struct VirtualMachineLibraryTests {
     #expect(loaded.effectiveDiskImageFormat == .raw)
     #expect(loaded.audioConfiguration == nil)
     #expect(loaded.effectiveAudioConfiguration == .disconnected)
+    #expect(loaded.networkConfiguration == nil)
+    #expect(loaded.effectiveNetworkConfiguration == .nat)
 
     let prepared = try await library.prepareMacVM(
       id: identifier,
@@ -465,6 +467,44 @@ struct VirtualMachineLibraryTests {
       id: fixture.manifest.id
     )
     #expect(replacementLease.machine.manifest.effectiveAudioConfiguration == updated)
+    replacementLease.release()
+  }
+
+  @Test
+  func networkConfigurationPersistsOnlyUnderTheRuntimeLease() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let lease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+
+    let updated = try await fixture.library.setMacOSNetworkAttachment(
+      .shared,
+      for: lease
+    )
+
+    #expect(updated.revision == 1)
+    #expect(updated.attachment == .shared)
+    lease.release()
+
+    await #expect(throws: MacVirtualMachineRuntimeError.staleTarget(lease.target)) {
+      _ = try await fixture.library.setMacOSNetworkAttachment(
+        .hostOnly,
+        for: lease
+      )
+    }
+
+    let manifests = try await fixture.library.list()
+    let reloaded = try #require(manifests.first)
+    #expect(reloaded.effectiveNetworkConfiguration == updated)
+    let replacementLease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+    #expect(
+      replacementLease.machine.manifest.effectiveNetworkConfiguration
+        == updated
+    )
     replacementLease.release()
   }
 

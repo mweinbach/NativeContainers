@@ -70,6 +70,17 @@ struct AppModelTests {
   }
 
   @Test
+  func macVirtualMachineNetworkUsesAStableAppScopedModel() throws {
+    let model = AppModel.previewVirtualMachines
+    let machine = try #require(model.virtualMachines.first)
+
+    #expect(
+      model.makeMacVirtualMachineNetworkModel(for: machine)
+        === model.makeMacVirtualMachineNetworkModel(for: machine)
+    )
+  }
+
+  @Test
   func macVirtualMachineSharingUsesAStableAppScopedModel() throws {
     let model = AppModel.previewVirtualMachines
     let machine = try #require(model.virtualMachines.first)
