@@ -185,6 +185,14 @@ reviewed builder descriptor, creation identity, image digest, DNS configuration,
 and socket. It produces an OCI archive under a unique staging reference but
 never mutates final tags.
 
+`AppleContainerBuildService` is only the stable facade and single-flight owner.
+It composes an `ImageBuildPlanning` service for validation and immutable review,
+an `ImageBuildExecuting` service for worker and publication orchestration, and
+an `ImageBuildLifecycleManaging` service for discard and cancellation-independent
+cleanup. The phases share the same injected staging, secret, artifact, output,
+and image-store boundaries, so product wiring stays one call while tests can
+replace any phase without constructing the Apple runtime.
+
 Build secrets cross a separate `ImageBuildSecretManaging` boundary. The review
 request contains file selections, but the immutable plan contains only a
 canonical ID, privacy-sensitive path, and byte count. The service rejects invalid or
@@ -260,16 +268,19 @@ as the parent-lifetime lease; secret bytes never enter Codable state, argv,
 environment, an app-side `Data`, or a temporary file. Secret-enabled solves force
 Apple `Builder.BuildConfig.quiet`, drain
 stderr without retaining it, and replace worker failures with a fixed notice.
-Ordinary builds retain the bounded plain BuildKit log. The parent escalates TERM
-to KILL on cancellation. Cleanup removes both
+Ordinary builds retain the bounded plain BuildKit log. The parent consumes
+short stdout frames with POSIX `read`, so progress is delivered before worker
+exit and cancellation can escalate TERM to KILL while BuildKit is still active.
+Cleanup removes both
 guest-visible and private artifacts in a cancellation-independent task,
 including builds canceled while queued. Context and worker isolation prevent
 stale review data and leaked process resources; they do not claim to sandbox a
 compromised BuildKit implementation.
 
-The worker reads its short request frame with one POSIX `read`. Foundation’s
-counted pipe read can wait for the entire requested buffer while the input lease
-is intentionally open, which would deadlock every real build before dispatch.
+Both sides use POSIX pipe reads for short framed traffic. Foundation’s counted
+pipe read can wait for the entire requested buffer or until EOF; the input lease
+is intentionally open, and the worker stays alive during a solve, so using it
+would deadlock request dispatch or buffer progress until the build had ended.
 
 During foundation development the GUI connects to a matching installed Apple
 `container` 1.0.0 service. A distributable product must embed a version-matched,

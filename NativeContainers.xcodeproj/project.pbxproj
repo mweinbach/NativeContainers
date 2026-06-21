@@ -193,6 +193,10 @@
 		1F9D2C182FE7D2EE0076F5B9 /* DockerComposeClientModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C172FE7D2EE0076F5B9 /* DockerComposeClientModels.swift */; };
 		1F9D2C1A2FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C192FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift */; };
 		1F9D2C1C2FE7D3150076F5B9 /* DockerComposeClientInstallServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C1B2FE7D3150076F5B9 /* DockerComposeClientInstallServiceTests.swift */; };
+		1F9D2C1E2FE7D8FB0076F5B9 /* ImageBuildPlanningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C1D2FE7D8FB0076F5B9 /* ImageBuildPlanningService.swift */; };
+		1F9D2C202FE7D8FE0076F5B9 /* ImageBuildLifecycleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C1F2FE7D8FE0076F5B9 /* ImageBuildLifecycleService.swift */; };
+		1F9D2C222FE7D9110076F5B9 /* ImageBuildExecutionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C212FE7D9110076F5B9 /* ImageBuildExecutionService.swift */; };
+		1F9D2C242FE7D93E0076F5B9 /* ImageBuildServiceCompositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C232FE7D93E0076F5B9 /* ImageBuildServiceCompositionTests.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -497,6 +501,10 @@
 		1F9D2C172FE7D2EE0076F5B9 /* DockerComposeClientModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerComposeClientModels.swift; sourceTree = "<group>"; };
 		1F9D2C192FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerComposeClientInstallService.swift; sourceTree = "<group>"; };
 		1F9D2C1B2FE7D3150076F5B9 /* DockerComposeClientInstallServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerComposeClientInstallServiceTests.swift; sourceTree = "<group>"; };
+		1F9D2C1D2FE7D8FB0076F5B9 /* ImageBuildPlanningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildPlanningService.swift; sourceTree = "<group>"; };
+		1F9D2C1F2FE7D8FE0076F5B9 /* ImageBuildLifecycleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildLifecycleService.swift; sourceTree = "<group>"; };
+		1F9D2C212FE7D9110076F5B9 /* ImageBuildExecutionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildExecutionService.swift; sourceTree = "<group>"; };
+		1F9D2C232FE7D93E0076F5B9 /* ImageBuildServiceCompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageBuildServiceCompositionTests.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -772,6 +780,7 @@
 				1F9D2C072FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift */,
 				1F9D2C0B2FE7D0470076F5B9 /* SocktainerComposeLiveFixtureServiceTests.swift */,
 				1F9D2C1B2FE7D3150076F5B9 /* DockerComposeClientInstallServiceTests.swift */,
+				1F9D2C232FE7D93E0076F5B9 /* ImageBuildServiceCompositionTests.swift */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -861,6 +870,9 @@
 				1F9D2C132FE7D0B20076F5B9 /* SocktainerComposeLiveConformanceService.swift */,
 				1F9D2C152FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift */,
 				1F9D2C192FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift */,
+				1F9D2C1D2FE7D8FB0076F5B9 /* ImageBuildPlanningService.swift */,
+				1F9D2C1F2FE7D8FE0076F5B9 /* ImageBuildLifecycleService.swift */,
+				1F9D2C212FE7D9110076F5B9 /* ImageBuildExecutionService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1172,6 +1184,7 @@
 				1F9D2B012FE7664E0076F5B9 /* AppCompositionRootTests.swift in Sources */,
 				1F9D2B942FE7A1A60076F5B9 /* MacVirtualMachineBundleResolverTests.swift in Sources */,
 				19E20564B7D56C32F75FE527 /* RestoreImageDownloadServiceTests.swift in Sources */,
+				1F9D2C242FE7D93E0076F5B9 /* ImageBuildServiceCompositionTests.swift in Sources */,
 				1F9D2B0D2FE769C60076F5B9 /* AppleContainerHostAccessServiceTests.swift in Sources */,
 				1F9D2B662FE796A80076F5B9 /* AppleContainerProcessXPCClientTests.swift in Sources */,
 				1F9D2BDA2FE7BEDE0076F5B9 /* MacVirtualMachineSharedDirectoryServiceTests.swift in Sources */,
@@ -1193,6 +1206,7 @@
 			files = (
 				6DF203F008ABAD5C4AB7903C /* AppModel.swift in Sources */,
 				1F9D2AFD2FE765FB0076F5B9 /* AppleImageService.swift in Sources */,
+				1F9D2C202FE7D8FE0076F5B9 /* ImageBuildLifecycleService.swift in Sources */,
 				1F9D2BA42FE7AA240076F5B9 /* AppleMacVirtualMachineConfigurationFactory.swift in Sources */,
 				1F9D2BFA2FE7C81B0076F5B9 /* ComposeTopologyService.swift in Sources */,
 				1F9D2B3B2FE77AA90076F5B9 /* RecordingImageBuildService.swift in Sources */,
@@ -1264,6 +1278,7 @@
 				1F9D2BB02FE7AB450076F5B9 /* MacVirtualMachineRuntimeView.swift in Sources */,
 				1F9D2BD42FE7BE010076F5B9 /* FileMacVirtualMachineSharedDirectoryConfigurationStore.swift in Sources */,
 				A0AE31A3A8A12AAEE077BBC1 /* ContainersView.swift in Sources */,
+				1F9D2C1E2FE7D8FB0076F5B9 /* ImageBuildPlanningService.swift in Sources */,
 				1F9D2BDE2FE7C3260076F5B9 /* HostProcessService.swift in Sources */,
 				740F510C439958BEB5694162 /* ImageBuildArtifactManager.swift in Sources */,
 				07DF4A0994E3E81F05211C04 /* ImageBuildModel.swift in Sources */,
@@ -1293,6 +1308,7 @@
 				21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */,
 				1F9D2B7C2FE79CA80076F5B9 /* LinuxMachineToolsView.swift in Sources */,
 				1F9D2B522FE791EA0076F5B9 /* AppleMachineRuntimeClient.swift in Sources */,
+				1F9D2C222FE7D9110076F5B9 /* ImageBuildExecutionService.swift in Sources */,
 				455E49DED3838B07FB756991 /* ImagesView.swift in Sources */,
 				1F9D2B842FE7A0FF0076F5B9 /* MacVirtualMachineInstallationService.swift in Sources */,
 				1F9D2C122FE7D0B20076F5B9 /* SocktainerComposeFixtureCleanupPlanner.swift in Sources */,

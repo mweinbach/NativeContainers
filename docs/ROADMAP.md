@@ -58,10 +58,12 @@ must leave a usable, test-backed product slice.
 - [x] Private persistent build history with typed outcomes, interrupted-build
       reconciliation guarded by live-launch leases, bounded retention, and no
       retained logs or secret values.
-- [x] Stable Build workspace services with navigation guards and visible cancel,
+- [x] Stable Build workspace plus independently injectable planning, execution,
+      and lifecycle services, with navigation guards, visible cancel,
       TERM-to-KILL, and immediate Force Stop kill points.
 - [x] Typed image-store, OCI archive, root-filesystem tar, and root-filesystem
-      folder outputs behind reviewed destination and publication services.
+      folder outputs live-verified behind reviewed destination and publication
+      services.
 - [ ] SSH forwarding and typed, app-owned cache import/export profiles.
 - [x] Version-pinned Socktainer service with SHA-256 and Developer ID validation,
       HTTP-level readiness, exact-PID TERM-to-KILL/Force Stop recovery, stale

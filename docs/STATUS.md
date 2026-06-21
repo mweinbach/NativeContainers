@@ -303,6 +303,10 @@ Updated: 2026-06-21.
   destination (when applicable), canonical image reference, exact target
   platforms, builder resources, build arguments, labels, target stage, cache
   policy, and pull policy before execution.
+- The native build entry point is now a small facade over independently
+  injectable planning, execution, and lifecycle services. Request validation
+  can run without runtime collaborators; execution retains the single-flight
+  boundary; discard and terminal cleanup have one shared owner.
 - A signed embedded one-shot worker owns Apple’s public
   `ContainerBuild.Builder` lifetime. Exact builder descriptor, digest, DNS,
   creation identity, and dial state are revalidated; running or uncertain
@@ -314,7 +318,10 @@ Updated: 2026-06-21.
 - Worker protocol v4 carries a typed output kind and typed artifact metadata,
   but never a user destination. Image-store and OCI-archive builds use Apple's
   OCI exporter, root-filesystem archives use `tar`, and root-filesystem folders
-  use `local`; root-filesystem outputs are deliberately single-platform.
+  use `local` with `platform-split=false`; root-filesystem outputs are
+  deliberately single-platform. The pinned tar exporter retains its
+  `linux_arm64` platform directory, while the local exporter publishes the
+  selected platform directly at the destination root.
 - File exports are copied out of the guest-visible builder directory into a
   descriptor-validated mode-0400 host artifact with a bound byte count and
   SHA-256. Local-directory exports are independently copied into an app-private
@@ -332,15 +339,22 @@ Updated: 2026-06-21.
   XPC import/tag replies, reports durable partial completion, and removes both
   artifact locations independently of task cancellation. Alternate outputs do
   not mutate or refresh Apple's image store.
+- Gated live probes now cover every alternate exporter against Apple 1.0.0. The
+  OCI archive contained `oci-layout`, `index.json`, and content-addressed blobs
+  without image-store mutation; the root-filesystem tar exposed its marker
+  under `linux_arm64`; and the local folder exposed the marker directly at its
+  root. Every probe removed its private and shared export residue.
 - A live Xcode probe exercised the app’s embedded signed worker against Apple’s
   1.0.0 services: it staged a Dockerfile context, reused the shared BuildKit
   container, exported and imported OCI, verified the arm64 snapshot, applied a
   unique reviewed tag, started a container, read the built marker through native
   exec, and removed the container, tag, private artifact, and shared export.
-- A separate live cancellation probe interrupted a 60-second BuildKit step five
-  seconds after launch. The worker surfaced `CancellationError`, no final tag or
-  build artifact remained, and the preexisting container/image counts were
-  unchanged.
+- A separate live cancellation probe observed the real `.building` frame after
+  about 104 ms, canceled a 60-second BuildKit step, and returned
+  `CancellationError` about 3 ms later. No destination, private artifact, or
+  shared export remained. A timing regression proves short progress frames are
+  visible before worker exit, so the cancel control is a real in-flight kill
+  point rather than a post-build cleanup request.
 - The Builds destination is now a modular workspace with separate New Build,
   History, and Builder & Cache views. A focused `ContainerBuilderManaging`
   service reports stable runtime state and whole-bundle allocated storage, and
@@ -536,8 +550,8 @@ Updated: 2026-06-21.
   identity-revalidated fallback reported `FALLBACK=true` for
   `ncwire-efdce9a3`. Both runs ended with zero container/volume/network residue,
   a stopped bridge, and no socket.
-- The full Xcode plan passes all 495 outcomes: 482 deterministic tests passed
-  and 13 explicitly gated live tests skipped, with no failures. The build emits
+- The full Xcode plan passes all 504 outcomes: 487 deterministic tests passed
+  and 17 explicitly gated live tests skipped, with no failures. The build emits
   only nine pre-existing warnings in macOS saved-state tests.
 
 ## Known configuration issue
@@ -553,9 +567,8 @@ entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Run gated live probes for OCI archive, root-filesystem tar, and local-folder
-   export against Apple 1.0.0, including cancellation cleanup. Then gate any
-   app-owned local cache profile behind a separate two-build reuse/reset probe.
+1. Gate any app-owned local cache profile behind a separate two-build
+   reuse/reset probe against Apple 1.0.0.
    Keep raw cache strings, remote credentials, SSH forwarding, and cache-only
    prune out of the UI until the pinned native API exposes a verifiable contract.
 2. Package a signed and notarized privileged helper if automated host-access

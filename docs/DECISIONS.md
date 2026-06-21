@@ -810,3 +810,30 @@ the verified version and path. Gated live Compose coverage now requires this
 private client, preventing an OrbStack symlink from silently satisfying product
 proof. Upgrades require a new reviewed release contract rather than a moving
 latest-version lookup.
+
+## ADR-032: Compose native builds from focused lifecycle services
+
+**Status:** Accepted — 2026-06-21
+
+`AppleContainerBuildService` remains the stable `ImageBuilding` facade and owns
+only public phase delegation, build single-flight serialization, and terminal
+error reporting. Immutable review belongs to `ImageBuildPlanning`; worker and
+publication orchestration belong to `ImageBuildExecuting`; discard and
+cancellation-independent residue removal belong to
+`ImageBuildLifecycleManaging`. The production initializer composes those facets
+from the same staging, secret, output, artifact, and image-store collaborators,
+while a service initializer permits focused tests without Apple runtime state.
+
+Exporter selection is a separate pure configuration contract shared with the
+worker. OCI outputs use `type=oci`, root-filesystem tar uses `type=tar`, and the
+single-platform local folder uses `type=local,platform-split=false`. Live Apple
+1.0.0 probes confirmed a valid OCI layout, the tar exporter’s retained
+`linux_arm64` envelope, the local exporter’s flat destination root, and zero
+private/shared residue. Raw exporter and cache strings remain outside the UI.
+
+Worker stdout uses POSIX `read` for immediately available framed progress.
+Foundation’s counted pipe read buffered short frames until worker EOF, making an
+in-flight cancel appear to work only after the solve had ended. The live
+60-second probe now reaches `.building` in about 104 ms and returns cancellation
+in about 3 ms; the existing TERM-to-KILL escalation and lifecycle cleanup remain
+the bounded fallback.

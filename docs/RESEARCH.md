@@ -265,8 +265,8 @@ release and isolating it behind an adapter are both deliberate.
   published as an OCI archive without image-store mutation. `type=tar` and
   `type=local` are root-filesystem outputs, not OCI images, and accept no final
   image tags in the app.
-- Root-filesystem tar and local-folder outputs are limited to one platform until
-  a pinned-runtime probe proves broader semantics. Apple's pinned CLI fixtures
+- Root-filesystem tar and local-folder outputs are deliberately limited to one
+  platform. Apple's pinned CLI fixtures
   separately exercise
   [`tar`](https://github.com/apple/container/blob/1.0.0/Tests/CLITests/Subcommands/Build/CLIBuilderTarExportTest.swift)
   and
@@ -275,13 +275,19 @@ release and isolating it behind an adapter are both deliberate.
   is sealed into a separate private directory store that rejects
   devices/FIFOs/sockets, preserves regular-file modes and relative symlinks,
   and fingerprints the complete tree before host publication.
+- Live Apple 1.0.0 probes confirmed the final exporter contracts. OCI output is
+  a valid layout archive and does not mutate the image store. The `tar` exporter
+  retains its `linux_arm64` directory envelope. The `local` exporter accepts
+  `platform-split=false` and places the selected platform directly at the
+  destination root. The same option is not applied to `tar` because the pinned
+  exporter ignores it. All three probes left no private or shared export residue.
 - Destination review pins the resolved owner-controlled parent descriptor.
   Existing archive files must be owner-controlled, single-link regular files
   and require explicit replacement authorization; folder outputs must be new.
   Publication copies to a hidden sibling, checks cancellation and identities,
   atomically renames, and reports post-commit fsync failure as retained partial
-  completion. Live exporter verification remains a gated follow-up; the safety
-  and protocol contracts are covered deterministically.
+  completion. Live probes verified publication and cleanup for OCI, tar, and
+  local-folder destinations.
 - Docker/registry exporters, SSH forwarding, and raw BuildKit cache strings
   remain later parity work.
 - The public build configuration accepts raw BuildKit CSV strings for cache
@@ -330,6 +336,10 @@ release and isolating it behind an adapter are both deliberate.
 - Containerization 0.33.3 `AsyncLock` does not remove canceled waiters. Native
   build serialization uses a local cancellation-aware FIFO so a queued review
   context is discarded promptly instead of waiting behind a long solve.
+- Foundation’s counted pipe read buffered short worker progress until EOF in a
+  live 60-second cancellation probe. The parent now consumes framed stdout with
+  POSIX `read`; `.building` arrived in about 104 ms and cancellation completed
+  about 3 ms later with no destination or artifact residue.
 - Builder cache has no supported prune command in 1.0.0 and can become hard to
   stop/delete ([#1159](https://github.com/apple/container/issues/1159),
   [#932](https://github.com/apple/container/issues/932)). Builder lifecycle and
