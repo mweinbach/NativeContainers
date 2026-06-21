@@ -45,7 +45,8 @@ final class AppModel {
 
   @ObservationIgnored
   private lazy var dockerCompatibilitySettingsModel = DockerCompatibilityModel(
-    service: services.dockerCompatibility
+    service: services.dockerCompatibility,
+    composeConformance: services.composeBridgeConformance
   )
 
   @ObservationIgnored
@@ -91,6 +92,8 @@ final class AppModel {
     registryService: any RegistryManaging = AppleRegistryService(),
     dockerCompatibilityService: any DockerCompatibilityManaging =
       UnavailableDockerCompatibilityService(),
+    composeBridgeConformance: any ComposeBridgeConformanceReporting =
+      SocktainerComposeConformanceService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
@@ -115,6 +118,7 @@ final class AppModel {
         imageBuild: imageBuildService,
         registry: registryService,
         dockerCompatibility: dockerCompatibilityService,
+        composeBridgeConformance: composeBridgeConformance,
         virtualMachineLibrary: virtualMachineLibrary,
         virtualMachineInstaller: virtualMachineInstaller,
         virtualMachineRuntime: virtualMachineRuntime,

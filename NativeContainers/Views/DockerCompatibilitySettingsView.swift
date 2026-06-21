@@ -80,6 +80,8 @@ struct DockerCompatibilitySettingsSection: View {
         )
         .font(.caption)
         .foregroundStyle(.secondary)
+
+        composeConformanceSection(model.composeConformance)
       } else {
         ProgressView("Inspecting Docker compatibility…")
       }
@@ -216,6 +218,79 @@ struct DockerCompatibilitySettingsSection: View {
       .font(.caption)
       .foregroundStyle(.orange)
       .textSelection(.enabled)
+  }
+
+  @ViewBuilder
+  private func composeConformanceSection(
+    _ report: ComposeBridgeConformanceReport
+  ) -> some View {
+    LabeledContent("Compose contract") {
+      Text("\(report.supportedCount) supported · \(report.gapCount) gaps")
+        .textSelection(.enabled)
+    }
+
+    DisclosureGroup("Pinned Compose conformance") {
+      VStack(alignment: .leading, spacing: 12) {
+        ForEach(report.results) { result in
+          VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+              Text(result.title)
+                .fontWeight(.medium)
+              Spacer()
+              Label(
+                composeStatusTitle(result.status),
+                systemImage: composeStatusSymbol(result.status)
+              )
+              .font(.caption)
+              .foregroundStyle(composeStatusColor(result.status))
+            }
+            Text(result.summary)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .textSelection(.enabled)
+            Text(result.evidence)
+              .font(.caption2.monospaced())
+              .foregroundStyle(.tertiary)
+              .textSelection(.enabled)
+          }
+        }
+      }
+      .padding(.top, 8)
+    }
+
+    Text(
+      "Source-pinned fixtures for Socktainer \(report.bridgeVersion) (Engine API v\(report.engineAPIVersion), revision \(report.sourceRevision)); these are not a live Compose run."
+    )
+    .font(.caption)
+    .foregroundStyle(.secondary)
+    .textSelection(.enabled)
+  }
+
+  private func composeStatusTitle(_ status: ComposeBridgeConformanceStatus) -> String {
+    switch status {
+    case .supported: "Supported"
+    case .partial: "Partial"
+    case .unsupported: "Unsupported"
+    case .policyBlocked: "Policy blocked"
+    }
+  }
+
+  private func composeStatusSymbol(_ status: ComposeBridgeConformanceStatus) -> String {
+    switch status {
+    case .supported: "checkmark.circle.fill"
+    case .partial: "exclamationmark.circle.fill"
+    case .unsupported: "xmark.circle.fill"
+    case .policyBlocked: "lock.circle.fill"
+    }
+  }
+
+  private func composeStatusColor(_ status: ComposeBridgeConformanceStatus) -> Color {
+    switch status {
+    case .supported: .green
+    case .partial: .orange
+    case .unsupported: .red
+    case .policyBlocked: .secondary
+    }
   }
 
   private func isInstalled(_ state: SocktainerInstallationState) -> Bool {

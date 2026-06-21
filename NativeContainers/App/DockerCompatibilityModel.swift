@@ -8,11 +8,17 @@ final class DockerCompatibilityModel {
   private(set) var isRefreshing = false
   private(set) var isWorking = false
   private(set) var errorMessage: String?
+  private(set) var composeConformance: ComposeBridgeConformanceReport
 
   private let service: any DockerCompatibilityManaging
 
-  init(service: any DockerCompatibilityManaging) {
+  init(
+    service: any DockerCompatibilityManaging,
+    composeConformance: any ComposeBridgeConformanceReporting =
+      SocktainerComposeConformanceService()
+  ) {
     self.service = service
+    self.composeConformance = composeConformance.report()
   }
 
   func load() async {

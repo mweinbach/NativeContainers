@@ -38,5 +38,5 @@ struct SettingsView: View {
 
 #Preview("Settings") {
   SettingsView(model: .preview)
-    .frame(width: 680, height: 700)
+    .frame(width: 680, height: 1_100)
 }

@@ -23,6 +23,7 @@ struct AppServices: Sendable {
   let builder: any ContainerBuilderManaging
   let registry: any RegistryManaging
   let dockerCompatibility: any DockerCompatibilityManaging
+  let composeBridgeConformance: any ComposeBridgeConformanceReporting
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
@@ -55,6 +56,8 @@ struct AppServices: Sendable {
     registry: any RegistryManaging,
     dockerCompatibility: any DockerCompatibilityManaging =
       UnavailableDockerCompatibilityService(),
+    composeBridgeConformance: any ComposeBridgeConformanceReporting =
+      SocktainerComposeConformanceService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
@@ -90,6 +93,7 @@ struct AppServices: Sendable {
     self.builder = builder
     self.registry = registry
     self.dockerCompatibility = dockerCompatibility
+    self.composeBridgeConformance = composeBridgeConformance
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
@@ -112,6 +116,8 @@ struct AppServices: Sendable {
     registry: any RegistryManaging,
     dockerCompatibility: any DockerCompatibilityManaging =
       UnavailableDockerCompatibilityService(),
+    composeBridgeConformance: any ComposeBridgeConformanceReporting =
+      SocktainerComposeConformanceService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
@@ -147,6 +153,7 @@ struct AppServices: Sendable {
     self.builder = builder
     self.registry = registry
     self.dockerCompatibility = dockerCompatibility
+    self.composeBridgeConformance = composeBridgeConformance
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
@@ -293,6 +300,7 @@ enum AppCompositionRoot {
       builder: builderManagementService,
       registry: AppleRegistryService(),
       dockerCompatibility: dockerCompatibility,
+      composeBridgeConformance: SocktainerComposeConformanceService(),
       virtualMachineLibrary: virtualMachineLibrary,
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,

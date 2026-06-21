@@ -29,6 +29,7 @@ struct AppCompositionRootTests {
     #expect(services.imageBuildHistory is ImageBuildHistoryStore)
     #expect(services.builder is AppleContainerBuilderManagementService)
     #expect(services.dockerCompatibility is DockerCompatibilityService)
+    #expect(services.composeBridgeConformance is SocktainerComposeConformanceService)
     #expect(services.virtualMachineLibrary is VirtualMachineLibrary)
     #expect(services.virtualMachineInstaller is MacVirtualMachineInstallationService)
     #expect(services.virtualMachineRuntime is MacVirtualMachineRuntimeService)

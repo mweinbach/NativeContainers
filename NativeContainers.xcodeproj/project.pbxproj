@@ -181,6 +181,9 @@
 		1F9D2BFE2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BFD2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift */; };
 		1F9D2C002FE7C8AB0076F5B9 /* ComposeProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BFF2FE7C8AB0076F5B9 /* ComposeProjectsView.swift */; };
 		1F9D2C022FE7CA180076F5B9 /* AppleRuntimeInventoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C012FE7CA180076F5B9 /* AppleRuntimeInventoryServiceTests.swift */; };
+		1F9D2C042FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C032FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift */; };
+		1F9D2C062FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C052FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift */; };
+		1F9D2C082FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C072FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -473,6 +476,9 @@
 		1F9D2BFD2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeTopologyServiceTests.swift; sourceTree = "<group>"; };
 		1F9D2BFF2FE7C8AB0076F5B9 /* ComposeProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeProjectsView.swift; sourceTree = "<group>"; };
 		1F9D2C012FE7CA180076F5B9 /* AppleRuntimeInventoryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleRuntimeInventoryServiceTests.swift; sourceTree = "<group>"; };
+		1F9D2C032FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBridgeConformanceModels.swift; sourceTree = "<group>"; };
+		1F9D2C052FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocktainerComposeConformanceService.swift; sourceTree = "<group>"; };
+		1F9D2C072FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocktainerComposeConformanceServiceTests.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -673,6 +679,7 @@
 				1F9D2BC92FE7BD260076F5B9 /* MacVirtualMachineSharedDirectoryModels.swift */,
 				1F9D2BDB2FE7C30F0076F5B9 /* DockerCompatibilityModels.swift */,
 				1F9D2BFB2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift */,
+				1F9D2C032FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -742,6 +749,7 @@
 				1F9D2BF72FE7C5990076F5B9 /* LiveSocktainerCompatibilitySmokeTests.swift */,
 				1F9D2BFD2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift */,
 				1F9D2C012FE7CA180076F5B9 /* AppleRuntimeInventoryServiceTests.swift */,
+				1F9D2C072FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -825,6 +833,7 @@
 				1F9D2BE52FE7C36D0076F5B9 /* DockerCompatibilityService.swift */,
 				1F9D2BED2FE7C4760076F5B9 /* SecureFileSystemPath.swift */,
 				1F9D2BF92FE7C81B0076F5B9 /* ComposeTopologyService.swift */,
+				1F9D2C052FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1145,6 +1154,7 @@
 				28033CCAC546F43031537AAF /* VirtualMachineLibraryTests.swift in Sources */,
 				1F9D2B412FE77BE10076F5B9 /* ImageBuildHistoryTests.swift in Sources */,
 				C2C2661B8E02F3B836209B2A /* VirtualMachineModelsTests.swift in Sources */,
+				1F9D2C082FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1173,6 +1183,7 @@
 				1F9D2B742FE79C170076F5B9 /* LinuxMachineToolModels.swift in Sources */,
 				1F9D2BE22FE7C3530076F5B9 /* SocktainerProcessService.swift in Sources */,
 				1F9D2BCE2FE7BD530076F5B9 /* AppleMacVirtualMachineSharedDirectoryDeviceFactory.swift in Sources */,
+				1F9D2C062FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift in Sources */,
 				3D89601DBF2980814902C293 /* BuildWorkerProtocol.swift in Sources */,
 				DFF77892BE0FA5C4A1FE023F /* ContainerBuildWorkerProcess.swift in Sources */,
 				1F9D2B6C2FE798E90076F5B9 /* AppleMachineImagePreparationService.swift in Sources */,
@@ -1268,6 +1279,7 @@
 				3520842AEB27B251F26E94E5 /* OverviewView.swift in Sources */,
 				1F9D2B452FE789750076F5B9 /* PrivateBuildDirectoryStore.swift in Sources */,
 				515EDFD55BB4EFF79D4B9003 /* PreviewSupport.swift in Sources */,
+				1F9D2C042FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift in Sources */,
 				CFB51BBFC7DA4F81E784E745 /* PrivateBuildArtifactStore.swift in Sources */,
 				1F9D2B822FE7A0E70076F5B9 /* RestoreImageImportService.swift in Sources */,
 				2CEB095A2F3E92AB8DD58DF8 /* RegistryManaging.swift in Sources */,
