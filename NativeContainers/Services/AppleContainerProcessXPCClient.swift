@@ -6,6 +6,17 @@ protocol LinuxMachineProvisioningProcess: RuntimeManagedProcess {
   func start() async throws
 }
 
+protocol AppleRuntimeProcess: LinuxMachineProvisioningProcess, ContainerTerminalProcess {}
+
+protocol AppleRuntimeProcessCreating: Sendable {
+  func createRuntimeProcess(
+    containerID: String,
+    processID: String,
+    configuration: ProcessConfiguration,
+    standardIO: [FileHandle?]
+  ) async throws -> any AppleRuntimeProcess
+}
+
 protocol LinuxMachineProcessCreating: Sendable {
   func createProcess(
     containerID: String,
@@ -14,14 +25,14 @@ protocol LinuxMachineProcessCreating: Sendable {
   ) async throws -> any LinuxMachineProvisioningProcess
 }
 
-struct AppleContainerProcessXPCClient: LinuxMachineProcessCreating {
+struct AppleContainerProcessXPCClient: LinuxMachineProcessCreating, AppleRuntimeProcessCreating {
   private let mutationSender: any AppleXPCRequestSending
   private let waitSender: any AppleXPCRequestSending
   private let signalSender: any AppleXPCRequestSending
 
   init(
     mutationTimeout: Duration = .seconds(10),
-    waitTimeout: Duration = .seconds(35),
+    waitTimeout: Duration? = nil,
     signalTimeout: Duration = .seconds(2)
   ) {
     mutationSender = AppleXPCRequestClient(operationTimeout: mutationTimeout)
@@ -44,13 +55,39 @@ struct AppleContainerProcessXPCClient: LinuxMachineProcessCreating {
     processID: String,
     configuration: ProcessConfiguration
   ) async throws -> any LinuxMachineProvisioningProcess {
+    try await createRuntimeProcess(
+      containerID: containerID,
+      processID: processID,
+      configuration: configuration,
+      standardIO: []
+    )
+  }
+
+  func createRuntimeProcess(
+    containerID: String,
+    processID: String,
+    configuration: ProcessConfiguration,
+    standardIO: [FileHandle?]
+  ) async throws -> any AppleRuntimeProcess {
     let request = XPCMessage(route: .containerCreateProcess)
     request.set(key: .id, value: containerID)
     request.set(key: .processIdentifier, value: processID)
     request.set(key: .processConfig, value: try JSONEncoder().encode(configuration))
+    for (index, handle) in standardIO.enumerated() {
+      switch index {
+      case 0:
+        if let handle { request.set(key: .stdin, value: handle) }
+      case 1:
+        if let handle { request.set(key: .stdout, value: handle) }
+      case 2:
+        if let handle { request.set(key: .stderr, value: handle) }
+      default:
+        throw AppleRuntimeProcessError.invalidStandardIOIndex(index)
+      }
+    }
     _ = try await mutationSender.send(
       request,
-      operation: "Create Linux machine setup process"
+      operation: "Create runtime process"
     )
     return AppleContainerXPCProcess(
       containerID: containerID,
@@ -62,7 +99,7 @@ struct AppleContainerProcessXPCClient: LinuxMachineProcessCreating {
   }
 }
 
-private struct AppleContainerXPCProcess: LinuxMachineProvisioningProcess {
+private struct AppleContainerXPCProcess: AppleRuntimeProcess {
   let containerID: String
   let processID: String
   let mutationSender: any AppleXPCRequestSending
@@ -75,7 +112,7 @@ private struct AppleContainerXPCProcess: LinuxMachineProvisioningProcess {
     request.set(key: .processIdentifier, value: processID)
     _ = try await mutationSender.send(
       request,
-      operation: "Start Linux machine setup process"
+      operation: "Start runtime process"
     )
   }
 
@@ -85,7 +122,7 @@ private struct AppleContainerXPCProcess: LinuxMachineProvisioningProcess {
     request.set(key: .processIdentifier, value: processID)
     let response = try await waitSender.send(
       request,
-      operation: "Wait for Linux machine setup process"
+      operation: "Wait for runtime process"
     )
     return Int32(response.int64(key: .exitCode))
   }
@@ -97,7 +134,30 @@ private struct AppleContainerXPCProcess: LinuxMachineProvisioningProcess {
     request.set(key: .signal, value: Int64(signal))
     _ = try await signalSender.send(
       request,
-      operation: "KILL Linux machine setup process"
+      operation: "Signal runtime process"
     )
+  }
+
+  func resize(to size: ContainerTerminalSize) async throws {
+    let request = XPCMessage(route: .containerResize)
+    request.set(key: .id, value: containerID)
+    request.set(key: .processIdentifier, value: processID)
+    request.set(key: .width, value: UInt64(size.columns))
+    request.set(key: .height, value: UInt64(size.rows))
+    _ = try await signalSender.send(
+      request,
+      operation: "Resize runtime process terminal"
+    )
+  }
+}
+
+enum AppleRuntimeProcessError: LocalizedError, Equatable {
+  case invalidStandardIOIndex(Int)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidStandardIOIndex(let index):
+      "Standard I/O index \(index) is invalid."
+    }
   }
 }

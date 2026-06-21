@@ -7,10 +7,10 @@ import Testing
 @Suite("Apple XPC request client")
 struct AppleXPCRequestClientTests {
   @Test
-  func callerCancellationClosesConnectionAndSurfacesCancellation() async {
+  func callerCancellationClosesConnectionWithoutAnOperationDeadline() async {
     let connection = BlockingXPCConnection()
     let client = AppleXPCRequestClient(
-      operationTimeout: .seconds(60),
+      operationTimeout: nil,
       makeConnection: { connection },
       sleep: { duration in try await Task.sleep(for: duration) }
     )

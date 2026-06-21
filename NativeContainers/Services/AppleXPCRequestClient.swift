@@ -30,13 +30,13 @@ struct AppleXPCRequestClient: AppleXPCRequestSending {
   typealias ConnectionFactory = @Sendable () -> any AppleXPCConnection
   typealias Sleeper = @Sendable (Duration) async throws -> Void
 
-  let operationTimeout: Duration
+  let operationTimeout: Duration?
   private let makeConnection: ConnectionFactory
   private let sleep: Sleeper
 
   init(
     serviceIdentifier: String = "com.apple.container.apiserver",
-    operationTimeout: Duration = .seconds(60)
+    operationTimeout: Duration? = .seconds(60)
   ) {
     self.init(
       operationTimeout: operationTimeout,
@@ -46,7 +46,7 @@ struct AppleXPCRequestClient: AppleXPCRequestSending {
   }
 
   init(
-    operationTimeout: Duration,
+    operationTimeout: Duration?,
     makeConnection: @escaping ConnectionFactory,
     sleep: @escaping Sleeper
   ) {
@@ -58,19 +58,21 @@ struct AppleXPCRequestClient: AppleXPCRequestSending {
   func send(_ message: XPCMessage, operation: String) async throws -> XPCMessage {
     let connection = makeConnection()
     let watchdogState = XPCRequestWatchdogState()
-    let watchdog = Task {
-      do {
-        try await sleep(operationTimeout)
-        guard !Task.isCancelled else { return }
-        watchdogState.markTimedOut()
-        connection.close()
-      } catch {
-        // Cancellation is the normal completion path for the watchdog.
+    let watchdog: Task<Void, Never>? = operationTimeout.map { timeout in
+      Task {
+        do {
+          try await sleep(timeout)
+          guard !Task.isCancelled else { return }
+          watchdogState.markTimedOut()
+          connection.close()
+        } catch {
+          // Cancellation is the normal completion path for the watchdog.
+        }
       }
     }
 
     defer {
-      watchdog.cancel()
+      watchdog?.cancel()
       connection.close()
     }
 

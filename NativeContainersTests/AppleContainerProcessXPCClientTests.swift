@@ -10,7 +10,7 @@ import Testing
 @Suite("Apple container process XPC client")
 struct AppleContainerProcessXPCClientTests {
   @Test
-  func sendsCreateStartWaitAndKillThroughFocusedTransports() async throws {
+  func sendsCreateStartWaitResizeAndKillThroughFocusedTransports() async throws {
     let sender = RecordingProcessXPCSender()
     let client = AppleContainerProcessXPCClient(
       mutationSender: sender,
@@ -24,12 +24,22 @@ struct AppleContainerProcessXPCClientTests {
       terminal: false
     )
 
-    let process = try await client.createProcess(
+    let input = Pipe()
+    let output = Pipe()
+    defer {
+      try? input.fileHandleForReading.close()
+      try? input.fileHandleForWriting.close()
+      try? output.fileHandleForReading.close()
+      try? output.fileHandleForWriting.close()
+    }
+    let process = try await client.createRuntimeProcess(
       containerID: "machine-runtime",
       processID: "setup",
-      configuration: configuration
+      configuration: configuration,
+      standardIO: [input.fileHandleForReading, output.fileHandleForWriting, nil]
     )
     try await process.start()
+    try await process.resize(to: try ContainerTerminalSize(columns: 132, rows: 43))
     let exitCode = try await process.wait()
     try await process.kill(SIGKILL)
 
@@ -38,12 +48,40 @@ struct AppleContainerProcessXPCClientTests {
       await sender.routes == [
         XPCRoute.containerCreateProcess.rawValue,
         XPCRoute.containerStartProcess.rawValue,
+        XPCRoute.containerResize.rawValue,
         XPCRoute.containerWait.rawValue,
         XPCRoute.containerKill.rawValue,
       ]
     )
-    #expect(await sender.identifiers == Array(repeating: "machine-runtime/setup", count: 4))
+    #expect(await sender.identifiers == Array(repeating: "machine-runtime/setup", count: 5))
+    #expect(await sender.createdStandardIO == [true, true, false])
+    #expect(await sender.terminalSizes == ["132x43"])
     #expect(await sender.signals == [Int64(SIGKILL)])
+  }
+
+  @Test
+  func rejectsMoreThanThreeStandardIOHandlesBeforeSending() async {
+    let sender = RecordingProcessXPCSender()
+    let client = AppleContainerProcessXPCClient(
+      mutationSender: sender,
+      waitSender: sender,
+      signalSender: sender
+    )
+    let configuration = ProcessConfiguration(
+      executable: "/bin/true",
+      arguments: [],
+      environment: []
+    )
+
+    await #expect(throws: AppleRuntimeProcessError.invalidStandardIOIndex(3)) {
+      try await client.createRuntimeProcess(
+        containerID: "machine-runtime",
+        processID: "invalid-stdio",
+        configuration: configuration,
+        standardIO: [nil, nil, nil, nil]
+      )
+    }
+    #expect(await sender.routes.isEmpty)
   }
 }
 
@@ -51,6 +89,8 @@ private actor RecordingProcessXPCSender: AppleXPCRequestSending {
   private(set) var routes: [String] = []
   private(set) var identifiers: [String] = []
   private(set) var signals: [Int64] = []
+  private(set) var createdStandardIO: [Bool] = []
+  private(set) var terminalSizes: [String] = []
 
   func send(_ message: XPCMessage, operation: String) -> XPCMessage {
     let route = message.string(key: XPCMessage.routeKey) ?? ""
@@ -60,6 +100,18 @@ private actor RecordingProcessXPCSender: AppleXPCRequestSending {
     )
     if route == XPCRoute.containerKill.rawValue {
       signals.append(message.int64(key: .signal))
+    }
+    if route == XPCRoute.containerCreateProcess.rawValue {
+      createdStandardIO = [
+        message.fileHandle(key: .stdin) != nil,
+        message.fileHandle(key: .stdout) != nil,
+        message.fileHandle(key: .stderr) != nil,
+      ]
+    }
+    if route == XPCRoute.containerResize.rawValue {
+      terminalSizes.append(
+        "\(message.uint64(key: .width))x\(message.uint64(key: .height))"
+      )
     }
 
     let response = XPCMessage(route: "testReply")

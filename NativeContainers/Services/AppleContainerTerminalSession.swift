@@ -1,5 +1,4 @@
 import ContainerAPIClient
-import ContainerizationOS
 import Darwin
 import Foundation
 
@@ -21,9 +20,14 @@ protocol ContainerTerminalProcessLaunching: Sendable {
 
 struct AppleContainerTerminalProcessLauncher: ContainerTerminalProcessLaunching {
   private let containerClient: ContainerClient
+  private let processClient: any AppleRuntimeProcessCreating
 
-  init(containerClient: ContainerClient = ContainerClient()) {
+  init(
+    containerClient: ContainerClient = ContainerClient(),
+    processClient: any AppleRuntimeProcessCreating = AppleContainerProcessXPCClient()
+  ) {
     self.containerClient = containerClient
+    self.processClient = processClient
   }
 
   func makeProcess(
@@ -50,34 +54,11 @@ struct AppleContainerTerminalProcessLauncher: ContainerTerminalProcessLaunching 
       configuration.workingDirectory = workingDirectory
     }
 
-    let process = try await containerClient.createProcess(
-      containerId: containerID,
-      processId: UUID().uuidString.lowercased(),
+    return try await processClient.createRuntimeProcess(
+      containerID: containerID,
+      processID: UUID().uuidString.lowercased(),
       configuration: configuration,
-      stdio: [standardInput, standardOutput, nil]
-    )
-    return AppleContainerTerminalProcess(process: process)
-  }
-}
-
-private struct AppleContainerTerminalProcess: ContainerTerminalProcess {
-  let process: any ClientProcess
-
-  func start() async throws {
-    try await process.start()
-  }
-
-  func wait() async throws -> Int32 {
-    try await process.wait()
-  }
-
-  func kill(_ signal: Int32) async throws {
-    try await process.kill(signal)
-  }
-
-  func resize(to size: ContainerTerminalSize) async throws {
-    try await process.resize(
-      Terminal.Size(width: size.columns, height: size.rows)
+      standardIO: [standardInput, standardOutput, nil]
     )
   }
 }
