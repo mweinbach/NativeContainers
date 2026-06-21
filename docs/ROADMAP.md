@@ -124,7 +124,12 @@ must leave a usable, test-backed product slice.
 - [x] Native login-shell terminal and bounded shell-command runner with
       stopped-machine auto-start, mapped-user execution, and explicit KILL.
 - [ ] Persistent machine snapshots/backups where the Apple runtime supports it.
-- [ ] Optional general-purpose GUI Linux VMs through Virtualization.framework.
+- [x] Transactional general-purpose GUI Linux VM bundle foundation through
+      Virtualization.framework: durable EFI/NVRAM and machine identity, copied
+      ISO media, stable MAC identity, secure artifact resolution, and a
+      validated Virtio GUI/audio/input/NAT/SPICE configuration.
+- [ ] GUI Linux runtime ownership, start/pause/resume/graceful-stop/Force Stop
+      service, native console, installer-media ejection, and creation UI.
 
 ## M4 — macOS VMs
 

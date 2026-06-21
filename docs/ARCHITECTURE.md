@@ -499,13 +499,33 @@ VMs live as self-contained bundles in Application Support. Each bundle owns:
 - disk images;
 - macOS auxiliary storage when applicable;
 - serialized hardware model and machine identifier data;
-- optional EFI variable storage for EFI Linux guests;
+- EFI variable storage, generic machine identity, and copied installer media
+  for EFI Linux guests;
 - saved machine state and thumbnails when supported.
 
 Bundle-owned artifact paths are relative, allowing a bundle to be moved or
 backed up as one unit. The one host-local exception is an optional absolute
 restore-image URL while installation remains retryable. Runtime-only objects
 such as `VZVirtualMachine` never go into the manifest.
+
+GUI Linux preparation follows the same storage boundary without borrowing the
+macOS installer model. `LinuxPlatformArtifactPreparer` composes a
+security-scoped, no-follow, change-detecting ISO copier with Apple generic
+machine-identity and EFI-variable-store creation. `VirtualMachineLibrary`
+creates those artifacts in a hidden per-operation directory, validates every
+required regular file, promotes the directory as one unit, and only then
+commits `LinuxVirtualMachineConfiguration` to the manifest. Any copy,
+identity, validation, promotion, or manifest failure removes both staging and
+promoted artifacts while leaving the draft manifest intact.
+
+`VirtualMachineBundleArtifactResolver` is the shared path-containment and
+regular-file boundary used by both macOS and Linux bundle resolvers.
+`AppleLinuxVirtualMachineConfigurationFactory` consumes only a resolved Linux
+bundle and validates an EFI configuration with a writable Virtio disk,
+read-only USB installer media, persistent NAT MAC address, Virtio graphics,
+host audio output, USB input, entropy, memory ballooning, and optional SPICE
+clipboard. Runtime ownership and UI remain outside this foundation rather than
+exposing a draft path that cannot yet boot through the app.
 
 Downloaded macOS IPSWs are intentionally outside the bundle boundary so
 multiple VMs can reuse one multi-gigabyte installer. New downloads and local

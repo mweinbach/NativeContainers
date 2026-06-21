@@ -918,6 +918,28 @@ Updated: 2026-06-21.
   discovered 749 test declarations; five parameterized cases expanded the
   execution to 754 outcomes. Build-for-testing also passed.
 
+## GUI Linux VM foundation checkpoint
+
+- General-purpose Linux VM storage is now a separate modular lane rather than
+  another branch inside the macOS runtime. A Linux manifest owns persistent
+  EFI/NVRAM, generic machine identity, stable locally administered MAC identity,
+  copied ISO media, and its writable disk inside the `.nativevm` bundle.
+- ISO acquisition rejects non-file, non-ISO, empty, symbolic, incomplete, and
+  concurrently changed inputs. Preparation stages inside the target bundle,
+  validates all required regular files, atomically promotes the platform
+  directory, and rolls back both artifacts and manifest on every tested failure.
+- macOS and Linux resolvers now share one containment/no-symlink artifact
+  service while retaining platform-specific errors and resolved models.
+- The Apple configuration factory passes
+  `VZVirtualMachineConfiguration.validate()` with a real generated ISO and
+  includes EFI boot, USB installer media, writable Virtio storage, persistent
+  NAT networking, Virtio graphics and host audio output, USB input, entropy,
+  memory ballooning, and optional SPICE clipboard.
+- Thirteen focused Linux tests pass, covering legacy manifest decoding,
+  transaction commit/rollback, missing artifacts, guest separation, safe ISO
+  copy, path traversal, clipboard topology, and the validated Apple
+  configuration. The runtime/console/UI lane is intentionally still hidden.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
@@ -927,10 +949,13 @@ available for that destructive integration pass.
 
 ## Next implementation slice
 
-1. Live-verify the implemented macOS installer, lifecycle service, force-stop
+1. Add the generation-safe GUI Linux runtime owner, lifecycle service,
+   graceful-stop watchdog plus explicit Force Stop, native console, installer
+   ejection, and creation workflow on top of the validated bundle foundation.
+2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.
-2. Live-verify a second reviewed Up that grows a real pinned Socktainer project
+3. Live-verify a second reviewed Up that grows a real pinned Socktainer project
    from a contiguous replica prefix, including stable metadata and exact Apple
    attachment observations. Keep recreation blocked until the pinned bridge
    implements rename and network attachment routes.

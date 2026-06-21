@@ -478,6 +478,17 @@ The installed Apple documentation confirms:
   adaptor when its generation closes.
 - Shared directories use VirtioFS. Linux clipboard integration uses the SPICE
   agent and requires guest support.
+- Apple's GUI Linux sample uses `VZGenericPlatformConfiguration`, a persistent
+  `VZGenericMachineIdentifier`, `VZEFIBootLoader` with
+  `VZEFIVariableStore`, a read-only ISO through
+  `VZUSBMassStorageDeviceConfiguration`, a writable Virtio block device,
+  Virtio graphics, USB keyboard and screen-coordinate pointer devices, and a
+  Virtio console. On Apple silicon, selected installer media must contain an
+  arm64/aarch64 guest.
+- `VZSpiceAgentPortAttachment` is the public host/guest clipboard path for
+  Linux. Port zero must use `spiceAgentPortName`, clipboard sharing must be
+  enabled on the attachment, and the guest must run `spice-vdagent`; merely
+  adding a graphical display does not provide clipboard integration.
 
 ## Docker wording
 
