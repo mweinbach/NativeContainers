@@ -565,6 +565,20 @@ than sharing presentation state across an implied multi-window group.
   owns security-scoped access; and the Apple factory owns the single automounted
   VirtioFS device. Runtime acquisition locks the bundle before reading the
   sidecar, and the engine session closes its access lease explicitly.
+- VM cloning is a separate application service rather than another filesystem
+  method on the UI model. The library-backed transaction store owns begin,
+  commit, and abort, holding the library mutation lease and source runtime lease
+  across the copy. A pluggable bundle copier rejects symbolic links, asks
+  Darwin `copyfile` for recursive clone-on-write with sparse-copy fallback,
+  cross-mount refusal, no-follow semantics, and a cancellation callback on each
+  fallback write. It then strips runtime locks, owner records, installation partials, and
+  every saved-state transaction, then atomically replaces the staged
+  `VZMacMachineIdentifier` through a focused generator. Commit independently
+  validates required artifacts, shared-directory state, transient absence, and
+  a valid identifier distinct from the source before one final rename publishes
+  the clone. Cancellation returns `COPYFILE_QUIT`, keeps the review sheet in a
+  cancelling state until transaction cleanup completes, and always aborts the
+  partial. Startup recovery removes hidden clone partials left by a hard exit.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before

@@ -878,3 +878,29 @@ NativeContainers generation, and never stops, kills, recreates, or deletes
 Apple's shared builder. The Builder & Cache UI consequently presents Apple's
 builder/internal cache lifecycle and the NativeContainers local cache as two
 explicitly different controls.
+
+## ADR-034: Clone stopped macOS VMs through a cancellable transaction service
+
+**Status:** Accepted — 2026-06-21
+
+Same-host cloning is not a direct `FileManager` action from SwiftUI. A focused
+`VirtualMachineCloning` orchestrator obtains a library transaction whose source
+runtime lease and global mutation lease remain held until commit or abort. A
+replaceable copier performs the private transfer, while the library remains the
+only authority that can atomically publish a new bundle identifier.
+
+The transfer uses Darwin `copyfile` with recursive best-effort APFS cloning,
+sparse-data fallback, no-follow and cross-mount protections, and a status
+callback that returns `COPYFILE_QUIT` after task cancellation. The UI remains in
+a cancelling state until the callback stops the transfer and the transaction
+removes its partial directory. Startup recovery deletes clone partials left by a
+hard exit.
+
+A clone preserves the installed disk, auxiliary storage, compatible hardware
+model, resource settings, and shared-directory configuration, but it is not a
+byte-identical backup. It receives a new app bundle identifier and a newly
+generated, round-trip-validated `VZMacMachineIdentifier`; the app's
+manifest-derived network MAC consequently changes as well. Runtime owner files,
+operation partials, and same-host saved memory are deliberately removed so the
+copy cold boots. The commit boundary independently rejects a copied or malformed
+machine identifier even when a custom copier violates the service contract.

@@ -7,6 +7,7 @@ struct CloneVirtualMachineView: View {
   @Environment(\.dismiss) private var dismiss
   @State private var name: String
   @State private var isCloning = false
+  @State private var isCancelling = false
   @State private var errorMessage: String?
   @State private var cloneTask: Task<Void, Never>?
 
@@ -60,16 +61,23 @@ struct CloneVirtualMachineView: View {
         if isCloning {
           ProgressView()
             .controlSize(.small)
-          Text("Cloning \(machine.name)…")
+          Text(isCancelling ? "Cancelling and cleaning up…" : "Cloning \(machine.name)…")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         Spacer()
-        Button("Cancel") {
-          cloneTask?.cancel()
-          dismiss()
+        Button {
+          guard let cloneTask else {
+            dismiss()
+            return
+          }
+          isCancelling = true
+          cloneTask.cancel()
+        } label: {
+          Text(isCancelling ? "Cancelling…" : "Cancel")
         }
         .keyboardShortcut(.cancelAction)
+        .disabled(isCancelling)
         Button("Clone") {
           clone()
         }
@@ -98,10 +106,13 @@ struct CloneVirtualMachineView: View {
       } catch is CancellationError {
         cloneTask = nil
         isCloning = false
+        isCancelling = false
+        dismiss()
       } catch {
         cloneTask = nil
         errorMessage = error.localizedDescription
         isCloning = false
+        isCancelling = false
       }
     }
   }

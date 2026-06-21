@@ -141,7 +141,12 @@ must leave a usable, test-backed product slice.
       gated by the Virtualization entitlement and an installed guest.
 - [ ] Clipboard, audio, advanced networking, and USB configuration where public
       APIs support the guest.
-- [ ] Clone, export/import, backup, and reclaim disk space.
+- [x] Stopped-only same-host clone service with APFS copy-on-write when
+      available, a fresh `VZMacMachineIdentifier`, runtime/library leases,
+      sparse fallback, write-level cancellation, cold-boot saved-state
+      scrubbing, atomic publication, cancellation cleanup, hard-exit recovery,
+      and a native review sheet.
+- [ ] Export/import, portable backup, and safe disk-space reclamation.
 
 ## M5 — Optimization and polish
 

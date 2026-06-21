@@ -50,22 +50,25 @@ actor VirtualMachineCloneService: VirtualMachineCloning {
 
 struct FileVirtualMachineBundleCopier: VirtualMachineBundleCopying, @unchecked Sendable {
   private let fileManager: FileManager
+  private let transfer: any VirtualMachineBundleTransferring
   private let machineIdentifierGenerator: any MacVirtualMachineIdentifierGenerating
 
   init(
     fileManager: FileManager = .default,
+    transfer: any VirtualMachineBundleTransferring = CopyfileVirtualMachineBundleTransfer(),
     machineIdentifierGenerator: any MacVirtualMachineIdentifierGenerating =
       AppleMacVirtualMachineIdentifierGenerator()
   ) {
     self.fileManager = fileManager
+    self.transfer = transfer
     self.machineIdentifierGenerator = machineIdentifierGenerator
   }
 
   func copyBundle(for transaction: VirtualMachineCloneTransaction) async throws {
     try Task.checkCancellation()
     try rejectSymbolicLinks(in: transaction.sourceBundleURL)
-    try fileManager.copyItem(
-      at: transaction.sourceBundleURL,
+    try await transfer.copyBundle(
+      from: transaction.sourceBundleURL,
       to: transaction.stagingBundleURL
     )
     try Task.checkCancellation()

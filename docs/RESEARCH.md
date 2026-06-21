@@ -545,6 +545,27 @@ bridge for part of Docker API v1.51 and is the preferred starting point. A
 native `container compose` change is under review upstream but was not merged
 at kickoff, so the foundation does not depend on it.
 
+## macOS VM clone identity and transfer findings
+
+- Apple documents `VZMacPlatformConfiguration.machineIdentifier` as the unique
+  identity of one VM instance and says concurrently running VMs with the same
+  value produce undefined guest behavior. Clone detection for iCloud identity
+  does not remove that platform-configuration requirement.
+- `VZMacMachineIdentifier()` creates a new unique identifier;
+  `dataRepresentation` and `init(dataRepresentation:)` are the supported opaque
+  persistence and validation boundary. NativeContainers therefore replaces the
+  copied identifier and validates it again at transaction commit rather than
+  treating the app manifest UUID as sufficient isolation.
+- Darwin `copyfile(3)` defines `COPYFILE_CLONE` as best-effort file cloning with
+  ordinary-copy fallback. Combined with `COPYFILE_RECURSIVE`, each hierarchy
+  entry gets the same clone attempt; `COPYFILE_DATA_SPARSE` preserves holes when
+  supported. Clone success is immediate and emits no progress callbacks.
+- When clone-on-write is unavailable, the status callback runs on every data
+  write. Returning `COPYFILE_QUIT` aborts the transfer and reports cancellation,
+  leaving the caller responsible for partial cleanup. That maps directly to the
+  clone transaction's abort boundary and provides a real kill point for a large
+  fallback copy.
+
 ## Public-API boundaries
 
 - No public Linux GPU/Metal passthrough.
