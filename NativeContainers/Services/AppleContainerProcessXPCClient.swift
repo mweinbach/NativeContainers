@@ -92,17 +92,27 @@ struct AppleContainerProcessXPCClient: LinuxMachineProcessCreating, AppleRuntime
         throw AppleRuntimeProcessError.invalidStandardIOIndex(index)
       }
     }
-    _ = try await mutationSender.send(
-      request,
-      operation: "Create runtime process"
-    )
-    return AppleContainerXPCProcess(
+    let process = AppleContainerXPCProcess(
       containerID: containerID,
       processID: processID,
       mutationSender: mutationSender,
       waitSender: waitSender,
       signalSender: signalSender
     )
+    do {
+      _ = try await mutationSender.send(
+        request,
+        operation: "Create runtime process"
+      )
+      return process
+    } catch {
+      // A lost create reply is outcome-uncertain. Address the same process ID once and
+      // best-effort KILL it without inheriting caller cancellation; never create or run a retry.
+      await Task.detached {
+        try? await process.kill(SIGKILL)
+      }.value
+      throw error
+    }
   }
 
   private func duplicateForTransfer(_ handle: FileHandle) throws -> FileHandle {

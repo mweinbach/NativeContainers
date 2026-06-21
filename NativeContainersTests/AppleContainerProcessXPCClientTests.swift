@@ -85,6 +85,44 @@ struct AppleContainerProcessXPCClientTests {
     }
     #expect(await sender.routes.isEmpty)
   }
+
+  @Test
+  func uncertainCreateReplyBestEffortKillsOnlyTheSameProcessID() async {
+    let signalSender = RecordingProcessXPCSender()
+    let client = AppleContainerProcessXPCClient(
+      mutationSender: FailingProcessXPCSender(),
+      waitSender: signalSender,
+      signalSender: signalSender
+    )
+    let configuration = ProcessConfiguration(
+      executable: "/bin/true",
+      arguments: [],
+      environment: []
+    )
+
+    await #expect(throws: ProcessXPCSenderError.replyLost) {
+      try await client.createRuntimeProcess(
+        containerID: "machine-runtime",
+        processID: "one-shot-id",
+        configuration: configuration,
+        standardIO: []
+      )
+    }
+
+    #expect(await signalSender.routes == [XPCRoute.containerKill.rawValue])
+    #expect(await signalSender.identifiers == ["machine-runtime/one-shot-id"])
+    #expect(await signalSender.signals == [Int64(SIGKILL)])
+  }
+}
+
+private enum ProcessXPCSenderError: Error, Equatable {
+  case replyLost
+}
+
+private struct FailingProcessXPCSender: AppleXPCRequestSending {
+  func send(_ message: XPCMessage, operation: String) throws -> XPCMessage {
+    throw ProcessXPCSenderError.replyLost
+  }
 }
 
 private actor RecordingProcessXPCSender: AppleXPCRequestSending {

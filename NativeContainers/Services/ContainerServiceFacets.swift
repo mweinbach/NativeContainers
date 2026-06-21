@@ -101,3 +101,33 @@ protocol MachineLifecycleManaging: Sendable {
 }
 
 protocol MachineManaging: MachineCreating, MachineLifecycleManaging {}
+
+protocol MachineCommandRunning: Sendable {
+  func executeCommand(
+    in target: LinuxMachineIdentity,
+    request: LinuxMachineCommandRequest
+  ) async throws -> ContainerCommandResult
+}
+
+protocol MachineTerminalOpening: Sendable {
+  func openTerminal(
+    in target: LinuxMachineIdentity,
+    request: LinuxMachineTerminalRequest
+  ) async throws -> any ContainerTerminalSession
+}
+
+struct UnavailableLinuxMachineToolService: MachineCommandRunning, MachineTerminalOpening {
+  func executeCommand(
+    in target: LinuxMachineIdentity,
+    request: LinuxMachineCommandRequest
+  ) async throws -> ContainerCommandResult {
+    throw LinuxMachineToolError.unavailable
+  }
+
+  func openTerminal(
+    in target: LinuxMachineIdentity,
+    request: LinuxMachineTerminalRequest
+  ) async throws -> any ContainerTerminalSession {
+    throw LinuxMachineToolError.unavailable
+  }
+}
