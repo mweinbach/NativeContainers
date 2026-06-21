@@ -25,7 +25,7 @@ struct ContainerBuildWorkerFrameCodecTests {
   }
 
   @Test
-  func protocolVersionFourRoundTripsTypedOutputsWithoutHostDestinations() throws {
+  func protocolVersionFiveRoundTripsTypedOutputsWithoutHostDestinations() throws {
     let buildID = UUID()
     let build = ContainerBuildWorkerBuildRequest(
       buildID: buildID,
@@ -41,7 +41,7 @@ struct ContainerBuildWorkerFrameCodecTests {
       buildArguments: [],
       labels: [],
       targetStage: "",
-      noCache: false,
+      cachePolicy: .appOwnedLocalV1,
       pullLatest: true,
       secretIDs: [],
       allowsTagReplacement: false
@@ -57,7 +57,7 @@ struct ContainerBuildWorkerFrameCodecTests {
     )
     let buildJSON = try #require(requestJSON["build"] as? [String: Any])
 
-    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 4)
+    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 5)
     #expect(decodedRequest == request)
     #expect(buildJSON["outputKind"] as? String == "rootFilesystemDirectory")
     #expect(buildJSON["destination"] == nil)
@@ -93,7 +93,14 @@ struct ContainerBuildWorkerFrameCodecTests {
         artifact: artifact,
         stagingReference: nil,
         platforms: [.current],
-        durationMilliseconds: 500
+        durationMilliseconds: 500,
+        cacheReceipt: ContainerBuildWorkerCacheReceipt(
+          mode: .appOwnedLocalV1,
+          handoffToken: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+          fingerprintSHA256: String(repeating: "a", count: 64),
+          byteCount: 1_024,
+          entryCount: 12
+        )
       )
       let event = ContainerBuildWorkerEvent.completed(result)
       let encodedEvent = try JSONEncoder().encode(event)
@@ -102,6 +109,9 @@ struct ContainerBuildWorkerFrameCodecTests {
         from: encodedEvent
       )
       #expect(decodedEvent == event)
+      let eventText = try #require(String(data: encodedEvent, encoding: .utf8))
+      #expect(!eventText.contains("type=local"))
+      #expect(!eventText.contains("/Users/"))
     }
   }
 
@@ -653,7 +663,7 @@ private func makeSecretBuildRequestForProcessTests(
       buildArguments: [],
       labels: [],
       targetStage: "",
-      noCache: true,
+      cachePolicy: .disabled,
       pullLatest: false,
       secretIDs: secretIDs,
       allowsTagReplacement: false

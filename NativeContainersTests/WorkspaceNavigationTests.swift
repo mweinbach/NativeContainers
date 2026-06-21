@@ -459,7 +459,7 @@ private func makeBuildRequest() -> ImageBuildRequest {
     buildArguments: [],
     labels: [],
     targetStage: "",
-    noCache: false,
+    cachePolicy: .builderInternal,
     pullLatest: true,
     builderCPUCount: nil,
     builderMemoryMiB: nil
@@ -497,7 +497,7 @@ private func makeBuildPlan() -> ImageBuildPlan {
     buildArguments: [],
     labels: [],
     targetStage: "",
-    noCache: false,
+    cachePolicy: .builderInternal,
     pullLatest: true,
     builderCPUCount: nil,
     builderMemoryMiB: nil,

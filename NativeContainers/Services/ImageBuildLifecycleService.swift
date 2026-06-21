@@ -10,17 +10,20 @@ struct AppleImageBuildLifecycleService: ImageBuildLifecycleManaging {
   private let secretManager: any ImageBuildSecretManaging
   private let artifactManager: any ImageBuildArtifactManaging
   private let outputManager: any ImageBuildOutputManaging
+  private let cacheFinalizer: any ImageBuildCacheFinalizing
 
   init(
     contextStager: any BuildContextStaging,
     secretManager: any ImageBuildSecretManaging,
     artifactManager: any ImageBuildArtifactManaging,
-    outputManager: any ImageBuildOutputManaging
+    outputManager: any ImageBuildOutputManaging,
+    cacheFinalizer: any ImageBuildCacheFinalizing
   ) {
     self.contextStager = contextStager
     self.secretManager = secretManager
     self.artifactManager = artifactManager
     self.outputManager = outputManager
+    self.cacheFinalizer = cacheFinalizer
   }
 
   func discard(_ plan: ImageBuildPlan) async {
@@ -34,6 +37,9 @@ struct AppleImageBuildLifecycleService: ImageBuildLifecycleManaging {
   func cleanup(_ plan: ImageBuildPlan) async {
     await discard(plan)
     await artifactManager.removeArtifacts(buildID: plan.id)
+    if plan.cachePolicy == .appOwnedLocalV1 {
+      await cacheFinalizer.discardPreparedCache(buildID: plan.id)
+    }
   }
 }
 

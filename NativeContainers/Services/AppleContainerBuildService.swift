@@ -25,6 +25,8 @@ actor AppleContainerBuildService: ImageBuilding {
     imageStore: any ImageBuildStoring = AppleImageBuildStore(),
     artifactManager: any ImageBuildArtifactManaging = AppleImageBuildArtifactManager(),
     outputManager: any ImageBuildOutputManaging = AppleImageBuildOutputService(),
+    cacheFinalizer: any ImageBuildCacheFinalizing =
+      AppleImageBuildCacheFinalizationService(),
     runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared,
     buildExecutionCoordinator: RuntimeMutationCoordinator = .imageBuilds
   ) {
@@ -41,13 +43,15 @@ actor AppleContainerBuildService: ImageBuilding {
       imageStore: imageStore,
       artifactManager: artifactManager,
       outputManager: outputManager,
+      cacheFinalizer: cacheFinalizer,
       runtimeMutationCoordinator: runtimeMutationCoordinator
     )
     lifecycleService = AppleImageBuildLifecycleService(
       contextStager: contextStager,
       secretManager: secretManager,
       artifactManager: artifactManager,
-      outputManager: outputManager
+      outputManager: outputManager,
+      cacheFinalizer: cacheFinalizer
     )
     self.buildExecutionCoordinator = buildExecutionCoordinator
   }

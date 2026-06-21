@@ -165,6 +165,17 @@ struct ContainerBuildWorkerRunner {
       additionalFields: exporterConfiguration.additionalFields,
       rawValue: exporterConfiguration.rawValue
     )
+    let cacheStore = AppOwnedBuildCacheStore(sharedExportRoot: sharedExportRoot)
+    let cacheLease = try await cacheStore.acquireLease(
+      policy: request.cachePolicy,
+      buildID: request.buildID
+    )
+    defer { cacheLease?.release() }
+    let cacheConfiguration = WorkerCacheConfiguration(
+      policy: request.cachePolicy,
+      buildID: request.buildID,
+      hasImportableCache: cacheLease?.hasImportableCache == true
+    )
     let configuration = Builder.BuildConfig(
       buildID: request.buildID.uuidString.lowercased(),
       contentStore: RemoteContentStoreClient(),
@@ -174,15 +185,15 @@ struct ContainerBuildWorkerRunner {
       dockerfile: inputs.dockerfile,
       dockerignore: inputs.dockerignore,
       labels: request.labels,
-      noCache: request.noCache,
+      noCache: request.cachePolicy == .disabled,
       platforms: platforms,
       terminal: nil,
       tags: buildTags,
       target: request.targetStage,
       quiet: !secrets.isEmpty,
       exports: [export],
-      cacheIn: [],
-      cacheOut: [],
+      cacheIn: cacheConfiguration.cacheIn,
+      cacheOut: cacheConfiguration.cacheOut,
       pull: request.pullLatest,
       containerSystemConfig: systemConfiguration
     )
@@ -202,10 +213,17 @@ struct ContainerBuildWorkerRunner {
       .progress(.exportingArtifact, message: "Isolating the reviewed build output")
     )
     let artifact: ContainerBuildWorkerArtifact
+    let privateArtifactStore = PrivateBuildArtifactStore()
+    var removePrivateArtifactOnFailure = true
+    defer {
+      if removePrivateArtifactOnFailure {
+        try? privateArtifactStore.remove(buildID: request.buildID)
+      }
+    }
     do {
       switch artifactKind {
       case .ociArchive, .rootFilesystemArchive:
-        let privateArtifact = try PrivateBuildArtifactStore().persist(
+        let privateArtifact = try privateArtifactStore.persist(
           sourceRootDirectory: sharedExportRoot,
           sourceDirectoryName: request.buildID.uuidString.lowercased(),
           buildID: request.buildID
@@ -241,13 +259,37 @@ struct ContainerBuildWorkerRunner {
         buildID: request.buildID
       )
     }
-    return ContainerBuildWorkerResult(
+    let preparedCache: AppOwnedBuildCachePreparedExport?
+    if let cacheLease {
+      try Task.checkCancellation()
+      preparedCache = try cacheLease.prepareForHostCommit()
+      try await writer.send(
+        .progress(
+          .exportingArtifact,
+          message: "Prepared app-owned cache (\(preparedCache?.snapshot.entryCount ?? 0) entries)"
+        )
+      )
+    } else {
+      preparedCache = nil
+    }
+    let result = ContainerBuildWorkerResult(
       buildID: request.buildID,
       artifact: artifact,
       stagingReference: request.outputKind == .imageStore ? internalReference : nil,
       platforms: request.platforms,
-      durationMilliseconds: Int64(Date().timeIntervalSince(startedAt) * 1_000)
+      durationMilliseconds: Int64(Date().timeIntervalSince(startedAt) * 1_000),
+      cacheReceipt: preparedCache.map {
+        ContainerBuildWorkerCacheReceipt(
+          mode: request.cachePolicy,
+          handoffToken: $0.handoffToken,
+          fingerprintSHA256: $0.fingerprintSHA256,
+          byteCount: $0.snapshot.byteCount,
+          entryCount: $0.snapshot.entryCount
+        )
+      }
     )
+    removePrivateArtifactOnFailure = false
+    return result
   }
 
   private func stagedContext(
@@ -485,5 +527,34 @@ struct ContainerBuildWorkerRunner {
 
   private static func sha256(_ data: Data) -> String {
     SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+  }
+}
+
+private struct WorkerCacheConfiguration {
+  private static let guestExportRoot = "/var/lib/container-builder-shim/exports"
+
+  let cacheIn: [String]
+  let cacheOut: [String]
+
+  init(
+    policy: ImageBuildCachePolicy,
+    buildID: UUID,
+    hasImportableCache: Bool
+  ) {
+    switch policy {
+    case .disabled, .builderInternal:
+      cacheIn = []
+      cacheOut = []
+    case .appOwnedLocalV1:
+      let namespace =
+        "\(Self.guestExportRoot)/\(AppOwnedBuildCacheStore.namespaceDirectoryName)"
+      cacheIn =
+        hasImportableCache
+        ? ["type=local,src=\(namespace)/\(AppOwnedBuildCacheStore.currentDirectoryName)"]
+        : []
+      cacheOut = [
+        "type=local,dest=\(namespace)/\(AppOwnedBuildCacheStore.stagingDirectoryName)/\(buildID.uuidString.lowercased()),mode=max"
+      ]
+    }
   }
 }

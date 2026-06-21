@@ -44,6 +44,11 @@ final class AppModel {
   }
 
   @ObservationIgnored
+  private lazy var appOwnedBuildCacheModel = AppOwnedBuildCacheModel(
+    service: services.appOwnedBuildCache
+  )
+
+  @ObservationIgnored
   private lazy var dockerCompatibilitySettingsModel = DockerCompatibilityModel(
     service: services.dockerCompatibility,
     composeConformance: services.composeBridgeConformance,
@@ -426,6 +431,10 @@ final class AppModel {
 
   func makeContainerBuilderManagementModel() -> ContainerBuilderManagementModel {
     builderWorkspaceModel
+  }
+
+  func makeAppOwnedBuildCacheModel() -> AppOwnedBuildCacheModel {
+    appOwnedBuildCacheModel
   }
 
   func makeRegistrySettingsModel() -> RegistrySettingsModel {

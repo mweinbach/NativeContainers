@@ -123,7 +123,9 @@ watchdogs. Machine requests cap at 35 seconds; process create/start uses a
 ten-second bound and signal/resize uses two seconds. Process wait connections
 have no fixed lifetime deadline so valid shells can remain open, but task
 cancellation closes them; setup and one-shot command services impose their own
-deadlines and confirmed KILL behavior. A timeout never implies rollback:
+deadlines and confirmed KILL behavior. Wait and output-drain completion recheck
+caller cancellation before returning, so a KILL-induced exit cannot race into a
+normal command result. A timeout never implies rollback:
 mutations reconcile live state before reporting an outcome. A focused image
 service performs public fetch and unpack operations before any machine exists.
 Apple 1.0 delete calls accept only a name, not an expected revision, so
@@ -193,6 +195,19 @@ cleanup. The phases share the same injected staging, secret, artifact, output,
 and image-store boundaries, so product wiring stays one call while tests can
 replace any phase without constructing the Apple runtime.
 
+Build caching crosses two additional focused boundaries. The worker-owned
+`AppOwnedBuildCacheStore` serializes the fixed local profile, validates a fresh
+OCI cache export, and atomically moves it from disposable `staging` into a
+tokenized `prepared` handoff before releasing the cross-process lease. Its
+receipt binds the build ID, opaque token, directory identity, OCI metadata
+hashes, and a deterministic metadata tree covering every entry without exposing
+a cache path or raw BuildKit string. After private-artifact validation, the host-owned
+`ImageBuildCacheFinalizing` service reopens that exact prepared generation and
+atomically swaps it into `current`. Inspection may recover abandoned staging
+but cannot delete a live prepared handoff; explicit discard/reset owns immediate
+cleanup and recovery reclaims handoffs older than 24 hours. Cache status/reset remains a separate `AppOwnedBuildCacheManaging`
+service from Apple builder lifecycle.
+
 Build secrets cross a separate `ImageBuildSecretManaging` boundary. The review
 request contains file selections, but the immutable plan contains only a
 canonical ID, privacy-sensitive path, and byte count. The service rejects invalid or
@@ -260,8 +275,8 @@ reconciliation runs in a fresh uncancelled task. Deletion additionally requires
 both inventory and the exact builder bundle path to be absent; the service never
 manually removes an orphaned bundle or the separate builder-export directory.
 
-Worker protocol v4 reserves stdout for capped length-prefixed control frames
-and adds typed output requests and artifact results without host destinations.
+Worker protocol v5 reserves stdout for capped length-prefixed control frames
+and adds typed output/cache requests and artifact receipts without host destinations.
 Its exact-length stdin decoder reads one metadata-only JSON request followed by
 a bounded binary secret envelope and final commit marker, then leaves stdin open
 as the parent-lifetime lease; secret bytes never enter Codable state, argv,
@@ -276,6 +291,21 @@ guest-visible and private artifacts in a cancellation-independent task,
 including builds canceled while queued. Context and worker isolation prevent
 stale review data and leaked process resources; they do not claim to sandbox a
 compromised BuildKit implementation.
+
+The app-owned local cache is a separate focused service. Its wire mode is a
+closed enum; raw BuildKit cache strings exist only in the worker adapter. One
+cancellation-aware cross-process lease protects a private versioned namespace
+across import, solve, export, and artifact isolation. Each solve exports into a
+fresh staging generation. The worker validates it and returns only a typed
+staged receipt after the primary artifact is private and digest-bound. After the
+worker terminal frame arrives, the app revalidates the artifact and a host-side
+cache finalizer reacquires the lease, revalidates staging, and atomically swaps
+it into `current`. Failed, cancelled, killed, or disconnected workers therefore
+cannot replace the last committed generation; lifecycle cleanup or the next
+lease scavenges abandoned staging. A committed generation remains valid if a
+later image-store or destination publication step fails.
+Inspection/reset use the same lock and never mutate Apple's builder container or
+unrelated `<appRoot>/builder` exports.
 
 Both sides use POSIX pipe reads for short framed traffic. Foundation’s counted
 pipe read can wait for the entire requested buffer or until EOF; the input lease

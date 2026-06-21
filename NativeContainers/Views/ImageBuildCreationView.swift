@@ -14,7 +14,7 @@ struct ImageBuildCreationView: View {
   @State private var labels = ""
   @State private var secretDrafts: [ImageBuildSecretDraft] = []
   @State private var targetStage = ""
-  @State private var noCache = false
+  @State private var cachePolicy = ImageBuildCachePolicy.builderInternal
   @State private var pullLatest = true
   @State private var usesCustomBuilderResources = false
   @State private var builderCPUCount = 2
@@ -221,7 +221,14 @@ struct ImageBuildCreationView: View {
   private var optionsSection: some View {
     Section("Build options") {
       Toggle("Pull newer base images", isOn: $pullLatest)
-      Toggle("Ignore BuildKit cache", isOn: $noCache)
+      Picker("Build cache", selection: $cachePolicy) {
+        ForEach(ImageBuildCachePolicy.allCases, id: \.self) { policy in
+          Text(policy.title).tag(policy)
+        }
+      }
+      Text(cachePolicy.explanation)
+        .font(.caption)
+        .foregroundStyle(.secondary)
       DisclosureGroup("Arguments, labels, and builder resources") {
         LabeledContent("Build arguments") {
           TextEditor(text: $buildArguments)
@@ -262,6 +269,9 @@ struct ImageBuildCreationView: View {
       LabeledContent("Dockerfile", value: plan.stagedDockerfile.lastPathComponent)
       LabeledContent("Output") {
         Label(plan.output.kind.title, systemImage: plan.output.kind.systemImage)
+      }
+      LabeledContent("Cache") {
+        Text(plan.cachePolicy.title)
       }
       if let destinationURL = plan.output.destinationURL {
         LabeledContent("Destination") {
@@ -447,7 +457,7 @@ struct ImageBuildCreationView: View {
       buildArguments: splitLines(buildArguments),
       labels: splitLines(labels),
       targetStage: targetStage.trimmingCharacters(in: .whitespacesAndNewlines),
-      noCache: noCache,
+      cachePolicy: cachePolicy,
       pullLatest: pullLatest,
       builderCPUCount: usesCustomBuilderResources ? builderCPUCount : nil,
       builderMemoryMiB: usesCustomBuilderResources ? builderMemoryMiB : nil,
@@ -546,6 +556,11 @@ struct ImageBuildCreationView: View {
     if plan.output.replacesExistingDestination {
       warnings.append(
         "The existing archive will be replaced only if its reviewed identity is unchanged."
+      )
+    }
+    if plan.cachePolicy == .appOwnedLocalV1 {
+      warnings.append(
+        "The private NativeContainers cache will be replaced atomically only after the reviewed output is isolated; a committed cache generation remains independent of later output publication."
       )
     }
     if allowsStopRunningBuilder {

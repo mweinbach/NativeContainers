@@ -36,6 +36,30 @@ extension ImageBuildOutputKind {
   }
 }
 
+extension ImageBuildCachePolicy {
+  var title: LocalizedStringResource {
+    switch self {
+    case .disabled:
+      "No Cache"
+    case .builderInternal:
+      "Shared Builder Cache"
+    case .appOwnedLocalV1:
+      "NativeContainers Local Cache"
+    }
+  }
+
+  var explanation: LocalizedStringResource {
+    switch self {
+    case .disabled:
+      "Ignore existing BuildKit cache for this build."
+    case .builderInternal:
+      "Use BuildKit’s cache inside Apple’s shared builder. Deleting the builder deletes this cache."
+    case .appOwnedLocalV1:
+      "Also export and import a fixed app-owned local cache. No registry credentials or custom cache strings are used."
+    }
+  }
+}
+
 struct ImageBuildOutputSelection: Equatable, Sendable {
   let kind: ImageBuildOutputKind
   let destinationURL: URL?
@@ -97,7 +121,7 @@ struct ImageBuildRequest: Equatable, Sendable {
   let buildArguments: [String]
   let labels: [String]
   let targetStage: String
-  let noCache: Bool
+  let cachePolicy: ImageBuildCachePolicy
   let pullLatest: Bool
   let builderCPUCount: Int?
   let builderMemoryMiB: Int?
@@ -112,7 +136,7 @@ struct ImageBuildRequest: Equatable, Sendable {
     buildArguments: [String],
     labels: [String],
     targetStage: String,
-    noCache: Bool,
+    cachePolicy: ImageBuildCachePolicy = .builderInternal,
     pullLatest: Bool,
     builderCPUCount: Int?,
     builderMemoryMiB: Int?,
@@ -126,12 +150,14 @@ struct ImageBuildRequest: Equatable, Sendable {
     self.buildArguments = buildArguments
     self.labels = labels
     self.targetStage = targetStage
-    self.noCache = noCache
+    self.cachePolicy = cachePolicy
     self.pullLatest = pullLatest
     self.builderCPUCount = builderCPUCount
     self.builderMemoryMiB = builderMemoryMiB
     self.output = output
   }
+
+  var noCache: Bool { cachePolicy == .disabled }
 }
 
 struct ImageBuildPlan: Equatable, Sendable, Identifiable {
@@ -150,7 +176,7 @@ struct ImageBuildPlan: Equatable, Sendable, Identifiable {
   let buildArguments: [String]
   let labels: [String]
   let targetStage: String
-  let noCache: Bool
+  let cachePolicy: ImageBuildCachePolicy
   let pullLatest: Bool
   let builderCPUCount: Int?
   let builderMemoryMiB: Int?
@@ -160,6 +186,8 @@ struct ImageBuildPlan: Equatable, Sendable, Identifiable {
   var replacesExistingTags: Bool {
     tags.contains(where: \.replacesExistingReference)
   }
+
+  var noCache: Bool { cachePolicy == .disabled }
 
   var builderConfiguration: ContainerBuilderConfiguration {
     ContainerBuilderConfiguration(

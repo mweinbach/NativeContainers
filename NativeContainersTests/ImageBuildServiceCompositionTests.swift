@@ -74,7 +74,7 @@ struct ImageBuildServiceCompositionTests {
           buildArguments: [],
           labels: [],
           targetStage: "",
-          noCache: false,
+          cachePolicy: .builderInternal,
           pullLatest: false,
           builderCPUCount: nil,
           builderMemoryMiB: nil
@@ -158,7 +158,7 @@ private func compositionRequest() -> ImageBuildRequest {
     buildArguments: [],
     labels: [],
     targetStage: "",
-    noCache: false,
+    cachePolicy: .builderInternal,
     pullLatest: false,
     builderCPUCount: nil,
     builderMemoryMiB: nil
@@ -192,7 +192,7 @@ private func compositionPlan() -> ImageBuildPlan {
     buildArguments: [],
     labels: [],
     targetStage: "",
-    noCache: false,
+    cachePolicy: .builderInternal,
     pullLatest: false,
     builderCPUCount: nil,
     builderMemoryMiB: nil,

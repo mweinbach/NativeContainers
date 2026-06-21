@@ -120,6 +120,7 @@ struct ImageBuildHistoryTests {
     var payload = try #require(envelope["record"] as? [String: Any])
     payload.removeValue(forKey: "retainedImages")
     payload.removeValue(forKey: "outputKind")
+    payload.removeValue(forKey: "cachePolicy")
     envelope["record"] = payload
     try JSONSerialization.data(withJSONObject: envelope).write(to: recordURL)
     #expect(Darwin.chmod(recordURL.path(percentEncoded: false), 0o600) == 0)
@@ -1279,6 +1280,7 @@ private func makeHistoryRecord(
     failureKind: status == .failed ? .unknown : nil,
     secretCount: 0,
     noCache: false,
+    cachePolicy: .builderInternal,
     pullLatest: true
   )
 }
@@ -1296,7 +1298,7 @@ private func makeHistoryBuildRequest() -> ImageBuildRequest {
     buildArguments: [],
     labels: [],
     targetStage: "",
-    noCache: false,
+    cachePolicy: .builderInternal,
     pullLatest: true,
     builderCPUCount: nil,
     builderMemoryMiB: nil
@@ -1339,7 +1341,7 @@ private func makeHistoryBuildPlan(
     buildArguments: buildArguments,
     labels: labels,
     targetStage: "runtime",
-    noCache: false,
+    cachePolicy: .builderInternal,
     pullLatest: true,
     builderCPUCount: nil,
     builderMemoryMiB: nil,

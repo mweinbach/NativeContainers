@@ -148,7 +148,7 @@ struct AppleImageBuildPlanningService: ImageBuildPlanning {
         buildArguments: request.buildArguments,
         labels: request.labels,
         targetStage: request.targetStage,
-        noCache: request.noCache,
+        cachePolicy: request.cachePolicy,
         pullLatest: request.pullLatest,
         builderCPUCount: request.builderCPUCount,
         builderMemoryMiB: request.builderMemoryMiB,

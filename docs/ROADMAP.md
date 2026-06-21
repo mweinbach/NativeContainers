@@ -64,7 +64,12 @@ must leave a usable, test-backed product slice.
 - [x] Typed image-store, OCI archive, root-filesystem tar, and root-filesystem
       folder outputs live-verified behind reviewed destination and publication
       services.
-- [ ] SSH forwarding and typed, app-owned cache import/export profiles.
+- [x] Typed fixed app-owned local cache profile with protocol-v5 isolation,
+      cancellation-aware cross-process leases, full-tree-fingerprint-bound
+      prepared handoff, bounded stale recovery, atomic promotion, namespace-only reset, and a
+      successful two-build live export/import compatibility probe. Cross-builder hit attribution would
+      require a destructive builder reset and remains intentionally unclaimed.
+- [ ] SSH forwarding and reviewed remote cache profiles.
 - [x] Version-pinned Socktainer service with SHA-256 and Developer ID validation,
       HTTP-level readiness, exact-PID TERM-to-KILL/Force Stop recovery, stale
       socket cleanup, and a product-specific Docker context that never becomes

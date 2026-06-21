@@ -192,7 +192,9 @@ Updated: 2026-06-21.
   only for callers that still need the complete API.
 - Command timeout arbitration publishes a timeout outcome before issuing
   `KILL`, so a signal-induced process exit cannot race the timeout into a false
-  success. Caller cancellation also triggers cancellation-independent `KILL`.
+  success. Caller cancellation also triggers cancellation-independent `KILL`
+  and is rechecked after process wait and output drain, so exit 137 cannot race
+  cancellation into a normal result.
 - Published TCP port ranges are expanded into exact endpoints. Creation
   validates literal IPv4/IPv6 hosts, brackets IPv6 for Apple's parser, and
   rejects host-port/protocol overlap before image work begins. The inspector
@@ -315,7 +317,7 @@ Updated: 2026-06-21.
   modes, and bind metadata plus content in a SHA-256 fingerprint checked before
   and after solve. Canceled staging and queued builds remove partial private
   contexts promptly.
-- Worker protocol v4 carries a typed output kind and typed artifact metadata,
+- Worker protocol v5 carries typed output/cache kinds and typed artifact metadata,
   but never a user destination. Image-store and OCI-archive builds use Apple's
   OCI exporter, root-filesystem archives use `tar`, and root-filesystem folders
   use `local` with `platform-split=false`; root-filesystem outputs are
@@ -372,12 +374,39 @@ Updated: 2026-06-21.
   runtime and observed the running builder as exact/trusted with its bundle
   present and 530,751,488 allocated bytes. Stop, `KILL`, and deletion were not
   invoked because external CLI build activity cannot be observed safely.
+- Protocol v5 now carries one typed cache mode instead of independent
+  `noCache` and raw-string configuration. A worker-private adapter maps the
+  versioned NativeContainers local profile into Apple's existing builder export
+  mount. The app-owned cache service holds a cancellation-aware cross-process
+  lease while the worker produces and validates fresh OCI-layout staging. Before
+  unlocking, the worker atomically moves it into a tokenized prepared handoff and
+  returns a receipt bound to that token, directory identity, OCI metadata hashes,
+  and a deterministic metadata tree covering every cache entry. After the app validates the private
+  artifact, a host-side service reacquires the lease, reopens that exact token,
+  recomputes the fingerprint, and commits with an atomic swap. Inspection and new
+  leases recover staging without deleting a live handoff and reclaim prepared
+  residue after 24 hours; broken pipes, hard exits, and same-sized payload
+  substitutions cannot publish it. Reset touches only the
+  app namespace and remains available for malformed caches. Builder & Cache
+  exposes size/status and a separate reset control. Deterministic promotion,
+  same-sized mutation, intervening-inspection, explicit-reset invalidation,
+  rollback, cancellation, lock-wait, staging/prepared hard-exit recovery, and
+  namespace-isolation tests are live. A live
+  Xcode probe against Apple 1.0.0 produced two 4,004,864-byte OCI outputs and
+  observed distinct worker-staged and app-committed events for both
+  9-entry/4,018,176-byte cache generations, and reduced the unique four-second
+  final unique four-second probe from about 5.20 seconds to 0.20 seconds before
+  resetting the app cache and removing its outputs. Repeated probes did not
+  produce stable archive byte equality, so no archive-determinism claim is made.
+  Apple's surviving internal cache means the
+  timing is not independent proof of local-cache hits; destructive builder-reset
+  attribution remains intentionally unclaimed.
 - Reviewed file-backed BuildKit secrets are live behind a focused
   `ImageBuildSecretManaging` service. Review pins private, owner-only regular
   files outside the build context by open descriptor and full identity; plans
   retain only ID, privacy-sensitive path, and byte count. Context staging rejects
   every pinned device/inode, closing hard-link races. After the builder is ready,
-  the vault revalidates and consumes each descriptor once, then protocol v4
+  the vault revalidates and consumes each descriptor once, then protocol v5
   streams bounded binary and empty values beside—never inside—the Codable control
   request. App-side leases are released when that pipe write commits. Secret
   builds force Apple’s quiet mode, drain and discard worker stderr, sanitize
@@ -550,8 +579,8 @@ Updated: 2026-06-21.
   identity-revalidated fallback reported `FALLBACK=true` for
   `ncwire-efdce9a3`. Both runs ended with zero container/volume/network residue,
   a stopped bridge, and no socket.
-- The full Xcode plan passes all 504 outcomes: 487 deterministic tests passed
-  and 17 explicitly gated live tests skipped, with no failures. The build emits
+- The full Xcode plan passes all 523 outcomes: 505 deterministic tests passed
+  and 18 explicitly gated live tests skipped, with no failures. The build emits
   only nine pre-existing warnings in macOS saved-state tests.
 
 ## Known configuration issue
@@ -567,10 +596,9 @@ entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Gate any app-owned local cache profile behind a separate two-build
-   reuse/reset probe against Apple 1.0.0.
-   Keep raw cache strings, remote credentials, SSH forwarding, and cache-only
-   prune out of the UI until the pinned native API exposes a verifiable contract.
+1. Keep raw cache strings, remote credentials, SSH forwarding, and cache-only
+   prune out of the UI until the pinned native API exposes a verifiable contract;
+   the fixed app-owned local profile is the only reviewed non-internal mode.
 2. Package a signed and notarized privileged helper if automated host-access
    mutation is still desired after the explicit command handoff is exercised.
 3. Add the entitlement through a functioning Xcode capability surface, then

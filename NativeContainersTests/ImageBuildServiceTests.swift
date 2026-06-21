@@ -137,7 +137,7 @@ struct ImageBuildServiceTests {
       buildArguments: ["CONFIGURATION=release"],
       labels: ["org.example.owner=nativecontainers"],
       targetStage: "runtime",
-      noCache: true,
+      cachePolicy: .disabled,
       pullLatest: false,
       builderCPUCount: 6,
       builderMemoryMiB: 8_192
@@ -683,6 +683,112 @@ struct ImageBuildServiceTests {
   }
 
   @Test
+  func localCachePlanRequiresMatchingStagedReceiptBeforeArtifactAccess() async {
+    let plan = makeImageBuildPlan(cachePolicy: .appOwnedLocalV1)
+    let missingReceipt = ContainerBuildWorkerResult(
+      buildID: plan.id,
+      artifact: ContainerBuildWorkerArtifact(
+        kind: .ociArchive,
+        path: fixedArtifactPath(for: plan.id),
+        sha256: String(repeating: "a", count: 64),
+        byteCount: 4_096,
+        entryCount: nil
+      ),
+      stagingReference: stagingReference(for: plan.id),
+      platforms: plan.platforms,
+      durationMilliseconds: 100
+    )
+    let worker = TestContainerBuildWorker(buildResultOverride: missingReceipt)
+    let artifactManager = TestImageBuildArtifactManager()
+    let cacheFinalizer = TestImageBuildCacheFinalizer()
+    let service = makeBuildService(
+      contextStager: TestBuildContextStager(staged: makeStagedBuildContext(id: plan.id)),
+      worker: worker,
+      imageStore: TestImageBuildStore(tagStates: [tagState(for: plan)]),
+      artifactManager: artifactManager,
+      cacheFinalizer: cacheFinalizer
+    )
+
+    await #expect(throws: ImageBuildError.workerArtifactMismatch) {
+      _ = try await service.build(plan, authorization: .none) { _ in }
+    }
+
+    #expect(await artifactManager.validations.isEmpty)
+    #expect(await cacheFinalizer.committedBuildIDs.isEmpty)
+    #expect(await cacheFinalizer.discardedBuildIDs == [plan.id])
+  }
+
+  @Test
+  func nonlocalCachePlanRejectsUnexpectedLocalCacheReceipt() async {
+    let plan = makeImageBuildPlan()
+    let unexpectedReceipt = ContainerBuildWorkerResult(
+      buildID: plan.id,
+      artifact: ContainerBuildWorkerArtifact(
+        kind: .ociArchive,
+        path: fixedArtifactPath(for: plan.id),
+        sha256: String(repeating: "a", count: 64),
+        byteCount: 4_096,
+        entryCount: nil
+      ),
+      stagingReference: stagingReference(for: plan.id),
+      platforms: plan.platforms,
+      durationMilliseconds: 100,
+      cacheReceipt: ContainerBuildWorkerCacheReceipt(
+        mode: .appOwnedLocalV1,
+        handoffToken: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+        fingerprintSHA256: String(repeating: "a", count: 64),
+        byteCount: 4_096,
+        entryCount: 9
+      )
+    )
+    let artifactManager = TestImageBuildArtifactManager()
+    let service = makeBuildService(
+      contextStager: TestBuildContextStager(staged: makeStagedBuildContext(id: plan.id)),
+      worker: TestContainerBuildWorker(buildResultOverride: unexpectedReceipt),
+      imageStore: TestImageBuildStore(tagStates: [tagState(for: plan)]),
+      artifactManager: artifactManager
+    )
+
+    await #expect(throws: ImageBuildError.workerArtifactMismatch) {
+      _ = try await service.build(plan, authorization: .none) { _ in }
+    }
+
+    #expect(await artifactManager.validations.isEmpty)
+  }
+
+  @Test
+  func localCacheFinalizesAfterArtifactValidationAndCleansPreparedStaging() async throws {
+    let plan = makeImageBuildPlan(cachePolicy: .appOwnedLocalV1)
+    let artifact = makeWorkerResult(for: plan)
+    let cacheFinalizer = TestImageBuildCacheFinalizer()
+    let artifactManager = TestImageBuildArtifactManager()
+    let service = makeBuildService(
+      contextStager: TestBuildContextStager(staged: makeStagedBuildContext(id: plan.id)),
+      worker: TestContainerBuildWorker(buildResultOverride: artifact),
+      imageStore: TestImageBuildStore(
+        tagStates: matchingTagStates(for: plan),
+        archiveLoadResult: ImageBuildArchiveLoadResult(
+          images: [
+            ImageBuildStoredImage(
+              reference: artifact.stagingReference!,
+              digest: "sha256:built"
+            )
+          ],
+          rejectedMembers: []
+        )
+      ),
+      artifactManager: artifactManager,
+      cacheFinalizer: cacheFinalizer
+    )
+
+    _ = try await service.build(plan, authorization: .none) { _ in }
+
+    #expect(await artifactManager.validations.count == 1)
+    #expect(await cacheFinalizer.committedBuildIDs == [plan.id])
+    #expect(await cacheFinalizer.discardedBuildIDs == [plan.id])
+  }
+
+  @Test
   func stagingValidationFailurePreventsAnyWorkerOperation() async {
     let plan = makeImageBuildPlan()
     let contextStager = TestBuildContextStager(
@@ -1213,7 +1319,7 @@ private func makeImageBuildRequest(
   buildArguments: [String] = [],
   labels: [String] = [],
   targetStage: String = "",
-  noCache: Bool = false,
+  cachePolicy: ImageBuildCachePolicy = .builderInternal,
   pullLatest: Bool = true,
   builderCPUCount: Int? = nil,
   builderMemoryMiB: Int? = nil,
@@ -1228,7 +1334,7 @@ private func makeImageBuildRequest(
     buildArguments: buildArguments,
     labels: labels,
     targetStage: targetStage,
-    noCache: noCache,
+    cachePolicy: cachePolicy,
     pullLatest: pullLatest,
     builderCPUCount: builderCPUCount,
     builderMemoryMiB: builderMemoryMiB,
@@ -1241,6 +1347,7 @@ private func makeImageBuildPlan(
   existingDigest: String? = nil,
   tags: [ContainerBuildTagExpectation]? = nil,
   secrets: [ImageBuildSecretReview] = [],
+  cachePolicy: ImageBuildCachePolicy = .builderInternal,
   output: ImageBuildOutputPlan = .imageStore
 ) -> ImageBuildPlan {
   let stagedRoot = URL(
@@ -1275,7 +1382,7 @@ private func makeImageBuildPlan(
     buildArguments: ["CONFIGURATION=release"],
     labels: ["org.example.owner=nativecontainers"],
     targetStage: "runtime",
-    noCache: false,
+    cachePolicy: cachePolicy,
     pullLatest: true,
     builderCPUCount: 4,
     builderMemoryMiB: 4_096,
@@ -1318,6 +1425,7 @@ private func makeBuildService(
   worker: TestContainerBuildWorker,
   imageStore: TestImageBuildStore,
   artifactManager: TestImageBuildArtifactManager,
+  cacheFinalizer: any ImageBuildCacheFinalizing = TestImageBuildCacheFinalizer(),
   runtimeMutationCoordinator: RuntimeMutationCoordinator = RuntimeMutationCoordinator(),
   buildExecutionCoordinator: RuntimeMutationCoordinator = RuntimeMutationCoordinator()
 ) -> AppleContainerBuildService {
@@ -1326,6 +1434,7 @@ private func makeBuildService(
     worker: worker,
     imageStore: imageStore,
     artifactManager: artifactManager,
+    cacheFinalizer: cacheFinalizer,
     runtimeMutationCoordinator: runtimeMutationCoordinator,
     buildExecutionCoordinator: buildExecutionCoordinator
   )
@@ -1377,12 +1486,17 @@ private func fixedArtifactPath(for buildID: UUID) -> String {
 private func makeWorkerResult(for plan: ImageBuildPlan) -> ContainerBuildWorkerResult {
   ContainerBuildWorkerResult(
     buildID: plan.id,
-    archivePath: fixedArtifactPath(for: plan.id),
-    archiveSHA256: String(repeating: "a", count: 64),
-    archiveByteCount: 4_096,
+    artifact: ContainerBuildWorkerArtifact(
+      kind: .ociArchive,
+      path: fixedArtifactPath(for: plan.id),
+      sha256: String(repeating: "a", count: 64),
+      byteCount: 4_096,
+      entryCount: nil
+    ),
     stagingReference: stagingReference(for: plan.id),
     platforms: plan.platforms,
-    durationMilliseconds: 1_250
+    durationMilliseconds: 1_250,
+    cacheReceipt: cacheReceipt(for: plan.cachePolicy)
   )
 }
 
@@ -1391,12 +1505,30 @@ private func makeWorkerResult(
 ) -> ContainerBuildWorkerResult {
   ContainerBuildWorkerResult(
     buildID: build.buildID,
-    archivePath: fixedArtifactPath(for: build.buildID),
-    archiveSHA256: String(repeating: "a", count: 64),
-    archiveByteCount: 4_096,
+    artifact: ContainerBuildWorkerArtifact(
+      kind: .ociArchive,
+      path: fixedArtifactPath(for: build.buildID),
+      sha256: String(repeating: "a", count: 64),
+      byteCount: 4_096,
+      entryCount: nil
+    ),
     stagingReference: stagingReference(for: build.buildID),
     platforms: build.platforms,
-    durationMilliseconds: 1_250
+    durationMilliseconds: 1_250,
+    cacheReceipt: cacheReceipt(for: build.cachePolicy)
+  )
+}
+
+private func cacheReceipt(
+  for policy: ImageBuildCachePolicy
+) -> ContainerBuildWorkerCacheReceipt? {
+  guard policy == .appOwnedLocalV1 else { return nil }
+  return ContainerBuildWorkerCacheReceipt(
+    mode: policy,
+    handoffToken: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+    fingerprintSHA256: String(repeating: "a", count: 64),
+    byteCount: 4_096,
+    entryCount: 9
   )
 }
 
@@ -1562,6 +1694,26 @@ private actor TestImageBuildStore: ImageBuildStoring {
     removedReferences.append(reference)
     await log?.record("store.remove:\(reference)")
     return removeResult
+  }
+}
+
+private actor TestImageBuildCacheFinalizer: ImageBuildCacheFinalizing {
+  private(set) var committedBuildIDs: [UUID] = []
+  private(set) var discardedBuildIDs: [UUID] = []
+
+  func commitPreparedCache(
+    _ receipt: ContainerBuildWorkerCacheReceipt,
+    buildID: UUID
+  ) async throws -> AppOwnedBuildCacheSnapshot {
+    committedBuildIDs.append(buildID)
+    return AppOwnedBuildCacheSnapshot(
+      byteCount: receipt.byteCount,
+      entryCount: receipt.entryCount
+    )
+  }
+
+  func discardPreparedCache(buildID: UUID) async {
+    discardedBuildIDs.append(buildID)
   }
 }
 

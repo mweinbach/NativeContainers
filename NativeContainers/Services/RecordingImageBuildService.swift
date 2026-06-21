@@ -121,6 +121,7 @@ struct RecordingImageBuildService: ImageBuilding, Sendable {
       failureKind: nil,
       secretCount: plan.secrets.count,
       noCache: plan.noCache,
+      cachePolicy: plan.cachePolicy,
       pullLatest: plan.pullLatest
     )
   }

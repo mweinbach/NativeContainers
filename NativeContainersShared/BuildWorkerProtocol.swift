@@ -6,7 +6,7 @@ enum ContainerBuildWorkerOperation: String, Codable, Equatable, Sendable {
 }
 
 struct ContainerBuildWorkerRequest: Codable, Equatable, Sendable {
-  static let currentProtocolVersion = 4
+  static let currentProtocolVersion = 5
 
   let protocolVersion: Int
   let operation: ContainerBuildWorkerOperation
@@ -45,6 +45,12 @@ enum ImageBuildOutputKind: String, Codable, CaseIterable, Equatable, Hashable, S
   case ociArchive
   case rootFilesystemArchive
   case rootFilesystemDirectory
+}
+
+enum ImageBuildCachePolicy: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+  case disabled
+  case builderInternal
+  case appOwnedLocalV1
 }
 
 struct ContainerBuildExporterConfiguration: Equatable, Sendable {
@@ -86,7 +92,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
   let buildArguments: [String]
   let labels: [String]
   let targetStage: String
-  let noCache: Bool
+  let cachePolicy: ImageBuildCachePolicy
   let pullLatest: Bool
   let secretIDs: [String]
   let allowsTagReplacement: Bool
@@ -105,7 +111,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
     buildArguments: [String],
     labels: [String],
     targetStage: String,
-    noCache: Bool,
+    cachePolicy: ImageBuildCachePolicy = .builderInternal,
     pullLatest: Bool,
     secretIDs: [String],
     allowsTagReplacement: Bool
@@ -123,7 +129,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
     self.buildArguments = buildArguments
     self.labels = labels
     self.targetStage = targetStage
-    self.noCache = noCache
+    self.cachePolicy = cachePolicy
     self.pullLatest = pullLatest
     self.secretIDs = secretIDs
     self.allowsTagReplacement = allowsTagReplacement
@@ -274,12 +280,47 @@ struct ContainerBuildWorkerArtifact: Codable, Equatable, Sendable {
   let entryCount: Int?
 }
 
+enum ContainerBuildWorkerCacheReceiptState: String, Codable, Equatable, Sendable {
+  case staged
+}
+
+struct ContainerBuildWorkerCacheReceipt: Codable, Equatable, Sendable {
+  static let currentSchemaVersion = 1
+
+  let mode: ImageBuildCachePolicy
+  let state: ContainerBuildWorkerCacheReceiptState
+  let schemaVersion: Int
+  let handoffToken: UUID
+  let fingerprintSHA256: String
+  let byteCount: Int64
+  let entryCount: Int
+
+  init(
+    mode: ImageBuildCachePolicy,
+    state: ContainerBuildWorkerCacheReceiptState = .staged,
+    schemaVersion: Int = currentSchemaVersion,
+    handoffToken: UUID,
+    fingerprintSHA256: String,
+    byteCount: Int64,
+    entryCount: Int
+  ) {
+    self.mode = mode
+    self.state = state
+    self.schemaVersion = schemaVersion
+    self.handoffToken = handoffToken
+    self.fingerprintSHA256 = fingerprintSHA256
+    self.byteCount = byteCount
+    self.entryCount = entryCount
+  }
+}
+
 struct ContainerBuildWorkerResult: Codable, Equatable, Sendable {
   let buildID: UUID
   let artifact: ContainerBuildWorkerArtifact
   let stagingReference: String?
   let platforms: [ContainerBuildPlatform]
   let durationMilliseconds: Int64
+  let cacheReceipt: ContainerBuildWorkerCacheReceipt?
 
   var archivePath: String { artifact.path }
   var archiveSHA256: String { artifact.sha256 }
@@ -290,13 +331,15 @@ struct ContainerBuildWorkerResult: Codable, Equatable, Sendable {
     artifact: ContainerBuildWorkerArtifact,
     stagingReference: String?,
     platforms: [ContainerBuildPlatform],
-    durationMilliseconds: Int64
+    durationMilliseconds: Int64,
+    cacheReceipt: ContainerBuildWorkerCacheReceipt? = nil
   ) {
     self.buildID = buildID
     self.artifact = artifact
     self.stagingReference = stagingReference
     self.platforms = platforms
     self.durationMilliseconds = durationMilliseconds
+    self.cacheReceipt = cacheReceipt
   }
 
   init(

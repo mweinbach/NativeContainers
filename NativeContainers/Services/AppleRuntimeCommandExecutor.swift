@@ -68,6 +68,7 @@ actor AppleRuntimeCommandExecutor: RuntimeCommandExecuting {
       )
       let standardOutput = try await standardOutputTask.value
       let standardError = try await standardErrorTask.value
+      try Task.checkCancellation()
       try? standardOutputPipe.fileHandleForReading.close()
       try? standardErrorPipe.fileHandleForReading.close()
       return ContainerCommandResult(

@@ -56,6 +56,7 @@ struct ImageBuildHistoryRecord: Codable, Equatable, Sendable, Identifiable {
   let failureKind: ImageBuildHistoryFailureKind?
   let secretCount: Int
   let noCache: Bool
+  let cachePolicy: ImageBuildCachePolicy
   let pullLatest: Bool
 
   func finishing(
@@ -92,6 +93,7 @@ struct ImageBuildHistoryRecord: Codable, Equatable, Sendable, Identifiable {
       failureKind: failureKind,
       secretCount: secretCount,
       noCache: noCache,
+      cachePolicy: cachePolicy,
       pullLatest: pullLatest
     )
   }
@@ -121,6 +123,7 @@ extension ImageBuildHistoryRecord {
     case failureKind
     case secretCount
     case noCache
+    case cachePolicy
     case pullLatest
   }
 
@@ -182,7 +185,17 @@ extension ImageBuildHistoryRecord {
       forKey: .failureKind
     )
     secretCount = try container.decode(Int.self, forKey: .secretCount)
-    noCache = try container.decode(Bool.self, forKey: .noCache)
+    let legacyNoCache = try container.decode(Bool.self, forKey: .noCache)
+    if let decodedCachePolicy = try container.decodeIfPresent(
+      ImageBuildCachePolicy.self,
+      forKey: .cachePolicy
+    ) {
+      cachePolicy = decodedCachePolicy
+      noCache = decodedCachePolicy == .disabled
+    } else {
+      noCache = legacyNoCache
+      cachePolicy = legacyNoCache ? .disabled : .builderInternal
+    }
     pullLatest = try container.decode(Bool.self, forKey: .pullLatest)
   }
 }

@@ -38,7 +38,9 @@ Apple Keychain-backed registry login management, reviewed native pull/push
 transfers, reviewed Dockerfile/Containerfile builds through Apple’s public
 BuildKit APIs with image-store, OCI-archive, root-filesystem tar, and folder
 outputs, one-shot reviewed file-backed build secrets, reviewed shared-builder
-Stop/Force Stop/cache reset, private persistent build history, and macOS
+Stop/Force Stop/internal-cache reset, a transactional app-owned local build
+cache with token-bound promotion and separate status/reset controls, private
+persistent build history, and macOS
 restore-image preparation. Persistent Linux machines now have native
 create/start/stop/Force Stop/delete controls, cancellable first-boot user
 provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,

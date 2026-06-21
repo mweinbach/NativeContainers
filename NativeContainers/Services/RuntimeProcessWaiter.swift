@@ -67,6 +67,7 @@ enum RuntimeProcessWaiter {
         timeout: .seconds(timeoutSeconds),
         sleep: sleep
       )
+      try Task.checkCancellation()
       switch firstOutcome {
       case .exited(let exitCode):
         return exitCode
@@ -91,12 +92,14 @@ enum RuntimeProcessWaiter {
           seconds: Self.killConfirmationSeconds
         )
       }
+      try Task.checkCancellation()
 
       let finalOutcome = try await raceExit(
         gate: exitGate,
         timeout: .seconds(Self.killConfirmationSeconds),
         sleep: killConfirmationSleep
       )
+      try Task.checkCancellation()
       switch finalOutcome {
       case .exited:
         throw RuntimeProcessWaitError.timedOut(seconds: timeoutSeconds)

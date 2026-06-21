@@ -5,11 +5,13 @@ struct ImageBuildsView: View {
   @State private var imageBuildModel: ImageBuildModel
   @State private var historyModel: ImageBuildHistoryModel
   @State private var builderModel: ContainerBuilderManagementModel
+  @State private var appOwnedCacheModel: AppOwnedBuildCacheModel
 
   init(appModel: AppModel) {
     _imageBuildModel = State(initialValue: appModel.makeImageBuildModel())
     _historyModel = State(initialValue: appModel.makeImageBuildHistoryModel())
     _builderModel = State(initialValue: appModel.makeContainerBuilderManagementModel())
+    _appOwnedCacheModel = State(initialValue: appModel.makeAppOwnedBuildCacheModel())
   }
 
   var body: some View {
@@ -27,6 +29,7 @@ struct ImageBuildsView: View {
           || imageBuildModel.isWorking
           || builderModel.plan != nil
           || builderModel.isBusy
+          || appOwnedCacheModel.isBusy
       )
       .padding()
 
@@ -38,7 +41,10 @@ struct ImageBuildsView: View {
       case .history:
         ImageBuildHistoryView(model: historyModel)
       case .builderAndCache:
-        ContainerBuilderManagementView(model: builderModel)
+        ContainerBuilderManagementView(
+          model: builderModel,
+          appOwnedCacheModel: appOwnedCacheModel
+        )
       }
     }
     .navigationTitle("Builds")

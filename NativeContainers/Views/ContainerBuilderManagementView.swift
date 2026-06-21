@@ -2,8 +2,10 @@ import SwiftUI
 
 struct ContainerBuilderManagementView: View {
   let model: ContainerBuilderManagementModel
+  let appOwnedCacheModel: AppOwnedBuildCacheModel
 
   @State private var reviewedAction: ContainerBuilderManagementAction?
+  @State private var isConfirmingAppOwnedCacheReset = false
   @State private var operationTask: Task<Void, Never>?
 
   var body: some View {
@@ -40,9 +42,22 @@ struct ContainerBuilderManagementView: View {
         ContainerBuilderResultSection(result: result)
       }
 
+      AppOwnedBuildCacheSection(
+        model: appOwnedCacheModel,
+        reset: { isConfirmingAppOwnedCacheReset = true }
+      )
+
       if let errorMessage = model.errorMessage {
         Section {
           Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+            .foregroundStyle(.red)
+            .textSelection(.enabled)
+        }
+      }
+
+      if let errorMessage = appOwnedCacheModel.errorMessage {
+        Section {
+          Label(errorMessage, systemImage: "externaldrive.badge.exclamationmark")
             .foregroundStyle(.red)
             .textSelection(.enabled)
         }
@@ -56,16 +71,16 @@ struct ContainerBuilderManagementView: View {
             operationTask?.cancel()
           }
         } else {
-          Button("Refresh Builder", systemImage: "arrow.clockwise") {
-            startOperation { await model.load() }
+          Button("Refresh", systemImage: "arrow.clockwise") {
+            startOperation { await refresh() }
           }
-          .disabled(model.isBusy)
+          .disabled(model.isBusy || appOwnedCacheModel.isBusy)
         }
       }
     }
     .task {
-      if model.inspection == nil {
-        startOperation { await model.load() }
+      if model.inspection == nil || appOwnedCacheModel.snapshot == nil {
+        startOperation { await refresh() }
       }
     }
     .confirmationDialog(
@@ -89,10 +104,28 @@ struct ContainerBuilderManagementView: View {
     } message: { plan in
       Text(plan.action.confirmationMessage(for: plan.builder))
     }
+    .confirmationDialog(
+      "Reset the NativeContainers local cache?",
+      isPresented: $isConfirmingAppOwnedCacheReset
+    ) {
+      Button("Reset Local Cache", role: .destructive) {
+        startOperation { _ = await appOwnedCacheModel.reset() }
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text(
+        "This removes only NativeContainers’ private local build cache. It does not stop or recreate Apple’s shared builder, remove its internal cache, or delete build outputs."
+      )
+    }
     .onDisappear {
       operationTask?.cancel()
       model.discardPlan()
     }
+  }
+
+  private func refresh() async {
+    await model.load()
+    await appOwnedCacheModel.load()
   }
 
   private var reviewIsPresented: Binding<Bool> {
@@ -121,6 +154,58 @@ struct ContainerBuilderManagementView: View {
     operationTask = Task { @MainActor in
       defer { operationTask = nil }
       await operation()
+    }
+  }
+}
+
+private struct AppOwnedBuildCacheSection: View {
+  let model: AppOwnedBuildCacheModel
+  let reset: () -> Void
+
+  var body: some View {
+    Section("NativeContainers local cache") {
+      if model.isLoading, model.snapshot == nil {
+        HStack {
+          ProgressView()
+            .controlSize(.small)
+          Text("Inspecting the app-owned cache…")
+        }
+      } else if let snapshot = model.snapshot {
+        LabeledContent(
+          "Allocated size",
+          value: snapshot.byteCount.formatted(.byteCount(style: .file))
+        )
+        LabeledContent("Entries", value: snapshot.entryCount.formatted())
+        if let warning = snapshot.maintenanceWarning {
+          Label(warning, systemImage: "wrench.and.screwdriver")
+            .font(.caption)
+            .foregroundStyle(.orange)
+        }
+        Button("Reset Local Cache…", systemImage: "trash", role: .destructive) {
+          reset()
+        }
+        .disabled(model.isBusy)
+      } else if model.errorMessage != nil {
+        Label("Cache inspection failed", systemImage: "externaldrive.badge.exclamationmark")
+          .foregroundStyle(.orange)
+        Button("Reset Local Cache…", systemImage: "trash", role: .destructive) {
+          reset()
+        }
+        .disabled(model.isBusy)
+      } else {
+        Label("No app-owned cache", systemImage: "externaldrive")
+          .foregroundStyle(.secondary)
+      }
+      if let warning = model.maintenanceWarning {
+        Label(warning, systemImage: "wrench.and.screwdriver")
+          .font(.caption)
+          .foregroundStyle(.orange)
+      }
+      Text(
+        "This cache is separate from Apple’s shared builder. Incomplete cache work is reclaimed automatically, and a committed generation stays valid if later output delivery fails."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
     }
   }
 }
@@ -258,7 +343,7 @@ private struct ContainerBuilderActionsSection: View {
       case .stopped:
         Section("Maintenance") {
           Button(
-            "Delete Builder & Cache…",
+            "Delete Builder & Internal Cache…",
             systemImage: "trash",
             role: .destructive
           ) {
@@ -327,7 +412,7 @@ extension ContainerBuilderManagementAction {
     switch self {
     case .stop: "Stop the shared builder?"
     case .forceStop: "Force stop the shared builder?"
-    case .deleteBuilderAndCache: "Delete the builder and cache?"
+    case .deleteBuilderAndCache: "Delete the builder and internal cache?"
     }
   }
 
@@ -335,7 +420,7 @@ extension ContainerBuilderManagementAction {
     switch self {
     case .stop: "Stop Builder"
     case .forceStop: "Force Stop with KILL"
-    case .deleteBuilderAndCache: "Delete Builder & Cache"
+    case .deleteBuilderAndCache: "Delete Builder & Internal Cache"
     }
   }
 
@@ -408,10 +493,23 @@ private struct ContainerBuilderPreviewService: ContainerBuilderManaging {
   }
 }
 
+private struct AppOwnedBuildCachePreviewService: AppOwnedBuildCacheManaging {
+  func loadCache() async throws -> AppOwnedBuildCacheSnapshot? {
+    AppOwnedBuildCacheSnapshot(byteCount: 786_432_000, entryCount: 2_418)
+  }
+
+  func resetCache() async throws -> AppOwnedBuildCacheResetReceipt {
+    AppOwnedBuildCacheResetReceipt()
+  }
+}
+
 #Preview("Builder and cache") {
   NavigationStack {
     ContainerBuilderManagementView(
-      model: ContainerBuilderManagementModel(service: ContainerBuilderPreviewService())
+      model: ContainerBuilderManagementModel(service: ContainerBuilderPreviewService()),
+      appOwnedCacheModel: AppOwnedBuildCacheModel(
+        service: AppOwnedBuildCachePreviewService()
+      )
     )
   }
   .frame(width: 760, height: 620)

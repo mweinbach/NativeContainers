@@ -28,6 +28,7 @@ struct AppCompositionRootTests {
     #expect(services.imageBuild is RecordingImageBuildService)
     #expect(services.imageBuildHistory is ImageBuildHistoryStore)
     #expect(services.builder is AppleContainerBuilderManagementService)
+    #expect(services.appOwnedBuildCache is AppleAppOwnedBuildCacheService)
     #expect(services.dockerCompatibility is DockerCompatibilityService)
     #expect(services.composeBridgeConformance is SocktainerComposeConformanceService)
     #expect(services.dockerComposeClient is DockerComposeClientInstallService)

@@ -525,7 +525,7 @@ private func makeSecretWorkerRequest(
       buildArguments: [],
       labels: [],
       targetStage: "",
-      noCache: true,
+      cachePolicy: .disabled,
       pullLatest: false,
       secretIDs: secretIDs,
       allowsTagReplacement: false

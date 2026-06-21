@@ -15,6 +15,7 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
   private let imageStore: any ImageBuildStoring
   private let artifactManager: any ImageBuildArtifactManaging
   private let outputManager: any ImageBuildOutputManaging
+  private let cacheFinalizer: any ImageBuildCacheFinalizing
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator
 
   init(
@@ -24,6 +25,7 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
     imageStore: any ImageBuildStoring,
     artifactManager: any ImageBuildArtifactManaging,
     outputManager: any ImageBuildOutputManaging,
+    cacheFinalizer: any ImageBuildCacheFinalizing,
     runtimeMutationCoordinator: RuntimeMutationCoordinator
   ) {
     self.contextStager = contextStager
@@ -32,6 +34,7 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
     self.imageStore = imageStore
     self.artifactManager = artifactManager
     self.outputManager = outputManager
+    self.cacheFinalizer = cacheFinalizer
     self.runtimeMutationCoordinator = runtimeMutationCoordinator
   }
 
@@ -81,6 +84,11 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
     }
     try validateArtifactMetadata(workerResult, for: plan)
     let artifactIdentity = try await artifactManager.validateArtifact(workerResult)
+    try await finalizePreparedCache(
+      workerResult.cacheReceipt,
+      buildID: plan.id,
+      progress: progress
+    )
     let logTail: String
     if plan.secrets.isEmpty {
       logTail = ImageBuildProgressBridge.mergedLogTail(
@@ -181,7 +189,7 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
       buildArguments: plan.buildArguments,
       labels: plan.labels,
       targetStage: plan.targetStage,
-      noCache: plan.noCache,
+      cachePolicy: plan.cachePolicy,
       pullLatest: plan.pullLatest,
       secretIDs: secretPayload.ids,
       allowsTagReplacement: authorization.allowsTagReplacement
@@ -403,6 +411,24 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
       expectedKind == .rootFilesystemDirectory
       ? artifact.artifact.byteCount >= 0
       : artifact.artifact.byteCount > 0
+    let validCacheReceipt: Bool
+    switch plan.cachePolicy {
+    case .disabled, .builderInternal:
+      validCacheReceipt = artifact.cacheReceipt == nil
+    case .appOwnedLocalV1:
+      validCacheReceipt =
+        artifact.cacheReceipt.map {
+          $0.mode == .appOwnedLocalV1
+            && $0.state == .staged
+            && $0.schemaVersion == ContainerBuildWorkerCacheReceipt.currentSchemaVersion
+            && $0.fingerprintSHA256.count == 64
+            && $0.fingerprintSHA256.utf8.allSatisfy({
+              (48...57).contains($0) || (97...102).contains($0)
+            })
+            && $0.byteCount > 0
+            && $0.entryCount > 0
+        } ?? false
+    }
 
     guard
       artifact.buildID == plan.id,
@@ -412,12 +438,45 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
       !artifact.artifact.path.isEmpty,
       validByteCount,
       validEntryCount,
+      validCacheReceipt,
       artifact.artifact.sha256.count == 64,
       artifact.artifact.sha256.utf8.allSatisfy({
         (48...57).contains($0) || (97...102).contains($0)
       })
     else {
       throw ImageBuildError.workerArtifactMismatch
+    }
+  }
+
+  private func finalizePreparedCache(
+    _ receipt: ContainerBuildWorkerCacheReceipt?,
+    buildID: UUID,
+    progress: @escaping ImageBuildProgressHandler
+  ) async throws {
+    guard let receipt else { return }
+    do {
+      let snapshot = try await cacheFinalizer.commitPreparedCache(
+        receipt,
+        buildID: buildID
+      )
+      await progress(
+        ImageBuildProgress(
+          phase: .exportingArtifact,
+          message: "Updated app-owned cache (\(snapshot.entryCount) entries)",
+          logTail: snapshot.maintenanceWarning ?? ""
+        )
+      )
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      await progress(
+        ImageBuildProgress(
+          phase: .exportingArtifact,
+          message:
+            "The build output is valid, but the app-owned cache could not be updated. Review Builder & Cache.",
+          logTail: ""
+        )
+      )
     }
   }
 }

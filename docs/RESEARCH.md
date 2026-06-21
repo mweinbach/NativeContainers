@@ -258,7 +258,7 @@ release and isolating it behind an adapter are both deliberate.
   shim writes OCI and tar
   exports to `<appRoot>/builder/<buildID>/out.tar` and local exports to
   `<appRoot>/builder/<buildID>/local`. The app therefore keeps reviewed user
-  destinations entirely on the host side of worker protocol v4.
+  destinations entirely on the host side of worker protocol v5.
 - Image-store and OCI-image-archive outputs both use `type=oci`. The former
   carries a unique internal staging tag and is imported, snapshot-verified, and
   retagged; the latter carries exactly one reviewed image reference and is
@@ -288,14 +288,33 @@ release and isolating it behind an adapter are both deliberate.
   atomically renames, and reports post-commit fsync failure as retained partial
   completion. Live probes verified publication and cleanup for OCI, tar, and
   local-folder destinations.
-- Docker/registry exporters, SSH forwarding, and raw BuildKit cache strings
-  remain later parity work.
+- Docker/registry exporters, SSH forwarding, and reviewed remote-cache profiles
+  remain later parity work. Raw BuildKit cache strings are intentionally not a
+  product surface.
 - The public build configuration accepts raw BuildKit CSV strings for cache
   import/export, but Apple’s CLI hides both flags, the builder source still
   marks cache-to/from as TODO, and upstream has no cache contract tests. Local
-  cache paths resolve inside the builder VM; a future app UI must expose typed,
-  app-owned profiles rather than raw strings or remote credentials and must be
-  gated by a two-build live reuse/reset probe.
+  cache paths resolve inside the builder VM. Protocol v5 now exposes one typed,
+  fixed app-owned local profile rather than raw strings or remote credentials.
+  The worker lowers it to Docker's documented
+  [local-cache `src`/`dest` syntax](https://docs.docker.com/build/cache/backends/local/),
+  exports and validates a fresh OCI-layout staging generation, atomically moves
+  it into a tokenized prepared handoff, and returns a fingerprint-bound receipt
+  before terminal result delivery. The app validates the private artifact before
+  a host-side service reopens that exact token, recomputes its identity and OCI
+  metadata plus full entry-metadata-tree fingerprint, and atomically promotes
+  the generation. Inspection and new worker leases recover staging without
+  deleting a live handoff, then reclaim unconsumed handoffs after 24 hours. Unit and
+  fault-path coverage is live. A real two-build Xcode probe
+  observed separate staged/committed events for both 9-entry generations and
+  reduced the final unique four-second probe from about 5.20 seconds to 0.20
+  seconds, then reset the namespace and removed both 4,004,864-byte outputs.
+  Repeated probes did not produce stable archive byte equality, so cache proof
+  rests on validated generations and lifecycle events rather than byte equality.
+  The surviving internal
+  BuildKit cache confounds hit
+  attribution; deleting the builder solely to prove independent local reuse was
+  deliberately not performed.
 - Apple’s public builder and shim protocols expose build/info operations but no
   build-history, disk-usage, or prune endpoint. NativeContainers therefore owns
   its small product history: schema-versioned private files record typed

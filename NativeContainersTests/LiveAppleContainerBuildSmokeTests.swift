@@ -260,6 +260,63 @@ struct LiveAppleContainerBuildSmokeTests {
   @Test(
     .enabled(
       if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_DESTRUCTIVE_LIVE_BUILD_CACHE_TESTS"
+      ] == "1",
+      "Set NATIVECONTAINERS_DESTRUCTIVE_LIVE_BUILD_CACHE_TESTS=1 to replace the persistent app-owned cache."
+    )
+  )
+  func appOwnedLocalCacheExportsValidGenerationsAndResets() async throws {
+    let token = UUID().uuidString.lowercased()
+    let fixture = try LiveBuildFixture(
+      prefix: "native-build-cache",
+      runInstruction: "RUN sleep 8 && echo \(token) > /nativecontainers-marker"
+    )
+    let outputRoot = try makeOutputRoot(prefix: "native-build-cache")
+    let cacheService = AppleAppOwnedBuildCacheService()
+    defer {
+      fixture.removeContext()
+      try? FileManager.default.removeItem(at: outputRoot)
+    }
+
+    try await cacheService.resetCache()
+    do {
+      let first = try await runCachedBuild(
+        fixture: fixture,
+        destination: outputRoot.appending(
+          path: "first.oci.tar",
+          directoryHint: .notDirectory
+        )
+      )
+      let loadedFirstCache = try await cacheService.loadCache()
+      let firstCache = try #require(loadedFirstCache)
+      #expect(firstCache.byteCount > 0)
+      #expect(firstCache.entryCount > 0)
+      #expect(first.duration > .seconds(6))
+
+      let second = try await runCachedBuild(
+        fixture: fixture,
+        destination: outputRoot.appending(
+          path: "second.oci.tar",
+          directoryHint: .notDirectory
+        )
+      )
+      let loadedSecondCache = try await cacheService.loadCache()
+      let secondCache = try #require(loadedSecondCache)
+      #expect(secondCache.byteCount > 0)
+      #expect(secondCache.entryCount > 0)
+      #expect(second.progressMessages.contains { $0.contains("Updated app-owned cache") })
+    } catch {
+      try? await cacheService.resetCache()
+      throw error
+    }
+
+    try await cacheService.resetCache()
+    #expect(try await cacheService.loadCache() == nil)
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
         "NATIVECONTAINERS_LIVE_BUILD_CANCELLATION_TESTS"
       ] == "1",
       "Set NATIVECONTAINERS_LIVE_BUILD_CANCELLATION_TESTS=1 for the destructive cancellation smoke."
@@ -430,6 +487,41 @@ struct LiveAppleContainerBuildSmokeTests {
     }
   }
 
+  private func runCachedBuild(
+    fixture: LiveBuildFixture,
+    destination: URL
+  ) async throws -> (duration: Duration, progressMessages: [String]) {
+    let service = AppleContainerBuildService()
+    let progress = LiveBuildProgressProbe()
+    let plan = try await service.prepareBuild(
+      fixture.request(
+        output: ImageBuildOutputSelection(
+          kind: .ociArchive,
+          destinationURL: destination
+        ),
+        cachePolicy: .appOwnedLocalV1
+      )
+    ) { _ in }
+    let start = ContinuousClock.now
+    do {
+      _ = try await service.build(
+        plan,
+        authorization: liveBuildAuthorization
+      ) { update in
+        await progress.record(update)
+      }
+      try await expectArtifactsRemoved(buildID: plan.id)
+      let progressValues = await progress.values
+      return (
+        start.duration(to: .now),
+        progressValues.map(\.message)
+      )
+    } catch {
+      await service.discardBuild(plan)
+      throw error
+    }
+  }
+
   private func makeOutputRoot(prefix: String) throws -> URL {
     let root = FileManager.default.temporaryDirectory.appending(
       path: "\(prefix)-output-\(UUID().uuidString.lowercased())",
@@ -556,7 +648,8 @@ private struct LiveBuildFixture {
 
   func request(
     secrets: [ImageBuildSecretSelection],
-    output: ImageBuildOutputSelection = .imageStore
+    output: ImageBuildOutputSelection = .imageStore,
+    cachePolicy: ImageBuildCachePolicy = .disabled
   ) -> ImageBuildRequest {
     ImageBuildRequest(
       contextDirectory: contextURL,
@@ -567,7 +660,7 @@ private struct LiveBuildFixture {
       buildArguments: [],
       labels: ["com.nativecontainers.smoke=true"],
       targetStage: "",
-      noCache: true,
+      cachePolicy: cachePolicy,
       pullLatest: true,
       builderCPUCount: nil,
       builderMemoryMiB: nil,
@@ -575,8 +668,15 @@ private struct LiveBuildFixture {
     )
   }
 
-  func request(output: ImageBuildOutputSelection) -> ImageBuildRequest {
-    request(secrets: [], output: output)
+  func request(
+    output: ImageBuildOutputSelection,
+    cachePolicy: ImageBuildCachePolicy = .disabled
+  ) -> ImageBuildRequest {
+    request(
+      secrets: [],
+      output: output,
+      cachePolicy: cachePolicy
+    )
   }
 
   func removeContext() {
@@ -600,6 +700,14 @@ private actor LiveBuildPhaseProbe {
 
   func record(_ phase: ImageBuildProgress.Phase) {
     if phase == .building { sawBuilding = true }
+  }
+}
+
+private actor LiveBuildProgressProbe {
+  private(set) var values: [ImageBuildProgress] = []
+
+  func record(_ progress: ImageBuildProgress) {
+    values.append(progress)
   }
 }
 

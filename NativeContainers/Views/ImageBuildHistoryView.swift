@@ -214,6 +214,10 @@ private struct ImageBuildHistoryRow: View {
         .font(.caption)
         .foregroundStyle(.secondary)
 
+        Label(record.cachePolicy.title, systemImage: "externaldrive")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
         HStack(spacing: 12) {
           Label {
             if let finishedAt = record.finishedAt {
@@ -352,6 +356,7 @@ extension ImageBuildHistoryFailureKind {
         failureKind: nil,
         secretCount: 1,
         noCache: false,
+        cachePolicy: .appOwnedLocalV1,
         pullLatest: true
       ),
       ImageBuildHistoryRecord(
@@ -386,6 +391,7 @@ extension ImageBuildHistoryFailureKind {
         failureKind: .partialImport,
         secretCount: 0,
         noCache: true,
+        cachePolicy: .disabled,
         pullLatest: false
       ),
     ],

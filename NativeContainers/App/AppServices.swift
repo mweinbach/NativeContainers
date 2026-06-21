@@ -21,6 +21,7 @@ struct AppServices: Sendable {
   let imageBuild: any ImageBuilding
   let imageBuildHistory: any ImageBuildHistoryStoring
   let builder: any ContainerBuilderManaging
+  let appOwnedBuildCache: any AppOwnedBuildCacheManaging
   let registry: any RegistryManaging
   let dockerCompatibility: any DockerCompatibilityManaging
   let composeBridgeConformance: any ComposeBridgeConformanceReporting
@@ -54,6 +55,7 @@ struct AppServices: Sendable {
     imageBuild: any ImageBuilding,
     imageBuildHistory: any ImageBuildHistoryStoring = NoopImageBuildHistoryStore(),
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
+    appOwnedBuildCache: any AppOwnedBuildCacheManaging = AppleAppOwnedBuildCacheService(),
     registry: any RegistryManaging,
     dockerCompatibility: any DockerCompatibilityManaging =
       UnavailableDockerCompatibilityService(),
@@ -94,6 +96,7 @@ struct AppServices: Sendable {
     self.imageBuild = imageBuild
     self.imageBuildHistory = imageBuildHistory
     self.builder = builder
+    self.appOwnedBuildCache = appOwnedBuildCache
     self.registry = registry
     self.dockerCompatibility = dockerCompatibility
     self.composeBridgeConformance = composeBridgeConformance
@@ -117,6 +120,7 @@ struct AppServices: Sendable {
     imageBuild: any ImageBuilding,
     imageBuildHistory: any ImageBuildHistoryStoring = NoopImageBuildHistoryStore(),
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
+    appOwnedBuildCache: any AppOwnedBuildCacheManaging = AppleAppOwnedBuildCacheService(),
     registry: any RegistryManaging,
     dockerCompatibility: any DockerCompatibilityManaging =
       UnavailableDockerCompatibilityService(),
@@ -157,6 +161,7 @@ struct AppServices: Sendable {
     self.imageBuild = imageBuild
     self.imageBuildHistory = imageBuildHistory
     self.builder = builder
+    self.appOwnedBuildCache = appOwnedBuildCache
     self.registry = registry
     self.dockerCompatibility = dockerCompatibility
     self.composeBridgeConformance = composeBridgeConformance
@@ -243,6 +248,9 @@ enum AppCompositionRoot {
       runtimeMutationCoordinator: mutationCoordinator,
       buildExecutionCoordinator: buildExecutionCoordinator
     )
+    let appOwnedBuildCacheService = AppleAppOwnedBuildCacheService(
+      buildExecutionCoordinator: buildExecutionCoordinator
+    )
     let creationService = AppleContainerCreationService(
       containerClient: containerClient,
       attachmentService: attachmentService,
@@ -305,6 +313,7 @@ enum AppCompositionRoot {
       imageBuild: imageBuildService,
       imageBuildHistory: imageBuildHistory,
       builder: builderManagementService,
+      appOwnedBuildCache: appOwnedBuildCacheService,
       registry: AppleRegistryService(),
       dockerCompatibility: dockerCompatibility,
       composeBridgeConformance: SocktainerComposeConformanceService(),

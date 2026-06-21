@@ -14,6 +14,10 @@ struct AppModelTests {
       model.makeContainerBuilderManagementModel()
         === model.makeContainerBuilderManagementModel()
     )
+    #expect(
+      model.makeAppOwnedBuildCacheModel()
+        === model.makeAppOwnedBuildCacheModel()
+    )
   }
 
   @Test

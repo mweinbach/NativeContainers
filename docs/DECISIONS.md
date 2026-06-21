@@ -837,3 +837,44 @@ in-flight cancel appear to work only after the solve had ended. The live
 60-second probe now reaches `.building` in about 104 ms and returns cancellation
 in about 3 ms; the existing TERM-to-KILL escalation and lifecycle cleanup remain
 the bounded fallback.
+
+## ADR-033: Keep app-owned BuildKit cache transactional and worker-private
+
+**Status:** Accepted — 2026-06-21
+
+Build requests and protocol-v5 control frames carry one closed cache mode:
+disabled, Apple builder-internal, or the versioned NativeContainers local
+profile. The app and UI never accept raw BuildKit cache CSV or a host/guest
+path. Only a worker-private adapter lowers the reviewed local profile to
+BuildKit's `type=local` import/export strings inside Apple's existing reviewed
+`<appRoot>/builder` VirtioFS mount.
+
+The local profile owns one mode-0700 namespace, stable cross-process lock,
+committed `current` generation, disposable per-build `staging`, and tokenized
+`prepared` handoffs. A cancellation-aware nonblocking lease spans cache import,
+solve, export, context revalidation, and private artifact isolation. The worker
+validates the OCI layout, binds a receipt to the build ID, opaque UUID token,
+directory identity, OCI metadata hashes, and bounded size/count fingerprint,
+plus a deterministic path/inode/mode/size/block/mtime/ctime tree covering every
+cache entry. It then atomically moves staging into prepared before releasing the lease. It never
+touches `current` and only then writes its terminal result frame.
+
+The app validates the private artifact and receipt before a host-side
+finalization service reacquires the lock, reopens that exact prepared token,
+recomputes the fingerprint, and publishes with
+`renameatx_np(RENAME_SWAP|RENAME_EXCL)`. Ordinary inspection and new leases
+recover abandoned staging but never delete prepared handoffs; explicit
+lifecycle discard and reset own prepared cleanup. A broken worker pipe,
+cancellation, hard exit, intervening inspection, or same-sized replacement
+therefore cannot publish an unbound generation or disturb the prior cache. Once
+the host-side atomic swap commits, the valid cache generation is independent of
+later output publication. Recovery reclaims prepared handoffs only after a
+24-hour expiry, bounding hard-exit residue without racing ordinary finalization.
+
+Local-cache inspection and reset are a separate `AppOwnedBuildCacheManaging`
+service from `ContainerBuilderManaging`. Reset takes the image-build
+single-flight lock and the same cross-process lease, atomically retires only the
+NativeContainers generation, and never stops, kills, recreates, or deletes
+Apple's shared builder. The Builder & Cache UI consequently presents Apple's
+builder/internal cache lifecycle and the NativeContainers local cache as two
+explicitly different controls.
