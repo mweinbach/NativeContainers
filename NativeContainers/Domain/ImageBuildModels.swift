@@ -3,6 +3,7 @@ import Foundation
 struct ImageBuildRequest: Equatable, Sendable {
   let contextDirectory: URL
   let dockerfile: URL?
+  let secrets: [ImageBuildSecretSelection]
   let tags: [String]
   let platforms: [ContainerBuildPlatform]
   let buildArguments: [String]
@@ -23,6 +24,8 @@ struct ImageBuildPlan: Equatable, Sendable, Identifiable {
   let stagedDockerignore: URL?
   let dockerignoreSHA256: String?
   let contextFingerprint: String
+  let secretReviewID: UUID?
+  let secrets: [ImageBuildSecretReview]
   let tags: [ContainerBuildTagExpectation]
   let platforms: [ContainerBuildPlatform]
   let buildArguments: [String]
@@ -72,6 +75,7 @@ struct ImageBuildResult: Equatable, Sendable {
 struct ImageBuildProgress: Equatable, Sendable {
   enum Phase: String, Equatable, Sendable {
     case stagingContext
+    case stagingSecrets
     case preparingBuilder
     case connectingBuilder
     case building
@@ -137,6 +141,7 @@ enum ImageBuildError: LocalizedError, Equatable, Sendable {
   case missingArtifact(String)
   case unsafeArtifact(String)
   case stagingReferenceChanged(String)
+  case secretBuildFailed
   case unsupported
 
   var errorDescription: String? {
@@ -175,6 +180,8 @@ enum ImageBuildError: LocalizedError, Equatable, Sendable {
       "The build worker’s OCI artifact at \(path) was not a private, regular file."
     case .stagingReferenceChanged(let reference):
       "The isolated staging reference “\(reference)” changed outside this build."
+    case .secretBuildFailed:
+      "The secret-enabled image build failed. Build output was suppressed to protect secret values."
     case .unsupported:
       "Native image builds are unavailable from this service."
     }

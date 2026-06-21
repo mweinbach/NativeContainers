@@ -227,6 +227,16 @@ Updated: 2026-06-20.
   runtime and observed the running builder as exact/trusted with its bundle
   present and 530,751,488 allocated bytes. Stop, `KILL`, and deletion were not
   invoked because external CLI build activity cannot be observed safely.
+- Reviewed file-backed BuildKit secrets are live behind a focused
+  `ImageBuildSecretManaging` service. Review pins private, owner-only regular
+  files outside the build context by open descriptor and full identity; plans
+  retain only ID, privacy-sensitive path, and byte count. Context staging rejects
+  every pinned device/inode, closing hard-link races. After the builder is ready,
+  the vault revalidates and consumes each descriptor once, then protocol v3
+  streams bounded binary and empty values beside—never inside—the Codable control
+  request. App-side leases are released when that pipe write commits. Secret
+  builds force Apple’s quiet mode, drain and discard worker stderr, sanitize
+  failure events, and retain only a fixed suppression notice.
 
 ## Known configuration issue
 
@@ -241,13 +251,11 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Add reviewed build secrets using the pinned public BuildKit secret payload,
-   without persisting secret bytes in plans, logs, or app state.
-2. Add cache import/export, history, and alternate outputs only where the pinned
+1. Add cache import/export, history, and alternate outputs only where the pinned
    native API exposes a verifiable contract; continue tracking SSH forwarding
    and cache-only prune as unsupported gaps.
-3. Package a signed and notarized privileged helper if automated host-access
+2. Package a signed and notarized privileged helper if automated host-access
    mutation is still desired after the explicit command handoff is exercised.
-4. Add the entitlement through a functioning Xcode capability surface, then
+3. Add the entitlement through a functioning Xcode capability surface, then
    implement and live-verify macOS installation and VM lifecycle.
-5. Spike a pinned Socktainer process and a product-specific Docker context.
+4. Spike a pinned Socktainer process and a product-specific Docker context.

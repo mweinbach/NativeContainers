@@ -2,6 +2,7 @@ import Foundation
 
 actor AppleContainerBuildService: ImageBuilding {
   private let contextStager: any BuildContextStaging
+  private let secretManager: any ImageBuildSecretManaging
   private let worker: any ContainerBuildWorkerRunning
   private let imageStore: any ImageBuildStoring
   private let artifactManager: any ImageBuildArtifactManaging
@@ -10,6 +11,7 @@ actor AppleContainerBuildService: ImageBuilding {
 
   init(
     contextStager: any BuildContextStaging = BuildContextStager(),
+    secretManager: any ImageBuildSecretManaging = ImageBuildSecretVault(),
     worker: any ContainerBuildWorkerRunning = ContainerBuildWorkerProcess(),
     imageStore: any ImageBuildStoring = AppleImageBuildStore(),
     artifactManager: any ImageBuildArtifactManaging = AppleImageBuildArtifactManager(),
@@ -17,6 +19,7 @@ actor AppleContainerBuildService: ImageBuilding {
     buildExecutionCoordinator: RuntimeMutationCoordinator = .imageBuilds
   ) {
     self.contextStager = contextStager
+    self.secretManager = secretManager
     self.worker = worker
     self.imageStore = imageStore
     self.artifactManager = artifactManager
@@ -30,29 +33,55 @@ actor AppleContainerBuildService: ImageBuilding {
   ) async throws -> ImageBuildPlan {
     try validate(request)
     let tags = try await imageStore.resolveTagExpectations(request.tags)
-    try Task.checkCancellation()
-    await progress(
-      ImageBuildProgress(
-        phase: .stagingContext,
-        message: "Copying the build context into a private review boundary",
-        logTail: ""
-      )
-    )
+    let secretReviewID = request.secrets.isEmpty ? nil : UUID()
+    var stagedContext: StagedBuildContext?
 
-    let dockerfile = resolvedDockerfile(
-      requested: request.dockerfile,
-      context: request.contextDirectory
-    )
-    let ignoreSelection = dockerignoreSelection(
-      dockerfile: dockerfile
-    )
-    let staged = try await contextStager.stage(
-      sourceDirectory: request.contextDirectory,
-      dockerfile: dockerfile,
-      dockerignore: ignoreSelection
-    )
     do {
+      let secretPreparation: ImageBuildSecretPreparation
+      if let secretReviewID {
+        await progress(
+          ImageBuildProgress(
+            phase: .stagingSecrets,
+            message: "Pinning private secret sources for review",
+            logTail: ""
+          )
+        )
+        secretPreparation = try await secretManager.prepare(
+          reviewID: secretReviewID,
+          selections: request.secrets,
+          contextDirectory: request.contextDirectory
+        )
+      } else {
+        secretPreparation = ImageBuildSecretPreparation(
+          reviews: [],
+          excludedContextFiles: []
+        )
+      }
+
       try Task.checkCancellation()
+      await progress(
+        ImageBuildProgress(
+          phase: .stagingContext,
+          message: "Copying the build context into a private review boundary",
+          logTail: ""
+        )
+      )
+      let dockerfile = resolvedDockerfile(
+        requested: request.dockerfile,
+        context: request.contextDirectory
+      )
+      let staged = try await contextStager.stage(
+        sourceDirectory: request.contextDirectory,
+        dockerfile: dockerfile,
+        dockerignore: dockerignoreSelection(dockerfile: dockerfile),
+        excludingFileIdentities: secretPreparation.excludedContextFiles
+      )
+      stagedContext = staged
+      if let secretReviewID {
+        try await secretManager.revalidate(reviewID: secretReviewID)
+      }
+      try Task.checkCancellation()
+
       return ImageBuildPlan(
         id: staged.id,
         sourceContextDirectory: request.contextDirectory.standardizedFileURL,
@@ -62,6 +91,8 @@ actor AppleContainerBuildService: ImageBuilding {
         stagedDockerignore: staged.dockerignoreURL,
         dockerignoreSHA256: staged.dockerignoreSHA256,
         contextFingerprint: staged.fingerprint,
+        secretReviewID: secretReviewID,
+        secrets: secretPreparation.reviews,
         tags: tags,
         platforms: request.platforms,
         buildArguments: request.buildArguments,
@@ -74,7 +105,12 @@ actor AppleContainerBuildService: ImageBuilding {
         generatedAt: Date()
       )
     } catch {
-      try? await contextStager.discard(staged)
+      if let secretReviewID {
+        await secretManager.discard(reviewID: secretReviewID)
+      }
+      if let stagedContext {
+        try? await contextStager.discard(stagedContext)
+      }
       throw error
     }
   }
@@ -109,6 +145,9 @@ actor AppleContainerBuildService: ImageBuilding {
   }
 
   func discardBuild(_ plan: ImageBuildPlan) async {
+    if let secretReviewID = plan.secretReviewID {
+      await secretManager.discard(reviewID: secretReviewID)
+    }
     try? await contextStager.discard(stagedContext(from: plan))
   }
 
@@ -147,6 +186,72 @@ actor AppleContainerBuildService: ImageBuilding {
     }
     try Task.checkCancellation()
 
+    let buildOutput = try await runReviewedBuildWorker(
+      plan,
+      authorization: authorization,
+      progress: progress
+    )
+    guard let workerResult = buildOutput.result else {
+      throw ImageBuildError.workerArtifactMismatch
+    }
+    try validateArtifactMetadata(workerResult, for: plan)
+    let artifactIdentity = try await artifactManager.validateArtifact(workerResult)
+    let logTail: String
+    if plan.secrets.isEmpty {
+      logTail = Self.mergedLogTail(
+        startOutput.standardErrorTail,
+        buildOutput.standardErrorTail
+      )
+    } else {
+      guard buildOutput.diagnostics == .suppressed else {
+        throw ImageBuildError.secretBuildFailed
+      }
+      logTail = ContainerBuildWorkerDiagnostics.suppressedMessage
+    }
+
+    return try await runtimeMutationCoordinator.perform { [self] in
+      try await finalize(
+        workerResult,
+        artifactIdentity: artifactIdentity,
+        plan: plan,
+        authorization: authorization,
+        logTail: logTail,
+        progress: progress
+      )
+    }
+  }
+
+  private func runReviewedBuildWorker(
+    _ plan: ImageBuildPlan,
+    authorization: ImageBuildAuthorization,
+    progress: @escaping ImageBuildProgressHandler
+  ) async throws -> ContainerBuildWorkerProcessOutput {
+    let secretPayload: ContainerBuildSecretSourcePayload
+    if plan.secrets.isEmpty {
+      guard plan.secretReviewID == nil else {
+        throw ImageBuildSecretError.reviewMismatch
+      }
+      secretPayload = .empty
+    } else {
+      guard let secretReviewID = plan.secretReviewID else {
+        throw ImageBuildSecretError.reviewMismatch
+      }
+      await progress(
+        ImageBuildProgress(
+          phase: .stagingSecrets,
+          message: "Streaming reviewed secrets to the isolated build worker",
+          logTail: ""
+        )
+      )
+      secretPayload = try await secretManager.consume(
+        reviewID: secretReviewID,
+        reviewedSecrets: plan.secrets
+      )
+    }
+    guard secretPayload.ids == plan.secrets.map(\.id) else {
+      throw ImageBuildSecretError.reviewMismatch
+    }
+
     let buildRequest = ContainerBuildWorkerBuildRequest(
       buildID: plan.id,
       contextPath: plan.stagedContextDirectory.path(percentEncoded: false),
@@ -162,41 +267,32 @@ actor AppleContainerBuildService: ImageBuilding {
       targetStage: plan.targetStage,
       noCache: plan.noCache,
       pullLatest: plan.pullLatest,
+      secretIDs: secretPayload.ids,
       allowsTagReplacement: authorization.allowsTagReplacement
     )
-    let buildOutput = try await worker.run(
-      ContainerBuildWorkerRequest(
-        operation: .build,
-        builder: ContainerBuilderConfiguration(
-          cpuCount: plan.builderCPUCount,
-          memoryMiB: plan.builderMemoryMiB,
-          allowsRecreateStoppedBuilder: false,
-          allowsStopRunningBuilder: false
+    do {
+      return try await worker.run(
+        ContainerBuildWorkerRequest(
+          operation: .build,
+          builder: ContainerBuilderConfiguration(
+            cpuCount: plan.builderCPUCount,
+            memoryMiB: plan.builderMemoryMiB,
+            allowsRecreateStoppedBuilder: false,
+            allowsStopRunningBuilder: false
+          ),
+          build: buildRequest
         ),
-        build: buildRequest
-      )
-    ) { event in
-      await Self.relay(event, logTail: "", to: progress)
-    }
-    guard let workerResult = buildOutput.result else {
-      throw ImageBuildError.workerArtifactMismatch
-    }
-    try validateArtifactMetadata(workerResult, for: plan)
-    let artifactIdentity = try await artifactManager.validateArtifact(workerResult)
-    let logTail = Self.mergedLogTail(
-      startOutput.standardErrorTail,
-      buildOutput.standardErrorTail
-    )
-
-    return try await runtimeMutationCoordinator.perform { [self] in
-      try await finalize(
-        workerResult,
-        artifactIdentity: artifactIdentity,
-        plan: plan,
-        authorization: authorization,
-        logTail: logTail,
-        progress: progress
-      )
+        secrets: secretPayload
+      ) { event in
+        await Self.relay(event, logTail: "", to: progress)
+      }
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      guard plan.secrets.isEmpty else {
+        throw ImageBuildError.secretBuildFailed
+      }
+      throw error
     }
   }
 
@@ -376,6 +472,9 @@ actor AppleContainerBuildService: ImageBuilding {
   }
 
   private func cleanup(plan: ImageBuildPlan) async {
+    if let secretReviewID = plan.secretReviewID {
+      await secretManager.discard(reviewID: secretReviewID)
+    }
     try? await contextStager.discard(stagedContext(from: plan))
     await artifactManager.removeArtifacts(buildID: plan.id)
   }
@@ -393,6 +492,12 @@ actor AppleContainerBuildService: ImageBuilding {
   }
 
   private func validate(_ request: ImageBuildRequest) throws {
+    if !request.secrets.isEmpty {
+      _ = try ImageBuildSecretPolicy.validate(
+        request.secrets,
+        contextDirectory: request.contextDirectory
+      )
+    }
     guard !request.tags.isEmpty else { throw ImageBuildError.emptyTags }
     guard !request.platforms.isEmpty else { throw ImageBuildError.emptyPlatforms }
     guard Set(request.platforms).count == request.platforms.count else {

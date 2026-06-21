@@ -6,7 +6,8 @@ protocol BuildContextStaging: Sendable {
   func stage(
     sourceDirectory: URL,
     dockerfile: URL?,
-    dockerignore: BuildContextDockerignoreSelection
+    dockerignore: BuildContextDockerignoreSelection,
+    excludingFileIdentities: Set<BuildContextExcludedFileIdentity>
   ) async throws -> StagedBuildContext
   func validate(_ context: StagedBuildContext) async throws
   func discard(_ context: StagedBuildContext) async throws
@@ -17,7 +18,8 @@ extension BuildContextStaging {
     try await stage(
       sourceDirectory: sourceDirectory,
       dockerfile: nil,
-      dockerignore: .conventional
+      dockerignore: .conventional,
+      excludingFileIdentities: []
     )
   }
 }
@@ -26,6 +28,11 @@ enum BuildContextDockerignoreSelection: Equatable, Sendable {
   case none
   case conventional
   case dockerfileSibling
+}
+
+struct BuildContextExcludedFileIdentity: Equatable, Hashable, Sendable {
+  let device: UInt64
+  let inode: UInt64
 }
 
 struct StagedBuildContext: Equatable, Sendable {
@@ -58,6 +65,7 @@ enum BuildContextStagingError: LocalizedError, Equatable, Sendable {
   case customDockerfileSyntax
   case dockerignoreNotRegular(String)
   case unsupportedEntry(path: String, kind: BuildContextUnsupportedEntryKind)
+  case excludedSecretSource(String)
   case sourceChanged(String)
   case invalidPath(String)
   case stagingDirectoryNotOwned
@@ -91,6 +99,8 @@ enum BuildContextStagingError: LocalizedError, Equatable, Sendable {
       "The selected Docker ignore file is not a regular file: \(path)"
     case .unsupportedEntry(let path, let kind):
       "The build context contains an unsupported \(kind.rawValue) entry: \(path)"
+    case .excludedSecretSource(let path):
+      "The build context contains a selected secret source at \(path). Move the secret outside the context."
     case .sourceChanged(let path):
       "The build context changed while it was being staged: \(path)"
     case .invalidPath(let path):
@@ -131,7 +141,8 @@ struct BuildContextStager: BuildContextStaging, Sendable {
   func stage(
     sourceDirectory: URL,
     dockerfile: URL? = nil,
-    dockerignore: BuildContextDockerignoreSelection = .conventional
+    dockerignore: BuildContextDockerignoreSelection = .conventional,
+    excludingFileIdentities: Set<BuildContextExcludedFileIdentity> = []
   ) async throws -> StagedBuildContext {
     try Task.checkCancellation()
     let stagingRoot = stagingRoot
@@ -140,6 +151,7 @@ struct BuildContextStager: BuildContextStaging, Sendable {
         sourceDirectory: sourceDirectory,
         dockerfile: dockerfile,
         dockerignore: dockerignore,
+        excludingFileIdentities: excludingFileIdentities,
         stagingRoot: stagingRoot
       )
     }
@@ -174,6 +186,7 @@ struct BuildContextStager: BuildContextStaging, Sendable {
     sourceDirectory: URL,
     dockerfile: URL?,
     dockerignore: BuildContextDockerignoreSelection,
+    excludingFileIdentities: Set<BuildContextExcludedFileIdentity>,
     stagingRoot: URL
   ) throws -> StagedBuildContext {
     try Task.checkCancellation()
@@ -239,6 +252,7 @@ struct BuildContextStager: BuildContextStaging, Sendable {
         from: sourceURL,
         to: destinationURL,
         relativePrefix: "",
+        excludingFileIdentities: excludingFileIdentities,
         entries: &entries
       )
       guard try snapshot(at: sourceURL, displayPath: ".") == sourceSnapshot else {
@@ -518,6 +532,7 @@ struct BuildContextStager: BuildContextStaging, Sendable {
     from sourceDirectory: URL,
     to destinationDirectory: URL,
     relativePrefix: String,
+    excludingFileIdentities: Set<BuildContextExcludedFileIdentity>,
     entries: inout [StagedEntry]
   ) throws {
     try Task.checkCancellation()
@@ -559,6 +574,7 @@ struct BuildContextStager: BuildContextStaging, Sendable {
           from: sourceURL,
           to: destinationURL,
           relativePrefix: relativePath,
+          excludingFileIdentities: excludingFileIdentities,
           entries: &entries
         )
         try setPermissions(
@@ -580,6 +596,13 @@ struct BuildContextStager: BuildContextStaging, Sendable {
           )
         )
       case .regularFile:
+        let sourceIdentity = BuildContextExcludedFileIdentity(
+          device: UInt64(sourceSnapshot.device),
+          inode: UInt64(sourceSnapshot.inode)
+        )
+        guard !excludingFileIdentities.contains(sourceIdentity) else {
+          throw BuildContextStagingError.excludedSecretSource(relativePath)
+        }
         let destinationSnapshot = try copyRegularFile(
           from: sourceURL,
           sourceSnapshot: sourceSnapshot,

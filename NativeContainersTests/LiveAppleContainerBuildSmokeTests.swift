@@ -1,4 +1,5 @@
 import ContainerAPIClient
+import Darwin
 import Foundation
 import Testing
 
@@ -61,6 +62,99 @@ struct LiveAppleContainerBuildSmokeTests {
         $0.reference == plan.tags[0].reference
       }
       #expect(!remains)
+      try await expectArtifactsRemoved(buildID: plan.id)
+    } catch {
+      await buildService.discardBuild(plan)
+      await cleanUpContainer(fixture.containerID, service: containerService)
+      await cleanUpImage(plan.tags[0].reference, service: containerService)
+      throw error
+    }
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_BUILD_TESTS"] == "1",
+      "Set NATIVECONTAINERS_LIVE_BUILD_TESTS=1 with Apple container services running."
+    )
+  )
+  func secretBuildConsumesMountWithoutRetainingPrintedValue() async throws {
+    let sentinel = Data("nativecontainers-live-secret-sentinel".utf8)
+    let fixture = try LiveBuildFixture(
+      prefix: "native-build-secret",
+      runInstruction: """
+        RUN --mount=type=secret,id=token sh -c 'test "$(cat /run/secrets/token)" = "nativecontainers-live-secret-sentinel" && cat /run/secrets/token >&2 && printf "secret-ok\\n" > /nativecontainers-secret-marker'
+        RUN test ! -e /run/secrets/token
+        """
+    )
+    let secretURL = fixture.contextURL.deletingLastPathComponent().appending(
+      path: "\(fixture.contextURL.lastPathComponent)-token.secret",
+      directoryHint: .notDirectory
+    )
+    try sentinel.write(to: secretURL)
+    #expect(Darwin.chmod(secretURL.path(percentEncoded: false), 0o600) == 0)
+    defer {
+      fixture.removeContext()
+      try? FileManager.default.removeItem(at: secretURL)
+    }
+
+    let buildService = AppleContainerBuildService()
+    let containerService = AppleContainerService()
+    let textProbe = LiveBuildTextProbe()
+    let plan = try await buildService.prepareBuild(
+      fixture.request(
+        secrets: [ImageBuildSecretSelection(id: "token", sourceURL: secretURL)]
+      )
+    ) { progress in
+      await textProbe.record(progress)
+    }
+
+    do {
+      let result = try await buildService.build(
+        plan,
+        authorization: ImageBuildAuthorization(
+          allowsTagReplacement: false,
+          allowsRecreateStoppedBuilder: true,
+          allowsStopRunningBuilder: false
+        )
+      ) { progress in
+        await textProbe.record(progress)
+      }
+      #expect(
+        result.logTail == ContainerBuildWorkerDiagnostics.suppressedMessage
+      )
+      let retained = await textProbe.text + "\n" + result.logTail
+      #expect(!retained.contains("nativecontainers-live-secret-sentinel"))
+      #expect(!retained.contains(sentinel.base64EncodedString()))
+
+      try await containerService.createContainer(
+        request: try ContainerCreationRequest(
+          name: fixture.containerID,
+          imageReference: plan.tags[0].reference,
+          cpuCount: 1,
+          memoryBytes: 256 * ContainerCreationRequest.bytesPerMiB,
+          arguments: ["/bin/sh", "-c", "while :; do sleep 3600; done"],
+          startAfterCreation: true
+        )
+      ) { _ in }
+      let marker = try await containerService.executeCommand(
+        in: fixture.containerID,
+        request: try ContainerCommandRequest(
+          executable: "/bin/cat",
+          arguments: ["/nativecontainers-secret-marker"]
+        )
+      )
+      #expect(marker.standardOutput == "secret-ok\n")
+      let absent = try await containerService.executeCommand(
+        in: fixture.containerID,
+        request: try ContainerCommandRequest(
+          executable: "/bin/sh",
+          arguments: ["-c", "test ! -e /run/secrets/token"]
+        )
+      )
+      #expect(absent.exitCode == 0)
+
+      await cleanUpContainer(fixture.containerID, service: containerService)
+      await cleanUpImage(plan.tags[0].reference, service: containerService)
       try await expectArtifactsRemoved(buildID: plan.id)
     } catch {
       await buildService.discardBuild(plan)
@@ -194,9 +288,16 @@ private struct LiveBuildFixture {
   }
 
   var request: ImageBuildRequest {
+    request(secrets: [])
+  }
+
+  func request(
+    secrets: [ImageBuildSecretSelection]
+  ) -> ImageBuildRequest {
     ImageBuildRequest(
       contextDirectory: contextURL,
       dockerfile: nil,
+      secrets: secrets,
       tags: [tag],
       platforms: [.current],
       buildArguments: [],
@@ -211,6 +312,17 @@ private struct LiveBuildFixture {
 
   func removeContext() {
     try? FileManager.default.removeItem(at: contextURL)
+  }
+}
+
+private actor LiveBuildTextProbe {
+  private(set) var values: [String] = []
+
+  var text: String { values.joined(separator: "\n") }
+
+  func record(_ progress: ImageBuildProgress) {
+    values.append(progress.message)
+    values.append(progress.logTail)
   }
 }
 

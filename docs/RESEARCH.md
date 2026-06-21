@@ -213,6 +213,14 @@ release and isolating it behind an adapter are both deliberate.
   reserved `buildkit` container. Builds run in a bundled per-build worker
   process so cancellation closes the native vsock reliably. The 1.0.0
   Dockerfile limit remains strictly below 16 KiB.
+- Apple container 1.0.0 accepts build secrets only as `[String: Data]` and
+  base64-encodes each `id=value` into repeated gRPC metadata. Its CLI supports
+  environment or file sources, arbitrary binary values, and empty files, but
+  defines no count, size, validation, redaction, or zeroization contract. The
+  app therefore keeps values outside Codable control state and applies a local
+  product safety policy of
+  32-entry/500-KiB-per-entry/1-MiB-total limits, and suppresses all secret-build
+  diagnostics before retained progress or results.
 
 ## Native BuildKit integration at the 1.0.0 pin
 

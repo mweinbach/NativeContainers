@@ -8,10 +8,10 @@ struct NativeContainersBuildWorker {
     do {
       try await writer.send(.hello())
       let input = FileHandle.standardInput
-      let request = try readRequest(from: input)
+      let invocation = try readInvocation(from: input)
       monitorParentLifetime(input)
       let runner = ContainerBuildWorkerRunner(writer: writer)
-      try await runner.run(request)
+      try await runner.run(invocation.request, secrets: invocation.secrets)
     } catch {
       let failure: ContainerBuildWorkerFailure
       if let workerError = error as? ContainerBuildWorkerError {
@@ -29,11 +29,17 @@ struct NativeContainersBuildWorker {
     }
   }
 
-  private static func readRequest(from handle: FileHandle) throws -> ContainerBuildWorkerRequest {
-    try ContainerBuildWorkerFramedInput.readOne(
-      from: handle.fileDescriptor,
-      as: ContainerBuildWorkerRequest.self
-    )
+  private static func readInvocation(
+    from handle: FileHandle
+  ) throws -> ContainerBuildWorkerInvocation {
+    do {
+      return try ContainerBuildWorkerInvocationInput.read(from: handle.fileDescriptor)
+    } catch let error as ContainerBuildSecretTransportError {
+      throw ContainerBuildWorkerError.make(
+        code: "secret-payload",
+        message: error.localizedDescription
+      )
+    }
   }
 
   private static func monitorParentLifetime(_ handle: FileHandle) {

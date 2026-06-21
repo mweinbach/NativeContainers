@@ -153,6 +153,19 @@ reviewed builder descriptor, creation identity, image digest, DNS configuration,
 and socket. It produces an OCI archive under a unique staging reference but
 never mutates final tags.
 
+Build secrets cross a separate `ImageBuildSecretManaging` boundary. The review
+request contains file selections, but the immutable plan contains only a
+canonical ID, privacy-sensitive path, and byte count. The service rejects invalid or
+duplicate IDs, sources inside the build context, links, non-regular files,
+foreign owners, multiple links, and any group/world access. It keeps the
+security scope and an `O_NOFOLLOW` descriptor open, with device, inode, mode,
+owner, link count, size, mtime, and ctime frozen until execution or discard.
+Those descriptors are pinned before context staging, which refuses to copy any
+matching device/inode and revalidates the review afterward. After shared-builder
+preparation, consumption revalidates both path and descriptor, streams with
+`pread`, clears its bounded buffer, and destroys the one-shot lease as soon as
+the committed pipe envelope is written.
+
 Canonical Dockerfile and ignore paths are checked as strict descendants by
 path component, not textual prefix. This accepts directory URLs normalized with
 or without a trailing separator while rejecting the context itself and sibling
@@ -176,9 +189,15 @@ reconciliation runs in a fresh uncancelled task. Deletion additionally requires
 both inventory and the exact builder bundle path to be absent; the service never
 manually removes an orphaned bundle or the separate builder-export directory.
 
-The worker protocol reserves stdout for capped length-prefixed control frames
-and stderr for a bounded plain BuildKit log. The parent keeps stdin open as a
-lifetime lease and escalates TERM to KILL on cancellation. Cleanup removes both
+Worker protocol v3 reserves stdout for capped length-prefixed control frames.
+Its exact-length stdin decoder reads one metadata-only JSON request followed by
+a bounded binary secret envelope and final commit marker, then leaves stdin open
+as the parent-lifetime lease; secret bytes never enter Codable state, argv,
+environment, an app-side `Data`, or a temporary file. Secret-enabled solves force
+Apple `Builder.BuildConfig.quiet`, drain
+stderr without retaining it, and replace worker failures with a fixed notice.
+Ordinary builds retain the bounded plain BuildKit log. The parent escalates TERM
+to KILL on cancellation. Cleanup removes both
 guest-visible and private artifacts in a cancellation-independent task,
 including builds canceled while queued. Context and worker isolation prevent
 stale review data and leaked process resources; they do not claim to sandbox a

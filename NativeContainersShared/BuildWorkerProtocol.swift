@@ -6,7 +6,7 @@ enum ContainerBuildWorkerOperation: String, Codable, Equatable, Sendable {
 }
 
 struct ContainerBuildWorkerRequest: Codable, Equatable, Sendable {
-  static let currentProtocolVersion = 2
+  static let currentProtocolVersion = 3
 
   let protocolVersion: Int
   let operation: ContainerBuildWorkerOperation
@@ -55,6 +55,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
   let targetStage: String
   let noCache: Bool
   let pullLatest: Bool
+  let secretIDs: [String]
   let allowsTagReplacement: Bool
 }
 

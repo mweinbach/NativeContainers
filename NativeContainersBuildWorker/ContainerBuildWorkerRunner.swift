@@ -14,7 +14,10 @@ struct ContainerBuildWorkerRunner {
 
   let writer: ContainerBuildWorkerEventWriter
 
-  func run(_ request: ContainerBuildWorkerRequest) async throws {
+  func run(
+    _ request: ContainerBuildWorkerRequest,
+    secrets: ContainerBuildSecretValues
+  ) async throws {
     guard request.protocolVersion == ContainerBuildWorkerRequest.currentProtocolVersion else {
       throw ContainerBuildWorkerError.make(
         code: "protocol-version",
@@ -28,6 +31,12 @@ struct ContainerBuildWorkerRunner {
 
     switch request.operation {
     case .startBuilder:
+      guard secrets.isEmpty else {
+        throw ContainerBuildWorkerError.make(
+          code: "unexpected-secrets",
+          message: "Builder preparation does not accept a secret payload."
+        )
+      }
       let reviewedBuilder = try await controller.ensureBuilder(requested: request.builder)
       let socket = try await controller.dialReviewedBuilder(reviewedBuilder)
       try socket.close()
@@ -39,20 +48,39 @@ struct ContainerBuildWorkerRunner {
           message: "A build operation requires a build specification."
         )
       }
+      guard build.secretIDs == secrets.ids else {
+        throw ContainerBuildWorkerError.make(
+          code: "secret-payload",
+          message: "The secret payload did not match the reviewed build request.",
+          buildID: build.buildID
+        )
+      }
       let reviewedBuilder = try await controller.requireRunningBuilder(
         requested: request.builder
       )
-      let result = try await performBuild(
-        build,
-        reviewedBuilder: reviewedBuilder,
-        controller: controller
-      )
+      var result: ContainerBuildWorkerResult?
+      try await secrets.consume { values in
+        result = try await performBuild(
+          build,
+          secrets: values,
+          reviewedBuilder: reviewedBuilder,
+          controller: controller
+        )
+      }
+      guard let result else {
+        throw ContainerBuildWorkerError.make(
+          code: "secret-payload",
+          message: "The one-shot secret payload was not consumed.",
+          buildID: build.buildID
+        )
+      }
       try await writer.send(.completed(result))
     }
   }
 
   private func performBuild(
     _ request: ContainerBuildWorkerBuildRequest,
+    secrets: [String: Data],
     reviewedBuilder: ReviewedContainerBuilder,
     controller: ContainerBuilderController
   ) async throws -> ContainerBuildWorkerResult {
@@ -109,7 +137,7 @@ struct ContainerBuildWorkerRunner {
       buildID: request.buildID.uuidString.lowercased(),
       contentStore: RemoteContentStoreClient(),
       buildArgs: request.buildArguments,
-      secrets: [:],
+      secrets: secrets,
       contextDir: inputs.context.path(percentEncoded: false),
       dockerfile: inputs.dockerfile,
       dockerignore: inputs.dockerignore,
@@ -119,7 +147,7 @@ struct ContainerBuildWorkerRunner {
       terminal: nil,
       tags: [stagingReference],
       target: request.targetStage,
-      quiet: false,
+      quiet: !secrets.isEmpty,
       exports: [export],
       cacheIn: [],
       cacheOut: [],

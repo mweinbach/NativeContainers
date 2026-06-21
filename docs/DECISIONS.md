@@ -393,3 +393,34 @@ is absent and the exact `<appRoot>/containers/buildkit` bundle fails `lstat`
 with `ENOENT`. A remaining bundle is an explicit incomplete-cleanup state. The
 app never deletes that bundle manually and never touches `<appRoot>/builder`,
 which holds exports rather than the container’s BuildKit cache.
+
+## ADR-020: Stream reviewed build secrets through a one-shot vault
+
+**Status:** Accepted — 2026-06-20
+
+Build-secret values must not enter a reviewed plan, observable app state,
+Codable worker request, environment, argument vector, temporary file, or retained
+diagnostic. A focused `ImageBuildSecretManaging` actor therefore owns each
+review. It holds security-scoped, `O_NOFOLLOW` descriptors for private
+owner-only files outside the build context, freezes their full filesystem
+identity, and exposes only ID, privacy-sensitive path, and byte count to the plan.
+Descriptors are pinned before context staging; the stager rejects matching
+device/inode identities so a transient hard link cannot copy a secret into the
+reviewed context.
+
+Execution consumes the review once, after the shared builder is ready. Protocol
+v3 reads the JSON control frame at its exact declared length and then a bounded
+binary envelope plus a final commit marker from the same anonymous stdin pipe,
+preserving stdin as the parent-death lease without read-ahead loss. The app
+streams directly from each pinned descriptor through a zeroed bounded buffer;
+the source payload destructively releases its leases when the write completes.
+Empty and arbitrary binary values are supported. IDs are canonical and unique;
+file and aggregate sizes are bounded by local product policy before Apple’s
+`[String: Data]` API is called in the isolated worker.
+
+A Dockerfile can deliberately print a mounted value, and Apple’s 1.0.0 builder
+routes normal solve output to the helper’s stderr. Secret builds therefore set
+`quiet`, drain but never retain stderr, sanitize failure events, and publish a
+fixed suppression notice. Apple still creates `Data`, base64 string, metadata,
+and HTTP/2 copies internally, so this boundary promises non-persistence and a
+one-shot worker lifetime—not cryptographic memory zeroization.

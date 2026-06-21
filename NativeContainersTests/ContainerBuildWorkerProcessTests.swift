@@ -287,6 +287,50 @@ struct ContainerBuildWorkerProcessTests {
   }
 
   @Test
+  func secretBuildDrainsAndSuppressesWorkerDiagnostics() async throws {
+    let sentinel = "super-secret-worker-sentinel"
+    let sentinelData = Data(sentinel.utf8)
+    let payload = try ContainerBuildSecretSourcePayload(entries: [
+      ProcessTestSecretStreamingEntry(id: "token", data: sentinelData)
+    ])
+    let request = makeSecretBuildRequestForProcessTests(secretIDs: payload.ids)
+    let failure = ContainerBuildWorkerFailure(
+      code: "build-failed",
+      message: "Build output exposed \(sentinel)",
+      buildID: request.build?.buildID,
+      partialImageDigest: nil
+    )
+    let process = try makeFixtureProcess(
+      events: [.failed(failure)],
+      commandsBeforeEvents: ["printf '%s' '\(sentinel)' >&2"],
+      exitStatus: 1
+    )
+    let recorder = BuildWorkerEventRecorder()
+
+    do {
+      _ = try await process.run(request, secrets: payload) { event in
+        await recorder.record(event)
+      }
+      Issue.record("Expected a sanitized worker failure.")
+    } catch let error as ContainerBuildWorkerProcessError {
+      guard case .workerFailed(let sanitized, _, let tail) = error else {
+        Issue.record("Unexpected process error: \(error)")
+        return
+      }
+      #expect(sanitized.message == ContainerBuildWorkerDiagnostics.suppressedMessage)
+      #expect(tail == ContainerBuildWorkerDiagnostics.suppressedMessage)
+      #expect(!sanitized.message.contains(sentinel))
+      #expect(!sanitized.message.contains(sentinelData.base64EncodedString()))
+    }
+
+    let events = await recorder.events
+    #expect(events.last?.message == ContainerBuildWorkerDiagnostics.suppressedMessage)
+    #expect(
+      events.last?.failure?.message
+        == ContainerBuildWorkerDiagnostics.suppressedMessage)
+  }
+
+  @Test
   func cancellationEscalatesPastIgnoredTerminateSignal() async throws {
     let process = try makeFixtureProcess(
       events: [],
@@ -374,6 +418,41 @@ struct ContainerBuildWorkerProcessTests {
   }
 }
 
+private final class ProcessTestSecretStreamingEntry:
+  ContainerBuildSecretStreamingEntry, @unchecked Sendable
+{
+  let id: String
+  let data: Data
+
+  var byteCount: Int { data.count }
+
+  init(id: String, data: Data) {
+    self.id = id
+    self.data = data
+  }
+
+  func writeBytes(to descriptor: Int32) throws {
+    try data.withUnsafeBytes { bytes in
+      var offset = 0
+      while offset < bytes.count {
+        let result = Darwin.write(
+          descriptor,
+          bytes.baseAddress!.advanced(by: offset),
+          bytes.count - offset
+        )
+        if result < 0 {
+          if errno == EINTR { continue }
+          throw ContainerBuildSecretTransportError.payloadWriteFailed(code: errno)
+        }
+        guard result > 0 else {
+          throw ContainerBuildSecretTransportError.payloadWriteFailed(code: EIO)
+        }
+        offset += result
+      }
+    }
+  }
+}
+
 private struct FrameFixture: Codable, Equatable, Sendable {
   let id: Int
   let text: String
@@ -389,6 +468,37 @@ private actor BuildWorkerEventRecorder {
 
 private func makeStartBuilderRequest() -> ContainerBuildWorkerRequest {
   ContainerBuildWorkerRequest(operation: .startBuilder)
+}
+
+private func makeSecretBuildRequestForProcessTests(
+  secretIDs: [String]
+) -> ContainerBuildWorkerRequest {
+  ContainerBuildWorkerRequest(
+    operation: .build,
+    build: ContainerBuildWorkerBuildRequest(
+      buildID: UUID(uuidString: "ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB")!,
+      contextPath: "/tmp/nativecontainers-worker-process/context",
+      dockerfilePath: "/tmp/nativecontainers-worker-process/context/Dockerfile",
+      dockerfileSHA256: String(repeating: "a", count: 64),
+      contextFingerprint: String(repeating: "b", count: 64),
+      dockerignorePath: nil,
+      dockerignoreSHA256: nil,
+      tags: [
+        ContainerBuildTagExpectation(
+          reference: "nativecontainers.local/process-test:latest",
+          existingDigest: nil
+        )
+      ],
+      platforms: [.current],
+      buildArguments: [],
+      labels: [],
+      targetStage: "",
+      noCache: true,
+      pullLatest: false,
+      secretIDs: secretIDs,
+      allowsTagReplacement: false
+    )
+  )
 }
 
 private func makeFixtureProcess(

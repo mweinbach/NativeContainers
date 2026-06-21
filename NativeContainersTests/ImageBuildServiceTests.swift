@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -169,7 +170,8 @@ struct ImageBuildServiceTests {
         TestBuildContextStageCall(
           sourceDirectory: request.contextDirectory,
           dockerfile: dockerfile,
-          dockerignore: .conventional
+          dockerignore: .conventional,
+          excludingFileIdentities: []
         )
       ]
     )
@@ -300,6 +302,155 @@ struct ImageBuildServiceTests {
     #expect(await progress.values.map(\.phase).contains(.verifyingPlatforms))
     #expect(await progress.values.map(\.phase).contains(.taggingImage))
     #expect(await progress.values.last?.phase == .completed)
+  }
+
+  @Test
+  func secretBuildStreamsValuesAfterReviewAndSuppressesAllDiagnostics() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-service-secret-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: root,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: 0o700]
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let sourceContext = root.appending(path: "context", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(
+      at: sourceContext,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: 0o700]
+    )
+    let secretURL = root.appending(path: "token.secret", directoryHint: .notDirectory)
+    let sentinel = Data("service-secret-sentinel".utf8)
+    try sentinel.write(to: secretURL)
+    #expect(Darwin.chmod(secretURL.path(percentEncoded: false), 0o600) == 0)
+
+    let staged = makeStagedBuildContext()
+    let expectedReview = ImageBuildSecretReview(
+      id: "token",
+      displayPath: (secretURL.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath,
+      byteCount: Int64(sentinel.count)
+    )
+    let expectedPlan = makeImageBuildPlan(id: staged.id, secrets: [expectedReview])
+    let contextStager = TestBuildContextStager(staged: staged)
+    let imageStore = TestImageBuildStore(
+      tagStates: matchingTagStates(for: expectedPlan),
+      archiveLoadResult: ImageBuildArchiveLoadResult(
+        images: [
+          ImageBuildStoredImage(
+            reference: stagingReference(for: staged.id),
+            digest: "sha256:built"
+          )
+        ],
+        rejectedMembers: []
+      )
+    )
+    let worker = TestContainerBuildWorker(
+      expectedSecretValues: ["token": sentinel]
+    )
+    let artifactManager = TestImageBuildArtifactManager()
+    let service = AppleContainerBuildService(
+      contextStager: contextStager,
+      worker: worker,
+      imageStore: imageStore,
+      artifactManager: artifactManager,
+      runtimeMutationCoordinator: RuntimeMutationCoordinator(),
+      buildExecutionCoordinator: RuntimeMutationCoordinator()
+    )
+    let progress = ImageBuildProgressRecorder()
+    let request = makeImageBuildRequest(
+      contextDirectory: sourceContext,
+      secrets: [ImageBuildSecretSelection(id: "token", sourceURL: secretURL)]
+    )
+
+    let plan = try await service.prepareBuild(request) { update in
+      await progress.record(update)
+    }
+    #expect(plan.secrets == [expectedReview])
+    #expect(plan.secrets.map(\.id) == ["token"])
+
+    let result = try await service.build(plan, authorization: .none) { update in
+      await progress.record(update)
+    }
+
+    #expect(await worker.secretPayloadIDs == [[], ["token"]])
+    #expect(await worker.secretPayloadMatchedExpectation == true)
+    #expect(await worker.requests.last?.build?.secretIDs == ["token"])
+    #expect(
+      result.logTail == ContainerBuildWorkerDiagnostics.suppressedMessage
+    )
+    let retainedText =
+      await progress.values.map {
+        "\($0.message)\n\($0.logTail)"
+      }.joined(separator: "\n") + "\n" + result.logTail
+    #expect(!retainedText.contains("service-secret-sentinel"))
+    #expect(!retainedText.contains(sentinel.base64EncodedString()))
+    #expect(await progress.values.map(\.phase).contains(.stagingSecrets))
+  }
+
+  @Test
+  func secretSourceIsRevalidatedOnlyAfterBuilderPreparation() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-service-secret-drift-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: root,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: 0o700]
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let sourceContext = root.appending(path: "context", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sourceContext, withIntermediateDirectories: false)
+    let secretURL = root.appending(path: "token.secret", directoryHint: .notDirectory)
+    try Data("reviewed".utf8).write(to: secretURL)
+    #expect(Darwin.chmod(secretURL.path(percentEncoded: false), 0o600) == 0)
+
+    let staged = makeStagedBuildContext()
+    let gate = ImageBuildTestGate()
+    let worker = TestContainerBuildWorker(firstStartGate: gate)
+    let expectedPlan = makeImageBuildPlan(
+      id: staged.id,
+      secrets: [
+        ImageBuildSecretReview(
+          id: "token",
+          displayPath: (secretURL.path(percentEncoded: false) as NSString)
+            .abbreviatingWithTildeInPath,
+          byteCount: 8
+        )
+      ]
+    )
+    let service = AppleContainerBuildService(
+      contextStager: TestBuildContextStager(staged: staged),
+      worker: worker,
+      imageStore: TestImageBuildStore(tagStates: matchingTagStates(for: expectedPlan)),
+      artifactManager: TestImageBuildArtifactManager(),
+      runtimeMutationCoordinator: RuntimeMutationCoordinator(),
+      buildExecutionCoordinator: RuntimeMutationCoordinator()
+    )
+    let plan = try await service.prepareBuild(
+      makeImageBuildRequest(
+        contextDirectory: sourceContext,
+        secrets: [ImageBuildSecretSelection(id: "token", sourceURL: secretURL)]
+      )
+    ) { _ in }
+
+    let task = Task {
+      try await service.build(plan, authorization: .none) { _ in }
+    }
+    await gate.waitUntilEntered()
+    try Data("changed!".utf8).write(to: secretURL)
+    #expect(Darwin.chmod(secretURL.path(percentEncoded: false), 0o600) == 0)
+    await gate.release()
+
+    await #expect(throws: ImageBuildSecretError.sourceChanged("token")) {
+      _ = try await task.value
+    }
+    #expect(await worker.requests.map(\.operation) == [.startBuilder])
   }
 
   @Test
@@ -913,6 +1064,7 @@ private func makeImageBuildRequest(
     directoryHint: .isDirectory
   ),
   dockerfile: URL? = nil,
+  secrets: [ImageBuildSecretSelection] = [],
   tags: [String] = ["registry.example/nativecontainers/app:latest"],
   platforms: [ContainerBuildPlatform] = [.current],
   buildArguments: [String] = [],
@@ -926,6 +1078,7 @@ private func makeImageBuildRequest(
   ImageBuildRequest(
     contextDirectory: contextDirectory,
     dockerfile: dockerfile,
+    secrets: secrets,
     tags: tags,
     platforms: platforms,
     buildArguments: buildArguments,
@@ -941,7 +1094,8 @@ private func makeImageBuildRequest(
 private func makeImageBuildPlan(
   id: UUID = UUID(uuidString: "12345678-1234-1234-1234-123456789ABC")!,
   existingDigest: String? = nil,
-  tags: [ContainerBuildTagExpectation]? = nil
+  tags: [ContainerBuildTagExpectation]? = nil,
+  secrets: [ImageBuildSecretReview] = []
 ) -> ImageBuildPlan {
   let stagedRoot = URL(
     filePath: "/tmp/nativecontainers-build-tests/\(id.uuidString.lowercased())/context",
@@ -962,6 +1116,8 @@ private func makeImageBuildPlan(
     ),
     dockerignoreSHA256: String(repeating: "b", count: 64),
     contextFingerprint: String(repeating: "c", count: 64),
+    secretReviewID: secrets.isEmpty ? nil : id,
+    secrets: secrets,
     tags: tags
       ?? [
         ContainerBuildTagExpectation(
@@ -1113,6 +1269,7 @@ private struct TestBuildContextStageCall: Equatable, Sendable {
   let sourceDirectory: URL
   let dockerfile: URL?
   let dockerignore: BuildContextDockerignoreSelection
+  let excludingFileIdentities: Set<BuildContextExcludedFileIdentity>
 }
 
 private actor TestBuildContextStager: BuildContextStaging {
@@ -1136,13 +1293,15 @@ private actor TestBuildContextStager: BuildContextStaging {
   func stage(
     sourceDirectory: URL,
     dockerfile: URL?,
-    dockerignore: BuildContextDockerignoreSelection
+    dockerignore: BuildContextDockerignoreSelection,
+    excludingFileIdentities: Set<BuildContextExcludedFileIdentity>
   ) async throws -> StagedBuildContext {
     stageCalls.append(
       TestBuildContextStageCall(
         sourceDirectory: sourceDirectory,
         dockerfile: dockerfile,
-        dockerignore: dockerignore
+        dockerignore: dockerignore,
+        excludingFileIdentities: excludingFileIdentities
       )
     )
     return staged
@@ -1263,24 +1422,32 @@ private actor TestContainerBuildWorker: ContainerBuildWorkerRunning {
   private let buildResultOverride: ContainerBuildWorkerResult?
   private let firstStartGate: ImageBuildTestGate?
   private let log: ImageBuildOperationLog?
+  private let expectedSecretValues: [String: Data]?
   private var startCount = 0
   private(set) var requests: [ContainerBuildWorkerRequest] = []
+  private(set) var secretPayloadIDs: [[String]] = []
+  private(set) var secretPayloadMatchedExpectation: Bool?
 
   init(
     buildResultOverride: ContainerBuildWorkerResult? = nil,
     firstStartGate: ImageBuildTestGate? = nil,
-    log: ImageBuildOperationLog? = nil
+    log: ImageBuildOperationLog? = nil,
+    expectedSecretValues: [String: Data]? = nil
   ) {
     self.buildResultOverride = buildResultOverride
     self.firstStartGate = firstStartGate
     self.log = log
+    self.expectedSecretValues = expectedSecretValues
   }
 
   func run(
     _ request: ContainerBuildWorkerRequest,
+    secrets: ContainerBuildSecretSourcePayload,
     onEvent: @escaping ContainerBuildWorkerEventHandler
   ) async throws -> ContainerBuildWorkerProcessOutput {
     requests.append(request)
+    secretPayloadIDs.append(secrets.ids)
+    let transferredSecrets = try await transfer(secrets)
     await log?.record("worker.\(request.operation.rawValue)")
     switch request.operation {
     case .startBuilder:
@@ -1295,13 +1462,21 @@ private actor TestContainerBuildWorker: ContainerBuildWorkerRunning {
         events: [.hello(), terminal],
         terminalEvent: terminal,
         result: nil,
-        standardErrorTail: "builder start diagnostic",
-        standardErrorWasTruncated: false,
+        diagnostics: .captured(
+          tail: "builder start diagnostic",
+          wasTruncated: false
+        ),
         exitStatus: 0
       )
     case .build:
       guard let build = request.build else {
         throw TestImageBuildFailure.missingBuildRequest
+      }
+      guard build.secretIDs == secrets.ids else {
+        throw TestImageBuildFailure.missingBuildRequest
+      }
+      if let expectedSecretValues {
+        secretPayloadMatchedExpectation = transferredSecrets == expectedSecretValues
       }
       let result = buildResultOverride ?? makeWorkerResult(for: build)
       let terminal = ContainerBuildWorkerEvent.completed(result)
@@ -1311,11 +1486,34 @@ private actor TestContainerBuildWorker: ContainerBuildWorkerRunning {
         events: [.hello(), terminal],
         terminalEvent: terminal,
         result: result,
-        standardErrorTail: "build diagnostic",
-        standardErrorWasTruncated: false,
+        diagnostics:
+          secrets.isEmpty
+          ? .captured(tail: "build diagnostic", wasTruncated: false)
+          : .suppressed,
         exitStatus: 0
       )
     }
+  }
+
+  private func transfer(
+    _ source: ContainerBuildSecretSourcePayload
+  ) async throws -> [String: Data] {
+    let expectedIDs = source.ids
+    let pipe = Pipe()
+    try ContainerBuildSecretWire.write(
+      source,
+      to: pipe.fileHandleForWriting.fileDescriptor
+    )
+    let values = try ContainerBuildSecretWire.read(
+      from: pipe.fileHandleForReading.fileDescriptor,
+      expectedIDs: expectedIDs
+    )
+    try? pipe.fileHandleForWriting.close()
+    try? pipe.fileHandleForReading.close()
+
+    var transferred: [String: Data] = [:]
+    try await values.consume { transferred = $0 }
+    return transferred
   }
 }
 

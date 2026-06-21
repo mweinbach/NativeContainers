@@ -9,6 +9,7 @@ struct ImageBuildCreationView: View {
   @State private var platform = ImageBuildPlatformSelection.current
   @State private var buildArguments = ""
   @State private var labels = ""
+  @State private var secretDrafts: [ImageBuildSecretDraft] = []
   @State private var targetStage = ""
   @State private var noCache = false
   @State private var pullLatest = true
@@ -20,6 +21,8 @@ struct ImageBuildCreationView: View {
   @State private var allowsStopRunningBuilder = false
   @State private var isChoosingContext = false
   @State private var isChoosingDockerfile = false
+  @State private var isChoosingSecret = false
+  @State private var selectedSecretDraftID: UUID?
   @State private var isConfirmingBuild = false
   @State private var operationTask: Task<Void, Never>?
 
@@ -32,6 +35,13 @@ struct ImageBuildCreationView: View {
       sourceSection
       outputSection
       optionsSection
+      ImageBuildSecretsSection(
+        drafts: $secretDrafts,
+        isLocked: inputsAreLocked
+      ) { draftID in
+        selectedSecretDraftID = draftID
+        isChoosingSecret = true
+      }
       if let plan = model.plan {
         reviewSection(plan)
       }
@@ -96,6 +106,23 @@ struct ImageBuildCreationView: View {
         dockerfile = urls.first
         model.clearResult()
       }
+    }
+    .fileImporter(
+      isPresented: $isChoosingSecret,
+      allowedContentTypes: [.item],
+      allowsMultipleSelection: false
+    ) { result in
+      defer { selectedSecretDraftID = nil }
+      guard
+        let selectedSecretDraftID,
+        case .success(let urls) = result,
+        let sourceURL = urls.first,
+        let index = secretDrafts.firstIndex(where: { $0.id == selectedSecretDraftID })
+      else {
+        return
+      }
+      secretDrafts[index].sourceURL = sourceURL
+      model.clearResult()
     }
     .confirmationDialog(
       "Build reviewed image?",
@@ -226,6 +253,25 @@ struct ImageBuildCreationView: View {
         }
       }
       LabeledContent("Platform", value: plan.platforms.map(\.description).joined(separator: ", "))
+      if !plan.secrets.isEmpty {
+        LabeledContent("Build secrets", value: "\(plan.secrets.count)")
+        ForEach(plan.secrets) { secret in
+          HStack {
+            Text(secret.id)
+              .font(.body.monospaced())
+            Spacer()
+            Text("\(secret.displayPath) · \(secret.byteCount) bytes")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          .privacySensitive()
+        }
+        Text(
+          "Only IDs and file metadata are retained in this plan; values remain in pinned source files until execution."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      }
       if plan.replacesExistingTags {
         Toggle("Allow replacing reviewed existing tags", isOn: $allowsTagReplacement)
           .tint(.orange)
@@ -281,6 +327,10 @@ struct ImageBuildCreationView: View {
 
   private var canPrepare: Bool {
     contextDirectory != nil && !tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && secretDrafts.allSatisfy {
+        !$0.secretID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          && $0.sourceURL != nil
+      }
       && operationTask == nil
   }
 
@@ -292,6 +342,14 @@ struct ImageBuildCreationView: View {
     ImageBuildRequest(
       contextDirectory: contextDirectory!,
       dockerfile: dockerfile,
+      secrets: secretDrafts.compactMap { draft in
+        draft.sourceURL.map {
+          ImageBuildSecretSelection(
+            id: draft.secretID.trimmingCharacters(in: .whitespacesAndNewlines),
+            sourceURL: $0
+          )
+        }
+      },
       tags: splitLines(tag.replacingOccurrences(of: ",", with: "\n")),
       platforms: [platform.value],
       buildArguments: splitLines(buildArguments),
@@ -314,6 +372,11 @@ struct ImageBuildCreationView: View {
     var warnings = [
       "Build \(plan.platforms.map(\.description).joined(separator: ", ")) from the private reviewed context and apply \(plan.tags.map(\.reference).joined(separator: ", "))."
     ]
+    if !plan.secrets.isEmpty {
+      warnings.append(
+        "\(plan.secrets.count) reviewed secret file(s) will be streamed once; BuildKit output will be suppressed."
+      )
+    }
     if plan.replacesExistingTags {
       warnings.append("Existing local tags will move only if their reviewed digests are unchanged.")
     }
@@ -328,6 +391,7 @@ struct ImageBuildCreationView: View {
   private func icon(for phase: ImageBuildProgress.Phase) -> String {
     switch phase {
     case .stagingContext: "doc.on.doc"
+    case .stagingSecrets: "key.horizontal"
     case .preparingBuilder: "shippingbox"
     case .connectingBuilder: "cable.connector"
     case .building: "hammer"
@@ -356,7 +420,7 @@ private enum ImageBuildPlatformSelection: String, CaseIterable, Identifiable {
 
   var id: Self { self }
 
-  var title: String {
+  var title: LocalizedStringResource {
     switch self {
     case .current: "Linux arm64/v8 (this Mac)"
     case .amd64: "Linux amd64"

@@ -102,13 +102,36 @@ enum ContainerBuildWorkerEnvironment {
   }
 }
 
+enum ContainerBuildWorkerDiagnostics: Equatable, Sendable {
+  case captured(tail: String, wasTruncated: Bool)
+  case suppressed
+
+  static let suppressedMessage = "Build output suppressed while secrets were mounted."
+
+  var tail: String {
+    switch self {
+    case .captured(let tail, _): tail
+    case .suppressed: Self.suppressedMessage
+    }
+  }
+
+  var wasTruncated: Bool {
+    switch self {
+    case .captured(_, let wasTruncated): wasTruncated
+    case .suppressed: false
+    }
+  }
+}
+
 struct ContainerBuildWorkerProcessOutput: Equatable, Sendable {
   let events: [ContainerBuildWorkerEvent]
   let terminalEvent: ContainerBuildWorkerEvent
   let result: ContainerBuildWorkerResult?
-  let standardErrorTail: String
-  let standardErrorWasTruncated: Bool
+  let diagnostics: ContainerBuildWorkerDiagnostics
   let exitStatus: Int32
+
+  var standardErrorTail: String { diagnostics.tail }
+  var standardErrorWasTruncated: Bool { diagnostics.wasTruncated }
 }
 
 typealias ContainerBuildWorkerEventHandler =
@@ -117,8 +140,18 @@ typealias ContainerBuildWorkerEventHandler =
 protocol ContainerBuildWorkerRunning: Sendable {
   func run(
     _ request: ContainerBuildWorkerRequest,
+    secrets: ContainerBuildSecretSourcePayload,
     onEvent: @escaping ContainerBuildWorkerEventHandler
   ) async throws -> ContainerBuildWorkerProcessOutput
+}
+
+extension ContainerBuildWorkerRunning {
+  func run(
+    _ request: ContainerBuildWorkerRequest,
+    onEvent: @escaping ContainerBuildWorkerEventHandler = { _ in }
+  ) async throws -> ContainerBuildWorkerProcessOutput {
+    try await run(request, secrets: .empty, onEvent: onEvent)
+  }
 }
 
 enum ContainerBuildWorkerProcessError: Error, Equatable, LocalizedError, Sendable {
@@ -126,6 +159,7 @@ enum ContainerBuildWorkerProcessError: Error, Equatable, LocalizedError, Sendabl
   case executableNotRunnable(String)
   case launchFailed(String)
   case requestWriteFailed(String)
+  case secretPayloadMismatch
   case standardOutputReadFailed(String)
   case standardErrorReadFailed(String)
   case invalidOutputFrame(ContainerBuildWorkerFrameError)
@@ -162,6 +196,8 @@ enum ContainerBuildWorkerProcessError: Error, Equatable, LocalizedError, Sendabl
       "The native image-build worker could not be launched: \(message)"
     case .requestWriteFailed(let message):
       "The reviewed build request could not be sent to the worker: \(message)"
+    case .secretPayloadMismatch:
+      "The build worker secret payload did not match the reviewed control request."
     case .standardOutputReadFailed(let message):
       "The build worker's control stream failed: \(message)"
     case .standardErrorReadFailed(let message):
@@ -220,9 +256,13 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
 
   func run(
     _ request: ContainerBuildWorkerRequest,
+    secrets: ContainerBuildSecretSourcePayload,
     onEvent: @escaping ContainerBuildWorkerEventHandler = { _ in }
   ) async throws -> ContainerBuildWorkerProcessOutput {
     try Task.checkCancellation()
+    guard (request.build?.secretIDs ?? []) == secrets.ids else {
+      throw ContainerBuildWorkerProcessError.secretPayloadMismatch
+    }
     let requestFrame = try ContainerBuildWorkerFrameCodec.encode(request)
     let executableURL = try executableLocator.locateBuildWorker().standardizedFileURL
     try Self.validateExecutable(executableURL)
@@ -244,6 +284,7 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
         session: session,
         request: request,
         requestFrame: requestFrame,
+        secrets: secrets,
         onEvent: onEvent
       )
     } onCancel: {
@@ -255,15 +296,21 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
     session: FoundationBuildWorkerSession,
     request: ContainerBuildWorkerRequest,
     requestFrame: Data,
+    secrets: ContainerBuildSecretSourcePayload,
     onEvent: @escaping ContainerBuildWorkerEventHandler
   ) async throws -> ContainerBuildWorkerProcessOutput {
     let stdoutReader = WorkerFileHandleReader(handle: session.standardOutput)
     let stderrReader = WorkerFileHandleReader(handle: session.standardError)
     let gracePeriod = terminationGracePeriod
+    let suppressesDiagnostics = !secrets.isEmpty
 
     let stdoutTask = Task.detached(priority: .userInitiated) {
       do {
-        return try await Self.readEvents(from: stdoutReader, onEvent: onEvent)
+        return try await Self.readEvents(
+          from: stdoutReader,
+          suppressesFailureDiagnostics: suppressesDiagnostics,
+          onEvent: onEvent
+        )
       } catch {
         session.requestTermination(after: gracePeriod)
         throw error
@@ -271,7 +318,10 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
     }
     let stderrTask = Task.detached(priority: .utility) {
       do {
-        return try Self.readStandardError(from: stderrReader)
+        return try Self.readStandardError(
+          from: stderrReader,
+          suppressesDiagnostics: suppressesDiagnostics
+        )
       } catch {
         session.requestTermination(after: gracePeriod)
         throw error
@@ -280,7 +330,7 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
 
     do {
       do {
-        try session.writeRequest(requestFrame)
+        try session.writeRequest(requestFrame, secrets: secrets)
       } catch {
         throw ContainerBuildWorkerProcessError.requestWriteFailed(error.localizedDescription)
       }
@@ -326,6 +376,7 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
 
   private static func readEvents(
     from reader: WorkerFileHandleReader,
+    suppressesFailureDiagnostics: Bool,
     onEvent: @escaping ContainerBuildWorkerEventHandler
   ) async throws -> EventReadResult {
     var decoder = ContainerBuildWorkerFrameDecoder<ContainerBuildWorkerEvent>()
@@ -342,7 +393,11 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
           throw ContainerBuildWorkerProcessError.invalidOutputFrame(error)
         }
 
-        for event in newEvents {
+        for receivedEvent in newEvents {
+          let event =
+            suppressesFailureDiagnostics
+            ? sanitizedSecretBuildEvent(receivedEvent)
+            : receivedEvent
           if event.kind == .hello {
             guard !receivedHello, events.isEmpty else {
               throw ContainerBuildWorkerProcessError.duplicateHello
@@ -401,30 +456,60 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
     return EventReadResult(events: events, terminalEvent: terminalEvent)
   }
 
+  private static func sanitizedSecretBuildEvent(
+    _ event: ContainerBuildWorkerEvent
+  ) -> ContainerBuildWorkerEvent {
+    guard event.kind == .failed, let failure = event.failure else { return event }
+    let message = ContainerBuildWorkerDiagnostics.suppressedMessage
+    return ContainerBuildWorkerEvent(
+      kind: .failed,
+      protocolVersion: nil,
+      phase: nil,
+      message: message,
+      result: nil,
+      failure: ContainerBuildWorkerFailure(
+        code: failure.code,
+        message: message,
+        buildID: failure.buildID,
+        partialImageDigest: failure.partialImageDigest
+      )
+    )
+  }
+
   private static func readStandardError(
-    from reader: WorkerFileHandleReader
-  ) throws -> StandardErrorTail {
+    from reader: WorkerFileHandleReader,
+    suppressesDiagnostics: Bool
+  ) throws -> ContainerBuildWorkerDiagnostics {
     var tail = BoundedUTF8Tail(maximumBytes: maximumStandardErrorBytes)
     do {
       while let data = try reader.read(upToCount: readChunkBytes), !data.isEmpty {
-        tail.append(data)
+        if !suppressesDiagnostics {
+          tail.append(data)
+        }
       }
     } catch {
       throw ContainerBuildWorkerProcessError.standardErrorReadFailed(error.localizedDescription)
     }
-    return tail.value
+    if suppressesDiagnostics {
+      return .suppressed
+    }
+    let captured = tail.value
+    return .captured(
+      tail: captured.text,
+      wasTruncated: captured.wasTruncated
+    )
   }
 
   private static func validate(
     request: ContainerBuildWorkerRequest,
     eventRead: EventReadResult,
-    standardError: StandardErrorTail,
+    standardError: ContainerBuildWorkerDiagnostics,
     exitStatus: Int32
   ) throws -> ContainerBuildWorkerProcessOutput {
     guard let terminalEvent = eventRead.terminalEvent else {
       throw ContainerBuildWorkerProcessError.missingTerminalEvent(
         exitStatus: exitStatus,
-        standardErrorTail: standardError.text
+        standardErrorTail: standardError.tail
       )
     }
 
@@ -436,7 +521,7 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
       throw ContainerBuildWorkerProcessError.workerFailed(
         failure: failure,
         exitStatus: exitStatus,
-        standardErrorTail: standardError.text
+        standardErrorTail: standardError.tail
       )
     case .completed:
       guard terminalEvent.result != nil, terminalEvent.failure == nil else {
@@ -465,7 +550,7 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
     guard exitStatus == EXIT_SUCCESS else {
       throw ContainerBuildWorkerProcessError.nonzeroExit(
         status: exitStatus,
-        standardErrorTail: standardError.text
+        standardErrorTail: standardError.tail
       )
     }
 
@@ -473,8 +558,7 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
       events: eventRead.events,
       terminalEvent: terminalEvent,
       result: terminalEvent.result,
-      standardErrorTail: standardError.text,
-      standardErrorWasTruncated: standardError.wasTruncated,
+      diagnostics: standardError,
       exitStatus: exitStatus
     )
   }
@@ -634,8 +718,13 @@ private final class FoundationBuildWorkerSession: @unchecked Sendable {
     }
   }
 
-  func writeRequest(_ data: Data) throws {
-    try inputPipe.fileHandleForWriting.write(contentsOf: data)
+  func writeRequest(
+    _ data: Data,
+    secrets: ContainerBuildSecretSourcePayload
+  ) throws {
+    let handle = inputPipe.fileHandleForWriting
+    try handle.write(contentsOf: data)
+    try ContainerBuildSecretWire.write(secrets, to: handle.fileDescriptor)
   }
 
   func waitForExit() async -> Int32 {
