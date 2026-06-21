@@ -185,7 +185,23 @@ struct URLSessionSocktainerArtifactDownloader: SocktainerArtifactDownloading {
     guard byteCount > 0, byteCount <= maximumByteCount else {
       throw DockerCompatibilityError.artifactTooLarge(byteCount)
     }
-    return temporaryURL
+
+    let retainedURL = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-socktainer-\(UUID().uuidString.lowercased()).download",
+      directoryHint: .notDirectory
+    )
+    do {
+      try FileManager.default.copyItem(at: temporaryURL, to: retainedURL)
+      guard chmod(retainedURL.nativeContainersPOSIXPath, 0o600) == 0 else {
+        throw DockerCompatibilityError.unsafeInstallLocation(
+          retainedURL.nativeContainersPOSIXPath
+        )
+      }
+      return retainedURL
+    } catch {
+      try? FileManager.default.removeItem(at: retainedURL)
+      throw error
+    }
   }
 }
 

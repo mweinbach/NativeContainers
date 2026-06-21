@@ -26,10 +26,17 @@ struct SettingsView: View {
         LabeledContent("Networking", value: "Apple runtime / NAT")
       }
 
+      DockerCompatibilitySettingsSection(appModel: model)
+
       RegistrySettingsSection(appModel: model)
     }
     .formStyle(.grouped)
     .padding()
     .navigationTitle("Settings")
   }
+}
+
+#Preview("Settings") {
+  SettingsView(model: .preview)
+    .frame(width: 680, height: 700)
 }

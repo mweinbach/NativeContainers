@@ -41,6 +41,11 @@ final class AppModel {
   }
 
   @ObservationIgnored
+  private lazy var dockerCompatibilitySettingsModel = DockerCompatibilityModel(
+    service: services.dockerCompatibility
+  )
+
+  @ObservationIgnored
   private var macVirtualMachineRuntimeModels: [UUID: MacVirtualMachineRuntimeModel] = [:]
 
   @ObservationIgnored
@@ -79,6 +84,8 @@ final class AppModel {
     machineService: any MachineManaging = AppleMachineManagementService(),
     imageBuildService: any ImageBuilding = AppleContainerBuildService(),
     registryService: any RegistryManaging = AppleRegistryService(),
+    dockerCompatibilityService: any DockerCompatibilityManaging =
+      UnavailableDockerCompatibilityService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
@@ -101,6 +108,7 @@ final class AppModel {
         machineService: machineService,
         imageBuild: imageBuildService,
         registry: registryService,
+        dockerCompatibility: dockerCompatibilityService,
         virtualMachineLibrary: virtualMachineLibrary,
         virtualMachineInstaller: virtualMachineInstaller,
         virtualMachineRuntime: virtualMachineRuntime,
@@ -405,6 +413,10 @@ final class AppModel {
 
   func makeRegistrySettingsModel() -> RegistrySettingsModel {
     RegistrySettingsModel(service: services.registry)
+  }
+
+  func makeDockerCompatibilityModel() -> DockerCompatibilityModel {
+    dockerCompatibilitySettingsModel
   }
 
   func makeContainerToolsModel(containerID: String) -> ContainerToolsModel {

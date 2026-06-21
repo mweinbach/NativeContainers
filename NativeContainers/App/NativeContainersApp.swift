@@ -27,7 +27,7 @@ struct NativeContainersApp: App {
 
     Settings {
       SettingsView(model: model)
-        .frame(width: 560, height: 360)
+        .frame(width: 680, height: 700)
     }
   }
 }

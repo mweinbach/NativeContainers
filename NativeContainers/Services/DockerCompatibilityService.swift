@@ -11,6 +11,7 @@ protocol DockerCompatibilityManaging: Sendable {
   func startBridge() async throws
   func stopBridge() async throws
   func forceStopBridge() async throws
+  func removeStaleSocket() async throws
   func createOrRepairDockerContext() async throws
 }
 
@@ -91,6 +92,10 @@ actor DockerCompatibilityService: DockerCompatibilityManaging {
     try await process.forceStop()
   }
 
+  func removeStaleSocket() async throws {
+    try await process.removeStaleSocket()
+  }
+
   func createOrRepairDockerContext() async throws {
     try await dockerContext.createOrRepairContext()
   }
@@ -156,6 +161,10 @@ actor UnavailableDockerCompatibilityService: DockerCompatibilityManaging {
   }
 
   func forceStopBridge() async throws {
+    throw DockerCompatibilityError.processNotOwned
+  }
+
+  func removeStaleSocket() async throws {
     throw DockerCompatibilityError.processNotOwned
   }
 

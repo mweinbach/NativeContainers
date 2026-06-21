@@ -21,6 +21,13 @@ protocol SocktainerSocketInspecting: Sendable {
 
 protocol SocktainerReadinessProbing: Sendable {
   func isReady(socketURL: URL) async -> Bool
+  func hasListener(socketURL: URL) async -> Bool
+}
+
+extension SocktainerReadinessProbing {
+  func hasListener(socketURL: URL) async -> Bool {
+    await isReady(socketURL: socketURL)
+  }
 }
 
 protocol SocktainerProcessManaging: Sendable {
@@ -29,6 +36,7 @@ protocol SocktainerProcessManaging: Sendable {
   func start(executableURL: URL) async throws
   func stop() async throws
   func forceStop() async throws
+  func removeStaleSocket() async throws
 }
 
 actor SocktainerProcessService: SocktainerProcessManaging {
@@ -38,6 +46,7 @@ actor SocktainerProcessService: SocktainerProcessManaging {
   private let socketInspector: any SocktainerSocketInspecting
   private let readinessProbe: any SocktainerReadinessProbing
   private let terminationSentinel: SocktainerTerminationSentinel
+  private let environment: [String: String]?
   private let startupTimeout: Duration
   private let gracefulStopTimeout: Duration
   private let killConfirmationTimeout: Duration
@@ -54,6 +63,7 @@ actor SocktainerProcessService: SocktainerProcessManaging {
     launcher: any HostProcessLaunching = FoundationHostProcessLauncher(),
     socketInspector: (any SocktainerSocketInspecting)? = nil,
     readinessProbe: any SocktainerReadinessProbing = UnixSocketSocktainerReadinessProbe(),
+    environment: [String: String]? = nil,
     startupTimeout: Duration = .seconds(10),
     gracefulStopTimeout: Duration = .seconds(5),
     killConfirmationTimeout: Duration = .seconds(2),
@@ -74,6 +84,7 @@ actor SocktainerProcessService: SocktainerProcessManaging {
     terminationSentinel = SocktainerTerminationSentinel(
       socketInspector: resolvedSocketInspector
     )
+    self.environment = environment
     self.startupTimeout = startupTimeout
     self.gracefulStopTimeout = gracefulStopTimeout
     self.killConfirmationTimeout = killConfirmationTimeout
@@ -135,6 +146,7 @@ actor SocktainerProcessService: SocktainerProcessManaging {
       launched = try launcher.launch(
         HostProcessConfiguration(
           executableURL: executableURL,
+          environment: environment,
           observeApplicationTermination: true,
           applicationTerminationCleanup: { [terminationSentinel] in
             terminationSentinel.cleanup()
@@ -219,6 +231,30 @@ actor SocktainerProcessService: SocktainerProcessManaging {
       throw DockerCompatibilityError.processDidNotExitAfterKill
     }
     processDidExit(session)
+  }
+
+  func removeStaleSocket() async throws {
+    guard session == nil else {
+      throw DockerCompatibilityError.processAlreadyRunning
+    }
+    guard case .socket(let identity) = try socketInspector.inspectSocket() else {
+      throw DockerCompatibilityError.processNotOwned
+    }
+
+    for _ in 0..<3 {
+      if await readinessProbe.hasListener(socketURL: socketURL) {
+        throw DockerCompatibilityError.foreignSocket(socketURL)
+      }
+      try await Task.sleep(for: .milliseconds(250))
+      guard case .socket(let current) = try socketInspector.inspectSocket(),
+        current == identity
+      else {
+        throw DockerCompatibilityError.foreignSocket(socketURL)
+      }
+    }
+
+    try socketInspector.removeSocket(ifMatching: identity)
+    runtimeState = .stopped
   }
 
   private func beginMonitoring(_ monitoredSession: any HostProcessSession) {
@@ -395,57 +431,22 @@ struct UnixSocketSocktainerReadinessProbe: SocktainerReadinessProbing {
     }.value
   }
 
+  func hasListener(socketURL: URL) async -> Bool {
+    await Task.detached(priority: .utility) {
+      guard let descriptor = Self.connectedSocket(socketURL: socketURL) else {
+        return false
+      }
+      Darwin.close(descriptor)
+      return true
+    }.value
+  }
+
   private static func probe(
     socketURL: URL,
     expectedAPIVersion: String
   ) -> Bool {
-    let descriptor = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-    guard descriptor >= 0 else { return false }
+    guard let descriptor = connectedSocket(socketURL: socketURL) else { return false }
     defer { Darwin.close(descriptor) }
-
-    var timeout = timeval(tv_sec: 1, tv_usec: 0)
-    _ = withUnsafePointer(to: &timeout) {
-      setsockopt(
-        descriptor,
-        SOL_SOCKET,
-        SO_RCVTIMEO,
-        $0,
-        socklen_t(MemoryLayout<timeval>.size)
-      )
-    }
-    _ = withUnsafePointer(to: &timeout) {
-      setsockopt(
-        descriptor,
-        SOL_SOCKET,
-        SO_SNDTIMEO,
-        $0,
-        socklen_t(MemoryLayout<timeval>.size)
-      )
-    }
-
-    let pathBytes = Array(socketURL.path(percentEncoded: false).utf8CString)
-    var address = sockaddr_un()
-    let maximumPathBytes = MemoryLayout.size(ofValue: address.sun_path)
-    guard pathBytes.count <= maximumPathBytes else { return false }
-    address.sun_family = sa_family_t(AF_UNIX)
-    let addressLength = socklen_t(
-      MemoryLayout<sockaddr_un>.offset(of: \.sun_path)! + pathBytes.count
-    )
-    address.sun_len = UInt8(addressLength)
-    withUnsafeMutablePointer(to: &address.sun_path) { pointer in
-      pointer.withMemoryRebound(to: CChar.self, capacity: maximumPathBytes) { destination in
-        pathBytes.withUnsafeBufferPointer { source in
-          destination.initialize(from: source.baseAddress!, count: pathBytes.count)
-        }
-      }
-    }
-
-    let connected = withUnsafePointer(to: &address) { pointer in
-      pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-        Darwin.connect(descriptor, $0, addressLength)
-      }
-    }
-    guard connected == 0 else { return false }
 
     let request = Data(
       "GET /_ping HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".utf8
@@ -477,6 +478,62 @@ struct UnixSocketSocktainerReadinessProbe: SocktainerReadinessProbing {
       if hasCompleteHTTPResponse(response) { break }
     }
     return isValidPingResponse(response, expectedAPIVersion: expectedAPIVersion)
+  }
+
+  private static func connectedSocket(socketURL: URL) -> Int32? {
+    let descriptor = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+    guard descriptor >= 0 else { return nil }
+
+    var timeout = timeval(tv_sec: 1, tv_usec: 0)
+    _ = withUnsafePointer(to: &timeout) {
+      setsockopt(
+        descriptor,
+        SOL_SOCKET,
+        SO_RCVTIMEO,
+        $0,
+        socklen_t(MemoryLayout<timeval>.size)
+      )
+    }
+    _ = withUnsafePointer(to: &timeout) {
+      setsockopt(
+        descriptor,
+        SOL_SOCKET,
+        SO_SNDTIMEO,
+        $0,
+        socklen_t(MemoryLayout<timeval>.size)
+      )
+    }
+
+    let pathBytes = Array(socketURL.path(percentEncoded: false).utf8CString)
+    var address = sockaddr_un()
+    let maximumPathBytes = MemoryLayout.size(ofValue: address.sun_path)
+    guard pathBytes.count <= maximumPathBytes else {
+      Darwin.close(descriptor)
+      return nil
+    }
+    address.sun_family = sa_family_t(AF_UNIX)
+    let addressLength = socklen_t(
+      MemoryLayout<sockaddr_un>.offset(of: \.sun_path)! + pathBytes.count
+    )
+    address.sun_len = UInt8(addressLength)
+    withUnsafeMutablePointer(to: &address.sun_path) { pointer in
+      pointer.withMemoryRebound(to: CChar.self, capacity: maximumPathBytes) { destination in
+        pathBytes.withUnsafeBufferPointer { source in
+          destination.initialize(from: source.baseAddress!, count: pathBytes.count)
+        }
+      }
+    }
+
+    let connected = withUnsafePointer(to: &address) { pointer in
+      pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        Darwin.connect(descriptor, $0, addressLength)
+      }
+    }
+    guard connected == 0 else {
+      Darwin.close(descriptor)
+      return nil
+    }
+    return descriptor
   }
 
   static func isValidPingResponse(

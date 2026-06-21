@@ -178,6 +178,39 @@ struct SocktainerProcessServiceTests {
 
     #expect(inspector.removedIdentities == [identity])
   }
+
+  @Test
+  func explicitRecoveryRemovesOnlyStableUnreachableSocket() async throws {
+    let fixture = ProcessFixture(
+      signalBehavior: .exitOnKill,
+      socketStates: [.socket(ProcessFixture.identity)]
+    )
+    let service = fixture.makeService(
+      readinessProbe: StaticSocktainerReadinessProbe(ready: false, listener: false)
+    )
+
+    try await service.removeStaleSocket()
+
+    #expect(fixture.socketInspector.removedIdentities == [fixture.identity])
+    #expect(await service.status() == .stopped)
+  }
+
+  @Test
+  func explicitRecoveryRefusesSocketWithLiveListener() async {
+    let fixture = ProcessFixture(
+      signalBehavior: .exitOnKill,
+      socketStates: [.socket(ProcessFixture.identity)]
+    )
+    let service = fixture.makeService(
+      readinessProbe: StaticSocktainerReadinessProbe(ready: false, listener: true)
+    )
+
+    await #expect(throws: DockerCompatibilityError.foreignSocket(fixture.socketURL)) {
+      try await service.removeStaleSocket()
+    }
+
+    #expect(fixture.socketInspector.removedIdentities.isEmpty)
+  }
 }
 
 private final class ProcessFixture: @unchecked Sendable {
@@ -201,13 +234,15 @@ private final class ProcessFixture: @unchecked Sendable {
   }
 
   func makeService(
-    startupTimeout: Duration = .milliseconds(100)
+    startupTimeout: Duration = .milliseconds(100),
+    readinessProbe: any SocktainerReadinessProbing =
+      StaticSocktainerReadinessProbe(ready: true, listener: true)
   ) -> SocktainerProcessService {
     SocktainerProcessService(
       socketURL: socketURL,
       launcher: launcher,
       socketInspector: socketInspector,
-      readinessProbe: StaticSocktainerReadinessProbe(isReady: true),
+      readinessProbe: readinessProbe,
       startupTimeout: startupTimeout,
       gracefulStopTimeout: .milliseconds(2),
       killConfirmationTimeout: .milliseconds(10),
@@ -217,10 +252,15 @@ private final class ProcessFixture: @unchecked Sendable {
 }
 
 private struct StaticSocktainerReadinessProbe: SocktainerReadinessProbing {
-  let isReady: Bool
+  let ready: Bool
+  let listener: Bool
 
   func isReady(socketURL: URL) async -> Bool {
-    isReady
+    ready
+  }
+
+  func hasListener(socketURL: URL) async -> Bool {
+    listener
   }
 }
 

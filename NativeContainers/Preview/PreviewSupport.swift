@@ -183,6 +183,7 @@ extension AppModel {
       containerService: service,
       machineService: service,
       registryService: PreviewRegistryService(),
+      dockerCompatibilityService: PreviewDockerCompatibilityService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: true),
       virtualMachineSharedDirectories: sharedDirectories,
       initialInventory: inventory,
@@ -227,6 +228,32 @@ private actor PreviewRegistryService: RegistryManaging {
       )
     ]
   }
+}
+
+private actor PreviewDockerCompatibilityService: DockerCompatibilityManaging {
+  private let socketURL = URL(filePath: "/Users/example/.socktainer/container.sock")
+
+  func snapshot() async -> DockerCompatibilitySnapshot {
+    DockerCompatibilitySnapshot(
+      release: .pinned,
+      installation: .ready(version: "1.0.0"),
+      appleContainer: .compatible(version: "1.0.0"),
+      runtime: .running(processID: 4242),
+      dockerContext: DockerContextSnapshot(
+        state: .ready,
+        activeContext: "orbstack",
+        environmentOverrides: []
+      ),
+      socketURL: socketURL
+    )
+  }
+
+  func installPinnedBridge() async throws {}
+  func startBridge() async throws {}
+  func stopBridge() async throws {}
+  func forceStopBridge() async throws {}
+  func removeStaleSocket() async throws {}
+  func createOrRepairDockerContext() async throws {}
 }
 
 private actor PreviewContainerService: ContainerManaging, MachineManaging {

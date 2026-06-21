@@ -21,6 +21,7 @@ struct AppServices: Sendable {
   let imageBuildHistory: any ImageBuildHistoryStoring
   let builder: any ContainerBuilderManaging
   let registry: any RegistryManaging
+  let dockerCompatibility: any DockerCompatibilityManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   let virtualMachineInstaller: any MacVirtualMachineInstalling
   let virtualMachineRuntime: any MacVirtualMachineRuntimeManaging
@@ -50,6 +51,8 @@ struct AppServices: Sendable {
     imageBuildHistory: any ImageBuildHistoryStoring = NoopImageBuildHistoryStore(),
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
     registry: any RegistryManaging,
+    dockerCompatibility: any DockerCompatibilityManaging =
+      UnavailableDockerCompatibilityService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
@@ -83,6 +86,7 @@ struct AppServices: Sendable {
     self.imageBuildHistory = imageBuildHistory
     self.builder = builder
     self.registry = registry
+    self.dockerCompatibility = dockerCompatibility
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
@@ -102,6 +106,8 @@ struct AppServices: Sendable {
     imageBuildHistory: any ImageBuildHistoryStoring = NoopImageBuildHistoryStore(),
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
     registry: any RegistryManaging,
+    dockerCompatibility: any DockerCompatibilityManaging =
+      UnavailableDockerCompatibilityService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
@@ -135,6 +141,7 @@ struct AppServices: Sendable {
     self.imageBuildHistory = imageBuildHistory
     self.builder = builder
     self.registry = registry
+    self.dockerCompatibility = dockerCompatibility
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
     self.virtualMachineRuntime = virtualMachineRuntime
@@ -244,6 +251,13 @@ enum AppCompositionRoot {
       persistence: virtualMachineLibrary,
       savedStateService: virtualMachineSavedState
     )
+    let socktainerInstaller = SocktainerInstallService()
+    let socktainerProcess = SocktainerProcessService()
+    let dockerCompatibility = DockerCompatibilityService(
+      installer: socktainerInstaller,
+      process: socktainerProcess,
+      dockerContext: DockerContextService(socketURL: socktainerProcess.socketURL)
+    )
     let imageBuildService = RecordingImageBuildService(
       base: AppleContainerBuildService(
         runtimeMutationCoordinator: mutationCoordinator,
@@ -272,6 +286,7 @@ enum AppCompositionRoot {
       imageBuildHistory: imageBuildHistory,
       builder: builderManagementService,
       registry: AppleRegistryService(),
+      dockerCompatibility: dockerCompatibility,
       virtualMachineLibrary: virtualMachineLibrary,
       virtualMachineInstaller: virtualMachineInstaller,
       virtualMachineRuntime: virtualMachineRuntime,
