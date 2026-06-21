@@ -106,3 +106,10 @@ struct CloneVirtualMachineView: View {
     }
   }
 }
+
+#Preview("Clone macOS VM") {
+  let model = AppModel.previewVirtualMachines
+  if let machine = model.virtualMachines.first {
+    CloneVirtualMachineView(machine: machine, model: model)
+  }
+}

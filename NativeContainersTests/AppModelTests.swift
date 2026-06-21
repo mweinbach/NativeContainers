@@ -195,6 +195,35 @@ struct AppModelTests {
   }
 
   @Test
+  func cloningUsesFocusedServiceThenPublishesAndSelectsPersistedClone() async throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var source = try VirtualMachineManifest(
+      name: "Source Mac",
+      guest: .macOS,
+      resources: resources
+    )
+    source.installState = .stopped
+    let fixture = AppModelVirtualMachineCloneFixture(source: source)
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      virtualMachineLibrary: fixture,
+      virtualMachineCloner: fixture,
+      initialInventory: emptyInventory(),
+      initialVirtualMachines: [source]
+    )
+
+    let clone = try await model.cloneVirtualMachine(id: source.id, name: "Source Mac Copy")
+
+    #expect(await fixture.requests == [.init(id: source.id, name: "Source Mac Copy")])
+    #expect(model.virtualMachines == [source, clone])
+    #expect(model.workspaceRoute == .macOSVirtualMachine(clone.id))
+  }
+
+  @Test
   func firstLoadRecoversPendingImportsAgainstPersistedRestoreImageReferences() async throws {
     let resources = try VirtualMachineResources(
       cpuCount: 4,
@@ -1147,6 +1176,45 @@ private actor PostPersistenceReadFailingVirtualMachineLibrary: VirtualMachineLib
 
   func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest {
     prepared
+  }
+}
+
+private actor AppModelVirtualMachineCloneFixture:
+  VirtualMachineLibraryProtocol,
+  VirtualMachineCloning
+{
+  struct Request: Equatable, Sendable {
+    let id: UUID
+    let name: String
+  }
+
+  private var manifests: [VirtualMachineManifest]
+  private(set) var requests: [Request] = []
+
+  init(source: VirtualMachineManifest) {
+    manifests = [source]
+  }
+
+  func list() -> [VirtualMachineManifest] {
+    manifests
+  }
+
+  func createDraft(
+    name: String,
+    guest: VirtualMachineGuest,
+    resources: VirtualMachineResources
+  ) throws -> VirtualMachineManifest {
+    try VirtualMachineManifest(name: name, guest: guest, resources: resources)
+  }
+
+  func cloneVirtualMachine(id: UUID, name: String) throws -> VirtualMachineManifest {
+    guard let source = manifests.first(where: { $0.id == id }) else {
+      throw VirtualMachineModelError.virtualMachineNotFound(id)
+    }
+    requests.append(Request(id: id, name: name))
+    let clone = try VirtualMachineManifest(cloning: source, name: name)
+    manifests.append(clone)
+    return clone
   }
 }
 

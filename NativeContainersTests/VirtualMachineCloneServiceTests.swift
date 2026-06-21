@@ -83,6 +83,19 @@ struct VirtualMachineCloneServiceTests {
     try cloneDiskHandle.close()
     #expect(copiedSentinel == Data("clone-sentinel".utf8))
 
+    let sourceIdentifierPath = try #require(source.machineIdentifierPath)
+    let cloneIdentifierPath = try #require(clone.machineIdentifierPath)
+    let sourceIdentifierData = try Data(
+      contentsOf: sourceBundle.appending(path: sourceIdentifierPath)
+    )
+    let cloneIdentifierData = try Data(
+      contentsOf: cloneBundle.appending(path: cloneIdentifierPath)
+    )
+    #expect(cloneIdentifierData != sourceIdentifierData)
+    #expect(
+      AppleMacVirtualMachineIdentifierGenerator().isValidIdentifierData(cloneIdentifierData)
+    )
+
     #expect(
       !FileManager.default.fileExists(
         atPath: cloneBundle.appending(path: VirtualMachineLibrary.runtimeLockFilename).path
@@ -137,6 +150,37 @@ struct VirtualMachineCloneServiceTests {
   }
 
   @Test
+  func cancellationAbortsPartialCopyAndReleasesLibraryLocks() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let library = VirtualMachineLibrary(rootURL: root)
+    let source = try await makeStoppedMachine(
+      library: library,
+      root: root,
+      name: "Cancellable Mac"
+    )
+    let copier = CancellableBlockingVirtualMachineBundleCopier()
+    let service = VirtualMachineCloneService(store: library, copier: copier)
+    let cloneTask = Task {
+      try await service.cloneVirtualMachine(id: source.id, name: "Cancelled Copy")
+    }
+
+    await copier.waitUntilStarted()
+    cloneTask.cancel()
+
+    await #expect(throws: CancellationError.self) {
+      _ = try await cloneTask.value
+    }
+    #expect(try await library.list() == [source])
+    try expectNoCloneStagingBundles(in: root)
+
+    let retry = VirtualMachineCloneService(store: library)
+    let clone = try await retry.cloneVirtualMachine(id: source.id, name: "After Cancel")
+    #expect(clone.name == "After Cancel")
+  }
+
+  @Test
   func refusesToCloneMachineOwnedByARuntimeSession() async throws {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -154,6 +198,39 @@ struct VirtualMachineCloneServiceTests {
     await #expect(throws: MacVirtualMachineRuntimeError.ownedElsewhere(source.id)) {
       _ = try await service.cloneVirtualMachine(id: source.id, name: "Unsafe Copy")
     }
+    #expect(try await library.list() == [source])
+    try expectNoCloneStagingBundles(in: root)
+  }
+
+  @Test
+  func storeRejectsCopierThatPreservesTheSourceMachineIdentifier() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let library = VirtualMachineLibrary(rootURL: root)
+    let source = try await makeStoppedMachine(
+      library: library,
+      root: root,
+      name: "Identity Source"
+    )
+    let transaction = try await library.beginClone(id: source.id, name: "Unsafe Identity Copy")
+    try FileManager.default.copyItem(
+      at: transaction.sourceBundleURL,
+      to: transaction.stagingBundleURL
+    )
+    let copiedRuntimeLock = transaction.stagingBundleURL.appending(
+      path: VirtualMachineLibrary.runtimeLockFilename
+    )
+    if FileManager.default.fileExists(atPath: copiedRuntimeLock.path) {
+      try FileManager.default.removeItem(at: copiedRuntimeLock)
+    }
+    try write(transaction.clone, to: transaction.stagingBundleURL)
+
+    await #expect(throws: VirtualMachineCloneError.self) {
+      _ = try await library.commitClone(transaction)
+    }
+    try await library.abortClone(transaction)
+
     #expect(try await library.list() == [source])
     try expectNoCloneStagingBundles(in: root)
   }
@@ -313,5 +390,54 @@ private struct PartialFailingVirtualMachineBundleCopier: VirtualMachineBundleCop
       to: transaction.stagingBundleURL.appending(path: "partial.data")
     )
     throw VirtualMachineCloneTestError.expected
+  }
+}
+
+private actor CancellableBlockingVirtualMachineBundleCopier: VirtualMachineBundleCopying {
+  private var isStarted = false
+  private var isCancelled = false
+  private var startWaiters: [CheckedContinuation<Void, Never>] = []
+  private var copyContinuation: CheckedContinuation<Void, Never>?
+
+  func copyBundle(for transaction: VirtualMachineCloneTransaction) async throws {
+    try FileManager.default.createDirectory(
+      at: transaction.stagingBundleURL,
+      withIntermediateDirectories: false
+    )
+    try Data("partial".utf8).write(
+      to: transaction.stagingBundleURL.appending(path: "partial.data")
+    )
+    isStarted = true
+    let waiters = startWaiters
+    startWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume()
+    }
+
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        if isCancelled {
+          continuation.resume()
+        } else {
+          copyContinuation = continuation
+        }
+      }
+    } onCancel: {
+      Task { await self.cancelCopy() }
+    }
+    try Task.checkCancellation()
+  }
+
+  func waitUntilStarted() async {
+    guard !isStarted else { return }
+    await withCheckedContinuation { continuation in
+      startWaiters.append(continuation)
+    }
+  }
+
+  private func cancelCopy() {
+    isCancelled = true
+    copyContinuation?.resume()
+    copyContinuation = nil
   }
 }

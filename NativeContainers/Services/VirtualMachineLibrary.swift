@@ -88,6 +88,7 @@ actor VirtualMachineLibrary:
   private let launchID: UUID
   private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
+  private let macMachineIdentifierValidator: any MacVirtualMachineIdentifierValidating
   private let sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring
   private let sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating
   private var operationLockLease: AdvisoryFileLockLease?
@@ -100,6 +101,8 @@ actor VirtualMachineLibrary:
     fileManager: FileManager = .default,
     launchID: UUID = UUID(),
     macPlatformArtifactPreparer: any MacPlatformArtifactPreparing = MacPlatformArtifactPreparer(),
+    macMachineIdentifierValidator: any MacVirtualMachineIdentifierValidating =
+      AppleMacVirtualMachineIdentifierGenerator(),
     sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring =
       FileMacVirtualMachineSharedDirectoryConfigurationStore(),
     sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating =
@@ -109,6 +112,7 @@ actor VirtualMachineLibrary:
     self.launchID = launchID
     self.rootURL = rootURL ?? Self.defaultRootURL(fileManager: fileManager)
     self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
+    self.macMachineIdentifierValidator = macMachineIdentifierValidator
     self.macVirtualMachineBundleResolver = MacVirtualMachineBundleResolver(
       rootURL: self.rootURL,
       fileManager: fileManager
@@ -766,6 +770,34 @@ actor VirtualMachineLibrary:
         named: name,
         in: transaction.stagingBundleURL,
         writable: writable
+      )
+    }
+    guard let sourceIdentifierPath = transaction.source.machineIdentifierPath,
+      let cloneIdentifierPath = manifest.machineIdentifierPath
+    else {
+      throw VirtualMachineCloneError.invalidBundle(
+        "the source or clone manifest has no machine identifier path"
+      )
+    }
+    let sourceIdentifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
+      sourceIdentifierPath,
+      named: "sourceMachineIdentifierPath",
+      in: transaction.sourceBundleURL,
+      writable: false
+    )
+    let cloneIdentifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
+      cloneIdentifierPath,
+      named: "machineIdentifierPath",
+      in: transaction.stagingBundleURL,
+      writable: false
+    )
+    let sourceIdentifierData = try Data(contentsOf: sourceIdentifierURL)
+    let cloneIdentifierData = try Data(contentsOf: cloneIdentifierURL)
+    guard cloneIdentifierData != sourceIdentifierData,
+      macMachineIdentifierValidator.isValidIdentifierData(cloneIdentifierData)
+    else {
+      throw VirtualMachineCloneError.invalidBundle(
+        "the staged machine identifier is invalid or duplicates the source"
       )
     }
     _ = try validatedSharedDirectoryConfiguration(in: transaction.stagingBundleURL)
