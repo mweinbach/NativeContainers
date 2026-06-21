@@ -73,7 +73,8 @@ struct AppleRuntimeInventoryService: ContainerInventoryLoading {
               protocolName: port.proto.rawValue
             )
           }
-        }
+        },
+        labels: snapshot.configuration.labels
       )
     }
 

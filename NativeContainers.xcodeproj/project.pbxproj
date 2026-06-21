@@ -176,6 +176,9 @@
 		1F9D2BF42FE7C5140076F5B9 /* DockerCompatibilitySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BF32FE7C5140076F5B9 /* DockerCompatibilitySettingsView.swift */; };
 		1F9D2BF62FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BF52FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift */; };
 		1F9D2BF82FE7C5990076F5B9 /* LiveSocktainerCompatibilitySmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BF72FE7C5990076F5B9 /* LiveSocktainerCompatibilitySmokeTests.swift */; };
+		1F9D2BFA2FE7C81B0076F5B9 /* ComposeTopologyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BF92FE7C81B0076F5B9 /* ComposeTopologyService.swift */; };
+		1F9D2BFC2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BFB2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift */; };
+		1F9D2BFE2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BFD2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -463,6 +466,9 @@
 		1F9D2BF32FE7C5140076F5B9 /* DockerCompatibilitySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerCompatibilitySettingsView.swift; sourceTree = "<group>"; };
 		1F9D2BF52FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerCompatibilityModelTests.swift; sourceTree = "<group>"; };
 		1F9D2BF72FE7C5990076F5B9 /* LiveSocktainerCompatibilitySmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSocktainerCompatibilitySmokeTests.swift; sourceTree = "<group>"; };
+		1F9D2BF92FE7C81B0076F5B9 /* ComposeTopologyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeTopologyService.swift; sourceTree = "<group>"; };
+		1F9D2BFB2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeObservabilityModels.swift; sourceTree = "<group>"; };
+		1F9D2BFD2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeTopologyServiceTests.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -661,6 +667,7 @@
 				1F9D2BBF2FE7B6FC0076F5B9 /* WorkspaceRoute.swift */,
 				1F9D2BC92FE7BD260076F5B9 /* MacVirtualMachineSharedDirectoryModels.swift */,
 				1F9D2BDB2FE7C30F0076F5B9 /* DockerCompatibilityModels.swift */,
+				1F9D2BFB2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -728,6 +735,7 @@
 				1F9D2BEF2FE7C4B40076F5B9 /* DockerCompatibilityServiceTests.swift */,
 				1F9D2BF52FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift */,
 				1F9D2BF72FE7C5990076F5B9 /* LiveSocktainerCompatibilitySmokeTests.swift */,
+				1F9D2BFD2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -810,6 +818,7 @@
 				1F9D2BE32FE7C3620076F5B9 /* DockerContextService.swift */,
 				1F9D2BE52FE7C36D0076F5B9 /* DockerCompatibilityService.swift */,
 				1F9D2BED2FE7C4760076F5B9 /* SecureFileSystemPath.swift */,
+				1F9D2BF92FE7C81B0076F5B9 /* ComposeTopologyService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1070,6 +1079,7 @@
 			files = (
 				1F9D2BEC2FE7C4090076F5B9 /* SocktainerInstallServiceTests.swift in Sources */,
 				B1148E3495B9B990BDE15006 /* AppModelTests.swift in Sources */,
+				1F9D2BFE2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift in Sources */,
 				6B674BA0375EC5B39B631A42 /* BuildContextStagerTests.swift in Sources */,
 				1F9D2BB22FE7AB750076F5B9 /* MacVirtualMachineRuntimeModelTests.swift in Sources */,
 				1F9D2B722FE79B860076F5B9 /* AppleRuntimeCommandExecutorTests.swift in Sources */,
@@ -1138,6 +1148,7 @@
 				6DF203F008ABAD5C4AB7903C /* AppModel.swift in Sources */,
 				1F9D2AFD2FE765FB0076F5B9 /* AppleImageService.swift in Sources */,
 				1F9D2BA42FE7AA240076F5B9 /* AppleMacVirtualMachineConfigurationFactory.swift in Sources */,
+				1F9D2BFA2FE7C81B0076F5B9 /* ComposeTopologyService.swift in Sources */,
 				1F9D2B3B2FE77AA90076F5B9 /* RecordingImageBuildService.swift in Sources */,
 				1F9D2AE32FE760D80076F5B9 /* AppleOwnedContainerRecoveryService.swift in Sources */,
 				1F9D2B8A2FE7A1540076F5B9 /* VirtualMachineRow.swift in Sources */,
@@ -1187,6 +1198,7 @@
 				1F9D2ADD2FE7600F0076F5B9 /* AppleInfrastructureService.swift in Sources */,
 				1F9D2BBC2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift in Sources */,
 				1F9D2B1F2FE7705A0076F5B9 /* ContainerBuilderManaging.swift in Sources */,
+				1F9D2BFC2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift in Sources */,
 				CB2BF886C18BC04C8CFB970A /* ContainerTerminalModels.swift in Sources */,
 				8BE07DC732E4109E57129AB3 /* ContainerTerminalView.swift in Sources */,
 				97A0664149C8957C65DD1674 /* ContainerToolModels.swift in Sources */,

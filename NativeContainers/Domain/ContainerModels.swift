@@ -39,6 +39,33 @@ struct ContainerRecord: Codable, Equatable, Sendable, Identifiable {
   let cpuCount: Int
   let memoryBytes: UInt64
   let ports: [ContainerPort]
+  let labels: [String: String]
+
+  init(
+    id: String,
+    imageReference: String,
+    platform: String,
+    state: RuntimeState,
+    ipAddress: String?,
+    createdAt: Date,
+    startedAt: Date?,
+    cpuCount: Int,
+    memoryBytes: UInt64,
+    ports: [ContainerPort],
+    labels: [String: String] = [:]
+  ) {
+    self.id = id
+    self.imageReference = imageReference
+    self.platform = platform
+    self.state = state
+    self.ipAddress = ipAddress
+    self.createdAt = createdAt
+    self.startedAt = startedAt
+    self.cpuCount = cpuCount
+    self.memoryBytes = memoryBytes
+    self.ports = ports
+    self.labels = labels
+  }
 }
 
 struct ImageRecord: Codable, Equatable, Sendable, Identifiable {
