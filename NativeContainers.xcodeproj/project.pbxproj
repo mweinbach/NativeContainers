@@ -1208,105 +1208,309 @@
 			path = Support;
 			sourceTree = "<group>";
 		};
+		1FEC47212FE8353C00DC60B2 /* Cache */ = {
+			isa = PBXGroup;
+			children = (
+				1FEC47072FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift */,
+				1F9D2C252FE7DB610076F5B9 /* AppOwnedBuildCacheStore.swift */,
+				1FEC470A2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift */,
+			);
+			path = Cache;
+			sourceTree = "<group>";
+		};
+		1FEC47222FE8353C00DC60B2 /* Context */ = {
+			isa = PBXGroup;
+			children = (
+				1FEC46FE2FE831A200DC60B2 /* BuildContextFileSystem.swift */,
+				1FEC47012FE831A300DC60B2 /* BuildContextFingerprint.swift */,
+				AA5888DF82CFB3AE9352C355 /* BuildContextStager.swift */,
+				1FEC47042FE831A300DC60B2 /* BuildContextTreeService.swift */,
+			);
+			path = Context;
+			sourceTree = "<group>";
+		};
+		1FEC47232FE8353C00DC60B2 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				7D026F8AA0205519336DCD80 /* PrivateBuildArtifactStore.swift */,
+				1F9D2B442FE789750076F5B9 /* PrivateBuildDirectoryStore.swift */,
+				21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		1FEC47242FE8353C00DC60B2 /* Worker */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2B2D2FE774B00076F5B9 /* BuildSecretWorkerTransport.swift */,
+				8DD77BCA7B3759ACE45B9678 /* BuildWorkerFrameCodec.swift */,
+				8F0EA6E348A0CD8EC09FF28A /* BuildWorkerProtocol.swift */,
+				1F9D2B182FE770060076F5B9 /* ContainerBuilderManagementModels.swift */,
+				83316B68633067C4A084922E /* ContainerBuilderSafetyPolicy.swift */,
+				1F9D2B1B2FE770390076F5B9 /* ContainerBuilderSnapshotAdapter.swift */,
+			);
+			path = Worker;
+			sourceTree = "<group>";
+		};
+		1FEC47252FE8354C00DC60B2 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2B002FE7664E0076F5B9 /* AppCompositionRootTests.swift */,
+				64FCAE44305E93880025D275 /* AppModelTests.swift */,
+				1F9D2BC72FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		1FEC47262FE8354C00DC60B2 /* Compatibility */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2BF52FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift */,
+				1F9D2BEF2FE7C4B40076F5B9 /* DockerCompatibilityServiceTests.swift */,
+				1F9D2BE92FE7C3A20076F5B9 /* DockerContextServiceTests.swift */,
+				1F9D2BF72FE7C5990076F5B9 /* LiveSocktainerCompatibilitySmokeTests.swift */,
+				1F9D2BEB2FE7C4090076F5B9 /* SocktainerInstallServiceTests.swift */,
+				1F9D2BE72FE7C3960076F5B9 /* SocktainerProcessServiceTests.swift */,
+			);
+			path = Compatibility;
+			sourceTree = "<group>";
+		};
+		1FEC47272FE8354C00DC60B2 /* Compose */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2C3E2FE7E7B60076F5B9 /* ComposeDesiredStateServiceTests.swift */,
+				1F9D2C502FE7EBF20076F5B9 /* ComposeExecutionWorkspaceTests.swift */,
+				1F9D2C402FE7E7D20076F5B9 /* ComposeLifecyclePlannerTests.swift */,
+				1F9D2C4C2FE7EA920076F5B9 /* ComposeOperationJournalTests.swift */,
+				1F9D2C422FE7E7E20076F5B9 /* ComposeProjectLifecycleServiceTests.swift */,
+				1F9D2C562FE7ED120076F5B9 /* ComposeProjectMutationExecutorTests.swift */,
+				1F9D2C3C2FE7E79F0076F5B9 /* ComposeProjectSourceServiceTests.swift */,
+				1F9D2C482FE7E8670076F5B9 /* ComposeProjectWorkspaceModelTests.swift */,
+				1F9D2BFD2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift */,
+				1F9D2C1B2FE7D3150076F5B9 /* DockerComposeClientInstallServiceTests.swift */,
+				1F9D2C622FE7F36B0076F5B9 /* LiveComposeProjectLifecycleSmokeTests.swift */,
+				1F9D2C072FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift */,
+				1F9D2C0B2FE7D0470076F5B9 /* SocktainerComposeLiveFixtureServiceTests.swift */,
+			);
+			path = Compose;
+			sourceTree = "<group>";
+		};
+		1FEC47282FE8354C00DC60B2 /* Containers */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2B102FE769E60076F5B9 /* AppleContainerAttachmentServiceTests.swift */,
+				1F9D2AF82FE765BC0076F5B9 /* AppleContainerCreationServiceTests.swift */,
+				1F9D2B0C2FE769C60076F5B9 /* AppleContainerHostAccessServiceTests.swift */,
+				1F9D2AF42FE765380076F5B9 /* AppleContainerToolServiceTests.swift */,
+				1F9D2B0E2FE769CE0076F5B9 /* ApplePublishedSocketWorkspaceTests.swift */,
+				1F9D2C012FE7CA180076F5B9 /* AppleRuntimeInventoryServiceTests.swift */,
+				1F9D2B042FE768E10076F5B9 /* ContainerAttachmentModelsTests.swift */,
+				1F9D2B162FE76B2E0076F5B9 /* ContainerCreationDraftTests.swift */,
+				561794C7F8095E30ECC83A00 /* ContainerTerminalModelTests.swift */,
+				E3BC90DD8367F9DF0D051650 /* ContainerTerminalTests.swift */,
+				D872832B249A2CC9F3C873EF /* LiveAppleContainerSmokeTests.swift */,
+				1F9D2AE42FE761110076F5B9 /* OwnedContainerRecoveryServiceTests.swift */,
+			);
+			path = Containers;
+			sourceTree = "<group>";
+		};
+		1FEC47292FE8354C00DC60B2 /* Images */ = {
+			isa = PBXGroup;
+			children = (
+				1FEC472A2FE8354C00DC60B2 /* ImageBuild */,
+				1FEC472B2FE8354C00DC60B2 /* Management */,
+				1FEC472C2FE8354C00DC60B2 /* Registry */,
+				1FEC472D2FE8354C00DC60B2 /* Restore */,
+			);
+			path = Images;
+			sourceTree = "<group>";
+		};
+		1FEC472A2FE8354C00DC60B2 /* ImageBuild */ = {
+			isa = PBXGroup;
+			children = (
+				0DF4E5C32D9BA19B5190B808 /* ContainerBuildWorkerProcessTests.swift */,
+				1F9D2B242FE7713F0076F5B9 /* ContainerBuilderManagementTests.swift */,
+				1F9D2B402FE77BE10076F5B9 /* ImageBuildHistoryTests.swift */,
+				1F9D2B4B2FE78C270076F5B9 /* ImageBuildOutputServiceTests.swift */,
+				1F9D2B322FE7755D0076F5B9 /* ImageBuildSecretServiceTests.swift */,
+				1F9D2C232FE7D93E0076F5B9 /* ImageBuildServiceCompositionTests.swift */,
+				E6DC10AD5CBAA1B2D3D33832 /* ImageBuildServiceTests.swift */,
+				6C8100AB2AF89D6F4DCFD1FF /* LiveAppleContainerBuildSmokeTests.swift */,
+			);
+			path = ImageBuild;
+			sourceTree = "<group>";
+		};
+		1FEC472B2FE8354C00DC60B2 /* Management */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2AFE2FE766480076F5B9 /* AppleImageServiceTests.swift */,
+				6E70AE831593D108EB47B2A9 /* ImageManagementModelTests.swift */,
+			);
+			path = Management;
+			sourceTree = "<group>";
+		};
+		1FEC472C2FE8354C00DC60B2 /* Registry */ = {
+			isa = PBXGroup;
+			children = (
+				4492BEE0F1604A5624234904 /* RegistrySettingsModelTests.swift */,
+			);
+			path = Registry;
+			sourceTree = "<group>";
+		};
+		1FEC472D2FE8354C00DC60B2 /* Restore */ = {
+			isa = PBXGroup;
+			children = (
+				E0BB5F9D6F70F66374A5AE0C /* MacRestoreImagePreparationModelTests.swift */,
+				1F9D2CBF2FE80C040076F5B9 /* RestoreImageCacheServiceTests.swift */,
+				A6C0B3804B6A81EC6343C2BD /* RestoreImageDownloadServiceTests.swift */,
+				1F9D2B912FE7A19D0076F5B9 /* RestoreImageImportServiceTests.swift */,
+				1F9D2CC72FE8110F0076F5B9 /* RestoreImageStoreMigrationServiceTests.swift */,
+			);
+			path = Restore;
+			sourceTree = "<group>";
+		};
+		1FEC472E2FE8354C00DC60B2 /* Infrastructure */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2AE62FE761600076F5B9 /* AppleInfrastructureServiceTests.swift */,
+				1F9D2ACE2FE754CA0076F5B9 /* InfrastructureManagementTests.swift */,
+				1F9D2AD22FE7583C0076F5B9 /* LiveAppleInfrastructureSmokeTests.swift */,
+			);
+			path = Infrastructure;
+			sourceTree = "<group>";
+		};
+		1FEC472F2FE8354C00DC60B2 /* Machines */ = {
+			isa = PBXGroup;
+			children = (
+				1FEC47302FE8354C00DC60B2 /* Linux */,
+				1FEC47312FE8354C00DC60B2 /* Virtual */,
+			);
+			path = Machines;
+			sourceTree = "<group>";
+		};
+		1FEC47302FE8354C00DC60B2 /* Linux */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2B652FE796A80076F5B9 /* AppleContainerProcessXPCClientTests.swift */,
+				1F9D2B612FE796030076F5B9 /* AppleLinuxMachineInventoryServiceTests.swift */,
+				1F9D2B772FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift */,
+				1F9D2B6D2FE799410076F5B9 /* AppleMachineRuntimeClientTests.swift */,
+				1F9D2B672FE796DA0076F5B9 /* AppleMachineXPCTransportTests.swift */,
+				1F9D2B712FE79B860076F5B9 /* AppleRuntimeCommandExecutorTests.swift */,
+				1F9D2B5B2FE792CF0076F5B9 /* LinuxMachineManagementTests.swift */,
+				1F9D2B692FE797C70076F5B9 /* LiveAppleLinuxMachineSmokeTests.swift */,
+			);
+			path = Linux;
+			sourceTree = "<group>";
+		};
+		1FEC47312FE8354C00DC60B2 /* Virtual */ = {
+			isa = PBXGroup;
+			children = (
+				1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */,
+				1F9D2C702FE7F7E60076F5B9 /* CopyfileVirtualMachineBundleTransferTests.swift */,
+				1FEC46D82FE823DB00DC60B2 /* DiskutilVirtualMachineDiskImageConverterTests.swift */,
+				1F9D2B932FE7A1A60076F5B9 /* MacVirtualMachineBundleResolverTests.swift */,
+				1F9D2B992FE7A1CD0076F5B9 /* MacVirtualMachineInstallationModelTests.swift */,
+				1F9D2B952FE7A1B60076F5B9 /* MacVirtualMachineInstallationServiceTests.swift */,
+				1F9D2BB12FE7AB750076F5B9 /* MacVirtualMachineRuntimeModelTests.swift */,
+				1F9D2BA52FE7AA560076F5B9 /* MacVirtualMachineRuntimeOwnershipStoreTests.swift */,
+				1F9D2BAB2FE7AAEA0076F5B9 /* MacVirtualMachineRuntimeServiceTests.swift */,
+				1F9D2BBD2FE7B0E80076F5B9 /* MacVirtualMachineSavedStateServiceTests.swift */,
+				1F9D2BB72FE7AE5C0076F5B9 /* MacVirtualMachineSavedStateStoreTests.swift */,
+				1F9D2BD92FE7BEDE0076F5B9 /* MacVirtualMachineSharedDirectoryServiceTests.swift */,
+				1F9D2C6A2FE7F5EA0076F5B9 /* VirtualMachineCloneServiceTests.swift */,
+				1FEC46DA2FE823E500DC60B2 /* VirtualMachineDiskImageMigrationJournalTests.swift */,
+				1FEC46E22FE824E100DC60B2 /* VirtualMachineDiskImageMigrationModelTests.swift */,
+				1FEC46DC2FE8240B00DC60B2 /* VirtualMachineDiskImageMigrationServiceTests.swift */,
+				1F9D2B972FE7A1C00076F5B9 /* VirtualMachineInstallationStoreTests.swift */,
+				8C1F9CEF3FD52963FD22CEEF /* VirtualMachineLibraryTests.swift */,
+				75005055A132B627A00B3FA2 /* VirtualMachineModelsTests.swift */,
+				1F9D2C782FE7FA620076F5B9 /* VirtualMachineTransferServiceTests.swift */,
+			);
+			path = Virtual;
+			sourceTree = "<group>";
+		};
+		1FEC47322FE8354C00DC60B2 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				1FEC47332FE8354D00DC60B2 /* Cache */,
+				1FEC47342FE8354D00DC60B2 /* Context */,
+				1FEC47352FE8354D00DC60B2 /* Storage */,
+				1FEC47362FE8354D00DC60B2 /* Worker */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		1FEC47332FE8354D00DC60B2 /* Cache */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2C282FE7DBEA0076F5B9 /* AppOwnedBuildCacheStoreTests.swift */,
+			);
+			path = Cache;
+			sourceTree = "<group>";
+		};
+		1FEC47342FE8354D00DC60B2 /* Context */ = {
+			isa = PBXGroup;
+			children = (
+				701DE05BFC2EED7D0C2858E8 /* BuildContextStagerTests.swift */,
+			);
+			path = Context;
+			sourceTree = "<group>";
+		};
+		1FEC47352FE8354D00DC60B2 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				B25889D42F3FCB36AB3B3748 /* SecureRegularFileValidatorTests.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		1FEC47362FE8354D00DC60B2 /* Worker */ = {
+			isa = PBXGroup;
+			children = (
+				280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */,
+			);
+			path = Worker;
+			sourceTree = "<group>";
+		};
+		1FEC47372FE8354D00DC60B2 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2C9B2FE802B60076F5B9 /* AppleContainerReclamationServiceTests.swift */,
+				1F9D2C8D2FE7FE860076F5B9 /* StorageOverviewModelTests.swift */,
+				1F9D2CA12FE803130076F5B9 /* StorageReclamationClientTests.swift */,
+				1F9D2C9F2FE802DB0076F5B9 /* StorageReclamationModelTests.swift */,
+				1F9D2C9D2FE802CC0076F5B9 /* StorageReclamationServiceTests.swift */,
+				1F9D2C8B2FE7FE750076F5B9 /* StorageUsageServiceTests.swift */,
+				1F9D2CAF2FE805E90076F5B9 /* VirtualMachineResidueReclamationServiceTests.swift */,
+				1F9D2CB72FE806E20076F5B9 /* VirtualMachineStorageReclamationModelTests.swift */,
+				1F9D2CAD2FE805D90076F5B9 /* VirtualMachineStorageReclamationServiceTests.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		1FEC47382FE8354D00DC60B2 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				1F9D2AE82FE7618B0076F5B9 /* AppleXPCRequestClientTests.swift */,
+				1F9D2C302FE7E6DA0076F5B9 /* HostProcessServiceTests.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
 		216DDC96B29F43C61AB411D5 /* NativeContainersTests */ = {
 			isa = PBXGroup;
 			children = (
-				64FCAE44305E93880025D275 /* AppModelTests.swift */,
-				701DE05BFC2EED7D0C2858E8 /* BuildContextStagerTests.swift */,
-				280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */,
-				0DF4E5C32D9BA19B5190B808 /* ContainerBuildWorkerProcessTests.swift */,
-				561794C7F8095E30ECC83A00 /* ContainerTerminalModelTests.swift */,
-				E3BC90DD8367F9DF0D051650 /* ContainerTerminalTests.swift */,
-				E6DC10AD5CBAA1B2D3D33832 /* ImageBuildServiceTests.swift */,
-				6E70AE831593D108EB47B2A9 /* ImageManagementModelTests.swift */,
-				6C8100AB2AF89D6F4DCFD1FF /* LiveAppleContainerBuildSmokeTests.swift */,
-				D872832B249A2CC9F3C873EF /* LiveAppleContainerSmokeTests.swift */,
-				E0BB5F9D6F70F66374A5AE0C /* MacRestoreImagePreparationModelTests.swift */,
-				4492BEE0F1604A5624234904 /* RegistrySettingsModelTests.swift */,
-				A6C0B3804B6A81EC6343C2BD /* RestoreImageDownloadServiceTests.swift */,
-				B25889D42F3FCB36AB3B3748 /* SecureRegularFileValidatorTests.swift */,
-				8C1F9CEF3FD52963FD22CEEF /* VirtualMachineLibraryTests.swift */,
-				75005055A132B627A00B3FA2 /* VirtualMachineModelsTests.swift */,
-				1F9D2ACE2FE754CA0076F5B9 /* InfrastructureManagementTests.swift */,
-				1F9D2AD22FE7583C0076F5B9 /* LiveAppleInfrastructureSmokeTests.swift */,
-				1F9D2AE42FE761110076F5B9 /* OwnedContainerRecoveryServiceTests.swift */,
-				1F9D2AE62FE761600076F5B9 /* AppleInfrastructureServiceTests.swift */,
-				1F9D2AE82FE7618B0076F5B9 /* AppleXPCRequestClientTests.swift */,
-				1F9D2AF42FE765380076F5B9 /* AppleContainerToolServiceTests.swift */,
-				1F9D2AF82FE765BC0076F5B9 /* AppleContainerCreationServiceTests.swift */,
-				1F9D2AFE2FE766480076F5B9 /* AppleImageServiceTests.swift */,
-				1F9D2B002FE7664E0076F5B9 /* AppCompositionRootTests.swift */,
-				1F9D2B042FE768E10076F5B9 /* ContainerAttachmentModelsTests.swift */,
-				1F9D2B0C2FE769C60076F5B9 /* AppleContainerHostAccessServiceTests.swift */,
-				1F9D2B0E2FE769CE0076F5B9 /* ApplePublishedSocketWorkspaceTests.swift */,
-				1F9D2B102FE769E60076F5B9 /* AppleContainerAttachmentServiceTests.swift */,
-				1F9D2B162FE76B2E0076F5B9 /* ContainerCreationDraftTests.swift */,
-				1F9D2B242FE7713F0076F5B9 /* ContainerBuilderManagementTests.swift */,
-				1F9D2B322FE7755D0076F5B9 /* ImageBuildSecretServiceTests.swift */,
-				1F9D2B402FE77BE10076F5B9 /* ImageBuildHistoryTests.swift */,
-				1F9D2B4B2FE78C270076F5B9 /* ImageBuildOutputServiceTests.swift */,
-				1F9D2B5B2FE792CF0076F5B9 /* LinuxMachineManagementTests.swift */,
-				1F9D2B612FE796030076F5B9 /* AppleLinuxMachineInventoryServiceTests.swift */,
-				1F9D2B652FE796A80076F5B9 /* AppleContainerProcessXPCClientTests.swift */,
-				1F9D2B672FE796DA0076F5B9 /* AppleMachineXPCTransportTests.swift */,
-				1F9D2B692FE797C70076F5B9 /* LiveAppleLinuxMachineSmokeTests.swift */,
-				1F9D2B6D2FE799410076F5B9 /* AppleMachineRuntimeClientTests.swift */,
-				1F9D2B712FE79B860076F5B9 /* AppleRuntimeCommandExecutorTests.swift */,
-				1F9D2B772FE79C470076F5B9 /* AppleLinuxMachineProcessServiceTests.swift */,
-				1F9D2B912FE7A19D0076F5B9 /* RestoreImageImportServiceTests.swift */,
-				1F9D2B932FE7A1A60076F5B9 /* MacVirtualMachineBundleResolverTests.swift */,
-				1F9D2B952FE7A1B60076F5B9 /* MacVirtualMachineInstallationServiceTests.swift */,
-				1F9D2B972FE7A1C00076F5B9 /* VirtualMachineInstallationStoreTests.swift */,
-				1F9D2B992FE7A1CD0076F5B9 /* MacVirtualMachineInstallationModelTests.swift */,
-				1F9D2BA52FE7AA560076F5B9 /* MacVirtualMachineRuntimeOwnershipStoreTests.swift */,
-				1F9D2BAB2FE7AAEA0076F5B9 /* MacVirtualMachineRuntimeServiceTests.swift */,
-				1F9D2BB12FE7AB750076F5B9 /* MacVirtualMachineRuntimeModelTests.swift */,
-				1F9D2BB72FE7AE5C0076F5B9 /* MacVirtualMachineSavedStateStoreTests.swift */,
-				1F9D2BBD2FE7B0E80076F5B9 /* MacVirtualMachineSavedStateServiceTests.swift */,
-				1F9D2BC72FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift */,
-				1F9D2BD92FE7BEDE0076F5B9 /* MacVirtualMachineSharedDirectoryServiceTests.swift */,
-				1F9D2BE72FE7C3960076F5B9 /* SocktainerProcessServiceTests.swift */,
-				1F9D2BE92FE7C3A20076F5B9 /* DockerContextServiceTests.swift */,
-				1F9D2BEB2FE7C4090076F5B9 /* SocktainerInstallServiceTests.swift */,
-				1F9D2BEF2FE7C4B40076F5B9 /* DockerCompatibilityServiceTests.swift */,
-				1F9D2BF52FE7C5220076F5B9 /* DockerCompatibilityModelTests.swift */,
-				1F9D2BF72FE7C5990076F5B9 /* LiveSocktainerCompatibilitySmokeTests.swift */,
-				1F9D2BFD2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift */,
-				1F9D2C012FE7CA180076F5B9 /* AppleRuntimeInventoryServiceTests.swift */,
-				1F9D2C072FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift */,
-				1F9D2C0B2FE7D0470076F5B9 /* SocktainerComposeLiveFixtureServiceTests.swift */,
-				1F9D2C1B2FE7D3150076F5B9 /* DockerComposeClientInstallServiceTests.swift */,
-				1F9D2C232FE7D93E0076F5B9 /* ImageBuildServiceCompositionTests.swift */,
-				1F9D2C282FE7DBEA0076F5B9 /* AppOwnedBuildCacheStoreTests.swift */,
-				1F9D2C302FE7E6DA0076F5B9 /* HostProcessServiceTests.swift */,
-				1F9D2C3C2FE7E79F0076F5B9 /* ComposeProjectSourceServiceTests.swift */,
-				1F9D2C3E2FE7E7B60076F5B9 /* ComposeDesiredStateServiceTests.swift */,
-				1F9D2C402FE7E7D20076F5B9 /* ComposeLifecyclePlannerTests.swift */,
-				1F9D2C422FE7E7E20076F5B9 /* ComposeProjectLifecycleServiceTests.swift */,
-				1F9D2C482FE7E8670076F5B9 /* ComposeProjectWorkspaceModelTests.swift */,
-				1F9D2C4C2FE7EA920076F5B9 /* ComposeOperationJournalTests.swift */,
-				1F9D2C502FE7EBF20076F5B9 /* ComposeExecutionWorkspaceTests.swift */,
-				1F9D2C562FE7ED120076F5B9 /* ComposeProjectMutationExecutorTests.swift */,
-				1F9D2C622FE7F36B0076F5B9 /* LiveComposeProjectLifecycleSmokeTests.swift */,
-				1F9D2C6A2FE7F5EA0076F5B9 /* VirtualMachineCloneServiceTests.swift */,
-				1F9D2C702FE7F7E60076F5B9 /* CopyfileVirtualMachineBundleTransferTests.swift */,
-				1F9D2C782FE7FA620076F5B9 /* VirtualMachineTransferServiceTests.swift */,
-				1F9D2C8B2FE7FE750076F5B9 /* StorageUsageServiceTests.swift */,
-				1F9D2C8D2FE7FE860076F5B9 /* StorageOverviewModelTests.swift */,
-				1F9D2C9B2FE802B60076F5B9 /* AppleContainerReclamationServiceTests.swift */,
-				1F9D2C9D2FE802CC0076F5B9 /* StorageReclamationServiceTests.swift */,
-				1F9D2C9F2FE802DB0076F5B9 /* StorageReclamationModelTests.swift */,
-				1F9D2CA12FE803130076F5B9 /* StorageReclamationClientTests.swift */,
-				1F9D2CAD2FE805D90076F5B9 /* VirtualMachineStorageReclamationServiceTests.swift */,
-				1F9D2CAF2FE805E90076F5B9 /* VirtualMachineResidueReclamationServiceTests.swift */,
-				1F9D2CB72FE806E20076F5B9 /* VirtualMachineStorageReclamationModelTests.swift */,
-				1F9D2CBF2FE80C040076F5B9 /* RestoreImageCacheServiceTests.swift */,
-				1F9D2CC72FE8110F0076F5B9 /* RestoreImageStoreMigrationServiceTests.swift */,
-				1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */,
-				1FEC46D82FE823DB00DC60B2 /* DiskutilVirtualMachineDiskImageConverterTests.swift */,
-				1FEC46DA2FE823E500DC60B2 /* VirtualMachineDiskImageMigrationJournalTests.swift */,
-				1FEC46DC2FE8240B00DC60B2 /* VirtualMachineDiskImageMigrationServiceTests.swift */,
-				1FEC46E22FE824E100DC60B2 /* VirtualMachineDiskImageMigrationModelTests.swift */,
+				1FEC47252FE8354C00DC60B2 /* App */,
+				1FEC47262FE8354C00DC60B2 /* Compatibility */,
+				1FEC47272FE8354C00DC60B2 /* Compose */,
+				1FEC47282FE8354C00DC60B2 /* Containers */,
+				1FEC47292FE8354C00DC60B2 /* Images */,
+				1FEC472E2FE8354C00DC60B2 /* Infrastructure */,
+				1FEC472F2FE8354C00DC60B2 /* Machines */,
+				1FEC47322FE8354C00DC60B2 /* Shared */,
+				1FEC47372FE8354D00DC60B2 /* Storage */,
+				1FEC47382FE8354D00DC60B2 /* Support */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -1329,22 +1533,10 @@
 		2A15B895BD4C4DB297E7DED7 /* NativeContainersShared */ = {
 			isa = PBXGroup;
 			children = (
-				AA5888DF82CFB3AE9352C355 /* BuildContextStager.swift */,
-				8DD77BCA7B3759ACE45B9678 /* BuildWorkerFrameCodec.swift */,
-				8F0EA6E348A0CD8EC09FF28A /* BuildWorkerProtocol.swift */,
-				83316B68633067C4A084922E /* ContainerBuilderSafetyPolicy.swift */,
-				7D026F8AA0205519336DCD80 /* PrivateBuildArtifactStore.swift */,
-				21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */,
-				1F9D2B182FE770060076F5B9 /* ContainerBuilderManagementModels.swift */,
-				1F9D2B1B2FE770390076F5B9 /* ContainerBuilderSnapshotAdapter.swift */,
-				1F9D2B2D2FE774B00076F5B9 /* BuildSecretWorkerTransport.swift */,
-				1F9D2B442FE789750076F5B9 /* PrivateBuildDirectoryStore.swift */,
-				1F9D2C252FE7DB610076F5B9 /* AppOwnedBuildCacheStore.swift */,
-				1FEC46FE2FE831A200DC60B2 /* BuildContextFileSystem.swift */,
-				1FEC47012FE831A300DC60B2 /* BuildContextFingerprint.swift */,
-				1FEC47042FE831A300DC60B2 /* BuildContextTreeService.swift */,
-				1FEC47072FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift */,
-				1FEC470A2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift */,
+				1FEC47212FE8353C00DC60B2 /* Cache */,
+				1FEC47222FE8353C00DC60B2 /* Context */,
+				1FEC47232FE8353C00DC60B2 /* Storage */,
+				1FEC47242FE8353C00DC60B2 /* Worker */,
 			);
 			path = NativeContainersShared;
 			sourceTree = "<group>";
