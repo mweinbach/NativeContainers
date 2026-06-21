@@ -382,9 +382,10 @@ than sharing presentation state across an implied multi-window group.
   console attachment must match it. Delegate stop/error events are the
   authoritative terminal signal and release the disk lease exactly once.
 - A graceful stop request leaves the VM in a stopping state with an explicit
-  Force Stop action. Force Stop wraps Apple's destructive stop API, never runs
-  automatically because a caller task was cancelled, and does not claim the VM
-  stopped when the framework reports an error.
+  Force Stop action. Force Stop wraps Apple's destructive stop API and does not
+  claim the VM stopped when the framework reports an error. A service-owned,
+  generation-pinned watchdog invokes that same path after a 30-second graceful
+  shutdown timeout; view lifetime and caller cancellation never arm or cancel it.
 - macOS VM suspension is split across three focused layers: the runtime service
   owns the generation-safe lifecycle state machine, the saved-state service
   sequences Virtualization.framework callbacks, and the saved-state store owns
@@ -405,6 +406,13 @@ than sharing presentation state across an implied multi-window group.
   stop is available, even if the original callback is still pending. The UI reports
   that the VM is stopped but cleanup is pending, and the runtime lease is never
   released until the save/restore callback and persistence cleanup quiesce.
+- Shared-directory configuration is a separate private sidecar inside the VM
+  bundle. UI models call a narrow management service; that service serializes
+  stopped-only mutations through the existing runtime lease and saved-state
+  inspector; the library owns monotonic atomic persistence; the bookmark service
+  owns security-scoped access; and the Apple factory owns the single automounted
+  VirtioFS device. Runtime acquisition locks the bundle before reading the
+  sidecar, and the engine session closes its access lease explicitly.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before

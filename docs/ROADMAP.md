@@ -102,8 +102,12 @@ must leave a usable, test-backed product slice.
       remains gated by the Virtualization entitlement and an installed guest.
 - [x] Native console with automatic display reconfiguration and system-key
       capture controls.
-- [ ] Shared directories, clipboard, audio, networking, and USB configuration
-      where public APIs support the guest.
+- [x] Persistent, security-scoped VirtioFS shared directories with stopped-only
+      editing, saved-state invalidation, read-only/read-write access, and a
+      selected-VM configuration inspector. Live guest mount verification remains
+      gated by the Virtualization entitlement and an installed guest.
+- [ ] Clipboard, audio, advanced networking, and USB configuration where public
+      APIs support the guest.
 - [ ] Clone, export/import, backup, and reclaim disk space.
 
 ## M5 — Optimization and polish

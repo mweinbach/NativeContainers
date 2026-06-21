@@ -652,3 +652,45 @@ that would silently share route and sheet state.
 The image-build navigation guard applies to every route, not only sidebar
 clicks. A reviewed plan or active build refuses Quick Open and Overview routes
 outside Builds until the owning operation is discarded or completed.
+
+## ADR-027: Persist macOS shared folders as leased capabilities
+
+**Status:** Accepted — 2026-06-21
+
+macOS shared folders are composed from focused services rather than embedding
+bookmark, filesystem, and Virtualization.framework work in SwiftUI. The UI model
+depends on `MacVirtualMachineSharedDirectoryManaging`; the orchestration actor
+acquires the existing per-bundle runtime lease and rejects any saved checkpoint;
+the library commits a private sidecar; the bookmark service owns scoped access;
+and the Apple device factory creates one macOS automount VirtioFS device backed
+by `VZMultipleDirectoryShare`.
+
+`SharedDirectories.json` remains inside the `.nativevm` bundle but outside the
+provisioning manifest. It is a current-user, mode-0600, bounded regular file
+written through an exclusive staging file, synchronization, and atomic rename.
+Records retain security-scoped bookmark capability bytes, a stable ID, a guest
+name, read-only intent, a display-only last-known path for UI, and a device/inode
+seal. Loading rejects links, foreign ownership, permissive modes, duplicate
+names or IDs, empty bookmarks, and unsupported schemas.
+
+Every semantic add or remove increments a monotonic revision, including the
+transition back to an empty list. The saved-state fingerprint includes that
+revision and stable guest-visible semantics, but excludes bookmark bytes and the
+last-known path so capability renewal does not invalidate memory. A never-shared
+VM continues to emit the legacy topology descriptor, preserving existing
+same-host checkpoints; once sharing has history, reverting settings cannot
+resurrect an older checkpoint.
+
+Configuration changes are stopped-only and fail closed while the runtime is
+owned, transitioning, or checkpointed. Runtime acquisition takes the advisory
+lock before reading the sidecar. Resolved security scopes live for the complete
+VZ session and are explicitly closed when the runtime coordinator finalizes the
+generation. Identity-preserving host-folder renames remain usable, while a
+replacement at the bookmarked path fails the device/inode check.
+
+Graceful VM shutdown separately arms a service-owned 30-second watchdog. The
+watchdog is pinned to the runtime generation and reuses the explicit Force Stop
+path; delegate completion, manual Force Stop, or generation replacement cancels
+it. A failed automatic stop retains ownership and leaves manual recovery
+available. There is no process-level PID kill fallback because the public,
+state-aware `VZVirtualMachine.stop` API is the only safe destructive boundary.

@@ -91,13 +91,15 @@ Updated: 2026-06-21.
   VM work remains available. Runtime startup does not require the cached IPSW.
 - Start, pause, resume, graceful shutdown, and explicitly confirmed destructive
   stop are wired through `VZVirtualMachine`. Graceful shutdown remains stopping
-  until the delegate confirms exit and keeps Force Stop visible. Failed force
-  stop retains the session and lease; stale generations cannot stop replacement
-  sessions; duplicate terminal callbacks finalize once; and caller cancellation
-  cannot release an accepted start. The native console uses automatic display
-  reconfiguration, opt-in Mac-shortcut capture, SDK 27's adaptor, and detaches
-  stale views. Deterministic ownership/service/model tests pass, while real VM
-  launch remains entitlement-gated.
+  until the delegate confirms exit, keeps Force Stop visible, and arms a
+  generation-pinned 30-second service watchdog that reuses the same destructive
+  stop path if the guest hangs. Failed force stop retains the session and lease;
+  stale generations cannot stop replacement sessions; duplicate terminal
+  callbacks finalize once; and caller cancellation cannot release an accepted
+  start. The native console uses automatic display reconfiguration, opt-in
+  Mac-shortcut capture, SDK 27's adaptor, and detaches stale views. Deterministic
+  ownership/service/model tests pass, while real VM launch remains
+  entitlement-gated.
 - Same-host suspend/resume is implemented behind focused runtime, saved-state
   callback, and transactional filesystem services. The live configuration uses
   a deterministic per-VM MAC and records save/restore capability independently
@@ -109,6 +111,15 @@ Updated: 2026-06-21.
   callbacks are outstanding. Deterministic store/service/runtime/model tests are
   implemented; a real save/restore remains gated by the Virtualization
   entitlement and installed macOS guest.
+- Installed macOS VM bundles can persist shared host directories in a private,
+  bounded `SharedDirectories.json` capability sidecar. A focused orchestration
+  service acquires the runtime lease, rejects running or checkpointed VMs, and
+  commits monotonic revisions. Bookmark resolution retains security scope for
+  the full engine session; one macOS automount VirtioFS device exposes all
+  validated read-only/read-write shares. The selected-VM inspector owns no
+  persistence logic and edits only through the service. Existing no-share saved
+  states retain the legacy fingerprint, while any sharing history prevents an
+  older checkpoint from becoming valid again.
 - Container detail inspection uses Apple’s direct API client for configuration,
   disk usage, one-shot CPU/memory/network/block/process statistics, stdout, and
   boot logs. Log reads are bounded to the newest 512 KiB per stream.
