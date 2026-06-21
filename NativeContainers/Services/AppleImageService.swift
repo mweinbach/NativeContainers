@@ -861,12 +861,19 @@ actor AppleImageService: ImageManaging {
         } ?? (removedReferences.contains(image.reference) ? image.reference : nil)
       }
       let confirmedRemoved = Set(removedReferences).union(reconciled)
-      let pending = images.filter { !confirmedRemoved.contains($0.reference) }.map {
-        ImageOperationFailure(
-          reference: $0.reference,
-          message: "Not removed because image cleanup was cancelled."
-        )
-      }
+      let attemptedFailures = Set(failures.map(\.reference))
+      let pending =
+        images
+        .filter {
+          !confirmedRemoved.contains($0.reference)
+            && !attemptedFailures.contains($0.reference)
+        }
+        .map {
+          ImageOperationFailure(
+            reference: $0.reference,
+            message: "Not removed because image cleanup was cancelled."
+          )
+        }
       let cleanup = await uncancelledOrphanCleanup()
       return ImageCleanupResult(
         removedReferences: confirmedRemoved.sorted(),
@@ -940,11 +947,18 @@ actor AppleImageService: ImageManaging {
   private func uncancelledImageReferences() async -> Set<String>? {
     let pruneTransport = self.pruneTransport
     return await Task.detached {
-      do {
-        return Set(try await pruneTransport.list().map(\.reference))
-      } catch {
-        return nil
+      var latest: Set<String>?
+      for attempt in 0..<3 {
+        do {
+          latest = Set(try await pruneTransport.list().map(\.reference))
+        } catch {
+          if attempt == 2 { return latest }
+        }
+        if attempt < 2 {
+          try? await Task.sleep(for: .milliseconds(150))
+        }
       }
+      return latest
     }.value
   }
 

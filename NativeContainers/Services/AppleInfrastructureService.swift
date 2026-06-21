@@ -150,7 +150,10 @@ struct AppleInfrastructureService: InfrastructureManaging, BuiltinNetworkProvidi
       case .resolved(nil):
         return
       case .resolved(let reconciled?):
-        guard reconciled.configurationIdentity == plan.identity else {
+        guard
+          reconciled.id == plan.volume.id,
+          reconciled.configurationIdentity == plan.identity
+        else {
           throw ResourceManagementError.stalePlan(current.name)
         }
         throw error
