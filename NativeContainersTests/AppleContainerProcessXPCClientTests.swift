@@ -1,0 +1,69 @@
+import ContainerAPIClient
+import ContainerResource
+import ContainerXPC
+import Darwin
+import Foundation
+import Testing
+
+@testable import NativeContainers
+
+@Suite("Apple container process XPC client")
+struct AppleContainerProcessXPCClientTests {
+  @Test
+  func sendsCreateStartWaitAndKillThroughFocusedTransports() async throws {
+    let sender = RecordingProcessXPCSender()
+    let client = AppleContainerProcessXPCClient(
+      mutationSender: sender,
+      waitSender: sender,
+      signalSender: sender
+    )
+    let configuration = ProcessConfiguration(
+      executable: "/sbin/machine/init",
+      arguments: ["-u"],
+      environment: ["PATH=/usr/bin"],
+      terminal: false
+    )
+
+    let process = try await client.createProcess(
+      containerID: "machine-runtime",
+      processID: "setup",
+      configuration: configuration
+    )
+    try await process.start()
+    let exitCode = try await process.wait()
+    try await process.kill(SIGKILL)
+
+    #expect(exitCode == 0)
+    #expect(
+      await sender.routes == [
+        XPCRoute.containerCreateProcess.rawValue,
+        XPCRoute.containerStartProcess.rawValue,
+        XPCRoute.containerWait.rawValue,
+        XPCRoute.containerKill.rawValue,
+      ]
+    )
+    #expect(await sender.identifiers == Array(repeating: "machine-runtime/setup", count: 4))
+    #expect(await sender.signals == [Int64(SIGKILL)])
+  }
+}
+
+private actor RecordingProcessXPCSender: AppleXPCRequestSending {
+  private(set) var routes: [String] = []
+  private(set) var identifiers: [String] = []
+  private(set) var signals: [Int64] = []
+
+  func send(_ message: XPCMessage, operation: String) -> XPCMessage {
+    let route = message.string(key: XPCMessage.routeKey) ?? ""
+    routes.append(route)
+    identifiers.append(
+      "\(message.string(key: .id) ?? "")/\(message.string(key: .processIdentifier) ?? "")"
+    )
+    if route == XPCRoute.containerKill.rawValue {
+      signals.append(message.int64(key: .signal))
+    }
+
+    let response = XPCMessage(route: "testReply")
+    response.set(key: .exitCode, value: Int64(0))
+    return response
+  }
+}

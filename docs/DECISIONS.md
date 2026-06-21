@@ -328,17 +328,19 @@ instead of claiming rollback succeeded.
 
 `AppCompositionRoot` is the only live dependency-construction site. It creates
 one container runtime graph and injects the same `RuntimeMutationCoordinator`
-into container, infrastructure, and image-build mutation paths. `AppServices`
-exposes narrow inventory, lifecycle, creation, inspection, tooling, terminal,
-machine, image, volume, network, and browser facets to `AppModel`; views keep
-their existing model factories and do not act as service locators.
+into container, infrastructure, machine, and image-build mutation paths.
+`AppServices` exposes narrow inventory, lifecycle, creation, inspection,
+tooling, terminal, machine-creation, machine-lifecycle, image, volume, network,
+and browser facets to `AppModel`; views keep their existing model factories
+and do not act as service locators.
 
 Low-level XPC sending, runtime inventory aggregation, creation, lifecycle,
 inspection, tooling, terminal sessions, image management,
-volume/network/browser management, machine lifecycle, and owned-container
-recovery are separate services. `AppleContainerService` remains a
-forwarding-only compatibility facade. This preserves complete-API call sites
-and one global mutation order while allowing deterministic timeout,
+volume/network/browser management, machine inventory/workflow/XPC/process
+operations, and owned-container recovery are separate services. `AppleContainerService`
+remains a forwarding-only compatibility facade for container capabilities;
+machine operations no longer pass through it. This preserves one global
+mutation order while allowing deterministic timeout,
 cancellation, reconciliation, malformed-reply, routing, and cleanup tests.
 
 ## ADR-018: Review attachments and confine published sockets
@@ -473,3 +475,33 @@ category. The SwiftUI History workspace depends on its own
 observable model and storage port, observes store updates while presented,
 warns about isolated unreadable records, and clears history without touching
 images, builder state, or cache.
+
+## ADR-022: Bound persistent-machine lifecycle and recovery behind focused services
+
+**Status:** Accepted — 2026-06-20
+
+Persistent Linux machines use separate inventory, creation, lifecycle, image
+preparation, Apple machine-transport, and first-boot process-transport services.
+The image service uses public fetch/unpack APIs directly instead of the
+CLI-oriented flags helper and intentionally prepares standard OCI-rootfs
+machines; optional custom machine resource artifacts remain future work. The
+composition root shares one machine transport between inventory and mutation
+workflows, and the inventory service re-inspects uninitialized list snapshots
+because Apple’s persisted list can lag the first-boot marker.
+
+Machine XPC operations use a fresh connection with a 35-second close watchdog.
+The first-boot process has independent 10-second create/start, 35-second wait,
+and 2-second KILL bounds. Caller cancellation closes the in-flight connection;
+after durable creation, failure or cancellation reconciles identity, attempts a
+graceful stop, escalates to the verified backing container’s KILL point, and
+confirms the terminal state. Explicit Force Stop requires a target-bound
+authorization value and also accepts a machine already stuck in `stopping`.
+Reply-after-commit errors are reconciled instead of being treated as proof that
+the mutation failed.
+
+Image fetch/unpack runs before persistent machine state exists, so that phase
+has no machine to stop or KILL. Apple 1.0 also accepts only a mutable ID for
+machine deletion. The app revalidates the
+complete creation identity immediately before delete and confirms absence
+afterward, but it does not claim atomic protection from an external same-name
+replacement between those calls.

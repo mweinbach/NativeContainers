@@ -148,8 +148,10 @@ extension AppModel {
       guest: .macOS,
       resources: machineResources
     )
+    let service = PreviewContainerService(inventory: inventory)
     return AppModel(
-      containerService: PreviewContainerService(inventory: inventory),
+      containerService: service,
+      machineService: service,
       registryService: PreviewRegistryService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: true),
       initialInventory: inventory,
@@ -172,8 +174,10 @@ extension AppModel {
       networks: [],
       machines: []
     )
+    let service = PreviewContainerService(inventory: inventory)
     return AppModel(
-      containerService: PreviewContainerService(inventory: inventory),
+      containerService: service,
+      machineService: service,
       registryService: PreviewRegistryService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: false),
       initialInventory: inventory
@@ -194,7 +198,7 @@ private actor PreviewRegistryService: RegistryManaging {
   }
 }
 
-private actor PreviewContainerService: ContainerManaging {
+private actor PreviewContainerService: ContainerManaging, MachineManaging {
   let inventory: ContainerInventory
 
   init(inventory: ContainerInventory) {
@@ -425,9 +429,31 @@ private actor PreviewContainerService: ContainerManaging {
   }
   func copyIntoContainer(id: String, source: URL, destination: String) async throws {}
   func copyFromContainer(id: String, source: String, destination: URL) async throws {}
-  func startMachine(id: String) async throws {}
-  func stopMachine(id: String) async throws {}
-  func deleteMachine(id: String) async throws {}
+  func createMachine(
+    request: LinuxMachineCreationRequest,
+    progress: @escaping ContainerProgressHandler
+  ) async throws -> LinuxMachineCreationResult {
+    await progress(
+      ContainerOperationProgress(phase: .completed, message: "Linux machine ready")
+    )
+    return LinuxMachineCreationResult(
+      identity: LinuxMachineIdentity(
+        id: request.name,
+        imageReference: request.imageReference,
+        platform: "linux/\(request.architecture.rawValue)",
+        createdAt: Date()
+      ),
+      state: request.startAfterCreation ? .running : .stopped,
+      isInitialized: request.startAfterCreation
+    )
+  }
+  func startMachine(_ target: LinuxMachineIdentity) async throws {}
+  func stopMachine(_ target: LinuxMachineIdentity) async throws {}
+  func forceStopMachine(
+    _ target: LinuxMachineIdentity,
+    authorization: LinuxMachineForceStopAuthorization
+  ) async throws {}
+  func deleteMachine(_ target: LinuxMachineIdentity) async throws {}
 }
 
 private actor PreviewContainerTerminalSession: ContainerTerminalSession {

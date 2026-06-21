@@ -71,9 +71,11 @@ must leave a usable, test-backed product slice.
 
 ## M3 — Linux machines
 
-- [ ] Create and manage Apple container machines.
-- [ ] CPU, memory, disk, home-mount, kernel, Rosetta, and nested-virtualization
+- [x] Create, first-boot provision, start, stop, force-stop, and perform
+      revalidated stopped-only deletion of Apple container machines.
+- [x] CPU, memory, and reviewed none/read-only/read-write home-mount
       configuration.
+- [ ] Disk, kernel, Rosetta, and nested-virtualization configuration.
 - [ ] Terminal access and command runner.
 - [ ] Persistent machine snapshots/backups where the Apple runtime supports it.
 - [ ] Optional general-purpose GUI Linux VMs through Virtualization.framework.

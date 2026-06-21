@@ -2,21 +2,20 @@ import ContainerAPIClient
 import ContainerResource
 import ContainerizationExtras
 import Foundation
-import MachineAPIClient
 
 struct AppleRuntimeInventoryService: ContainerInventoryLoading {
   private let infrastructureClient: any AppleInfrastructureTransport
   private let containerReader: any ContainerSnapshotReading
-  private let machineClient: MachineClient
+  private let machineInventory: any LinuxMachineInventoryLoading
 
   init(
     infrastructureClient: any AppleInfrastructureTransport = AppleInfrastructureClient(),
     containerReader: any ContainerSnapshotReading = AppleContainerSnapshotReader(),
-    machineClient: MachineClient = MachineClient()
+    machineInventory: any LinuxMachineInventoryLoading = AppleLinuxMachineInventoryService()
   ) {
     self.infrastructureClient = infrastructureClient
     self.containerReader = containerReader
-    self.machineClient = machineClient
+    self.machineInventory = machineInventory
   }
 
   func loadInventory() async throws -> ContainerInventory {
@@ -25,7 +24,7 @@ struct AppleRuntimeInventoryService: ContainerInventoryLoading {
     async let imageRequest = ClientImage.list()
     async let volumeRequest = infrastructureClient.listVolumes()
     async let networkRequest = infrastructureClient.listNetworks()
-    async let machineRequest = machineClient.list()
+    async let machineRequest = machineInventory.loadMachines()
     async let systemConfigurationRequest = AppleContainerConfiguration.load()
 
     let (
@@ -34,7 +33,7 @@ struct AppleRuntimeInventoryService: ContainerInventoryLoading {
       clientImages,
       configurations,
       networkResources,
-      machineSnapshots,
+      machines,
       systemConfiguration
     ) = try await (
       healthRequest,
@@ -143,22 +142,6 @@ struct AppleRuntimeInventoryService: ContainerInventoryLoading {
       )
     }
 
-    let machines = machineSnapshots.map { machine in
-      LinuxMachineRecord(
-        id: machine.id,
-        imageReference: machine.configuration.image.reference,
-        platform: String(describing: machine.platform),
-        state: RuntimeState(rawValue: machine.status.rawValue) ?? .unknown,
-        ipAddress: machine.ipAddress,
-        createdAt: machine.createdDate,
-        startedAt: machine.startedDate,
-        diskSizeBytes: machine.diskSize,
-        cpuCount: machine.bootConfig.cpus,
-        memoryDescription: String(describing: machine.bootConfig.memory),
-        isInitialized: machine.initialized
-      )
-    }
-
     return ContainerInventory(
       system: system,
       containers: containers.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending },
@@ -167,7 +150,7 @@ struct AppleRuntimeInventoryService: ContainerInventoryLoading {
       },
       volumes: volumes.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
       networks: networks.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
-      machines: machines.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
+      machines: machines
     )
   }
 

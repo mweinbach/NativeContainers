@@ -188,8 +188,7 @@ protocol ContainerManaging:
   ContainerInspecting,
   ContainerLifecycleManaging,
   ContainerTooling,
-  ContainerTerminalOpening,
-  MachineLifecycleManaging
+  ContainerTerminalOpening
 {}
 
 extension ContainerManaging {

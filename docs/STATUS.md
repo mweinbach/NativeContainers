@@ -7,18 +7,19 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 281 test declarations. The current full
-  app-hosted Xcode run passed all 272 deterministic tests, with nine destructive
+- The suite currently contains 315 test declarations. The current full
+  app-hosted Xcode run passed all 305 deterministic tests, with ten destructive
   or external-service integrations skipped behind explicit live gates. That run
-  includes build-history privacy/durability, short-pipe framing, builder mount
-  normalization, and strict path-component-containment regressions. Existing
+  includes Linux-machine recovery/XPC/inventory coverage, build-history
+  privacy/durability, short-pipe framing, builder mount normalization, and
+  strict path-component-containment regressions. Existing
   opt-in tests pass against Apple’s live runtime for provisioning, interactive
   PTY, and image-reference behavior. The push/pull round trip remains
   hard-gated to a disposable localhost registry and is never run against public
   services.
 - The app launches through Xcode and stops cleanly.
-- The SwiftUI overview and split container inspector render successfully in
-  Xcode Preview in light mode.
+- The SwiftUI overview, split container inspector, Linux-machine list, and
+  Linux-machine creation form render successfully in Xcode Preview in light mode.
 - A live Xcode snippet called `AppleContainerService.loadInventory()` against
   the installed XPC services and returned the 1.0.0 server plus live container,
   image, volume, network, and machine counts.
@@ -74,6 +75,21 @@ Updated: 2026-06-20.
   `KILL`, force-deletes only the exact operation-labeled partial container,
   retries with bounded backoff, and verifies that it is absent; an unverifiable
   cleanup is surfaced instead of being silently ignored.
+- Persistent Linux machines now use separate inventory, workflow, machine-XPC,
+  and first-boot process-XPC services. Machine requests use fresh
+  watchdog-closed connections, setup process create/start/wait/KILL calls have
+  independent hard bounds, cancellation after durable creation automatically
+  attempts graceful stop then verified backing-container KILL, and explicit
+  Force Stop remains available for running or stuck-stopping machines. Every
+  terminal mutation is reconciled before success is reported.
+- A live app-hosted Xcode smoke fetched Alpine through the focused preparation
+  service, created and first-boot provisioned a uniquely named persistent
+  machine, verified it running and initialized, stopped it, deleted it, and
+  confirmed no machine remained.
+- Linux-machine inventory re-inspects stale uninitialized list snapshots, and
+  destructive actions pin the creation identity. Apple 1.0 still exposes an
+  ID-only delete route, so the narrow external same-name replacement race is
+  documented rather than presented as atomic safety.
 - The runtime integration now has an explicit composition root and narrow
   inventory, creation, attachment, lifecycle, inspection, tooling, terminal,
   image, volume, network, browser, and machine facets. Every runtime capability

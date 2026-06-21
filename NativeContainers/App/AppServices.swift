@@ -1,6 +1,5 @@
 import ContainerAPIClient
 import Foundation
-import MachineAPIClient
 
 struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
@@ -10,6 +9,7 @@ struct AppServices: Sendable {
   let containerTools: any ContainerTooling
   let containerTerminal: any ContainerTerminalOpening
   let containerAttachments: any ContainerAttachmentEnvironmentLoading
+  let machineCreator: any MachineCreating
   let machineLifecycle: any MachineLifecycleManaging
   let images: any ImageManaging
   let volumes: any VolumeManaging
@@ -31,6 +31,7 @@ struct AppServices: Sendable {
     containerTools: any ContainerTooling,
     containerTerminal: any ContainerTerminalOpening,
     containerAttachments: any ContainerAttachmentEnvironmentLoading,
+    machineCreator: any MachineCreating,
     machineLifecycle: any MachineLifecycleManaging,
     images: any ImageManaging,
     volumes: any VolumeManaging,
@@ -51,6 +52,7 @@ struct AppServices: Sendable {
     self.containerTools = containerTools
     self.containerTerminal = containerTerminal
     self.containerAttachments = containerAttachments
+    self.machineCreator = machineCreator
     self.machineLifecycle = machineLifecycle
     self.images = images
     self.volumes = volumes
@@ -67,6 +69,7 @@ struct AppServices: Sendable {
 
   init(
     containerService: any ContainerManaging,
+    machineService: any MachineManaging = AppleMachineManagementService(),
     imageBuild: any ImageBuilding,
     imageBuildHistory: any ImageBuildHistoryStoring = NoopImageBuildHistoryStore(),
     builder: any ContainerBuilderManaging = AppleContainerBuilderManagementService(),
@@ -82,7 +85,8 @@ struct AppServices: Sendable {
     containerTools = containerService
     containerTerminal = containerService
     containerAttachments = containerService
-    machineLifecycle = containerService
+    machineCreator = machineService
+    machineLifecycle = machineService
     images = containerService
     volumes = containerService
     networks = containerService
@@ -102,14 +106,16 @@ enum AppCompositionRoot {
     let mutationCoordinator = RuntimeMutationCoordinator.shared
     let buildExecutionCoordinator = RuntimeMutationCoordinator.imageBuilds
     let containerClient = ContainerClient()
-    let machineClient = MachineClient()
+    let machineTransport = AppleMachineXPCTransport()
     let infrastructureClient = AppleInfrastructureClient()
     let cleanupClient = AppleContainerCleanupClient()
     let containerReader = AppleContainerSnapshotReader(client: containerClient)
     let inventoryService = AppleRuntimeInventoryService(
       infrastructureClient: infrastructureClient,
       containerReader: containerReader,
-      machineClient: machineClient
+      machineInventory: AppleLinuxMachineInventoryService(
+        machineTransport: machineTransport
+      )
     )
     let infrastructureService = AppleInfrastructureService(
       infrastructureClient: infrastructureClient,
@@ -139,7 +145,13 @@ enum AppCompositionRoot {
         containerClient: containerClient
       )
     )
-    let machineLifecycleService = AppleMachineLifecycleService(machineClient: machineClient)
+    let machineService = AppleMachineManagementService(
+      runtime: AppleMachineRuntimeClient(
+        machineTransport: machineTransport,
+        containerKillClient: cleanupClient
+      ),
+      runtimeMutationCoordinator: mutationCoordinator
+    )
     let builderManagementService = AppleContainerBuilderManagementService(
       runtimeMutationCoordinator: mutationCoordinator,
       buildExecutionCoordinator: buildExecutionCoordinator
@@ -169,7 +181,8 @@ enum AppCompositionRoot {
       containerTools: toolService,
       containerTerminal: terminalService,
       containerAttachments: attachmentService,
-      machineLifecycle: machineLifecycleService,
+      machineCreator: machineService,
+      machineLifecycle: machineService,
       images: imageService,
       volumes: infrastructureService,
       networks: infrastructureService,

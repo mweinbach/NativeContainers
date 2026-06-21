@@ -70,6 +70,22 @@ stopped containers. Execution uses the shared runtime mutation coordinator,
 re-fetches immediately before mutation, and treats built-in networks and new
 references as hard stops. Apple remains the final atomic in-use authority.
 
+Persistent Linux machines cross separate `MachineCreating` and
+`MachineLifecycleManaging` facets. `AppleMachineManagementService` owns the
+reviewed workflow and shared mutation lease, while
+`AppleMachineRuntimeClient` contains Apple package types,
+`AppleMachineImagePreparationService` prepares standard OCI-rootfs machines
+through public image fetch/unpack APIs without the CLI-oriented flags helper,
+`AppleMachineXPCTransport` bounds machine requests with fresh watchdog-closed
+connections, and `AppleContainerProcessXPCClient` independently bounds setup
+process create/start/wait/signal calls. Creation is cancellable; once durable
+state exists, failure or cancellation attempts a graceful stop and then KILLs
+only the revalidated backing container. Force Stop requires explicit
+authorization and confirms exit. Delete revalidates the complete creation
+identity immediately before Apple’s ID-only route, but Apple 1.0 exposes no
+conditional delete token, so a narrow external same-name replacement race
+remains.
+
 Container creation attachments cross a separate `ContainerAttachmentManaging`
 facet. The SwiftUI draft freezes complete volume and network configuration
 identities, ordered network selection, normalized guest mount paths, and logical
@@ -96,11 +112,14 @@ Creation can require one reviewed configured-on-disk identity, but the GUI does
 not execute `sudo`, claim PF is currently loaded, or broaden privileges. A
 future mutating helper remains a separately signed and notarized service.
 
-Infrastructure XPC requests use a fresh connection with cancellation-triggered
-close and a 60-second close watchdog. A timeout never implies rollback: create
-and delete reconcile live state and the operation label before reporting an
-outcome. Apple 1.0 delete calls accept only a name, not an expected revision, so
-a narrow external same-name replacement race remains documented rather than
+Infrastructure and Linux-machine XPC requests use fresh connections with
+cancellation-triggered close and operation-specific close watchdogs. Machine
+requests cap at 35 seconds; first-boot process create/start, wait, and signal
+use separate 10-, 35-, and 2-second bounds. A timeout never implies rollback:
+mutations reconcile live state before reporting an outcome. A focused image
+service performs public fetch and unpack operations before any machine exists.
+Apple 1.0 delete calls accept only a name, not an expected revision, so
+narrow external same-name replacement races remain documented rather than
 hidden.
 
 Cancellation reconciliation, owned-resource rollback, and inventory refresh

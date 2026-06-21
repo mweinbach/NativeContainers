@@ -5,6 +5,10 @@ protocol ContainerInventoryLoading: Sendable {
   func loadInventory() async throws -> ContainerInventory
 }
 
+protocol LinuxMachineInventoryLoading: Sendable {
+  func loadMachines() async throws -> [LinuxMachineRecord]
+}
+
 protocol BuiltinNetworkProviding: Sendable {
   func builtinNetworkResource() async throws -> NetworkResource?
 }
@@ -79,8 +83,21 @@ protocol ContainerTerminalOpening: Sendable {
   ) async throws -> any ContainerTerminalSession
 }
 
-protocol MachineLifecycleManaging: Sendable {
-  func startMachine(id: String) async throws
-  func stopMachine(id: String) async throws
-  func deleteMachine(id: String) async throws
+protocol MachineCreating: Sendable {
+  func createMachine(
+    request: LinuxMachineCreationRequest,
+    progress: @escaping ContainerProgressHandler
+  ) async throws -> LinuxMachineCreationResult
 }
+
+protocol MachineLifecycleManaging: Sendable {
+  func startMachine(_ target: LinuxMachineIdentity) async throws
+  func stopMachine(_ target: LinuxMachineIdentity) async throws
+  func forceStopMachine(
+    _ target: LinuxMachineIdentity,
+    authorization: LinuxMachineForceStopAuthorization
+  ) async throws
+  func deleteMachine(_ target: LinuxMachineIdentity) async throws
+}
+
+protocol MachineManaging: MachineCreating, MachineLifecycleManaging {}

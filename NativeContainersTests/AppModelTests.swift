@@ -125,6 +125,7 @@ struct AppModelTests {
         containerTools: lifecycleService,
         containerTerminal: lifecycleService,
         containerAttachments: lifecycleService,
+        machineCreator: lifecycleService,
         machineLifecycle: lifecycleService,
         images: lifecycleService,
         volumes: lifecycleService,
@@ -642,7 +643,7 @@ private func inventoryWithImage(digest: String) -> ContainerInventory {
   )
 }
 
-private actor MockContainerService: ContainerManaging {
+private actor MockContainerService: ContainerManaging, MachineManaging {
   private var inventories: [ContainerInventory]
   let inspection: ContainerInspection
   let loadError: (any Error)?
@@ -803,9 +804,31 @@ private actor MockContainerService: ContainerManaging {
   func copyFromContainer(id: String, source: String, destination: URL) async throws {
     copiedFromContainer.append((id, source, destination))
   }
-  func startMachine(id: String) async throws {}
-  func stopMachine(id: String) async throws {}
-  func deleteMachine(id: String) async throws {}
+  func createMachine(
+    request: LinuxMachineCreationRequest,
+    progress: @escaping ContainerProgressHandler
+  ) async throws -> LinuxMachineCreationResult {
+    await progress(
+      ContainerOperationProgress(phase: .completed, message: "Linux machine ready")
+    )
+    return LinuxMachineCreationResult(
+      identity: LinuxMachineIdentity(
+        id: request.name,
+        imageReference: request.imageReference,
+        platform: "linux/\(request.architecture.rawValue)",
+        createdAt: Date()
+      ),
+      state: request.startAfterCreation ? .running : .stopped,
+      isInitialized: request.startAfterCreation
+    )
+  }
+  func startMachine(_ target: LinuxMachineIdentity) async throws {}
+  func stopMachine(_ target: LinuxMachineIdentity) async throws {}
+  func forceStopMachine(
+    _ target: LinuxMachineIdentity,
+    authorization: LinuxMachineForceStopAuthorization
+  ) async throws {}
+  func deleteMachine(_ target: LinuxMachineIdentity) async throws {}
 }
 
 private enum AppModelTestError: LocalizedError {

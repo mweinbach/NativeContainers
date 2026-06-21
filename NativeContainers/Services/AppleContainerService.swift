@@ -1,7 +1,6 @@
 import ContainerAPIClient
 import ContainerResource
 import Foundation
-import MachineAPIClient
 
 actor AppleContainerService: ContainerManaging {
   private let inventoryService: AppleRuntimeInventoryService
@@ -11,14 +10,13 @@ actor AppleContainerService: ContainerManaging {
   private let inspectionService: AppleContainerInspectionService
   private let toolService: AppleContainerToolService
   private let terminalService: AppleContainerTerminalService
-  private let machineLifecycleService: AppleMachineLifecycleService
   private let creationService: AppleContainerCreationService
   private let imageService: AppleImageService
 
   init(
     terminalProcessLauncher: (any ContainerTerminalProcessLaunching)? = nil,
     containerClient: ContainerClient = ContainerClient(),
-    machineClient: MachineClient = MachineClient(),
+    machineInventory: any LinuxMachineInventoryLoading = AppleLinuxMachineInventoryService(),
     infrastructureClient: any AppleInfrastructureTransport = AppleInfrastructureClient(),
     containerCleanupClient: any AppleContainerCleanupTransport = AppleContainerCleanupClient(),
     inventoryService: AppleRuntimeInventoryService? = nil,
@@ -28,7 +26,6 @@ actor AppleContainerService: ContainerManaging {
     inspectionService: AppleContainerInspectionService? = nil,
     toolService: AppleContainerToolService? = nil,
     terminalService: AppleContainerTerminalService? = nil,
-    machineLifecycleService: AppleMachineLifecycleService? = nil,
     creationService: AppleContainerCreationService? = nil,
     imageService: AppleImageService? = nil,
     ownedContainerRecovery: AppleOwnedContainerRecoveryService? = nil,
@@ -40,7 +37,7 @@ actor AppleContainerService: ContainerManaging {
       ?? AppleRuntimeInventoryService(
         infrastructureClient: infrastructureClient,
         containerReader: containerReader,
-        machineClient: machineClient
+        machineInventory: machineInventory
       )
     let resolvedInfrastructureService =
       infrastructureService
@@ -71,8 +68,6 @@ actor AppleContainerService: ContainerManaging {
         terminalProcessLauncher: terminalProcessLauncher
           ?? AppleContainerTerminalProcessLauncher(containerClient: containerClient)
       )
-    let resolvedMachineLifecycleService =
-      machineLifecycleService ?? AppleMachineLifecycleService(machineClient: machineClient)
     let resolvedImageService =
       imageService
       ?? AppleImageService(
@@ -93,7 +88,6 @@ actor AppleContainerService: ContainerManaging {
     self.inspectionService = resolvedInspectionService
     self.toolService = resolvedToolService
     self.terminalService = resolvedTerminalService
-    self.machineLifecycleService = resolvedMachineLifecycleService
     self.creationService =
       creationService
       ?? AppleContainerCreationService(
@@ -333,18 +327,6 @@ actor AppleContainerService: ContainerManaging {
 
   func copyFromContainer(id: String, source: String, destination: URL) async throws {
     try await toolService.copyFromContainer(id: id, source: source, destination: destination)
-  }
-
-  func startMachine(id: String) async throws {
-    try await machineLifecycleService.startMachine(id: id)
-  }
-
-  func stopMachine(id: String) async throws {
-    try await machineLifecycleService.stopMachine(id: id)
-  }
-
-  func deleteMachine(id: String) async throws {
-    try await machineLifecycleService.deleteMachine(id: id)
   }
 
 }

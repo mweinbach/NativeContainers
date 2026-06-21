@@ -57,6 +57,7 @@ struct ResourceActionMenu: View {
   let onStop: () -> Void
   var onRestart: (() -> Void)? = nil
   var onForceStop: (() -> Void)? = nil
+  var canDelete = true
   let onDelete: () -> Void
 
   var body: some View {
@@ -74,6 +75,7 @@ struct ResourceActionMenu: View {
       }
       Divider()
       Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+        .disabled(!canDelete)
     }
     .menuStyle(.borderlessButton)
     .fixedSize()

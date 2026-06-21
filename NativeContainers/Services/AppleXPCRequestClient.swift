@@ -11,8 +11,11 @@ protocol AppleXPCConnection: Sendable {
 }
 
 struct LiveAppleXPCConnection: AppleXPCConnection {
-  private static let serviceIdentifier = "com.apple.container.apiserver"
-  private let client = XPCClient(service: Self.serviceIdentifier)
+  private let client: XPCClient
+
+  init(serviceIdentifier: String = "com.apple.container.apiserver") {
+    client = XPCClient(service: serviceIdentifier)
+  }
 
   func send(_ message: XPCMessage) async throws -> XPCMessage {
     try await client.send(message)
@@ -31,10 +34,13 @@ struct AppleXPCRequestClient: AppleXPCRequestSending {
   private let makeConnection: ConnectionFactory
   private let sleep: Sleeper
 
-  init(operationTimeout: Duration = .seconds(60)) {
+  init(
+    serviceIdentifier: String = "com.apple.container.apiserver",
+    operationTimeout: Duration = .seconds(60)
+  ) {
     self.init(
       operationTimeout: operationTimeout,
-      makeConnection: { LiveAppleXPCConnection() },
+      makeConnection: { LiveAppleXPCConnection(serviceIdentifier: serviceIdentifier) },
       sleep: { duration in try await Task.sleep(for: duration) }
     )
   }

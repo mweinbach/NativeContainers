@@ -141,12 +141,9 @@ actor AppleContainerToolService: ContainerTooling {
   }
 }
 
-protocol ContainerCommandProcess: Sendable {
-  func wait() async throws -> Int32
-  func kill(_ signal: Int32) async throws
-}
+typealias ContainerCommandProcess = RuntimeManagedProcess
 
-private struct AppleContainerCommandProcess: ContainerCommandProcess {
+private struct AppleContainerCommandProcess: RuntimeManagedProcess {
   let process: any ClientProcess
 
   func wait() async throws -> Int32 {
@@ -159,44 +156,21 @@ private struct AppleContainerCommandProcess: ContainerCommandProcess {
 }
 
 enum AppleContainerToolProcessWaiter {
-  private enum Outcome: Sendable {
-    case exited(Int32)
-    case timedOut
-  }
-
   static func wait(
-    for process: any ContainerCommandProcess,
+    for process: any RuntimeManagedProcess,
     timeoutSeconds: Int,
     sleep: @escaping @Sendable (Duration) async throws -> Void = {
       try await Task.sleep(for: $0)
     }
   ) async throws -> Int32 {
-    try await withTaskCancellationHandler {
-      try await withThrowingTaskGroup(of: Outcome.self) { group in
-        group.addTask {
-          .exited(try await process.wait())
-        }
-        group.addTask {
-          try await sleep(.seconds(timeoutSeconds))
-          return .timedOut
-        }
-        defer { group.cancelAll() }
-        guard let outcome = try await group.next() else {
-          throw CancellationError()
-        }
-        try Task.checkCancellation()
-        switch outcome {
-        case .exited(let result):
-          return result
-        case .timedOut:
-          try? await process.kill(SIGKILL)
-          throw ContainerToolValidationError.commandTimedOut(timeoutSeconds)
-        }
-      }
-    } onCancel: {
-      Task.detached {
-        try? await process.kill(SIGKILL)
-      }
+    do {
+      return try await RuntimeProcessWaiter.wait(
+        for: process,
+        timeoutSeconds: timeoutSeconds,
+        sleep: sleep
+      )
+    } catch RuntimeProcessWaitError.timedOut {
+      throw ContainerToolValidationError.commandTimedOut(timeoutSeconds)
     }
   }
 }

@@ -58,6 +58,7 @@ final class AppModel {
 
   convenience init(
     containerService: any ContainerManaging = AppleContainerService(),
+    machineService: any MachineManaging = AppleMachineManagementService(),
     imageBuildService: any ImageBuilding = AppleContainerBuildService(),
     registryService: any RegistryManaging = AppleRegistryService(),
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
@@ -69,6 +70,7 @@ final class AppModel {
     self.init(
       services: AppServices(
         containerService: containerService,
+        machineService: machineService,
         imageBuild: imageBuildService,
         registry: registryService,
         virtualMachineLibrary: virtualMachineLibrary,
@@ -171,24 +173,6 @@ final class AppModel {
     }
   }
 
-  func startMachine(id: String) async {
-    await performMutation {
-      try await self.services.machineLifecycle.startMachine(id: id)
-    }
-  }
-
-  func stopMachine(id: String) async {
-    await performMutation {
-      try await self.services.machineLifecycle.stopMachine(id: id)
-    }
-  }
-
-  func deleteMachine(id: String) async {
-    await performMutation {
-      try await self.services.machineLifecycle.deleteMachine(id: id)
-    }
-  }
-
   func createVirtualMachineDraft(
     name: String,
     guest: VirtualMachineGuest,
@@ -220,6 +204,15 @@ final class AppModel {
       allocatedCPUCount: container.cpuCount,
       service: services.containerInspector
     )
+  }
+
+  func makeLinuxMachineManagementModel() -> LinuxMachineManagementModel {
+    LinuxMachineManagementModel(
+      creator: services.machineCreator,
+      lifecycle: services.machineLifecycle
+    ) { [weak self] in
+      await self?.refresh()
+    }
   }
 
   func makeContainerProvisioningModel() -> ContainerProvisioningModel {

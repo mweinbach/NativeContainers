@@ -39,16 +39,20 @@ transfers, reviewed Dockerfile/Containerfile builds through Apple’s public
 BuildKit APIs with image-store, OCI-archive, root-filesystem tar, and folder
 outputs, one-shot reviewed file-backed build secrets, reviewed shared-builder
 Stop/Force Stop/cache reset, private persistent build history, and macOS
-restore-image preparation.
+restore-image preparation. Persistent Linux machines now have native
+create/start/stop/Force Stop/delete controls, cancellable first-boot user
+provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
+memory, and reviewed home-directory configuration.
 
 The app is composed from narrow injectable service facets. Inventory, container
 creation and lifecycle, inspection, command tools, terminal sessions, image
 management, infrastructure, attachment resolution, private socket workspace,
 host-access discovery, build-secret review/consumption, shared-builder
 management, build-history recording and persistence, machine lifecycle, bounded
-XPC transport, and owned-resource recovery are independent services. A
-forwarding-only compatibility facade preserves callers that still need the
-complete API.
+XPC transport, machine image preparation, and owned-resource recovery are
+independent services. A
+dedicated machine-management service owns machine creation and lifecycle rather
+than routing those operations through the container compatibility facade.
 
 ## Build
 
@@ -60,8 +64,9 @@ bundles are intentionally not part of this repository’s development workflow;
 see [AGENTS.md](AGENTS.md).
 
 The deterministic suite runs without mutating the local runtime. To run the
-reversible live provisioning, attachment, PTY, and image-reference smokes, set
-`NATIVECONTAINERS_LIVE_TESTS=1` for the test action. They create uniquely named
+reversible live provisioning, Linux-machine lifecycle, attachment, PTY, and
+image-reference smokes, set `NATIVECONTAINERS_LIVE_TESTS=1` for the test action.
+They create uniquely named
 Alpine resources, verify native lifecycle, reviewed volume/network/Unix-socket
 attachments, interactive-terminal, and image tag/inspect/delete behavior, and
 delete every uniquely created test resource.
