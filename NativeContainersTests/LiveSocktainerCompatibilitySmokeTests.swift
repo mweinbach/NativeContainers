@@ -10,7 +10,7 @@ struct LiveSocktainerCompatibilitySmokeTests {
       if: ProcessInfo.processInfo.environment[
         "NATIVECONTAINERS_LIVE_SOCKTAINER"
       ] == "1",
-      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker installed, and the pinned binary available."
+      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker and standalone Compose clients installed, and the pinned bridge binary available."
     )
   )
   func validatedBridgeServesIsolatedDockerContextAndCleansUp() async throws {
@@ -100,6 +100,109 @@ struct LiveSocktainerCompatibilitySmokeTests {
         timeout: .seconds(20)
       )
       #expect(inventory.exitCode == 0)
+
+      try await process.stop()
+      #expect(await process.status() == .stopped)
+      #expect(!FileManager.default.fileExists(atPath: socketURL.nativeContainersPOSIXPath))
+    } catch {
+      try? await process.forceStop()
+      throw error
+    }
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_SOCKTAINER"
+      ] == "1",
+      "Set NATIVECONTAINERS_LIVE_SOCKTAINER=1 with Apple container 1.0.0 running, Docker and standalone Compose clients installed, and the pinned bridge binary available."
+    )
+  )
+  func composeFixturePublishesCanonicalAppleTopologyAndCleansUp() async throws {
+    let environment = ProcessInfo.processInfo.environment
+    let binaryURL = URL(
+      filePath:
+        environment["NATIVECONTAINERS_SOCKTAINER_BINARY"]
+        ?? "/tmp/nativecontainers-socktainer-v1.0.0"
+    )
+    try SocktainerArtifactValidator().validate(
+      artifactURL: binaryURL,
+      release: .pinned
+    )
+    #expect(
+      await AppleContainerHealthVersionChecker().compatibility(requiredVersion: "1.0.0")
+        == .compatible(version: "1.0.0")
+    )
+
+    let rootURL = URL(filePath: "/tmp", directoryHint: .isDirectory).appending(
+      path: "nc-sc-\(UUID().uuidString.lowercased().prefix(8))",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+
+    let socketURL =
+      rootURL
+      .appending(path: ".socktainer", directoryHint: .isDirectory)
+      .appending(path: "container.sock", directoryHint: .notDirectory)
+    var isolatedEnvironment = environment
+    isolatedEnvironment["HOME"] = rootURL.nativeContainersPOSIXPath
+    isolatedEnvironment["DOCKER_CONFIG"] =
+      rootURL
+      .appending(path: ".docker", directoryHint: .isDirectory)
+      .nativeContainersPOSIXPath
+
+    let process = SocktainerProcessService(
+      socketURL: socketURL,
+      environment: isolatedEnvironment,
+      startupTimeout: .seconds(15)
+    )
+    let executor = FoundationHostCommandExecutor()
+    let context = DockerContextService(
+      socketURL: socketURL,
+      commandExecutor: executor,
+      environment: isolatedEnvironment
+    )
+    let locator = FixedPathHostExecutableLocator()
+    var composeCandidates: [URL] = []
+    if let configuredPath = environment["NATIVECONTAINERS_DOCKER_COMPOSE_BINARY"],
+      !configuredPath.isEmpty
+    {
+      composeCandidates.append(URL(filePath: configuredPath))
+    }
+    composeCandidates.append(contentsOf: [
+      URL(filePath: "/usr/local/bin/docker-compose"),
+      URL(filePath: "/opt/homebrew/bin/docker-compose"),
+    ])
+    let composeURL = try #require(locator.locate(candidates: composeCandidates))
+
+    do {
+      try await process.start(executableURL: binaryURL)
+      guard case .running = await process.status() else {
+        Issue.record("Socktainer did not remain running after readiness.")
+        try await process.forceStop()
+        return
+      }
+      try await context.createOrRepairContext()
+
+      let projectName = "ncwire-\(UUID().uuidString.lowercased().prefix(8))"
+      let fixture = SocktainerComposeLiveConformanceService(
+        commandExecutor: executor,
+        inventory: AppleRuntimeInventoryService()
+      )
+      let result = try await fixture.run(
+        configuration: try SocktainerComposeLiveFixtureConfiguration(
+          projectName: projectName,
+          workspaceURL: rootURL,
+          composeExecutableURL: composeURL,
+          environment: isolatedEnvironment
+        )
+      )
+
+      #expect(result.projectName == projectName)
+      #expect(result.observedState == .allRunning)
+      #expect(result.containerID == "\(projectName)-probe")
+      #expect(!result.usedFallbackCleanup)
 
       try await process.stop()
       #expect(await process.status() == .stopped)

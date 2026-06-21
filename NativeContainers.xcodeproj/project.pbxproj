@@ -184,6 +184,12 @@
 		1F9D2C042FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C032FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift */; };
 		1F9D2C062FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C052FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift */; };
 		1F9D2C082FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C072FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift */; };
+		1F9D2C0C2FE7D0470076F5B9 /* SocktainerComposeLiveFixtureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C0B2FE7D0470076F5B9 /* SocktainerComposeLiveFixtureServiceTests.swift */; };
+		1F9D2C0E2FE7D0B20076F5B9 /* ComposeBridgeLiveConformanceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C0D2FE7D0B20076F5B9 /* ComposeBridgeLiveConformanceModels.swift */; };
+		1F9D2C102FE7D0B20076F5B9 /* SocktainerComposeFixtureWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C0F2FE7D0B20076F5B9 /* SocktainerComposeFixtureWorkspace.swift */; };
+		1F9D2C122FE7D0B20076F5B9 /* SocktainerComposeFixtureCleanupPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C112FE7D0B20076F5B9 /* SocktainerComposeFixtureCleanupPlanner.swift */; };
+		1F9D2C142FE7D0B20076F5B9 /* SocktainerComposeLiveConformanceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C132FE7D0B20076F5B9 /* SocktainerComposeLiveConformanceService.swift */; };
+		1F9D2C162FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2C152FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -479,6 +485,12 @@
 		1F9D2C032FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBridgeConformanceModels.swift; sourceTree = "<group>"; };
 		1F9D2C052FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocktainerComposeConformanceService.swift; sourceTree = "<group>"; };
 		1F9D2C072FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocktainerComposeConformanceServiceTests.swift; sourceTree = "<group>"; };
+		1F9D2C0B2FE7D0470076F5B9 /* SocktainerComposeLiveFixtureServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocktainerComposeLiveFixtureServiceTests.swift; sourceTree = "<group>"; };
+		1F9D2C0D2FE7D0B20076F5B9 /* ComposeBridgeLiveConformanceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeBridgeLiveConformanceModels.swift; sourceTree = "<group>"; };
+		1F9D2C0F2FE7D0B20076F5B9 /* SocktainerComposeFixtureWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocktainerComposeFixtureWorkspace.swift; sourceTree = "<group>"; };
+		1F9D2C112FE7D0B20076F5B9 /* SocktainerComposeFixtureCleanupPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocktainerComposeFixtureCleanupPlanner.swift; sourceTree = "<group>"; };
+		1F9D2C132FE7D0B20076F5B9 /* SocktainerComposeLiveConformanceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocktainerComposeLiveConformanceService.swift; sourceTree = "<group>"; };
+		1F9D2C152FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocktainerComposeFixtureNativeCleanup.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -680,6 +692,7 @@
 				1F9D2BDB2FE7C30F0076F5B9 /* DockerCompatibilityModels.swift */,
 				1F9D2BFB2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift */,
 				1F9D2C032FE7CE330076F5B9 /* ComposeBridgeConformanceModels.swift */,
+				1F9D2C0D2FE7D0B20076F5B9 /* ComposeBridgeLiveConformanceModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -750,6 +763,7 @@
 				1F9D2BFD2FE7C82C0076F5B9 /* ComposeTopologyServiceTests.swift */,
 				1F9D2C012FE7CA180076F5B9 /* AppleRuntimeInventoryServiceTests.swift */,
 				1F9D2C072FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift */,
+				1F9D2C0B2FE7D0470076F5B9 /* SocktainerComposeLiveFixtureServiceTests.swift */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -834,6 +848,10 @@
 				1F9D2BED2FE7C4760076F5B9 /* SecureFileSystemPath.swift */,
 				1F9D2BF92FE7C81B0076F5B9 /* ComposeTopologyService.swift */,
 				1F9D2C052FE7CE330076F5B9 /* SocktainerComposeConformanceService.swift */,
+				1F9D2C0F2FE7D0B20076F5B9 /* SocktainerComposeFixtureWorkspace.swift */,
+				1F9D2C112FE7D0B20076F5B9 /* SocktainerComposeFixtureCleanupPlanner.swift */,
+				1F9D2C132FE7D0B20076F5B9 /* SocktainerComposeLiveConformanceService.swift */,
+				1F9D2C152FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1102,6 +1120,7 @@
 				18E0B550FB9D7772C2D45292 /* ContainerBuildWorkerProcessTests.swift in Sources */,
 				1F9D2C022FE7CA180076F5B9 /* AppleRuntimeInventoryServiceTests.swift in Sources */,
 				1F9D2B252FE7713F0076F5B9 /* ContainerBuilderManagementTests.swift in Sources */,
+				1F9D2C0C2FE7D0470076F5B9 /* SocktainerComposeLiveFixtureServiceTests.swift in Sources */,
 				1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */,
 				DD8E9F4280FD58E7E868B783 /* ContainerTerminalModelTests.swift in Sources */,
 				1F9D2B112FE769E60076F5B9 /* AppleContainerAttachmentServiceTests.swift in Sources */,
@@ -1207,6 +1226,7 @@
 				1F9D2B542FE792100076F5B9 /* AppleMachineManagementService.swift in Sources */,
 				DF37C616A057253634297F83 /* ContainerTerminalModel.swift in Sources */,
 				1F9D2BF22FE7C4E40076F5B9 /* DockerCompatibilityModel.swift in Sources */,
+				1F9D2C142FE7D0B20076F5B9 /* SocktainerComposeLiveConformanceService.swift in Sources */,
 				1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */,
 				1F9D2BC02FE7B6FC0076F5B9 /* WorkspaceRoute.swift in Sources */,
 				1F9D2B152FE76B040076F5B9 /* ContainerCreationSections.swift in Sources */,
@@ -1245,6 +1265,7 @@
 				1F9D2B762FE79C2C0076F5B9 /* AppleLinuxMachineProcessService.swift in Sources */,
 				3DCB281F5AF84FBC4DDE6AD2 /* ImageInspectorModel.swift in Sources */,
 				1F9D2B642FE796720076F5B9 /* AppleContainerProcessXPCClient.swift in Sources */,
+				1F9D2C102FE7D0B20076F5B9 /* SocktainerComposeFixtureWorkspace.swift in Sources */,
 				1F9D2BC22FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift in Sources */,
 				1F9D2AD72FE75F420076F5B9 /* AppleXPCRequestClient.swift in Sources */,
 				1F9D2B432FE77DDF0076F5B9 /* PrivateImageBuildHistoryDirectory.swift in Sources */,
@@ -1263,6 +1284,7 @@
 				1F9D2B522FE791EA0076F5B9 /* AppleMachineRuntimeClient.swift in Sources */,
 				455E49DED3838B07FB756991 /* ImagesView.swift in Sources */,
 				1F9D2B842FE7A0FF0076F5B9 /* MacVirtualMachineInstallationService.swift in Sources */,
+				1F9D2C122FE7D0B20076F5B9 /* SocktainerComposeFixtureCleanupPlanner.swift in Sources */,
 				6EFDAA07140EDCC9B4FB8615 /* LinuxMachinesView.swift in Sources */,
 				1F9D2ADF2FE760400076F5B9 /* AppleRuntimeInventoryService.swift in Sources */,
 				78D8757B9A4FE8F19E8883AF /* MacPlatformArtifactPreparer.swift in Sources */,
@@ -1301,6 +1323,7 @@
 				1F9D2B292FE771A70076F5B9 /* ContainerBuilderManagementView.swift in Sources */,
 				1F9D2B5A2FE792540076F5B9 /* LinuxMachineCreationView.swift in Sources */,
 				1F9D2B4E2FE791D30076F5B9 /* LinuxMachineManagementModels.swift in Sources */,
+				1F9D2C162FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift in Sources */,
 				72D23C0E9992E41005DDACDC /* RootView.swift in Sources */,
 				1F9D2BD22FE7BDF90076F5B9 /* MacVirtualMachineSharedDirectoryBookmarkService.swift in Sources */,
 				1F9D2B9E2FE7A7660076F5B9 /* AdvisoryFileLock.swift in Sources */,
@@ -1332,6 +1355,7 @@
 				236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */,
 				1F9D2B562FE7923C0076F5B9 /* LinuxMachineManagementModel.swift in Sources */,
 				1F9D2BEE2FE7C4760076F5B9 /* SecureFileSystemPath.swift in Sources */,
+				1F9D2C0E2FE7D0B20076F5B9 /* ComposeBridgeLiveConformanceModels.swift in Sources */,
 				B10B22FAA12D249A147360B3 /* VolumesView.swift in Sources */,
 				1F9D2B312FE775060076F5B9 /* ImageBuildSecretsSection.swift in Sources */,
 			);
