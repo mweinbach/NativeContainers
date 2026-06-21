@@ -36,6 +36,11 @@ Apple Keychain-backed registry login management, reviewed native pull/push
 transfers, reviewed Dockerfile/Containerfile builds through Apple’s public
 BuildKit APIs, and macOS restore-image preparation.
 
+The app is composed from narrow injectable service facets. Inventory,
+infrastructure management, bounded XPC transport, and owned-resource recovery
+are independent services behind a compatibility facade, which keeps UI models
+small and makes failure paths deterministic to test.
+
 ## Build
 
 The Xcode project is generated from `project.yml` so project configuration is

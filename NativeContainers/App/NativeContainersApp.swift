@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct NativeContainersApp: App {
-  @State private var model = AppModel()
+  @State private var model = AppModel(services: AppCompositionRoot.live())
 
   var body: some Scene {
     WindowGroup {

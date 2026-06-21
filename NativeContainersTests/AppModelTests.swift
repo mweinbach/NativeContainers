@@ -101,6 +101,41 @@ struct AppModelTests {
   }
 
   @Test
+  func appServicesRoutesInventoryAndLifecycleThroughDistinctFacets() async {
+    let routedInventory = inventoryWithImage(digest: "sha256:routed")
+    let inventoryService = MockContainerService(inventory: routedInventory)
+    let lifecycleService = MockContainerService(inventory: emptyInventory())
+    let model = AppModel(
+      services: AppServices(
+        inventory: inventoryService,
+        containerLifecycle: lifecycleService,
+        containerCreator: lifecycleService,
+        containerInspector: lifecycleService,
+        containerTools: lifecycleService,
+        containerTerminal: lifecycleService,
+        machineLifecycle: lifecycleService,
+        images: lifecycleService,
+        volumes: lifecycleService,
+        networks: lifecycleService,
+        browser: lifecycleService,
+        imageBuild: AppleContainerBuildService(),
+        registry: AppleRegistryService(),
+        virtualMachineLibrary: MockVirtualMachineLibrary(manifests: []),
+        restoreImageDiscovery: MacRestoreImageService(),
+        restoreImageDownloader: RestoreImageDownloadService()
+      )
+    )
+
+    await model.startContainer(id: "web")
+
+    #expect(await lifecycleService.startedContainerIDs == ["web"])
+    #expect(await lifecycleService.loadCount == 0)
+    #expect(await inventoryService.startedContainerIDs.isEmpty)
+    #expect(await inventoryService.loadCount == 1)
+    #expect(model.images == routedInventory.images)
+  }
+
+  @Test
   func refreshRequestedDuringActivePassRunsAndAwaitsFollowUpPass() async {
     let stale = inventoryWithImage(digest: "sha256:stale")
     let current = inventoryWithImage(digest: "sha256:current")

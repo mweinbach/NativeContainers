@@ -11,9 +11,9 @@ final class ContainerToolsModel {
   private(set) var transferMessage: String?
 
   let containerID: String
-  private let service: any ContainerManaging
+  private let service: any ContainerTooling
 
-  init(containerID: String, service: any ContainerManaging) {
+  init(containerID: String, service: any ContainerTooling) {
     self.containerID = containerID
     self.service = service
   }

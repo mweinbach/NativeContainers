@@ -26,7 +26,7 @@ final class ContainerTerminalModel {
   private var lastSentSize: ContainerTerminalSize?
   private var hasOpenedSession = false
 
-  init(containerID: String, service: any ContainerManaging) {
+  init(containerID: String, service: any ContainerTerminalOpening) {
     self.containerID = containerID
     self.openSession = { id, request in
       try await service.openTerminal(in: id, request: request)

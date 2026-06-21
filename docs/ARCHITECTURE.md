@@ -76,11 +76,18 @@ hidden.
 Cancellation reconciliation, owned-resource rollback, and inventory refresh
 run in fresh tasks so the cancellation that closed the original connection
 cannot also cancel recovery. Container rollback uses a dedicated bounded XPC
-client: it sends `KILL`, issues force deletion, retries once, and verifies
-absence without holding the global mutation lease. The next architecture pass
-will move lifecycle, inventory, volume, network, and reconciliation behavior
-out of `AppleContainerService` into focused protocol-backed services; the
-existing facade remains the composition root and UI boundary.
+client: it sends `KILL`, issues force deletion, retries with bounded backoff,
+and verifies absence without holding the global mutation lease.
+
+`AppCompositionRoot` constructs one live service graph and shares the same
+runtime mutation coordinator across container, infrastructure, and image-build
+mutations. `AppModel` depends on named narrow facets through `AppServices`, not
+the complete runtime adapter. `AppleRuntimeInventoryService`,
+`AppleInfrastructureService`, `AppleOwnedContainerRecoveryService`, and
+`AppleXPCRequestClient` own their focused vertical slices. The legacy
+`AppleContainerService` forwards those facets while remaining the temporary
+compatibility facade for image, lifecycle, inspection/tooling, terminal, and
+machine implementations that have not yet moved.
 
 Browser opening is intentionally outside the service mutation layer. The
 service re-fetches the same container creation identity, its running state, and

@@ -2,13 +2,21 @@ import ContainerResource
 import ContainerXPC
 import Foundation
 
-struct AppleContainerCleanupClient: Sendable {
-  private static let serviceIdentifier = "com.apple.container.apiserver"
+protocol AppleContainerCleanupTransport: Sendable {
+  func list(id: String) async throws -> [ContainerSnapshot]
+  func kill(id: String) async throws
+  func forceDelete(id: String) async throws
+}
 
-  let operationTimeout: Duration
+struct AppleContainerCleanupClient: AppleContainerCleanupTransport {
+  private let requestSender: any AppleXPCRequestSending
 
   init(operationTimeout: Duration = .seconds(15)) {
-    self.operationTimeout = operationTimeout
+    requestSender = AppleXPCRequestClient(operationTimeout: operationTimeout)
+  }
+
+  init(requestSender: any AppleXPCRequestSending) {
+    self.requestSender = requestSender
   }
 
   func list(id: String) async throws -> [ContainerSnapshot] {
@@ -40,13 +48,6 @@ struct AppleContainerCleanupClient: Sendable {
   }
 
   private func send(_ message: XPCMessage) async throws -> XPCMessage {
-    let client = XPCClient(service: Self.serviceIdentifier)
-    defer { client.close() }
-
-    return try await withTaskCancellationHandler {
-      try await client.send(message, responseTimeout: operationTimeout)
-    } onCancel: {
-      client.close()
-    }
+    try await requestSender.send(message, operation: "Clean up container")
   }
 }

@@ -12,13 +12,13 @@ final class ContainerInspectorModel {
 
   let containerID: String
   private let allocatedCPUCount: Int
-  private let service: any ContainerManaging
+  private let service: any ContainerInspecting
   private let maximumSampleCount = 60
 
   init(
     containerID: String,
     allocatedCPUCount: Int,
-    service: any ContainerManaging
+    service: any ContainerInspecting
   ) {
     self.containerID = containerID
     self.allocatedCPUCount = max(allocatedCPUCount, 1)

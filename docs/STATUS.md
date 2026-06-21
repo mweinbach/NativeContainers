@@ -7,8 +7,8 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 175 test declarations. The current full
-  app-hosted Xcode run passed all 168 deterministic tests, with seven destructive
+- The suite currently contains 186 test declarations. The current full
+  app-hosted Xcode run passed all 179 deterministic tests, with seven destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes the short-pipe framing, builder mount normalization, and strict
   path-component-containment regressions. Existing opt-in tests pass against
@@ -53,8 +53,14 @@ Updated: 2026-06-20.
   watchdog. Reconciliation and inventory refresh continue in fresh,
   cancellation-independent tasks. Container creation cancellation sends
   `KILL`, force-deletes only the exact operation-labeled partial container,
-  retries once, and verifies that it is absent; an unverifiable cleanup is
-  surfaced instead of being silently ignored.
+  retries with bounded backoff, and verifies that it is absent; an unverifiable
+  cleanup is surfaced instead of being silently ignored.
+- The runtime integration now has an explicit composition root and narrow
+  inventory, lifecycle, inspection, tooling, image, volume, network, browser,
+  and machine facets. Inventory aggregation, infrastructure lifecycle,
+  owned-container recovery, and bounded XPC requests are separate injectable
+  services; the legacy `AppleContainerService` remains a forwarding facade for
+  callers that still need the complete API.
 - Published TCP port ranges are expanded into exact endpoints. Creation
   validates literal IPv4/IPv6 hosts, brackets IPv6 for Apple's parser, and
   rejects host-port/protocol overlap before image work begins. The inspector
@@ -194,9 +200,9 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Decompose the monolithic runtime adapter into focused lifecycle, volume,
-   network, inventory, and reconciliation services behind narrow protocols,
-   while preserving the current UI-facing facade.
+1. Finish extracting container lifecycle, image, inspection/tooling, and machine
+   implementations from the compatibility facade into their existing narrow
+   service facets.
 2. Add named-volume/network attachment selection plus Unix-socket publishing
    and privileged host-access helpers.
 3. Add explicit builder-cache management plus build secrets, SSH forwarding,

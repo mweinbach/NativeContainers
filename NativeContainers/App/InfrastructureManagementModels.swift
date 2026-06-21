@@ -11,11 +11,11 @@ final class VolumeManagementModel {
   private(set) var prunePlan: VolumePrunePlan?
   private(set) var cleanupResult: ResourceCleanupResult?
 
-  private let service: any InfrastructureManaging
+  private let service: any VolumeManaging
   private let didMutate: @MainActor @Sendable () async -> Void
 
   init(
-    service: any InfrastructureManaging,
+    service: any VolumeManaging,
     didMutate: @escaping @MainActor @Sendable () async -> Void
   ) {
     self.service = service
@@ -56,16 +56,18 @@ final class VolumeManagementModel {
       return false
     }
     guard plan.canDelete else {
-      errorMessage = ResourceManagementError.volumeInUse(
-        name: plan.volume.name,
-        containerIDs: plan.volume.usedByContainerIDs
-      ).localizedDescription
+      errorMessage =
+        ResourceManagementError.volumeInUse(
+          name: plan.volume.name,
+          containerIDs: plan.volume.usedByContainerIDs
+        ).localizedDescription
       return false
     }
-    let succeeded = await mutate {
-      try await self.service.deleteVolume(plan)
-      return true
-    } ?? false
+    let succeeded =
+      await mutate {
+        try await self.service.deleteVolume(plan)
+        return true
+      } ?? false
     if succeeded { deletionPlan = nil }
     return succeeded
   }
@@ -84,9 +86,11 @@ final class VolumeManagementModel {
       errorMessage = ResourceManagementError.stalePlan("volume prune").localizedDescription
       return false
     }
-    guard let result: ResourceCleanupResult = await mutate({
-      try await self.service.pruneVolumes(plan)
-    }) else {
+    guard
+      let result: ResourceCleanupResult = await mutate({
+        try await self.service.pruneVolumes(plan)
+      })
+    else {
       return false
     }
     cleanupResult = result
@@ -165,11 +169,11 @@ final class NetworkManagementModel {
   private(set) var prunePlan: NetworkPrunePlan?
   private(set) var cleanupResult: ResourceCleanupResult?
 
-  private let service: any InfrastructureManaging
+  private let service: any NetworkManaging
   private let didMutate: @MainActor @Sendable () async -> Void
 
   init(
-    service: any InfrastructureManaging,
+    service: any NetworkManaging,
     didMutate: @escaping @MainActor @Sendable () async -> Void
   ) {
     self.service = service
@@ -214,16 +218,18 @@ final class NetworkManagementModel {
       return false
     }
     guard plan.network.usedByContainerIDs.isEmpty else {
-      errorMessage = ResourceManagementError.networkInUse(
-        name: plan.network.name,
-        containerIDs: plan.network.usedByContainerIDs
-      ).localizedDescription
+      errorMessage =
+        ResourceManagementError.networkInUse(
+          name: plan.network.name,
+          containerIDs: plan.network.usedByContainerIDs
+        ).localizedDescription
       return false
     }
-    let succeeded = await mutate {
-      try await self.service.deleteNetwork(plan)
-      return true
-    } ?? false
+    let succeeded =
+      await mutate {
+        try await self.service.deleteNetwork(plan)
+        return true
+      } ?? false
     if succeeded { deletionPlan = nil }
     return succeeded
   }
@@ -242,9 +248,11 @@ final class NetworkManagementModel {
       errorMessage = ResourceManagementError.stalePlan("network prune").localizedDescription
       return false
     }
-    guard let result: ResourceCleanupResult = await mutate({
-      try await self.service.pruneNetworks(plan)
-    }) else {
+    guard
+      let result: ResourceCleanupResult = await mutate({
+        try await self.service.pruneNetworks(plan)
+      })
+    else {
       return false
     }
     cleanupResult = result

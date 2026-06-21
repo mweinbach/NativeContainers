@@ -2,14 +2,32 @@ import ContainerAPIClient
 import ContainerResource
 import ContainerXPC
 import Foundation
+import XPC
 
-struct AppleInfrastructureClient: Sendable {
-  private static let serviceIdentifier = "com.apple.container.apiserver"
+protocol AppleInfrastructureTransport: Sendable {
+  func createVolume(
+    name: String,
+    driver: String,
+    driverOptions: [String: String],
+    labels: [String: String]
+  ) async throws -> VolumeConfiguration
+  func deleteVolume(name: String) async throws
+  func listVolumes() async throws -> [VolumeConfiguration]
+  func volumeDiskUsage(name: String) async throws -> UInt64
+  func createNetwork(configuration: NetworkConfiguration) async throws -> NetworkResource
+  func deleteNetwork(id: String) async throws
+  func listNetworks() async throws -> [NetworkResource]
+}
 
-  let operationTimeout: Duration
+struct AppleInfrastructureClient: AppleInfrastructureTransport {
+  private let requestSender: any AppleXPCRequestSending
 
   init(operationTimeout: Duration = .seconds(60)) {
-    self.operationTimeout = operationTimeout
+    requestSender = AppleXPCRequestClient(operationTimeout: operationTimeout)
+  }
+
+  init(requestSender: any AppleXPCRequestSending) {
+    self.requestSender = requestSender
   }
 
   func createVolume(
@@ -51,6 +69,15 @@ struct AppleInfrastructureClient: Sendable {
     let message = XPCMessage(route: .volumeDiskUsage)
     message.set(key: .volumeName, value: name)
     let response = try await send(message, operation: "Inspect volume storage \(name)")
+    let hasVolumeSize = XPCKeys.volumeSize.rawValue.withCString { key in
+      guard let value = xpc_dictionary_get_value(response.underlying, key) else {
+        return false
+      }
+      return xpc_get_type(value) == XPC_TYPE_UINT64
+    }
+    guard hasVolumeSize else {
+      throw ResourceManagementError.invalidInfrastructureResponse
+    }
     return response.uint64(key: .volumeSize)
   }
 
@@ -89,51 +116,6 @@ struct AppleInfrastructureClient: Sendable {
     _ message: XPCMessage,
     operation: String
   ) async throws -> XPCMessage {
-    let client = XPCClient(service: Self.serviceIdentifier)
-    let watchdogState = XPCWatchdogState()
-    let watchdog = Task {
-      do {
-        try await Task.sleep(for: operationTimeout)
-        guard !Task.isCancelled else { return }
-        watchdogState.markTimedOut()
-        client.close()
-      } catch {
-        // Cancellation is the normal completion path for the watchdog.
-      }
-    }
-
-    defer {
-      watchdog.cancel()
-      client.close()
-    }
-
-    do {
-      return try await withTaskCancellationHandler {
-        try await client.send(message)
-      } onCancel: {
-        client.close()
-      }
-    } catch {
-      if watchdogState.didTimeOut {
-        throw ResourceManagementError.operationTimedOut(operation)
-      }
-      try Task.checkCancellation()
-      throw error
-    }
-  }
-}
-
-private final class XPCWatchdogState: @unchecked Sendable {
-  private let lock = NSLock()
-  private var timedOut = false
-
-  var didTimeOut: Bool {
-    lock.withLock { timedOut }
-  }
-
-  func markTimedOut() {
-    lock.withLock {
-      timedOut = true
-    }
+    try await requestSender.send(message, operation: operation)
   }
 }

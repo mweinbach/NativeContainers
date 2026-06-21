@@ -317,7 +317,26 @@ impossible in 1.0.
 Every failed or cancelled container creation performs ownership-checked cleanup
 after releasing the shared runtime mutation lease. A dedicated short-lived XPC
 client sends `KILL` for a running owned container, requests force deletion,
-retries once, and verifies absence. Cleanup never acts on a replacement with a
-different operation label. If the postcondition cannot be verified, the app
-reports both the original operation error and cleanup failure instead of
-claiming rollback succeeded.
+retries with bounded backoff, and verifies absence. Cleanup never acts on a
+replacement with a different operation label. If the postcondition cannot be
+verified, the app reports both the original operation error and cleanup failure
+instead of claiming rollback succeeded.
+
+## ADR-017: Compose the app from narrow service facets
+
+**Status:** Accepted — 2026-06-20
+
+`AppCompositionRoot` is the only live dependency-construction site. It creates
+one container runtime graph and injects the same `RuntimeMutationCoordinator`
+into container, infrastructure, and image-build mutation paths. `AppServices`
+exposes narrow inventory, lifecycle, creation, inspection, tooling, terminal,
+machine, image, volume, network, and browser facets to `AppModel`; views keep
+their existing model factories and do not act as service locators.
+
+Low-level XPC sending, runtime inventory aggregation, volume/network/browser
+management, and owned-container recovery are separate injectable services.
+`AppleContainerService` remains a forwarding compatibility facade while the
+remaining lifecycle, image, inspection/tooling, and machine implementations are
+extracted incrementally. This preserves public call sites and one global
+mutation order while allowing deterministic timeout, cancellation,
+reconciliation, malformed-reply, and cleanup tests.

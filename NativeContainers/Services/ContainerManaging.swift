@@ -96,23 +96,33 @@ extension ImageManaging {
   }
 }
 
-protocol InfrastructureManaging: Sendable {
+protocol VolumeManaging: Sendable {
   func prepareVolumeCreation(_ request: VolumeCreateRequest) async throws -> VolumeCreationPlan
   func createVolume(_ plan: VolumeCreationPlan) async throws -> VolumeRecord
   func prepareVolumeDeletion(name: String) async throws -> VolumeDeletionPlan
   func deleteVolume(_ plan: VolumeDeletionPlan) async throws
   func prepareVolumePrune() async throws -> VolumePrunePlan
   func pruneVolumes(_ plan: VolumePrunePlan) async throws -> ResourceCleanupResult
+}
 
+protocol NetworkManaging: Sendable {
   func prepareNetworkCreation(_ request: NetworkCreateRequest) async throws -> NetworkCreationPlan
   func createNetwork(_ plan: NetworkCreationPlan) async throws -> NetworkRecord
   func prepareNetworkDeletion(id: String) async throws -> NetworkDeletionPlan
   func deleteNetwork(_ plan: NetworkDeletionPlan) async throws
   func prepareNetworkPrune() async throws -> NetworkPrunePlan
   func pruneNetworks(_ plan: NetworkPrunePlan) async throws -> ResourceCleanupResult
+}
 
+protocol ContainerBrowserResolving: Sendable {
   func resolveContainerBrowserURL(_ target: ContainerBrowserTarget) async throws -> URL
 }
+
+protocol InfrastructureManaging:
+  VolumeManaging,
+  NetworkManaging,
+  ContainerBrowserResolving
+{}
 
 extension InfrastructureManaging {
   func prepareVolumeCreation(_ request: VolumeCreateRequest) async throws -> VolumeCreationPlan {
@@ -168,34 +178,17 @@ extension InfrastructureManaging {
   }
 }
 
-protocol ContainerManaging: ImageManaging, InfrastructureManaging {
-  func loadInventory() async throws -> ContainerInventory
-  func createContainer(
-    request: ContainerCreationRequest,
-    progress: @escaping ContainerProgressHandler
-  ) async throws
-  func inspectContainer(id: String) async throws -> ContainerInspection
-  func sampleContainer(id: String) async throws -> ContainerStatistics?
-  func loadContainerLogs(id: String) async throws -> ContainerLogsSnapshot
-  func startContainer(id: String) async throws
-  func stopContainer(id: String) async throws
-  func restartContainer(id: String) async throws
-  func forceStopContainer(id: String) async throws
-  func deleteContainer(id: String) async throws
-  func executeCommand(
-    in id: String,
-    request: ContainerCommandRequest
-  ) async throws -> ContainerCommandResult
-  func openTerminal(
-    in id: String,
-    request: ContainerTerminalRequest
-  ) async throws -> any ContainerTerminalSession
-  func copyIntoContainer(id: String, source: URL, destination: String) async throws
-  func copyFromContainer(id: String, source: String, destination: URL) async throws
-  func startMachine(id: String) async throws
-  func stopMachine(id: String) async throws
-  func deleteMachine(id: String) async throws
-}
+protocol ContainerManaging:
+  ImageManaging,
+  InfrastructureManaging,
+  ContainerInventoryLoading,
+  ContainerCreating,
+  ContainerInspecting,
+  ContainerLifecycleManaging,
+  ContainerTooling,
+  ContainerTerminalOpening,
+  MachineLifecycleManaging
+{}
 
 extension ContainerManaging {
   func openTerminal(

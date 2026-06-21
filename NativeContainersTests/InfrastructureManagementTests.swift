@@ -1,3 +1,4 @@
+import ContainerXPC
 import Foundation
 import Testing
 
@@ -73,6 +74,21 @@ struct InfrastructureManagementTests {
         name: "backend",
         labels: [ResourceOperationLabel.appleResourceRoleKey: "builtin"]
       )
+    }
+  }
+
+  @Test
+  func infrastructureClientRejectsMissingListPayloads() async {
+    let client = AppleInfrastructureClient(requestSender: MissingPayloadXPCSender())
+
+    await #expect(throws: ResourceManagementError.invalidInfrastructureResponse) {
+      try await client.listVolumes()
+    }
+    await #expect(throws: ResourceManagementError.invalidInfrastructureResponse) {
+      try await client.listNetworks()
+    }
+    await #expect(throws: ResourceManagementError.invalidInfrastructureResponse) {
+      try await client.volumeDiskUsage(name: "missing-size")
     }
   }
 
@@ -347,6 +363,12 @@ private func networkRecord(
     isBuiltin: isBuiltin,
     usedByContainerIDs: usedByContainerIDs
   )
+}
+
+private struct MissingPayloadXPCSender: AppleXPCRequestSending {
+  func send(_ message: XPCMessage, operation: String) async throws -> XPCMessage {
+    XPCMessage(route: .volumeList)
+  }
 }
 
 private actor RefreshCounter {

@@ -10,8 +10,11 @@ must leave a usable, test-backed product slice.
 - [x] Direct Apple client adapter reports container system health.
 - [x] Live inventories for containers, images, volumes, and Linux machines.
 - [x] Stable domain models and mockable service protocols.
-- [ ] Extract lifecycle, inventory, volume, network, and reconciliation logic
-      from the monolithic Apple runtime adapter into focused services.
+- [x] Extract inventory, volume/network/browser, XPC, and owned-resource
+      recovery logic into injectable focused services behind an explicit
+      composition root.
+- [ ] Extract the remaining container lifecycle, image, inspection/tooling, and
+      machine implementations from the compatibility facade.
 - [x] Persistent VM bundle library with schema versioning and atomic writes.
 - [x] SwiftUI management shell with useful empty/error/loading states.
 - [x] Diagnostics screen records runtime and package versions.

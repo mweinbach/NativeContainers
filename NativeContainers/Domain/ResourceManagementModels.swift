@@ -249,7 +249,8 @@ struct ResourceCleanupPartialCompletionError: LocalizedError, Sendable {
   var errorDescription: String? {
     let removed = result.removedResourceNames.count
     let remaining = result.failedResources.count
-    return "\(operation) was cancelled after removing \(removed) resource(s); \(remaining) reviewed resource(s) remain."
+    return
+      "\(operation) was cancelled after removing \(removed) resource(s); \(remaining) reviewed resource(s) remain."
   }
 }
 
@@ -297,7 +298,8 @@ enum ContainerBrowserURLBuilder {
       components.scheme = scheme.rawValue
       components.host = host
     }
-    let isDefaultPort = (scheme == .http && port.hostPort == 80)
+    let isDefaultPort =
+      (scheme == .http && port.hostPort == 80)
       || (scheme == .https && port.hostPort == 443)
     if !isDefaultPort {
       components.port = Int(port.hostPort)
@@ -443,7 +445,7 @@ enum ResourceManagementError: LocalizedError, Equatable, Sendable {
     case .invalidBrowserHost(let host):
       "“\(host)” is not a valid browser host."
     case .operationTimedOut(let operation):
-      "\(operation) did not respond within 60 seconds. Its XPC connection was closed and runtime state will be reconciled."
+      "\(operation) exceeded its safety timeout. Its XPC connection was closed and runtime state will be reconciled."
     case .invalidInfrastructureResponse:
       "Apple’s container service returned an incomplete infrastructure response."
     case .cleanupStateUnknown(let resource):

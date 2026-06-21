@@ -10,20 +10,34 @@ final class ContainerProvisioningModel {
   private(set) var pullPlan: ImagePullPlan?
   private(set) var pullResult: ImagePullResult?
 
-  private let service: any ContainerManaging
+  private let containerCreator: any ContainerCreating
+  private let imageService: any ImageManaging
   private let didComplete: @MainActor @Sendable () async -> Void
 
   init(
+    containerCreator: any ContainerCreating,
+    imageService: any ImageManaging,
+    didComplete: @escaping @MainActor @Sendable () async -> Void
+  ) {
+    self.containerCreator = containerCreator
+    self.imageService = imageService
+    self.didComplete = didComplete
+  }
+
+  convenience init(
     service: any ContainerManaging,
     didComplete: @escaping @MainActor @Sendable () async -> Void
   ) {
-    self.service = service
-    self.didComplete = didComplete
+    self.init(
+      containerCreator: service,
+      imageService: service,
+      didComplete: didComplete
+    )
   }
 
   func createContainer(_ request: ContainerCreationRequest) async -> Bool {
     await perform { [self] in
-      try await service.createContainer(request: request) { update in
+      try await containerCreator.createContainer(request: request) { update in
         await self.receive(update)
       }
     }
@@ -43,7 +57,7 @@ final class ContainerProvisioningModel {
     pullResult = nil
     defer { isWorking = false }
     do {
-      let plan = try await service.prepareImagePull(
+      let plan = try await imageService.prepareImagePull(
         reference: reference,
         platform: platform,
         transport: transport,
@@ -76,7 +90,7 @@ final class ContainerProvisioningModel {
     defer { isWorking = false }
 
     do {
-      let result = try await service.pullImage(plan, authorization: authorization) { update in
+      let result = try await imageService.pullImage(plan, authorization: authorization) { update in
         await self.receive(update)
       }
       pullResult = result

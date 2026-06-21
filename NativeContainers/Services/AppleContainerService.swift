@@ -9,186 +9,59 @@ import MachineAPIClient
 import SystemPackage
 import TerminalProgress
 
-private enum InfrastructureLookup<Value: Sendable>: Sendable {
-  case resolved(Value?)
-  case failed
-}
-
 actor AppleContainerService: ContainerManaging {
   private static let maximumLogBytes = 512 * 1_024
   private static let maximumCommandOutputBytes = 1_024 * 1_024
-  private static let creationOperationLabel = "com.nativecontainers.creation-operation"
 
-  private let containerClient = ContainerClient()
-  private let machineClient = MachineClient()
-  private let infrastructureClient: AppleInfrastructureClient
-  private let containerCleanupClient: AppleContainerCleanupClient
+  private let containerClient: ContainerClient
+  private let machineClient: MachineClient
+  private let inventoryService: AppleRuntimeInventoryService
+  private let infrastructureService: AppleInfrastructureService
+  private let ownedContainerRecovery: AppleOwnedContainerRecoveryService
   private let runtimeMutationCoordinator: RuntimeMutationCoordinator
   private let terminalProcessLauncher: any ContainerTerminalProcessLaunching
 
   init(
     terminalProcessLauncher: any ContainerTerminalProcessLaunching =
       AppleContainerTerminalProcessLauncher(),
-    infrastructureClient: AppleInfrastructureClient = AppleInfrastructureClient(),
-    containerCleanupClient: AppleContainerCleanupClient = AppleContainerCleanupClient(),
+    containerClient: ContainerClient = ContainerClient(),
+    machineClient: MachineClient = MachineClient(),
+    infrastructureClient: any AppleInfrastructureTransport = AppleInfrastructureClient(),
+    containerCleanupClient: any AppleContainerCleanupTransport = AppleContainerCleanupClient(),
+    inventoryService: AppleRuntimeInventoryService? = nil,
+    infrastructureService: AppleInfrastructureService? = nil,
+    ownedContainerRecovery: AppleOwnedContainerRecoveryService? = nil,
     runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared
   ) {
     self.terminalProcessLauncher = terminalProcessLauncher
-    self.infrastructureClient = infrastructureClient
-    self.containerCleanupClient = containerCleanupClient
+    self.containerClient = containerClient
+    self.machineClient = machineClient
+    let containerReader = AppleContainerSnapshotReader(client: containerClient)
+    self.inventoryService =
+      inventoryService
+      ?? AppleRuntimeInventoryService(
+        infrastructureClient: infrastructureClient,
+        containerReader: containerReader,
+        machineClient: machineClient
+      )
+    self.infrastructureService =
+      infrastructureService
+      ?? AppleInfrastructureService(
+        infrastructureClient: infrastructureClient,
+        containerReader: containerReader,
+        runtimeMutationCoordinator: runtimeMutationCoordinator
+      )
+    self.ownedContainerRecovery =
+      ownedContainerRecovery
+      ?? AppleOwnedContainerRecoveryService(
+        cleanupClient: containerCleanupClient,
+        ownershipLabel: AppleContainerOwnership.creationOperationLabel
+      )
     self.runtimeMutationCoordinator = runtimeMutationCoordinator
   }
 
   func loadInventory() async throws -> ContainerInventory {
-    async let healthRequest = ClientHealthCheck.ping()
-    async let containerRequest = containerClient.list()
-    async let imageRequest = ClientImage.list()
-    async let volumeRequest = infrastructureClient.listVolumes()
-    async let networkRequest = infrastructureClient.listNetworks()
-    async let machineRequest = machineClient.list()
-    async let systemConfigurationRequest = loadSystemConfiguration()
-
-    let (
-      health,
-      snapshots,
-      clientImages,
-      configurations,
-      networkResources,
-      machineSnapshots,
-      systemConfiguration
-    ) = try await (
-      healthRequest,
-      containerRequest,
-      imageRequest,
-      volumeRequest,
-      networkRequest,
-      machineRequest,
-      systemConfigurationRequest
-    )
-
-    let system = ContainerSystemInfo(
-      version: health.apiServerVersion,
-      build: health.apiServerBuild,
-      commit: health.apiServerCommit,
-      applicationRoot: health.appRoot,
-      installRoot: health.installRoot
-    )
-
-    let containers = snapshots.map { snapshot in
-      ContainerRecord(
-        id: snapshot.id,
-        imageReference: snapshot.configuration.image.reference,
-        platform: String(describing: snapshot.platform),
-        state: RuntimeState(rawValue: snapshot.status.rawValue) ?? .unknown,
-        ipAddress: snapshot.networks.first.map { String(describing: $0.ipv4Address) },
-        createdAt: snapshot.configuration.creationDate,
-        startedAt: snapshot.startedDate,
-        cpuCount: snapshot.configuration.resources.cpus,
-        memoryBytes: snapshot.configuration.resources.memoryInBytes,
-        ports: snapshot.configuration.publishedPorts.flatMap { port in
-          (0..<port.count).map { offset in
-            ContainerPort(
-              hostAddress: String(describing: port.hostAddress),
-              hostPort: port.hostPort + offset,
-              containerPort: port.containerPort + offset,
-              protocolName: port.proto.rawValue
-            )
-          }
-        }
-      )
-    }
-
-    let images = clientImages.filter { image in
-      !Utility.isInfraImage(
-        name: image.reference,
-        builderImage: systemConfiguration.build.image,
-        initImage: systemConfiguration.vminit.image
-      )
-    }.map { image in
-      ImageRecord(
-        reference: image.reference,
-        digest: image.digest,
-        mediaType: image.descriptor.mediaType,
-        indexSizeBytes: image.descriptor.size
-      )
-    }
-
-    let volumeConsumers = snapshots.reduce(into: [String: Set<String>]()) { result, snapshot in
-      for volumeName in snapshot.configuration.mounts.compactMap(\.volumeName) {
-        result[volumeName, default: []].insert(snapshot.id)
-      }
-    }
-    let networkConsumers = snapshots.reduce(into: [String: Set<String>]()) { result, snapshot in
-      for attachment in snapshot.configuration.networks {
-        result[attachment.network, default: []].insert(snapshot.id)
-      }
-    }
-    let allocatedVolumeSizes = await loadAllocatedVolumeSizes(
-      names: configurations.map(\.name)
-    )
-
-    let volumes = configurations.map { volume in
-      VolumeRecord(
-        id: volume.id,
-        name: volume.name,
-        driver: volume.driver,
-        format: volume.format,
-        source: volume.source,
-        createdAt: volume.creationDate,
-        sizeBytes: volume.sizeInBytes,
-        allocatedBytes: allocatedVolumeSizes[volume.name],
-        labels: volume.labels,
-        options: volume.options,
-        isAnonymous: volume.isAnonymous,
-        usedByContainerIDs: (volumeConsumers[volume.name] ?? []).sorted()
-      )
-    }
-
-    let networks = networkResources.map { network in
-      NetworkRecord(
-        id: network.id,
-        name: network.name,
-        mode: ContainerNetworkMode(rawValue: network.configuration.mode.rawValue) ?? .nat,
-        createdAt: network.creationDate,
-        configuredIPv4Subnet: network.configuration.ipv4Subnet.map(String.init(describing:)),
-        configuredIPv6Subnet: network.configuration.ipv6Subnet.map(String.init(describing:)),
-        assignedIPv4Subnet: String(describing: network.status.ipv4Subnet),
-        ipv4Gateway: String(describing: network.status.ipv4Gateway),
-        assignedIPv6Subnet: network.status.ipv6Subnet.map(String.init(describing:)),
-        labels: network.labels.dictionary,
-        plugin: network.configuration.plugin,
-        options: network.configuration.options,
-        isBuiltin: network.isBuiltin,
-        usedByContainerIDs: (networkConsumers[network.id] ?? []).sorted()
-      )
-    }
-
-    let machines = machineSnapshots.map { machine in
-      LinuxMachineRecord(
-        id: machine.id,
-        imageReference: machine.configuration.image.reference,
-        platform: String(describing: machine.platform),
-        state: RuntimeState(rawValue: machine.status.rawValue) ?? .unknown,
-        ipAddress: machine.ipAddress,
-        createdAt: machine.createdDate,
-        startedAt: machine.startedDate,
-        diskSizeBytes: machine.diskSize,
-        cpuCount: machine.bootConfig.cpus,
-        memoryDescription: String(describing: machine.bootConfig.memory),
-        isInitialized: machine.initialized
-      )
-    }
-
-    return ContainerInventory(
-      system: system,
-      containers: containers.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending },
-      images: images.sorted {
-        $0.reference.localizedStandardCompare($1.reference) == .orderedAscending
-      },
-      volumes: volumes.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
-      networks: networks.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
-      machines: machines.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
-    )
+    try await inventoryService.loadInventory()
   }
 
   func startContainer(id: String) async throws {
@@ -785,439 +658,55 @@ actor AppleContainerService: ContainerManaging {
   }
 
   func prepareVolumeCreation(_ request: VolumeCreateRequest) async throws -> VolumeCreationPlan {
-    guard request.labels[VolumeConfiguration.anonymousLabel] == nil else {
-      throw ResourceManagementError.reservedMetadataKey(VolumeConfiguration.anonymousLabel)
-    }
-    _ = try ResourceLabels(request.labels)
-    guard try await currentVolumeRecord(name: request.name) == nil else {
-      throw ResourceManagementError.resourceAlreadyExists(request.name)
-    }
-    return VolumeCreationPlan(request: request, generatedAt: Date())
+    try await infrastructureService.prepareVolumeCreation(request)
   }
 
   func createVolume(_ plan: VolumeCreationPlan) async throws -> VolumeRecord {
-    do {
-      return try await withRuntimeMutation {
-        try await self.createVolumeWhileLocked(plan)
-      }
-    } catch {
-      let originalError = error
-      switch await uncancelledVolumeRecord(name: plan.request.name) {
-      case .resolved(let record?) where volume(record, matches: plan.request):
-        if originalError is CancellationError {
-          try await removeOwnedVolume(plan.request)
-          throw CancellationError()
-        }
-        return record
-      case .resolved:
-        throw originalError
-      case .failed:
-        if originalError is CancellationError {
-          throw ResourceManagementError.cleanupStateUnknown(plan.request.name)
-        }
-        throw originalError
-      }
-    }
-  }
-
-  private func createVolumeWhileLocked(_ plan: VolumeCreationPlan) async throws -> VolumeRecord {
-    guard try await currentVolumeRecord(name: plan.request.name) == nil else {
-      throw ResourceManagementError.stalePlan(plan.request.name)
-    }
-    try Task.checkCancellation()
-
-    var labels = plan.request.labels
-    labels[ResourceOperationLabel.key] = plan.request.operationID.uuidString
-    let options = [
-      "size": "\(plan.request.sizeBytes)B",
-      "journal": plan.request.journalMode.rawValue,
-    ]
-    let configuration = try await infrastructureClient.createVolume(
-      name: plan.request.name,
-      driver: "local",
-      driverOptions: options,
-      labels: labels
-    )
-    try Task.checkCancellation()
-
-    let allocatedBytes: UInt64?
-    do {
-      allocatedBytes = try await infrastructureClient.volumeDiskUsage(name: configuration.name)
-    } catch is CancellationError {
-      throw CancellationError()
-    } catch {
-      allocatedBytes = nil
-    }
-    try Task.checkCancellation()
-
-    let created = VolumeRecord(
-      id: configuration.id,
-      name: configuration.name,
-      driver: configuration.driver,
-      format: configuration.format,
-      source: configuration.source,
-      createdAt: configuration.creationDate,
-      sizeBytes: configuration.sizeInBytes,
-      allocatedBytes: allocatedBytes,
-      labels: configuration.labels,
-      options: configuration.options,
-      isAnonymous: configuration.isAnonymous,
-      usedByContainerIDs: []
-    )
-    guard volume(created, matches: plan.request) else {
-      throw ResourceManagementError.stalePlan(plan.request.name)
-    }
-    return created
+    try await infrastructureService.createVolume(plan)
   }
 
   func prepareVolumeDeletion(name: String) async throws -> VolumeDeletionPlan {
-    guard let volume = try await currentVolumeRecord(name: name) else {
-      throw ResourceManagementError.stalePlan(name)
-    }
-    return VolumeDeletionPlan(
-      volume: volume,
-      identity: volume.configurationIdentity,
-      generatedAt: Date()
-    )
+    try await infrastructureService.prepareVolumeDeletion(name: name)
   }
 
   func deleteVolume(_ plan: VolumeDeletionPlan) async throws {
-    try await withRuntimeMutation {
-      try await self.deleteVolumeWhileLocked(plan)
-    }
-  }
-
-  private func deleteVolumeWhileLocked(_ plan: VolumeDeletionPlan) async throws {
-    guard let current = try await currentVolumeRecord(name: plan.volume.name) else {
-      return
-    }
-    try InfrastructureExecutionSafety.validateVolumeDeletion(
-      plan: plan,
-      current: current
-    )
-    try Task.checkCancellation()
-
-    do {
-      try await infrastructureClient.deleteVolume(name: current.name)
-    } catch {
-      guard shouldReconcileAfterInfrastructureError(error) else { throw error }
-      switch await uncancelledVolumeRecord(name: current.name) {
-      case .resolved(nil):
-        return
-      case .resolved(let reconciled?):
-        guard reconciled.configurationIdentity == plan.identity else {
-          throw ResourceManagementError.stalePlan(current.name)
-        }
-        throw error
-      case .failed:
-        throw error
-      }
-    }
+    try await infrastructureService.deleteVolume(plan)
   }
 
   func prepareVolumePrune() async throws -> VolumePrunePlan {
-    let volumes = try await loadCurrentVolumeRecords()
-    let candidates = volumes
-      .filter { $0.usedByContainerIDs.isEmpty }
-      .map {
-        VolumeDeletionPlan(
-          volume: $0,
-          identity: $0.configurationIdentity,
-          generatedAt: Date()
-        )
-      }
-    return VolumePrunePlan(candidates: candidates, generatedAt: Date())
+    try await infrastructureService.prepareVolumePrune()
   }
 
   func pruneVolumes(_ plan: VolumePrunePlan) async throws -> ResourceCleanupResult {
-    try await withRuntimeMutation {
-      var removed: [String] = []
-      var failures: [ResourceOperationFailure] = []
-      var reclaimedBytes: UInt64 = 0
-
-      func cancellationResult(startingAt index: Int) -> ResourceCleanupResult {
-        let pending = plan.candidates[index...].map {
-          ResourceOperationFailure(
-            resource: $0.volume.name,
-            message: "Not removed because pruning was cancelled."
-          )
-        }
-        return ResourceCleanupResult(
-          removedResourceNames: removed.sorted(),
-          failedResources: failures + pending,
-          reclaimedBytes: reclaimedBytes
-        )
-      }
-
-      for (index, candidate) in plan.candidates.enumerated() {
-        if Task.isCancelled {
-          throw ResourceCleanupPartialCompletionError(
-            operation: "Volume pruning",
-            result: cancellationResult(startingAt: index)
-          )
-        }
-
-        let allocated: UInt64
-        do {
-          allocated = try await self.infrastructureClient.volumeDiskUsage(
-            name: candidate.volume.name
-          )
-        } catch is CancellationError {
-          throw ResourceCleanupPartialCompletionError(
-            operation: "Volume pruning",
-            result: cancellationResult(startingAt: index)
-          )
-        } catch {
-          allocated = 0
-        }
-
-        do {
-          try Task.checkCancellation()
-          try await self.deleteVolumeWhileLocked(candidate)
-          removed.append(candidate.volume.name)
-          let (sum, overflow) = reclaimedBytes.addingReportingOverflow(allocated)
-          reclaimedBytes = overflow ? UInt64.max : sum
-        } catch is CancellationError {
-          throw ResourceCleanupPartialCompletionError(
-            operation: "Volume pruning",
-            result: cancellationResult(startingAt: index)
-          )
-        } catch {
-          failures.append(
-            ResourceOperationFailure(
-              resource: candidate.volume.name,
-              message: error.localizedDescription
-            )
-          )
-        }
-      }
-
-      return ResourceCleanupResult(
-        removedResourceNames: removed.sorted(),
-        failedResources: failures,
-        reclaimedBytes: reclaimedBytes
-      )
-    }
+    try await infrastructureService.pruneVolumes(plan)
   }
 
   func prepareNetworkCreation(_ request: NetworkCreateRequest) async throws -> NetworkCreationPlan {
-    guard request.name != NetworkClient.noNetworkName else {
-      throw ResourceManagementError.invalidNetworkName
-    }
-    _ = try ResourceLabels(request.labels)
-    _ = try request.ipv4Subnet.map { try CIDRv4($0) }
-    _ = try request.ipv6Subnet.map { try CIDRv6($0) }
-    guard try await currentNetworkRecord(id: request.name) == nil else {
-      throw ResourceManagementError.resourceAlreadyExists(request.name)
-    }
-    return NetworkCreationPlan(request: request, generatedAt: Date())
+    try await infrastructureService.prepareNetworkCreation(request)
   }
 
   func createNetwork(_ plan: NetworkCreationPlan) async throws -> NetworkRecord {
-    do {
-      return try await withRuntimeMutation {
-        try await self.createNetworkWhileLocked(plan)
-      }
-    } catch {
-      let originalError = error
-      switch await uncancelledNetworkRecord(id: plan.request.name) {
-      case .resolved(let record?) where network(record, matches: plan.request):
-        if originalError is CancellationError {
-          try await removeOwnedNetwork(plan.request)
-          throw CancellationError()
-        }
-        return record
-      case .resolved:
-        throw originalError
-      case .failed:
-        if originalError is CancellationError {
-          throw ResourceManagementError.cleanupStateUnknown(plan.request.name)
-        }
-        throw originalError
-      }
-    }
-  }
-
-  private func createNetworkWhileLocked(_ plan: NetworkCreationPlan) async throws -> NetworkRecord {
-    guard try await currentNetworkRecord(id: plan.request.name) == nil else {
-      throw ResourceManagementError.stalePlan(plan.request.name)
-    }
-    try Task.checkCancellation()
-
-    var labels = plan.request.labels
-    labels[ResourceOperationLabel.key] = plan.request.operationID.uuidString
-    let configuration = try NetworkConfiguration(
-      name: plan.request.name,
-      mode: NetworkMode(rawValue: plan.request.mode.rawValue) ?? .nat,
-      ipv4Subnet: try plan.request.ipv4Subnet.map { try CIDRv4($0) },
-      ipv6Subnet: try plan.request.ipv6Subnet.map { try CIDRv6($0) },
-      labels: ResourceLabels(labels),
-      plugin: "container-network-vmnet"
-    )
-    let resource = try await infrastructureClient.createNetwork(configuration: configuration)
-    try Task.checkCancellation()
-
-    let created = NetworkRecord(
-      id: resource.id,
-      name: resource.name,
-      mode: ContainerNetworkMode(rawValue: resource.configuration.mode.rawValue) ?? .nat,
-      createdAt: resource.creationDate,
-      configuredIPv4Subnet: resource.configuration.ipv4Subnet.map(String.init(describing:)),
-      configuredIPv6Subnet: resource.configuration.ipv6Subnet.map(String.init(describing:)),
-      assignedIPv4Subnet: String(describing: resource.status.ipv4Subnet),
-      ipv4Gateway: String(describing: resource.status.ipv4Gateway),
-      assignedIPv6Subnet: resource.status.ipv6Subnet.map(String.init(describing:)),
-      labels: resource.labels.dictionary,
-      plugin: resource.configuration.plugin,
-      options: resource.configuration.options,
-      isBuiltin: resource.isBuiltin,
-      usedByContainerIDs: []
-    )
-    guard network(created, matches: plan.request) else {
-      throw ResourceManagementError.stalePlan(plan.request.name)
-    }
-    return created
+    try await infrastructureService.createNetwork(plan)
   }
 
   func prepareNetworkDeletion(id: String) async throws -> NetworkDeletionPlan {
-    guard let network = try await currentNetworkRecord(id: id) else {
-      throw ResourceManagementError.stalePlan(id)
-    }
-    return NetworkDeletionPlan(
-      network: network,
-      identity: network.configurationIdentity,
-      generatedAt: Date()
-    )
+    try await infrastructureService.prepareNetworkDeletion(id: id)
   }
 
   func deleteNetwork(_ plan: NetworkDeletionPlan) async throws {
-    try await withRuntimeMutation {
-      try await self.deleteNetworkWhileLocked(plan)
-    }
-  }
-
-  private func deleteNetworkWhileLocked(_ plan: NetworkDeletionPlan) async throws {
-    guard let current = try await currentNetworkRecord(id: plan.network.id) else {
-      return
-    }
-    try InfrastructureExecutionSafety.validateNetworkDeletion(
-      plan: plan,
-      current: current
-    )
-    try Task.checkCancellation()
-
-    do {
-      try await infrastructureClient.deleteNetwork(id: current.id)
-    } catch {
-      guard shouldReconcileAfterInfrastructureError(error) else { throw error }
-      switch await uncancelledNetworkRecord(id: current.id) {
-      case .resolved(nil):
-        return
-      case .resolved(let reconciled?):
-        guard reconciled.configurationIdentity == plan.identity else {
-          throw ResourceManagementError.stalePlan(current.name)
-        }
-        throw error
-      case .failed:
-        throw error
-      }
-    }
+    try await infrastructureService.deleteNetwork(plan)
   }
 
   func prepareNetworkPrune() async throws -> NetworkPrunePlan {
-    let networks = try await loadCurrentNetworkRecords()
-    let candidates = networks
-      .filter { !$0.isBuiltin && $0.usedByContainerIDs.isEmpty }
-      .map {
-        NetworkDeletionPlan(
-          network: $0,
-          identity: $0.configurationIdentity,
-          generatedAt: Date()
-        )
-      }
-    return NetworkPrunePlan(candidates: candidates, generatedAt: Date())
+    try await infrastructureService.prepareNetworkPrune()
   }
 
   func pruneNetworks(_ plan: NetworkPrunePlan) async throws -> ResourceCleanupResult {
-    try await withRuntimeMutation {
-      var removed: [String] = []
-      var failures: [ResourceOperationFailure] = []
-
-      func cancellationResult(startingAt index: Int) -> ResourceCleanupResult {
-        let pending = plan.candidates[index...].map {
-          ResourceOperationFailure(
-            resource: $0.network.name,
-            message: "Not removed because pruning was cancelled."
-          )
-        }
-        return ResourceCleanupResult(
-          removedResourceNames: removed.sorted(),
-          failedResources: failures + pending,
-          reclaimedBytes: 0
-        )
-      }
-
-      for (index, candidate) in plan.candidates.enumerated() {
-        if Task.isCancelled {
-          throw ResourceCleanupPartialCompletionError(
-            operation: "Network pruning",
-            result: cancellationResult(startingAt: index)
-          )
-        }
-
-        do {
-          try await self.deleteNetworkWhileLocked(candidate)
-          removed.append(candidate.network.name)
-        } catch is CancellationError {
-          throw ResourceCleanupPartialCompletionError(
-            operation: "Network pruning",
-            result: cancellationResult(startingAt: index)
-          )
-        } catch {
-          failures.append(
-            ResourceOperationFailure(
-              resource: candidate.network.name,
-              message: error.localizedDescription
-            )
-          )
-        }
-      }
-
-      return ResourceCleanupResult(
-        removedResourceNames: removed.sorted(),
-        failedResources: failures,
-        reclaimedBytes: 0
-      )
-    }
+    try await infrastructureService.pruneNetworks(plan)
   }
 
   func resolveContainerBrowserURL(_ target: ContainerBrowserTarget) async throws -> URL {
-    let snapshot = try await containerClient.get(id: target.containerID)
-    guard snapshot.configuration.creationDate == target.containerCreatedAt else {
-      throw ResourceManagementError.containerReplaced(target.containerID)
-    }
-    guard snapshot.status == .running else {
-      throw ResourceManagementError.containerNotRunning(target.containerID)
-    }
-
-    let publishedPorts = snapshot.configuration.publishedPorts.flatMap { port in
-      (0..<port.count).map { offset in
-        ContainerPort(
-          hostAddress: String(describing: port.hostAddress),
-          hostPort: port.hostPort + offset,
-          containerPort: port.containerPort + offset,
-          protocolName: port.proto.rawValue
-        )
-      }
-    }
-    guard let publishedPort = publishedPorts.first(where: { $0.id == target.portID }) else {
-      throw ResourceManagementError.publishedPortChanged
-    }
-
-    return try ContainerBrowserURLBuilder.makeURL(
-      port: publishedPort,
-      scheme: target.scheme
-    )
+    try await infrastructureService.resolveContainerBrowserURL(target)
   }
 
   func createContainer(
@@ -1231,7 +720,7 @@ actor AppleContainerService: ContainerManaging {
     } catch {
       let operationMessage = error.localizedDescription
       do {
-        try await removeContainerIfOwned(
+        try await ownedContainerRecovery.removeOwnedContainer(
           id: request.name,
           operationID: request.operationID
         )
@@ -1285,7 +774,9 @@ actor AppleContainerService: ContainerManaging {
       entrypoint: nil,
       initImage: nil,
       kernel: nil,
-      labels: ["\(Self.creationOperationLabel)=\(request.operationID.uuidString)"],
+      labels: [
+        "\(AppleContainerOwnership.creationOperationLabel)=\(request.operationID.uuidString)"
+      ],
       mounts: [],
       name: request.name,
       networks: [],
@@ -1377,7 +868,9 @@ actor AppleContainerService: ContainerManaging {
       defaultMemory: systemConfiguration.container.memory
     )
     configuration.rosetta = request.architecture == .amd64
-    configuration.labels = [Self.creationOperationLabel: request.operationID.uuidString]
+    configuration.labels = [
+      AppleContainerOwnership.creationOperationLabel: request.operationID.uuidString
+    ]
     configuration.publishedPorts = try Parser.publishPorts(
       request.publishedPorts.map(\.appleSpecification)
     )
@@ -1392,11 +885,7 @@ actor AppleContainerService: ContainerManaging {
     configuration.useInit = request.useInitProcess
     configuration.stopSignal = imageConfiguration?.stopSignal
 
-    guard
-      let builtinNetwork = try await infrastructureClient.listNetworks().first(where: {
-        $0.id == NetworkClient.defaultNetworkName && $0.isBuiltin
-      })
-    else {
+    guard let builtinNetwork = try await infrastructureService.builtinNetworkResource() else {
       throw AppleContainerServiceError.builtinNetworkUnavailable
     }
     let hostname = systemConfiguration.dns.domain.map { "\(request.name).\($0)." } ?? request.name
@@ -2022,331 +1511,6 @@ actor AppleContainerService: ContainerManaging {
     )
   }
 
-  private func uncancelledVolumeRecord(
-    name: String
-  ) async -> InfrastructureLookup<VolumeRecord> {
-    await Task.detached { [self] in
-      do {
-        return .resolved(try await currentVolumeRecord(name: name))
-      } catch {
-        return .failed
-      }
-    }.value
-  }
-
-  private func uncancelledNetworkRecord(
-    id: String
-  ) async -> InfrastructureLookup<NetworkRecord> {
-    await Task.detached { [self] in
-      do {
-        return .resolved(try await currentNetworkRecord(id: id))
-      } catch {
-        return .failed
-      }
-    }.value
-  }
-
-  private func removeOwnedVolume(_ request: VolumeCreateRequest) async throws {
-    do {
-      try await Task.detached { [self] in
-        guard let current = try await currentVolumeRecord(name: request.name),
-          volume(current, matches: request)
-        else {
-          return
-        }
-
-        do {
-          try await infrastructureClient.deleteVolume(name: request.name)
-        } catch {
-          if let remaining = try await currentVolumeRecord(name: request.name),
-            volume(remaining, matches: request)
-          {
-            throw error
-          }
-          return
-        }
-
-        if let remaining = try await currentVolumeRecord(name: request.name),
-          volume(remaining, matches: request)
-        {
-          throw ResourceManagementError.ownedResourceCleanupFailed(request.name)
-        }
-      }.value
-    } catch {
-      throw ResourceManagementError.ownedResourceCleanupFailed(request.name)
-    }
-  }
-
-  private func removeOwnedNetwork(_ request: NetworkCreateRequest) async throws {
-    do {
-      try await Task.detached { [self] in
-        guard let current = try await currentNetworkRecord(id: request.name),
-          network(current, matches: request)
-        else {
-          return
-        }
-
-        do {
-          try await infrastructureClient.deleteNetwork(id: current.id)
-        } catch {
-          if let remaining = try await currentNetworkRecord(id: current.id),
-            network(remaining, matches: request)
-          {
-            throw error
-          }
-          return
-        }
-
-        if let remaining = try await currentNetworkRecord(id: current.id),
-          network(remaining, matches: request)
-        {
-          throw ResourceManagementError.ownedResourceCleanupFailed(request.name)
-        }
-      }.value
-    } catch {
-      throw ResourceManagementError.ownedResourceCleanupFailed(request.name)
-    }
-  }
-
-  private func shouldReconcileAfterInfrastructureError(_ error: any Error) -> Bool {
-    if error is CancellationError { return true }
-    guard let resourceError = error as? ResourceManagementError else { return false }
-    if case .operationTimedOut = resourceError { return true }
-    return false
-  }
-
-  private func removeContainerIfOwned(id: String, operationID: UUID) async throws {
-    let cleanupClient = containerCleanupClient
-    try await Task.detached {
-      var lastFailure = "The container remained present after force deletion."
-
-      for attempt in 0..<2 {
-        let snapshots: [ContainerSnapshot]
-        do {
-          snapshots = try await cleanupClient.list(id: id)
-        } catch {
-          lastFailure = "Ownership verification failed: \(error.localizedDescription)"
-          if attempt == 0 {
-            try await Task.sleep(for: .milliseconds(250))
-          }
-          continue
-        }
-
-        guard let snapshot = snapshots.first else { return }
-        guard
-          snapshot.configuration.labels[Self.creationOperationLabel] == operationID.uuidString
-        else {
-          return
-        }
-
-        if snapshot.status == .running {
-          do {
-            try await cleanupClient.kill(id: id)
-          } catch {
-            lastFailure = "KILL failed: \(error.localizedDescription)"
-          }
-        }
-
-        do {
-          try await cleanupClient.forceDelete(id: id)
-        } catch {
-          lastFailure = "Force deletion failed: \(error.localizedDescription)"
-        }
-
-        do {
-          let remaining = try await cleanupClient.list(id: id)
-          guard let current = remaining.first else { return }
-          guard
-            current.configuration.labels[Self.creationOperationLabel] == operationID.uuidString
-          else {
-            return
-          }
-          lastFailure = "The owned container still exists after force deletion."
-        } catch {
-          lastFailure = "Post-cleanup verification failed: \(error.localizedDescription)"
-        }
-
-        if attempt == 0 {
-          try await Task.sleep(for: .milliseconds(250))
-        }
-      }
-
-      throw AppleContainerCleanupError.exhausted(id: id, reason: lastFailure)
-    }.value
-  }
-
-  private func loadAllocatedVolumeSizes(names: [String]) async -> [String: UInt64] {
-    let uniqueNames = Array(Set(names)).sorted()
-    return await withTaskGroup(of: (String, UInt64?).self) { group in
-      let initialCount = min(4, uniqueNames.count)
-      for name in uniqueNames.prefix(initialCount) {
-        group.addTask {
-          do {
-            return (name, try await self.infrastructureClient.volumeDiskUsage(name: name))
-          } catch {
-            return (name, nil)
-          }
-        }
-      }
-
-      var nextIndex = initialCount
-      var result: [String: UInt64] = [:]
-      while let (name, size) = await group.next() {
-        if let size {
-          result[name] = size
-        }
-        if nextIndex < uniqueNames.count {
-          let nextName = uniqueNames[nextIndex]
-          nextIndex += 1
-          group.addTask {
-            do {
-              return (
-                nextName,
-                try await self.infrastructureClient.volumeDiskUsage(name: nextName)
-              )
-            } catch {
-              return (nextName, nil)
-            }
-          }
-        }
-      }
-      return result
-    }
-  }
-
-  private func loadCurrentVolumeRecords() async throws -> [VolumeRecord] {
-    async let configurationRequest = infrastructureClient.listVolumes()
-    async let containerRequest = containerClient.list()
-    let (configurations, snapshots) = try await (configurationRequest, containerRequest)
-    let allocatedSizes = await loadAllocatedVolumeSizes(names: configurations.map(\.name))
-
-    let consumers = snapshots.reduce(into: [String: Set<String>]()) { result, snapshot in
-      for volumeName in snapshot.configuration.mounts.compactMap(\.volumeName) {
-        result[volumeName, default: []].insert(snapshot.id)
-      }
-    }
-
-    return configurations.map { configuration in
-      VolumeRecord(
-        id: configuration.id,
-        name: configuration.name,
-        driver: configuration.driver,
-        format: configuration.format,
-        source: configuration.source,
-        createdAt: configuration.creationDate,
-        sizeBytes: configuration.sizeInBytes,
-        allocatedBytes: allocatedSizes[configuration.name],
-        labels: configuration.labels,
-        options: configuration.options,
-        isAnonymous: configuration.isAnonymous,
-        usedByContainerIDs: (consumers[configuration.name] ?? []).sorted()
-      )
-    }
-  }
-
-  private func currentVolumeRecord(name: String) async throws -> VolumeRecord? {
-    async let configurationRequest = infrastructureClient.listVolumes()
-    async let containerRequest = containerClient.list()
-    let (configurations, snapshots) = try await (configurationRequest, containerRequest)
-    guard let configuration = configurations.first(where: { $0.name == name }) else {
-      return nil
-    }
-
-    let consumers = Set(
-      snapshots.compactMap { snapshot in
-        snapshot.configuration.mounts.contains(where: { $0.volumeName == name })
-          ? snapshot.id
-          : nil
-      }
-    )
-    return VolumeRecord(
-      id: configuration.id,
-      name: configuration.name,
-      driver: configuration.driver,
-      format: configuration.format,
-      source: configuration.source,
-      createdAt: configuration.creationDate,
-      sizeBytes: configuration.sizeInBytes,
-      allocatedBytes: nil,
-      labels: configuration.labels,
-      options: configuration.options,
-      isAnonymous: configuration.isAnonymous,
-      usedByContainerIDs: consumers.sorted()
-    )
-  }
-
-  private func loadCurrentNetworkRecords() async throws -> [NetworkRecord] {
-    async let networkRequest = infrastructureClient.listNetworks()
-    async let containerRequest = containerClient.list()
-    let (networkResources, snapshots) = try await (networkRequest, containerRequest)
-
-    let consumers = snapshots.reduce(into: [String: Set<String>]()) { result, snapshot in
-      for attachment in snapshot.configuration.networks {
-        result[attachment.network, default: []].insert(snapshot.id)
-      }
-    }
-
-    return networkResources.map { resource in
-      NetworkRecord(
-        id: resource.id,
-        name: resource.name,
-        mode: ContainerNetworkMode(rawValue: resource.configuration.mode.rawValue) ?? .nat,
-        createdAt: resource.creationDate,
-        configuredIPv4Subnet: resource.configuration.ipv4Subnet.map {
-          String(describing: $0)
-        },
-        configuredIPv6Subnet: resource.configuration.ipv6Subnet.map {
-          String(describing: $0)
-        },
-        assignedIPv4Subnet: String(describing: resource.status.ipv4Subnet),
-        ipv4Gateway: String(describing: resource.status.ipv4Gateway),
-        assignedIPv6Subnet: resource.status.ipv6Subnet.map { String(describing: $0) },
-        labels: resource.labels.dictionary,
-        plugin: resource.configuration.plugin,
-        options: resource.configuration.options,
-        isBuiltin: resource.isBuiltin,
-        usedByContainerIDs: (consumers[resource.id] ?? []).sorted()
-      )
-    }
-  }
-
-  private func currentNetworkRecord(id: String) async throws -> NetworkRecord? {
-    try await loadCurrentNetworkRecords().first { $0.id == id }
-  }
-
-  private nonisolated func volume(_ volume: VolumeRecord, matches request: VolumeCreateRequest) -> Bool {
-    var expectedLabels = request.labels
-    expectedLabels[ResourceOperationLabel.key] = request.operationID.uuidString
-    let expectedOptions = [
-      "size": "\(request.sizeBytes)B",
-      "journal": request.journalMode.rawValue,
-    ]
-    return volume.name == request.name
-      && volume.driver == "local"
-      && volume.format == "ext4"
-      && volume.sizeBytes == request.sizeBytes
-      && volume.options == expectedOptions
-      && volume.labels == expectedLabels
-  }
-
-  private nonisolated func network(_ network: NetworkRecord, matches request: NetworkCreateRequest) -> Bool {
-    let expectedIPv4 = request.ipv4Subnet.flatMap { value in
-      (try? CIDRv4(value)).map { String(describing: $0) }
-    }
-    let expectedIPv6 = request.ipv6Subnet.flatMap { value in
-      (try? CIDRv6(value)).map { String(describing: $0) }
-    }
-    var expectedLabels = request.labels
-    expectedLabels[ResourceOperationLabel.key] = request.operationID.uuidString
-    return network.name == request.name
-      && network.mode == request.mode
-      && network.configuredIPv4Subnet == expectedIPv4
-      && network.configuredIPv6Subnet == expectedIPv6
-      && network.plugin == "container-network-vmnet"
-      && network.options.isEmpty
-      && network.labels == expectedLabels
-  }
-
   private static func parseImageDate(_ value: String?) -> Date? {
     guard let value else { return nil }
     let fractional = ISO8601DateFormatter()
@@ -2365,17 +1529,6 @@ actor AppleContainerService: ContainerManaging {
 
   private func loadSystemConfiguration() async throws -> ContainerSystemConfig {
     try await AppleContainerConfiguration.load()
-  }
-}
-
-private enum AppleContainerCleanupError: LocalizedError {
-  case exhausted(id: String, reason: String)
-
-  var errorDescription: String? {
-    switch self {
-    case .exhausted(let id, let reason):
-      "Could not remove owned container “\(id)”. \(reason)"
-    }
   }
 }
 

@@ -17,32 +17,17 @@ final class AppModel {
   private(set) var lastRefresh: Date?
   private(set) var errorMessage: String?
 
-  private let containerService: any ContainerManaging
-  private let imageBuildService: any ImageBuilding
-  private let registryService: any RegistryManaging
-  private let virtualMachineLibrary: any VirtualMachineLibraryProtocol
-  private let restoreImageDiscovery: any MacRestoreImageDiscovering
-  private let restoreImageDownloader: any MacRestoreImageDownloading
+  private let services: AppServices
   private var hasLoaded = false
   private var refreshRequested = false
   private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
 
   init(
-    containerService: any ContainerManaging = AppleContainerService(),
-    imageBuildService: any ImageBuilding = AppleContainerBuildService(),
-    registryService: any RegistryManaging = AppleRegistryService(),
-    virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
-    restoreImageDiscovery: any MacRestoreImageDiscovering = MacRestoreImageService(),
-    restoreImageDownloader: any MacRestoreImageDownloading = RestoreImageDownloadService(),
+    services: AppServices,
     initialInventory: ContainerInventory? = nil,
     initialVirtualMachines: [VirtualMachineManifest] = []
   ) {
-    self.containerService = containerService
-    self.imageBuildService = imageBuildService
-    self.registryService = registryService
-    self.virtualMachineLibrary = virtualMachineLibrary
-    self.restoreImageDiscovery = restoreImageDiscovery
-    self.restoreImageDownloader = restoreImageDownloader
+    self.services = services
     if let initialInventory {
       systemInfo = initialInventory.system
       containers = initialInventory.containers
@@ -54,6 +39,30 @@ final class AppModel {
       hasLoaded = true
       lastRefresh = Date()
     }
+  }
+
+  convenience init(
+    containerService: any ContainerManaging = AppleContainerService(),
+    imageBuildService: any ImageBuilding = AppleContainerBuildService(),
+    registryService: any RegistryManaging = AppleRegistryService(),
+    virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
+    restoreImageDiscovery: any MacRestoreImageDiscovering = MacRestoreImageService(),
+    restoreImageDownloader: any MacRestoreImageDownloading = RestoreImageDownloadService(),
+    initialInventory: ContainerInventory? = nil,
+    initialVirtualMachines: [VirtualMachineManifest] = []
+  ) {
+    self.init(
+      services: AppServices(
+        containerService: containerService,
+        imageBuild: imageBuildService,
+        registry: registryService,
+        virtualMachineLibrary: virtualMachineLibrary,
+        restoreImageDiscovery: restoreImageDiscovery,
+        restoreImageDownloader: restoreImageDownloader
+      ),
+      initialInventory: initialInventory,
+      initialVirtualMachines: initialVirtualMachines
+    )
   }
 
   func loadIfNeeded() async {
@@ -88,7 +97,7 @@ final class AppModel {
     var messages: [String] = []
 
     do {
-      let inventory = try await containerService.loadInventory()
+      let inventory = try await services.inventory.loadInventory()
       systemInfo = inventory.system
       containers = inventory.containers
       images = inventory.images
@@ -108,7 +117,7 @@ final class AppModel {
     }
 
     do {
-      virtualMachines = try await virtualMachineLibrary.list()
+      virtualMachines = try await services.virtualMachineLibrary.list()
     } catch {
       messages.append("Virtual machine library: \(error.localizedDescription)")
     }
@@ -119,49 +128,49 @@ final class AppModel {
 
   func startContainer(id: String) async {
     await performMutation {
-      try await self.containerService.startContainer(id: id)
+      try await self.services.containerLifecycle.startContainer(id: id)
     }
   }
 
   func stopContainer(id: String) async {
     await performMutation {
-      try await self.containerService.stopContainer(id: id)
+      try await self.services.containerLifecycle.stopContainer(id: id)
     }
   }
 
   func restartContainer(id: String) async {
     await performMutation {
-      try await self.containerService.restartContainer(id: id)
+      try await self.services.containerLifecycle.restartContainer(id: id)
     }
   }
 
   func forceStopContainer(id: String) async {
     await performMutation {
-      try await self.containerService.forceStopContainer(id: id)
+      try await self.services.containerLifecycle.forceStopContainer(id: id)
     }
   }
 
   func deleteContainer(id: String) async {
     await performMutation {
-      try await self.containerService.deleteContainer(id: id)
+      try await self.services.containerLifecycle.deleteContainer(id: id)
     }
   }
 
   func startMachine(id: String) async {
     await performMutation {
-      try await self.containerService.startMachine(id: id)
+      try await self.services.machineLifecycle.startMachine(id: id)
     }
   }
 
   func stopMachine(id: String) async {
     await performMutation {
-      try await self.containerService.stopMachine(id: id)
+      try await self.services.machineLifecycle.stopMachine(id: id)
     }
   }
 
   func deleteMachine(id: String) async {
     await performMutation {
-      try await self.containerService.deleteMachine(id: id)
+      try await self.services.machineLifecycle.deleteMachine(id: id)
     }
   }
 
@@ -170,20 +179,20 @@ final class AppModel {
     guest: VirtualMachineGuest,
     resources: VirtualMachineResources
   ) async throws {
-    _ = try await virtualMachineLibrary.createDraft(
+    _ = try await services.virtualMachineLibrary.createDraft(
       name: name,
       guest: guest,
       resources: resources
     )
-    virtualMachines = try await virtualMachineLibrary.list()
+    virtualMachines = try await services.virtualMachineLibrary.list()
   }
 
   func prepareMacVirtualMachine(id: UUID, restoreImageURL: URL) async throws {
-    _ = try await virtualMachineLibrary.prepareMacVM(
+    _ = try await services.virtualMachineLibrary.prepareMacVM(
       id: id,
       restoreImageURL: restoreImageURL
     )
-    virtualMachines = try await virtualMachineLibrary.list()
+    virtualMachines = try await services.virtualMachineLibrary.list()
   }
 
   func clearError() {
@@ -194,41 +203,44 @@ final class AppModel {
     ContainerInspectorModel(
       containerID: container.id,
       allocatedCPUCount: container.cpuCount,
-      service: containerService
+      service: services.containerInspector
     )
   }
 
   func makeContainerProvisioningModel() -> ContainerProvisioningModel {
-    ContainerProvisioningModel(service: containerService) { [weak self] in
+    ContainerProvisioningModel(
+      containerCreator: services.containerCreator,
+      imageService: services.images
+    ) { [weak self] in
       await self?.refresh()
     }
   }
 
   func makeImageInspector(reference: String) -> ImageInspectorModel {
-    ImageInspectorModel(reference: reference, service: containerService)
+    ImageInspectorModel(reference: reference, service: services.images)
   }
 
   func makeImageOperations(reference: String? = nil) -> ImageOperationsModel {
-    ImageOperationsModel(sourceReference: reference, service: containerService) { [weak self] in
+    ImageOperationsModel(sourceReference: reference, service: services.images) { [weak self] in
       await self?.refresh()
     }
   }
 
   func makeVolumeManagementModel() -> VolumeManagementModel {
-    VolumeManagementModel(service: containerService) { [weak self] in
+    VolumeManagementModel(service: services.volumes) { [weak self] in
       await self?.refresh()
     }
   }
 
   func makeNetworkManagementModel() -> NetworkManagementModel {
-    NetworkManagementModel(service: containerService) { [weak self] in
+    NetworkManagementModel(service: services.networks) { [weak self] in
       await self?.refresh()
     }
   }
 
   func resolveContainerBrowserURL(_ target: ContainerBrowserTarget) async -> URL? {
     do {
-      return try await containerService.resolveContainerBrowserURL(target)
+      return try await services.browser.resolveContainerBrowserURL(target)
     } catch {
       errorMessage = error.localizedDescription
       return nil
@@ -236,21 +248,21 @@ final class AppModel {
   }
 
   func makeImageBuildModel() -> ImageBuildModel {
-    ImageBuildModel(service: imageBuildService) { [weak self] in
+    ImageBuildModel(service: services.imageBuild) { [weak self] in
       await self?.refresh()
     }
   }
 
   func makeRegistrySettingsModel() -> RegistrySettingsModel {
-    RegistrySettingsModel(service: registryService)
+    RegistrySettingsModel(service: services.registry)
   }
 
   func makeContainerToolsModel(containerID: String) -> ContainerToolsModel {
-    ContainerToolsModel(containerID: containerID, service: containerService)
+    ContainerToolsModel(containerID: containerID, service: services.containerTools)
   }
 
   func makeContainerTerminalModel(containerID: String) -> ContainerTerminalModel {
-    ContainerTerminalModel(containerID: containerID, service: containerService)
+    ContainerTerminalModel(containerID: containerID, service: services.containerTerminal)
   }
 
   func makeMacRestoreImagePreparationModel(
@@ -258,8 +270,8 @@ final class AppModel {
   ) -> MacRestoreImagePreparationModel {
     MacRestoreImagePreparationModel(
       machine: machine,
-      discovery: restoreImageDiscovery,
-      downloader: restoreImageDownloader
+      discovery: services.restoreImageDiscovery,
+      downloader: services.restoreImageDownloader
     ) { [self] restoreImageURL in
       try await prepareMacVirtualMachine(
         id: machine.id,
