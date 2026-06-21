@@ -311,6 +311,10 @@
 		1FEC47032FE831A300DC60B2 /* BuildContextFingerprint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC47012FE831A300DC60B2 /* BuildContextFingerprint.swift */; };
 		1FEC47052FE831A300DC60B2 /* BuildContextTreeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC47042FE831A300DC60B2 /* BuildContextTreeService.swift */; };
 		1FEC47062FE831A300DC60B2 /* BuildContextTreeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC47042FE831A300DC60B2 /* BuildContextTreeService.swift */; };
+		1FEC47082FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC47072FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift */; };
+		1FEC47092FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC47072FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift */; };
+		1FEC470B2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC470A2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift */; };
+		1FEC470C2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC470A2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
 		2556B0C38DDD5700704BE145 /* NativeContainersBuildWorker in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 754A88C661F8562B691EA099 /* NativeContainersBuildWorker */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -728,6 +732,8 @@
 		1FEC46FE2FE831A200DC60B2 /* BuildContextFileSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildContextFileSystem.swift; sourceTree = "<group>"; };
 		1FEC47012FE831A300DC60B2 /* BuildContextFingerprint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildContextFingerprint.swift; sourceTree = "<group>"; };
 		1FEC47042FE831A300DC60B2 /* BuildContextTreeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildContextTreeService.swift; sourceTree = "<group>"; };
+		1FEC47072FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppOwnedBuildCacheModels.swift; sourceTree = "<group>"; };
+		1FEC470A2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppOwnedBuildCacheValidator.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -1216,6 +1222,8 @@
 				1FEC46FE2FE831A200DC60B2 /* BuildContextFileSystem.swift */,
 				1FEC47012FE831A300DC60B2 /* BuildContextFingerprint.swift */,
 				1FEC47042FE831A300DC60B2 /* BuildContextTreeService.swift */,
+				1FEC47072FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift */,
+				1FEC470A2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift */,
 			);
 			path = NativeContainersShared;
 			sourceTree = "<group>";
@@ -1694,6 +1702,7 @@
 				1F9D2C102FE7D0B20076F5B9 /* SocktainerComposeFixtureWorkspace.swift in Sources */,
 				1F9D2BC22FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift in Sources */,
 				1F9D2AD72FE75F420076F5B9 /* AppleXPCRequestClient.swift in Sources */,
+				1FEC470B2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift in Sources */,
 				1F9D2B432FE77DDF0076F5B9 /* PrivateImageBuildHistoryDirectory.swift in Sources */,
 				1FEC46DF2FE8249200DC60B2 /* VirtualMachineDiskImageMigrationModel.swift in Sources */,
 				AEF8A0C79D65EBF3BC79F55A /* ImageInspectorView.swift in Sources */,
@@ -1724,6 +1733,7 @@
 				1F9D2BA02FE7AA010076F5B9 /* MacVirtualMachineRuntimeModels.swift in Sources */,
 				1F9D2BC62FE7B73E0076F5B9 /* ResourceQuickOpenView.swift in Sources */,
 				1F9D2C7E2FE7FAD00076F5B9 /* VirtualMachineTransferViews.swift in Sources */,
+				1FEC47082FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift in Sources */,
 				1F9D2C002FE7C8AB0076F5B9 /* ComposeProjectsView.swift in Sources */,
 				1F9D2C982FE801BD0076F5B9 /* AppleContainerReclamationService.swift in Sources */,
 				1F9D2C472FE7E8330076F5B9 /* ComposeProjectManagementView.swift in Sources */,
@@ -1840,6 +1850,7 @@
 				5667EF40787A9C5010114517 /* BuildWorkerProtocol.swift in Sources */,
 				B375042ED05FBF9361E9C7EF /* ContainerBuildWorkerRunner.swift in Sources */,
 				1F9D2B2E2FE774B00076F5B9 /* BuildSecretWorkerTransport.swift in Sources */,
+				1FEC470C2FE8323D00DC60B2 /* AppOwnedBuildCacheValidator.swift in Sources */,
 				1FEC47032FE831A300DC60B2 /* BuildContextFingerprint.swift in Sources */,
 				1F9D2B1C2FE770390076F5B9 /* ContainerBuilderSnapshotAdapter.swift in Sources */,
 				1FEC47052FE831A300DC60B2 /* BuildContextTreeService.swift in Sources */,
@@ -1848,6 +1859,7 @@
 				1F9D2C262FE7DB610076F5B9 /* AppOwnedBuildCacheStore.swift in Sources */,
 				1F9D2B462FE789750076F5B9 /* PrivateBuildDirectoryStore.swift in Sources */,
 				1C6BF4082FCFF853F80291AA /* ContainerBuilderSafetyPolicy.swift in Sources */,
+				1FEC47092FE8323D00DC60B2 /* AppOwnedBuildCacheModels.swift in Sources */,
 				1F9D2B1A2FE770060076F5B9 /* ContainerBuilderManagementModels.swift in Sources */,
 				08989CA0B5D2F7CD78E68088 /* NativeContainersBuildWorker.swift in Sources */,
 				950DEF6A85352DE90D963665 /* PrivateBuildArtifactStore.swift in Sources */,
