@@ -119,7 +119,7 @@ struct AppOwnedBuildCacheStoreTests {
     #expect(try currentMarker(root: root) == "second")
     #expect(try await store.inspect() == second)
 
-    try await store.reset()
+    _ = try await store.reset()
     #expect(try await store.inspect() == nil)
   }
 
@@ -396,7 +396,7 @@ struct AppOwnedBuildCacheStoreTests {
     )
 
     #expect(try await service.loadCache() == committed)
-    try await service.resetCache()
+    _ = try await service.resetCache()
     #expect(try await service.loadCache() == nil)
     #expect(FileManager.default.fileExists(atPath: unrelated.path(percentEncoded: false)))
   }

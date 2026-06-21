@@ -40,9 +40,9 @@ struct CopyfileVirtualMachineBundleTransferTests {
   }
 
   @Test
-  func callbackReturnsQuitAsSoonAsCancellationIsRequested() throws {
+  func callbackReturnsQuitAsSoonAsCancellationIsRequested() {
     let cancellation = VirtualMachineBundleCopyCancellation()
-    let callback = try #require(virtualMachineBundleCopyCallback)
+    let callback = virtualMachineBundleCopyCallback
     let context = Unmanaged.passUnretained(cancellation).toOpaque()
 
     #expect(

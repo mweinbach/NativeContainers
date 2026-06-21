@@ -17,8 +17,8 @@ struct MacVirtualMachineSavedStateServiceTests {
       lease: fixture.lease
     )
 
-    let storedSummary = await store.summary
-    let stateURL = await store.saveTransaction.stateURL
+    let storedSummary = store.summary
+    let stateURL = store.saveTransaction.stateURL
     #expect(summary == storedSummary)
     #expect(session.savedURLs == [stateURL])
     #expect(await store.commitCount == 1)
@@ -53,7 +53,7 @@ struct MacVirtualMachineSavedStateServiceTests {
       _ = try await service.restoreCheckpoint(session: session, lease: fixture.lease)
     }
 
-    let stateURL = await store.restoreTransaction.artifact.stateURL
+    let stateURL = store.restoreTransaction.artifact.stateURL
     #expect(session.restoredURLs == [stateURL])
     #expect(await store.finishRestoreCount == 1)
   }
@@ -73,7 +73,7 @@ struct MacVirtualMachineSavedStateServiceTests {
       lease: fixture.lease
     )
 
-    let storedSummary = await store.summary
+    let storedSummary = store.summary
     #expect(summary == storedSummary)
     #expect(await store.finishRestoreCount == 1)
   }

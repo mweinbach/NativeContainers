@@ -278,7 +278,7 @@ struct LiveAppleContainerBuildSmokeTests {
       try? FileManager.default.removeItem(at: outputRoot)
     }
 
-    try await cacheService.resetCache()
+    _ = try await cacheService.resetCache()
     do {
       let first = try await runCachedBuild(
         fixture: fixture,
@@ -306,11 +306,11 @@ struct LiveAppleContainerBuildSmokeTests {
       #expect(secondCache.entryCount > 0)
       #expect(second.progressMessages.contains { $0.contains("Updated app-owned cache") })
     } catch {
-      try? await cacheService.resetCache()
+      _ = try? await cacheService.resetCache()
       throw error
     }
 
-    try await cacheService.resetCache()
+    _ = try await cacheService.resetCache()
     #expect(try await cacheService.loadCache() == nil)
   }
 

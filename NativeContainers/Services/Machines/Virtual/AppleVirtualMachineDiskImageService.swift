@@ -110,7 +110,7 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
       .overlay
     case nil:
       nil
-    @unknown default:
+    default:
       .unknown
     }
   }
