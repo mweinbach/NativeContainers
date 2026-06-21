@@ -160,11 +160,11 @@ actor FoundationHostCommandExecutor: HostCommandExecuting {
     do {
       let didExit = try await waitForExit(session, timeout: timeout)
       guard didExit else {
-        try await terminate(session)
+        try await terminateUncancelled(session)
         throw HostProcessError.timedOut
       }
     } catch is CancellationError {
-      try? await terminate(session)
+      try await terminateUncancelled(session)
       throw CancellationError()
     }
 
@@ -177,19 +177,49 @@ actor FoundationHostCommandExecutor: HostCommandExecuting {
     )
   }
 
-  private func terminate(_ session: any HostProcessSession) async throws {
-    if session.isRunning {
-      try session.send(signal: SIGTERM)
-      if try await waitForExit(session, timeout: terminationGracePeriod) {
-        return
+  private func terminateUncancelled(_ session: any HostProcessSession) async throws {
+    let pollInterval = pollInterval
+    let terminationGracePeriod = terminationGracePeriod
+    let killConfirmationTimeout = killConfirmationTimeout
+
+    try await Task.detached(priority: .userInitiated) {
+      if session.isRunning {
+        try session.send(signal: SIGTERM)
+        if await Self.waitForExitUncancelled(
+          session,
+          timeout: terminationGracePeriod,
+          pollInterval: pollInterval
+        ) {
+          return
+        }
       }
+      if session.isRunning {
+        try session.send(signal: SIGKILL)
+      }
+      guard
+        await Self.waitForExitUncancelled(
+          session,
+          timeout: killConfirmationTimeout,
+          pollInterval: pollInterval
+        )
+      else {
+        throw HostProcessError.didNotExitAfterKill
+      }
+    }.value
+  }
+
+  private nonisolated static func waitForExitUncancelled(
+    _ session: any HostProcessSession,
+    timeout: Duration,
+    pollInterval: Duration
+  ) async -> Bool {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while session.isRunning {
+      guard clock.now < deadline else { return false }
+      try? await Task.sleep(for: pollInterval)
     }
-    if session.isRunning {
-      try session.send(signal: SIGKILL)
-    }
-    guard try await waitForExit(session, timeout: killConfirmationTimeout) else {
-      throw HostProcessError.didNotExitAfterKill
-    }
+    return true
   }
 
   private func waitForExit(
