@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct MacVirtualMachineConfigurationDescriptor: Codable, Equatable, Sendable {
@@ -63,12 +64,10 @@ struct MacVirtualMachineConfigurationDescriptorService:
   }
 
   static func macAddress(for machineID: UUID) -> String {
-    let hexadecimal = machineID.uuidString.replacingOccurrences(of: "-", with: "")
-    let octets = stride(from: 0, to: 10, by: 2).map { offset in
-      let start = hexadecimal.index(hexadecimal.startIndex, offsetBy: offset)
-      let end = hexadecimal.index(start, offsetBy: 2)
-      return String(hexadecimal[start..<end]).lowercased()
-    }
-    return (["02"] + octets).joined(separator: ":")
+    var octets = Array(
+      SHA256.hash(data: Data(machineID.uuidString.utf8)).prefix(6)
+    )
+    octets[0] = (octets[0] & 0b1111_1100) | 0b0000_0010
+    return octets.map { String(format: "%02x", $0) }.joined(separator: ":")
   }
 }

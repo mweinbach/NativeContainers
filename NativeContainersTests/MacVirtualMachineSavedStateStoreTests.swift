@@ -58,6 +58,37 @@ struct MacVirtualMachineSavedStateStoreTests {
   }
 
   @Test
+  func hostOperatingSystemChangeIsRejectedBeforeRestoreAttempt() async throws {
+    let fixture = try SavedStateStoreFixture()
+    defer { fixture.remove() }
+    try await fixture.commitState(Data("state".utf8))
+    let metadataURL = fixture.savedStateDirectory.appending(
+      path: MacVirtualMachineSavedStateStore.metadataFilename
+    )
+    let metadata = try JSONDecoder().decode(
+      MacVirtualMachineSavedStateMetadata.self,
+      from: Data(contentsOf: metadataURL)
+    )
+    let changed = MacVirtualMachineSavedStateMetadata(
+      schemaVersion: metadata.schemaVersion,
+      machineID: metadata.machineID,
+      configurationFingerprint: metadata.configurationFingerprint,
+      stateFilename: metadata.stateFilename,
+      createdAt: metadata.createdAt,
+      stateSizeBytes: metadata.stateSizeBytes,
+      hostOperatingSystemVersion: "different host build"
+    )
+    try JSONEncoder().encode(changed).write(to: metadataURL, options: .atomic)
+
+    let inspection = try await fixture.store.inspect(for: fixture.lease)
+    guard case .incompatible(let reason) = inspection else {
+      Issue.record("Expected host incompatibility")
+      return
+    }
+    #expect(reason.contains("host operating system changed"))
+  }
+
+  @Test
   func recoveryDeletesInterruptedSaveRestoreAndDiscardTransactions() async throws {
     let fixture = try SavedStateStoreFixture()
     defer { fixture.remove() }
@@ -180,8 +211,9 @@ struct MacVirtualMachineSavedStateStoreTests {
     let second = try service.descriptor(for: fixture.machine)
 
     #expect(first == second)
-    #expect(first.macAddress.hasPrefix("02:"))
     #expect(first.macAddress.split(separator: ":").count == 6)
+    let firstOctet = try #require(UInt8(first.macAddress.prefix(2), radix: 16))
+    #expect(firstOctet & 0b0000_0011 == 0b0000_0010)
   }
 }
 

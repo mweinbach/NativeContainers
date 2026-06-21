@@ -57,6 +57,7 @@ enum MacVirtualMachineSavedStateError: LocalizedError, Equatable, Sendable {
   case invalidTransaction(UUID)
   case invalidBundle(String)
   case unsupportedSchema(Int)
+  case operationAndCleanupFailed(operation: String, cleanup: String)
 
   var errorDescription: String? {
     switch self {
@@ -74,6 +75,8 @@ enum MacVirtualMachineSavedStateError: LocalizedError, Equatable, Sendable {
       "The saved-state bundle is invalid: \(reason)"
     case .unsupportedSchema(let version):
       "The saved state uses unsupported metadata version \(version)."
+    case .operationAndCleanupFailed(let operation, let cleanup):
+      "The saved-state operation failed (\(operation)), and cleanup also failed (\(cleanup))."
     }
   }
 }

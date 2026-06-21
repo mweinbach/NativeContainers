@@ -38,11 +38,16 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
       guard machine.manifest.id == target.machineID else {
         throw MacVirtualMachineRuntimeError.staleTarget(target)
       }
-      let configuration = try configurationFactory.makeConfiguration(for: machine)
-      let virtualMachine = VZVirtualMachine(configuration: configuration)
+      let runtimeConfiguration = try configurationFactory.makeRuntimeConfiguration(
+        for: machine
+      )
+      let virtualMachine = VZVirtualMachine(
+        configuration: runtimeConfiguration.configuration
+      )
       return AppleMacVirtualMachineRuntimeSession(
         target: target,
-        virtualMachine: virtualMachine
+        virtualMachine: virtualMachine,
+        saveRestoreSupport: runtimeConfiguration.saveRestoreSupport
       )
     #else
       throw MacVirtualMachineRuntimeError.requiresAppleSilicon
@@ -58,13 +63,20 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
   {
     let target: MacVirtualMachineRuntimeTarget
     let console: MacVirtualMachineConsole?
+    let saveRestoreSupport: MacVirtualMachineSaveRestoreSupport
+    var canForceStop: Bool { virtualMachine.canStop }
     var eventHandler: MacVirtualMachineRuntimeEventHandler?
 
     private let virtualMachine: VZVirtualMachine
 
-    init(target: MacVirtualMachineRuntimeTarget, virtualMachine: VZVirtualMachine) {
+    init(
+      target: MacVirtualMachineRuntimeTarget,
+      virtualMachine: VZVirtualMachine,
+      saveRestoreSupport: MacVirtualMachineSaveRestoreSupport
+    ) {
       self.target = target
       self.virtualMachine = virtualMachine
+      self.saveRestoreSupport = saveRestoreSupport
       self.console = MacVirtualMachineConsole(target: target, virtualMachine: virtualMachine)
       super.init()
       virtualMachine.delegate = self
@@ -77,6 +89,52 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
       let virtualMachine = virtualMachine
       let operation = Task { @MainActor in
         try await virtualMachine.start()
+      }
+      try await operation.value
+    }
+
+    func saveState(to url: URL) async throws {
+      try requireSaveRestoreSupport()
+      guard virtualMachine.state == .paused else {
+        throw MacVirtualMachineRuntimeError.operationUnavailable(
+          "save the state of"
+        )
+      }
+      let virtualMachine = virtualMachine
+      let operation = Task { @MainActor in
+        try await withCheckedThrowingContinuation {
+          (continuation: CheckedContinuation<Void, any Error>) in
+          virtualMachine.saveMachineStateTo(url: url) { error in
+            if let error {
+              continuation.resume(throwing: error)
+            } else {
+              continuation.resume()
+            }
+          }
+        }
+      }
+      try await operation.value
+    }
+
+    func restoreState(from url: URL) async throws {
+      try requireSaveRestoreSupport()
+      guard virtualMachine.state == .stopped else {
+        throw MacVirtualMachineRuntimeError.operationUnavailable(
+          "restore the state of"
+        )
+      }
+      let virtualMachine = virtualMachine
+      let operation = Task { @MainActor in
+        try await withCheckedThrowingContinuation {
+          (continuation: CheckedContinuation<Void, any Error>) in
+          virtualMachine.restoreMachineStateFrom(url: url) { error in
+            if let error {
+              continuation.resume(throwing: error)
+            } else {
+              continuation.resume()
+            }
+          }
+        }
       }
       try await operation.value
     }
@@ -128,6 +186,19 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
         }
       }
       try await operation.value
+    }
+
+    private func requireSaveRestoreSupport() throws {
+      switch saveRestoreSupport {
+      case .supported:
+        return
+      case .unsupported(let reason):
+        throw MacVirtualMachineRuntimeError.saveRestoreUnsupported(reason)
+      case .unknown:
+        throw MacVirtualMachineRuntimeError.saveRestoreUnsupported(
+          "capability validation did not complete"
+        )
+      }
     }
 
     func guestDidStop(_ virtualMachine: VZVirtualMachine) {

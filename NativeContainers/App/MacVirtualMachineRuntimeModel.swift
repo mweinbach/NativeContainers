@@ -9,6 +9,8 @@ final class MacVirtualMachineRuntimeModel {
   private(set) var actionErrorMessage: String?
 
   private let service: any MacVirtualMachineRuntimeManaging
+  @ObservationIgnored private var observationTask: Task<Void, Never>?
+  @ObservationIgnored private var hasRefreshedSavedState = false
 
   init(machineID: UUID, service: any MacVirtualMachineRuntimeManaging) {
     self.machineID = machineID
@@ -26,19 +28,37 @@ final class MacVirtualMachineRuntimeModel {
   }
 
   func observe() async {
-    for await update in service.updates(for: machineID) {
-      guard !Task.isCancelled else { return }
-      guard update.revision >= snapshot.revision else { continue }
-      snapshot = update
-      if update.errorMessage == nil {
-        actionErrorMessage = nil
+    if observationTask == nil {
+      let updates = service.updates(for: machineID)
+      observationTask = Task { @MainActor [weak self] in
+        for await update in updates {
+          guard !Task.isCancelled, let self else { return }
+          apply(update)
+        }
       }
+    }
+    guard !hasRefreshedSavedState else { return }
+    hasRefreshedSavedState = true
+    await service.refreshSavedState(id: machineID)
+  }
+
+  private func apply(_ update: MacVirtualMachineRuntimeSnapshot) {
+    guard update.revision >= snapshot.revision else { return }
+    snapshot = update
+    if update.errorMessage == nil {
+      actionErrorMessage = nil
     }
   }
 
   func start() async {
     await perform {
       try await service.start(id: machineID)
+    }
+  }
+
+  func startFresh() async {
+    await perform {
+      try await service.startFresh(id: machineID)
     }
   }
 
@@ -56,6 +76,13 @@ final class MacVirtualMachineRuntimeModel {
     }
   }
 
+  func suspend() async {
+    guard let target = snapshot.target else { return }
+    await perform {
+      try await service.suspend(target: target)
+    }
+  }
+
   func requestStop() async {
     guard let target = snapshot.target else { return }
     await perform {
@@ -70,8 +97,20 @@ final class MacVirtualMachineRuntimeModel {
     }
   }
 
+  func discardSavedState() async {
+    await perform {
+      try await service.discardSavedState(id: machineID)
+    }
+  }
+
   func clearActionError() {
     actionErrorMessage = nil
+  }
+
+  func stopObserving() {
+    observationTask?.cancel()
+    observationTask = nil
+    hasRefreshedSavedState = false
   }
 
   private func perform(_ operation: () async throws -> Void) async {
@@ -82,5 +121,9 @@ final class MacVirtualMachineRuntimeModel {
     } catch {
       actionErrorMessage = error.localizedDescription
     }
+  }
+
+  deinit {
+    observationTask?.cancel()
   }
 }

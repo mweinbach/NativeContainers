@@ -367,6 +367,15 @@ actor MacVirtualMachineSavedStateStore: MacVirtualMachineSavedStateStoring {
         "metadata does not belong to this virtual machine"
       )
     }
+    guard
+      metadata.hostOperatingSystemVersion
+        == ProcessInfo.processInfo.operatingSystemVersionString
+    else {
+      throw MacVirtualMachineSavedStateError.incompatible(
+        lease.target.machineID,
+        "the host operating system changed after suspension"
+      )
+    }
 
     let stateURL = directory.appending(path: Self.stateFilename)
     let stateSize = try requireRegularFile(stateURL, nonempty: true)

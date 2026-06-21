@@ -10,6 +10,9 @@ struct VirtualMachineRow: View {
   let forceStop: () -> Void
   let discard: () -> Void
 
+  @State private var isConfirmingStartFresh = false
+  @State private var isConfirmingDiscardSavedState = false
+
   var body: some View {
     HStack(spacing: 14) {
       Image(systemName: machine.guest == .macOS ? "macwindow" : "display")
@@ -20,10 +23,23 @@ struct VirtualMachineRow: View {
       VStack(alignment: .leading, spacing: 4) {
         Text(machine.name)
           .font(.headline)
-        Text(installStateLabel)
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        if let installationFailureMessage {
+          Text(installationFailureMessage)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else {
+          Text(installStateLabel)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
         VirtualMachineResourceSummary(resources: machine.resources)
+        if let runtimeDiagnostic {
+          Label(runtimeDiagnostic, systemImage: "exclamationmark.triangle.fill")
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .lineLimit(2)
+            .help(runtimeDiagnostic)
+        }
       }
 
       Spacer()
@@ -42,6 +58,11 @@ struct VirtualMachineRow: View {
                   Task { await runtime.resume() }
                 }
               }
+              if runtime.snapshot.canSuspend {
+                Button("Suspend", systemImage: "moon.zzz.fill") {
+                  Task { await runtime.suspend() }
+                }
+              }
               if runtime.snapshot.canRequestStop {
                 Button("Shut Down", systemImage: "power") {
                   Task { await runtime.requestStop() }
@@ -49,11 +70,26 @@ struct VirtualMachineRow: View {
               }
               if runtime.snapshot.canForceStop {
                 Button(
-                  "Force Stop…",
+                  forceStopTitle,
                   systemImage: "exclamationmark.octagon",
                   role: .destructive,
                   action: forceStop
                 )
+                .disabled(runtime.snapshot.isForceStopQueued)
+              }
+              if runtime.snapshot.canDiscardSavedState {
+                Divider()
+                Button("Start Fresh…", systemImage: "play.fill") {
+                  isConfirmingStartFresh = true
+                }
+                .disabled(availability != .available)
+                Button(
+                  "Discard Saved State…",
+                  systemImage: "trash",
+                  role: .destructive
+                ) {
+                  isConfirmingDiscardSavedState = true
+                }
               }
             }
             if runtime.snapshot.target == nil,
@@ -69,11 +105,32 @@ struct VirtualMachineRow: View {
           }
           .menuStyle(.borderlessButton)
           .help("More virtual machine actions")
+          .accessibilityLabel("More virtual machine actions")
         }
       }
     }
     .padding(.vertical, 7)
     .task { await runtime.observe() }
+    .confirmationDialog(
+      "Start \(machine.name) without its saved state?",
+      isPresented: $isConfirmingStartFresh
+    ) {
+      Button("Start Fresh", role: .destructive) {
+        Task { await runtime.startFresh() }
+      }
+    } message: {
+      Text("The suspended session is permanently discarded before macOS starts.")
+    }
+    .confirmationDialog(
+      "Discard the saved state for \(machine.name)?",
+      isPresented: $isConfirmingDiscardSavedState
+    ) {
+      Button("Discard Saved State", role: .destructive) {
+        Task { await runtime.discardSavedState() }
+      }
+    } message: {
+      Text("The VM remains powered off, but its suspended session cannot be resumed.")
+    }
   }
 
   @ViewBuilder
@@ -107,16 +164,25 @@ struct VirtualMachineRow: View {
   private var runtimeAction: some View {
     switch runtime.snapshot.state {
     case .stopped, .ownedElsewhere:
-      Button(runtime.snapshot.state == .ownedElsewhere ? "Retry" : "Start") {
-        Task { await runtime.start() }
+      if case .incompatible = runtime.snapshot.savedStateStatus {
+        Button("Start Fresh…") {
+          isConfirmingStartFresh = true
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(availability != .available)
+      } else {
+        Button(runtimeActionTitle) {
+          Task { await runtime.start() }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(availability != .available || !runtime.snapshot.canStart)
+        .help(availability.unavailableReason ?? "Start macOS")
       }
-      .buttonStyle(.borderedProminent)
-      .disabled(availability != .available)
-      .help(availability.unavailableReason ?? "Start macOS")
     case .running, .paused, .stopping:
       Button("Open", action: open)
         .buttonStyle(.borderedProminent)
-    case .starting, .pausing, .resuming:
+    case .inspectingSavedState, .starting, .pausing, .resuming, .saving, .restoring,
+      .discardingSavedState:
       HStack(spacing: 6) {
         ProgressView()
           .controlSize(.small)
@@ -126,7 +192,7 @@ struct VirtualMachineRow: View {
     }
   }
 
-  private var installStateLabel: String {
+  private var installStateLabel: LocalizedStringResource {
     switch machine.installState {
     case .draft:
       "Needs restore image"
@@ -135,10 +201,51 @@ struct VirtualMachineRow: View {
     case .installing:
       "Installing macOS"
     case .stopped:
-      runtime.snapshot.state.label
+      stoppedStateLabel
     case .failed:
-      machine.installationFailure?.message ?? "Needs attention"
+      "Needs attention"
     }
+  }
+
+  private var runtimeActionTitle: LocalizedStringResource {
+    if runtime.snapshot.state == .ownedElsewhere { return "Retry" }
+    if case .available = runtime.snapshot.savedStateStatus { return "Resume" }
+    return "Start"
+  }
+
+  private var forceStopTitle: LocalizedStringResource {
+    if runtime.snapshot.isForceStopCompleteAwaitingCleanup {
+      return "Force Stopped"
+    }
+    if runtime.snapshot.isForceStopQueued { return "Force Stop Queued" }
+    return "Force Stop…"
+  }
+
+  private var stoppedStateLabel: LocalizedStringResource {
+    guard runtime.snapshot.target == nil else {
+      return runtime.snapshot.state.label
+    }
+    switch runtime.snapshot.savedStateStatus {
+    case .available:
+      return "Suspended"
+    case .incompatible:
+      return "Saved state needs attention"
+    case .unknown, .none:
+      return runtime.snapshot.state.label
+    }
+  }
+
+  private var runtimeDiagnostic: String? {
+    if let errorMessage = runtime.errorMessage { return errorMessage }
+    if case .incompatible(let reason) = runtime.snapshot.savedStateStatus {
+      return reason
+    }
+    return nil
+  }
+
+  private var installationFailureMessage: String? {
+    guard machine.installState == .failed else { return nil }
+    return machine.installationFailure?.message
   }
 }
 

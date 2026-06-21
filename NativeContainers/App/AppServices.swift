@@ -224,9 +224,13 @@ enum AppCompositionRoot {
       store: virtualMachineLibrary,
       engine: AppleMacVirtualMachineInstallationEngine()
     )
+    let virtualMachineSavedState = MacVirtualMachineSavedStateService(
+      store: MacVirtualMachineSavedStateStore()
+    )
     let virtualMachineRuntime = MacVirtualMachineRuntimeService(
       leasingStore: virtualMachineLibrary,
-      engine: AppleMacVirtualMachineRuntimeEngine()
+      engine: AppleMacVirtualMachineRuntimeEngine(),
+      savedStateService: virtualMachineSavedState
     )
     let imageBuildService = RecordingImageBuildService(
       base: AppleContainerBuildService(

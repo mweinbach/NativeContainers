@@ -177,6 +177,7 @@ final class AppModel {
 
     do {
       virtualMachines = try await services.virtualMachineLibrary.list()
+      removeStaleMacVirtualMachineRuntimeModels()
     } catch {
       messages.append("Virtual machine library: \(error.localizedDescription)")
     }
@@ -412,6 +413,14 @@ final class AppModel {
     )
     macVirtualMachineRuntimeModels[machine.id] = model
     return model
+  }
+
+  private func removeStaleMacVirtualMachineRuntimeModels() {
+    let currentIdentifiers = Set(virtualMachines.map(\.id))
+    for identifier in Array(macVirtualMachineRuntimeModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      macVirtualMachineRuntimeModels.removeValue(forKey: identifier)?.stopObserving()
+    }
   }
 
   private func performMutation(
