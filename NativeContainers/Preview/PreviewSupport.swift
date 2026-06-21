@@ -205,6 +205,7 @@ extension AppModel {
       machineService: service,
       registryService: PreviewRegistryService(),
       dockerCompatibilityService: PreviewDockerCompatibilityService(),
+      dockerComposeClientService: PreviewDockerComposeClientService(),
       virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: true),
       virtualMachineSharedDirectories: sharedDirectories,
       initialInventory: inventory,
@@ -275,6 +276,33 @@ private actor PreviewDockerCompatibilityService: DockerCompatibilityManaging {
   func forceStopBridge() async throws {}
   func removeStaleSocket() async throws {}
   func createOrRepairDockerContext() async throws {}
+}
+
+private actor PreviewDockerComposeClientService: DockerComposeClientInstalling {
+  nonisolated let release = DockerComposeRelease.pinned
+  nonisolated let executableURL = URL(
+    filePath:
+      "/Users/example/Library/Application Support/NativeContainers/Compatibility/DockerCompose/5.1.4/docker-compose"
+  )
+  nonisolated let provenanceURL = URL(
+    filePath:
+      "/Users/example/Library/Application Support/NativeContainers/Compatibility/DockerCompose/5.1.4/provenance.json"
+  )
+
+  func snapshot() async -> DockerComposeClientSnapshot {
+    DockerComposeClientSnapshot(
+      release: release,
+      installation: .ready(version: release.version),
+      executableURL: executableURL,
+      provenanceURL: provenanceURL
+    )
+  }
+
+  func installationState() async -> DockerComposeClientInstallationState {
+    .ready(version: release.version)
+  }
+
+  func install() async throws {}
 }
 
 private actor PreviewContainerService: ContainerManaging, MachineManaging {

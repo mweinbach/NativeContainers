@@ -81,6 +81,10 @@ struct DockerCompatibilitySettingsSection: View {
         .font(.caption)
         .foregroundStyle(.secondary)
 
+        if let composeClient = model.composeClient {
+          composeClientSection(composeClient)
+        }
+
         composeConformanceSection(model.composeConformance)
       } else {
         ProgressView("Inspecting Docker compatibility…")
@@ -221,6 +225,48 @@ struct DockerCompatibilitySettingsSection: View {
   }
 
   @ViewBuilder
+  private func composeClientSection(
+    _ snapshot: DockerComposeClientSnapshot
+  ) -> some View {
+    LabeledContent("Official client") {
+      Text("Docker Compose \(snapshot.release.version)")
+        .textSelection(.enabled)
+    }
+    LabeledContent("Client installation") {
+      statusLabel(
+        composeClientInstallationTitle(snapshot.installation),
+        systemImage: composeClientInstallationSymbol(snapshot.installation),
+        color: composeClientInstallationColor(snapshot.installation)
+      )
+    }
+
+    if !isComposeClientInstalled(snapshot.installation) {
+      Button("Install Official Compose Client", systemImage: "arrow.down.circle") {
+        Task { await model.installComposeClient() }
+      }
+      .disabled(model.isWorking)
+    }
+
+    VStack(alignment: .leading, spacing: 4) {
+      Text("Private binary")
+      Text(snapshot.executableURL.path(percentEncoded: false))
+        .font(.caption.monospaced())
+        .foregroundStyle(.secondary)
+        .textSelection(.enabled)
+    }
+
+    if case .invalid(let reason) = snapshot.installation {
+      warningLabel(reason)
+    }
+
+    Text(
+      "NativeContainers verifies the pinned arm64 binary and SLSA provenance, then keeps both under its private Application Support directory. It does not modify Docker CLI plug-in directories."
+    )
+    .font(.caption)
+    .foregroundStyle(.secondary)
+  }
+
+  @ViewBuilder
   private func composeConformanceSection(
     _ report: ComposeBridgeConformanceReport
   ) -> some View {
@@ -296,6 +342,43 @@ struct DockerCompatibilitySettingsSection: View {
   private func isInstalled(_ state: SocktainerInstallationState) -> Bool {
     if case .ready = state { return true }
     return false
+  }
+
+  private func isComposeClientInstalled(
+    _ state: DockerComposeClientInstallationState
+  ) -> Bool {
+    if case .ready = state { return true }
+    return false
+  }
+
+  private func composeClientInstallationTitle(
+    _ state: DockerComposeClientInstallationState
+  ) -> String {
+    switch state {
+    case .notInstalled: "Not installed"
+    case .ready(let version): "Verified \(version)"
+    case .invalid: "Invalid — reinstall required"
+    }
+  }
+
+  private func composeClientInstallationSymbol(
+    _ state: DockerComposeClientInstallationState
+  ) -> String {
+    switch state {
+    case .ready: "checkmark.seal.fill"
+    case .notInstalled: "arrow.down.circle"
+    case .invalid: "xmark.octagon.fill"
+    }
+  }
+
+  private func composeClientInstallationColor(
+    _ state: DockerComposeClientInstallationState
+  ) -> Color {
+    switch state {
+    case .ready: .green
+    case .notInstalled: .secondary
+    case .invalid: .red
+    }
   }
 
   private func isRuntimeBusy(_ state: SocktainerRuntimeState) -> Bool {

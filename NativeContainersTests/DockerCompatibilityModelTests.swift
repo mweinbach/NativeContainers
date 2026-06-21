@@ -40,6 +40,28 @@ struct DockerCompatibilityModelTests {
   }
 
   @Test
+  func composeClientInstallRefreshesItsIndependentSnapshot() async {
+    let compatibility = RecordingDockerCompatibilityService(
+      snapshot: Self.stoppedSnapshot
+    )
+    let composeClient = RecordingDockerComposeClientService()
+    let model = DockerCompatibilityModel(
+      service: compatibility,
+      composeClientService: composeClient
+    )
+
+    await model.load()
+    #expect(model.composeClient?.installation == .notInstalled)
+
+    await model.installComposeClient()
+
+    #expect(await composeClient.installCount == 1)
+    #expect(model.composeClient?.installation == .ready(version: "5.1.4"))
+    #expect(model.snapshot == Self.stoppedSnapshot)
+    #expect(model.errorMessage == nil)
+  }
+
+  @Test
   func appModelKeepsOneSettingsScopedCompatibilityModel() {
     let service = RecordingDockerCompatibilityService(snapshot: Self.stoppedSnapshot)
     let appModel = AppModel(dockerCompatibilityService: service)
@@ -74,6 +96,33 @@ struct DockerCompatibilityModelTests {
     ),
     socketURL: socketURL
   )
+}
+
+private actor RecordingDockerComposeClientService: DockerComposeClientInstalling {
+  nonisolated let release = DockerComposeRelease.pinned
+  nonisolated let executableURL = URL(filePath: "/private/docker-compose")
+  nonisolated let provenanceURL = URL(filePath: "/private/provenance.json")
+
+  private var state = DockerComposeClientInstallationState.notInstalled
+  private(set) var installCount = 0
+
+  func snapshot() async -> DockerComposeClientSnapshot {
+    DockerComposeClientSnapshot(
+      release: release,
+      installation: state,
+      executableURL: executableURL,
+      provenanceURL: provenanceURL
+    )
+  }
+
+  func installationState() async -> DockerComposeClientInstallationState {
+    state
+  }
+
+  func install() async throws {
+    installCount += 1
+    state = .ready(version: release.version)
+  }
 }
 
 private actor RecordingDockerCompatibilityService: DockerCompatibilityManaging {
