@@ -96,10 +96,11 @@ actor VirtualMachineLibrary:
 
   private let rootURL: URL
   private let fileManager: FileManager
+  private let bundleStore: VirtualMachineBundleStore
+  private let bundleValidator: VirtualMachineBundleValidator
   private let launchID: UUID
   private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
-  private let macMachineIdentifierValidator: any MacVirtualMachineIdentifierValidating
   private let sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring
   private let sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating
   private var operationLockLease: AdvisoryFileLockLease?
@@ -120,49 +121,43 @@ actor VirtualMachineLibrary:
     sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating =
       AppleMacVirtualMachineSharedDirectoryNameValidator()
   ) {
-    self.fileManager = fileManager
-    self.launchID = launchID
-    self.rootURL = rootURL ?? Self.defaultRootURL(fileManager: fileManager)
-    self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
-    self.macMachineIdentifierValidator = macMachineIdentifierValidator
-    self.macVirtualMachineBundleResolver = MacVirtualMachineBundleResolver(
-      rootURL: self.rootURL,
+    let resolvedRootURL =
+      rootURL
+      ?? VirtualMachineBundleStore.defaultRootURL(
+        fileManager: fileManager
+      )
+    let bundleStore = VirtualMachineBundleStore(
+      rootURL: resolvedRootURL,
       fileManager: fileManager
     )
+    let bundleResolver = MacVirtualMachineBundleResolver(
+      rootURL: resolvedRootURL,
+      fileManager: fileManager
+    )
+    self.fileManager = fileManager
+    self.launchID = launchID
+    self.rootURL = resolvedRootURL
+    self.bundleStore = bundleStore
+    self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
+    self.macVirtualMachineBundleResolver = bundleResolver
     self.sharedDirectoryStore = sharedDirectoryStore
     self.sharedDirectoryNameValidator = sharedDirectoryNameValidator
+    self.bundleValidator = VirtualMachineBundleValidator(
+      bundleStore: bundleStore,
+      fileManager: fileManager,
+      resolver: bundleResolver,
+      machineIdentifierValidator: macMachineIdentifierValidator,
+      sharedDirectoryStore: sharedDirectoryStore,
+      sharedDirectoryNameValidator: sharedDirectoryNameValidator
+    )
   }
 
   func list() throws -> [VirtualMachineManifest] {
-    try ensureRootExists()
-
-    let resourceKeys: Set<URLResourceKey> = [.isDirectoryKey, .isHiddenKey]
-    let entries = try fileManager.contentsOfDirectory(
-      at: rootURL,
-      includingPropertiesForKeys: Array(resourceKeys),
-      options: [.skipsHiddenFiles]
-    )
-
-    return try entries.compactMap { bundleURL in
-      guard bundleURL.pathExtension == Self.bundleExtension else { return nil }
-      let values = try bundleURL.resourceValues(forKeys: resourceKeys)
-      guard values.isDirectory == true, values.isHidden != true else { return nil }
-
-      let manifest = try readManifest(in: bundleURL)
-      let bundleName = bundleURL.deletingPathExtension().lastPathComponent
-      guard bundleName.caseInsensitiveCompare(manifest.id.uuidString) == .orderedSame else {
-        throw VirtualMachineModelError.bundleIdentifierMismatch(
-          expected: manifest.id,
-          bundleName: bundleURL.lastPathComponent
-        )
-      }
-      return manifest
-    }
-    .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    try bundleStore.list()
   }
 
   func loadRestoreImageReferences() throws -> Set<URL> {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
     defer { releaseOperationAccess(token: accessToken) }
@@ -185,7 +180,7 @@ actor VirtualMachineLibrary:
       throw VirtualMachineModelError.invalidRestoreImageReference(sourceURL)
     }
 
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
     defer { releaseOperationAccess(token: accessToken) }
@@ -204,7 +199,7 @@ actor VirtualMachineLibrary:
       } else {
         manifest.restoreImageURL = destinationURL
       }
-      try write(manifest, to: manifestURL(for: manifest.id))
+      try bundleStore.write(manifest, to: bundleStore.manifestURL(for: manifest.id))
       updateCount += 1
     }
     return updateCount
@@ -213,13 +208,13 @@ actor VirtualMachineLibrary:
   func loadVirtualMachineStorageInventory() throws
     -> VirtualMachineStorageInventory
   {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     return VirtualMachineStorageInventory(
       rootURL: rootURL,
       targets: try list().map {
         VirtualMachineStorageTarget(
           manifest: $0,
-          bundleURL: bundleURL(for: $0.id)
+          bundleURL: bundleStore.bundleURL(for: $0.id)
         )
       }
     )
@@ -229,9 +224,9 @@ actor VirtualMachineLibrary:
     id: UUID
   ) throws -> MacVirtualMachineSharedDirectoryConfiguration {
     let manifest = try installationManifest(id: id)
-    let bundleURL = bundleURL(for: manifest.id)
-    try requireDirectory(bundleURL)
-    return try validatedSharedDirectoryConfiguration(in: bundleURL)
+    let bundleURL = bundleStore.bundleURL(for: manifest.id)
+    try bundleStore.requireDirectory(bundleURL)
+    return try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
   }
 
   func addMacOSSharedDirectory(
@@ -241,7 +236,7 @@ actor VirtualMachineLibrary:
     let borrow = try lease.borrow()
     defer { borrow.release() }
     let bundleURL = try requireConfigurationMutationLease(lease)
-    var current = try validatedSharedDirectoryConfiguration(in: bundleURL)
+    var current = try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
 
     try sharedDirectoryNameValidator.validatePersistedName(directory.guestName)
     let normalizedName = MacVirtualMachineSharedDirectoryNameNormalizer.normalized(
@@ -281,7 +276,7 @@ actor VirtualMachineLibrary:
     let borrow = try lease.borrow()
     defer { borrow.release() }
     let bundleURL = try requireConfigurationMutationLease(lease)
-    let current = try validatedSharedDirectoryConfiguration(in: bundleURL)
+    let current = try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
     guard current.directories.contains(where: { $0.id == id }) else {
       throw MacVirtualMachineSharedDirectoryError.sharedDirectoryNotFound(id)
     }
@@ -345,7 +340,7 @@ actor VirtualMachineLibrary:
       to: commit.destinationPath,
       format: commit.destinationFormat
     )
-    try write(manifest, to: manifestURL(for: manifest.id))
+    try bundleStore.write(manifest, to: bundleStore.manifestURL(for: manifest.id))
     return manifest
   }
 
@@ -354,13 +349,13 @@ actor VirtualMachineLibrary:
     guest: VirtualMachineGuest,
     resources: VirtualMachineResources
   ) throws -> VirtualMachineManifest {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
     defer { releaseOperationAccess(token: accessToken) }
 
     let manifest = try VirtualMachineManifest(name: name, guest: guest, resources: resources)
-    let finalURL = bundleURL(for: manifest.id)
+    let finalURL = bundleStore.bundleURL(for: manifest.id)
     guard !fileManager.fileExists(atPath: finalURL.path) else {
       throw VirtualMachineModelError.duplicateIdentifier(manifest.id)
     }
@@ -372,11 +367,14 @@ actor VirtualMachineLibrary:
 
     do {
       try fileManager.createDirectory(at: stagingURL, withIntermediateDirectories: false)
-      try createSparseDisk(
+      try bundleStore.createSparseDisk(
         at: stagingURL.appending(path: manifest.diskImagePath),
         size: resources.diskBytes
       )
-      try write(manifest, to: stagingURL.appending(path: Self.manifestFilename))
+      try bundleStore.write(
+        manifest,
+        to: stagingURL.appending(path: Self.manifestFilename)
+      )
       try fileManager.moveItem(at: stagingURL, to: finalURL)
       return manifest
     } catch {
@@ -386,17 +384,17 @@ actor VirtualMachineLibrary:
   }
 
   func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
     defer { releaseOperationAccess(token: accessToken) }
 
-    let bundleURL = bundleURL(for: id)
+    let bundleURL = bundleStore.bundleURL(for: id)
     guard fileManager.fileExists(atPath: bundleURL.path) else {
       throw VirtualMachineModelError.virtualMachineNotFound(id)
     }
 
-    var manifest = try readManifest(in: bundleURL)
+    var manifest = try bundleStore.readManifest(in: bundleURL)
     guard manifest.guest == .macOS else {
       throw VirtualMachineModelError.requiresMacOSGuest(id)
     }
@@ -435,7 +433,7 @@ actor VirtualMachineLibrary:
         resources: manifest.resources,
         destination: stagingArtifacts
       )
-      try validatePreparedArtifacts(stagingArtifacts)
+      try bundleStore.validatePreparedArtifacts(stagingArtifacts)
 
       try fileManager.moveItem(at: stagingDirectory, to: finalArtifactDirectory)
       promotedArtifacts = true
@@ -446,7 +444,10 @@ actor VirtualMachineLibrary:
         hardwareModelPath: MacPlatformArtifactURLs.hardwareModelManifestPath,
         machineIdentifierPath: MacPlatformArtifactURLs.machineIdentifierManifestPath
       )
-      try write(manifest, to: bundleURL.appending(path: Self.manifestFilename))
+      try bundleStore.write(
+        manifest,
+        to: bundleURL.appending(path: Self.manifestFilename)
+      )
       return manifest
     } catch {
       try? fileManager.removeItem(at: stagingDirectory)
@@ -458,17 +459,17 @@ actor VirtualMachineLibrary:
   }
 
   func discardVirtualMachine(id: UUID) async throws {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
     defer { releaseOperationAccess(token: accessToken) }
 
-    let manifest = try manifest(id: id)
+    let manifest = try bundleStore.manifest(id: id)
     guard manifest.installState != .installing else {
       throw VirtualMachineModelError.invalidInstallState(manifest.installState)
     }
-    let bundleURL = bundleURL(for: id)
-    try requireDirectory(bundleURL)
+    let bundleURL = bundleStore.bundleURL(for: id)
+    try bundleStore.requireDirectory(bundleURL)
     guard
       let runtimeLock = try AdvisoryFileLock.acquire(
         at: bundleURL.appending(path: Self.runtimeLockFilename)
@@ -488,7 +489,7 @@ actor VirtualMachineLibrary:
   }
 
   func beginClone(id: UUID, name: String) throws -> VirtualMachineCloneTransaction {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let operationID = UUID()
     try acquireOperationAccess(token: operationID)
     var runtimeLock: AdvisoryFileLockLease?
@@ -504,8 +505,8 @@ actor VirtualMachineLibrary:
     guard source.installState == .stopped else {
       throw VirtualMachineCloneError.invalidSourceState(source.installState)
     }
-    let sourceBundleURL = bundleURL(for: id)
-    try requireDirectory(sourceBundleURL)
+    let sourceBundleURL = bundleStore.bundleURL(for: id)
+    try bundleStore.requireDirectory(sourceBundleURL)
     guard
       let acquiredRuntimeLock = try AdvisoryFileLock.acquire(
         at: sourceBundleURL.appending(path: Self.runtimeLockFilename)
@@ -517,7 +518,7 @@ actor VirtualMachineLibrary:
     _ = try macVirtualMachineBundleResolver.resolveRuntime(source)
 
     let clone = try VirtualMachineManifest(cloning: source, name: name)
-    let finalBundleURL = bundleURL(for: clone.id)
+    let finalBundleURL = bundleStore.bundleURL(for: clone.id)
     guard !fileManager.fileExists(atPath: finalBundleURL.path) else {
       throw VirtualMachineModelError.duplicateIdentifier(clone.id)
     }
@@ -550,7 +551,7 @@ actor VirtualMachineLibrary:
     _ transaction: VirtualMachineCloneTransaction
   ) throws -> VirtualMachineManifest {
     _ = try activeClone(transaction)
-    try validateCloneBundle(transaction)
+    try bundleValidator.validateCloneBundle(transaction)
     guard !fileManager.fileExists(atPath: transaction.finalBundleURL.path) else {
       throw VirtualMachineModelError.duplicateIdentifier(transaction.clone.id)
     }
@@ -566,12 +567,12 @@ actor VirtualMachineLibrary:
     _ = try activeClone(transaction)
     defer { finishClone(operationID: transaction.operationID) }
     guard fileManager.fileExists(atPath: transaction.stagingBundleURL.path) else { return }
-    try requireDirectory(transaction.stagingBundleURL)
+    try bundleStore.requireDirectory(transaction.stagingBundleURL)
     try fileManager.removeItem(at: transaction.stagingBundleURL)
   }
 
   func acquireExportSource(id: UUID) throws -> VirtualMachineExportSourceLease {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
     defer { releaseOperationAccess(token: accessToken) }
@@ -580,8 +581,8 @@ actor VirtualMachineLibrary:
     guard manifest.installState == .stopped else {
       throw VirtualMachineTransferError.invalidSourceState(manifest.installState)
     }
-    let bundleURL = bundleURL(for: id)
-    try requireDirectory(bundleURL)
+    let bundleURL = bundleStore.bundleURL(for: id)
+    try bundleStore.requireDirectory(bundleURL)
     guard
       let runtimeLock = try AdvisoryFileLock.acquire(
         at: bundleURL.appending(path: Self.runtimeLockFilename)
@@ -608,7 +609,7 @@ actor VirtualMachineLibrary:
     from sourceURL: URL,
     mode: VirtualMachineImportMode
   ) throws -> VirtualMachineImportTransaction {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let operationID = UUID()
     try acquireOperationAccess(token: operationID)
     var didBegin = false
@@ -627,16 +628,16 @@ actor VirtualMachineLibrary:
         "the selected item is not a .\(Self.bundleExtension) package"
       )
     }
-    guard !isSameOrDescendant(sourceBundleURL, of: rootURL) else {
+    guard !bundleStore.isSameOrDescendant(sourceBundleURL, of: rootURL) else {
       throw VirtualMachineTransferError.invalidPackage(
         "packages already inside the active library cannot be imported"
       )
     }
-    try requireDirectory(sourceBundleURL)
+    try bundleStore.requireDirectory(sourceBundleURL)
 
     let source: VirtualMachineManifest
     do {
-      source = try readManifest(in: sourceBundleURL)
+      source = try bundleStore.readManifest(in: sourceBundleURL)
     } catch {
       throw VirtualMachineTransferError.invalidPackage(error.localizedDescription)
     }
@@ -650,7 +651,7 @@ actor VirtualMachineLibrary:
     }
 
     let imported = try source.imported(using: mode)
-    let finalBundleURL = bundleURL(for: imported.id)
+    let finalBundleURL = bundleStore.bundleURL(for: imported.id)
     guard !fileManager.fileExists(atPath: finalBundleURL.path) else {
       throw VirtualMachineTransferError.identityCollision(imported.id)
     }
@@ -683,7 +684,7 @@ actor VirtualMachineLibrary:
     _ transaction: VirtualMachineImportTransaction
   ) throws -> VirtualMachineManifest {
     _ = try activeImport(transaction)
-    try validateImportedBundle(transaction)
+    try bundleValidator.validateImportedBundle(transaction)
     guard !fileManager.fileExists(atPath: transaction.finalBundleURL.path) else {
       throw VirtualMachineTransferError.identityCollision(transaction.imported.id)
     }
@@ -699,7 +700,7 @@ actor VirtualMachineLibrary:
     _ = try activeImport(transaction)
     defer { finishImport(operationID: transaction.operationID) }
     guard fileManager.fileExists(atPath: transaction.stagingBundleURL.path) else { return }
-    try requireDirectory(transaction.stagingBundleURL)
+    try bundleStore.requireDirectory(transaction.stagingBundleURL)
     try fileManager.removeItem(at: transaction.stagingBundleURL)
   }
 
@@ -717,7 +718,7 @@ actor VirtualMachineLibrary:
     id: UUID,
     allowsDiskImageMigrationJournal: Bool
   ) throws -> MacVirtualMachineRuntimeLease {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
     defer { releaseOperationAccess(token: accessToken) }
@@ -726,8 +727,8 @@ actor VirtualMachineLibrary:
     guard manifest.installState == .stopped else {
       throw VirtualMachineModelError.invalidInstallState(manifest.installState)
     }
-    let bundleURL = bundleURL(for: manifest.id)
-    try requireDirectory(bundleURL)
+    let bundleURL = bundleStore.bundleURL(for: manifest.id)
+    try bundleStore.requireDirectory(bundleURL)
     if !allowsDiskImageMigrationJournal {
       try requireNoDiskImageMigrationJournal(
         in: bundleURL,
@@ -748,7 +749,7 @@ actor VirtualMachineLibrary:
         auxiliaryStorageURL: resolvedMachine.auxiliaryStorageURL,
         hardwareModelURL: resolvedMachine.hardwareModelURL,
         machineIdentifierURL: resolvedMachine.machineIdentifierURL,
-        sharedDirectories: try validatedSharedDirectoryConfiguration(
+        sharedDirectories: try bundleValidator.sharedDirectoryConfiguration(
           in: resolvedMachine.bundleURL
         )
       )
@@ -801,7 +802,7 @@ actor VirtualMachineLibrary:
     id: UUID,
     operationID: UUID
   ) throws -> PreparedMacVirtualMachine {
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     try acquireOperationAccess(token: operationID)
     var staged = false
     defer {
@@ -815,8 +816,11 @@ actor VirtualMachineLibrary:
       throw VirtualMachineModelError.invalidInstallState(manifest.installState)
     }
     let preparedMachine = try macVirtualMachineBundleResolver.resolve(manifest)
-    let stagingDirectory = installationStagingDirectory(id: id, operationID: operationID)
-    let installedDirectory = installationInstalledDirectory(id: id)
+    let stagingDirectory = bundleStore.installationStagingDirectory(
+      id: id,
+      operationID: operationID
+    )
+    let installedDirectory = bundleStore.installationInstalledDirectory(id: id)
     guard !fileManager.fileExists(atPath: stagingDirectory.path),
       !fileManager.fileExists(atPath: installedDirectory.path)
     else {
@@ -831,7 +835,7 @@ actor VirtualMachineLibrary:
         withIntermediateDirectories: false
       )
       let stagedDisk = stagingDirectory.appending(path: Self.installationDiskFilename)
-      try createSparseDisk(at: stagedDisk, size: manifest.resources.diskBytes)
+      try bundleStore.createSparseDisk(at: stagedDisk, size: manifest.resources.diskBytes)
       let stagedAuxiliaryStorage = stagingDirectory.appending(
         path: Self.installationAuxiliaryStorageFilename
       )
@@ -864,9 +868,12 @@ actor VirtualMachineLibrary:
   }
 
   private func removeStagedMacOSInstallation(id: UUID, operationID: UUID) throws {
-    let stagingDirectory = installationStagingDirectory(id: id, operationID: operationID)
+    let stagingDirectory = bundleStore.installationStagingDirectory(
+      id: id,
+      operationID: operationID
+    )
     guard fileManager.fileExists(atPath: stagingDirectory.path) else { return }
-    try requireDirectory(stagingDirectory)
+    try bundleStore.requireDirectory(stagingDirectory)
     try fileManager.removeItem(at: stagingDirectory)
   }
 
@@ -878,10 +885,13 @@ actor VirtualMachineLibrary:
     guard manifest.installState == .readyToInstall, manifest.installationOperationID == nil else {
       throw VirtualMachineModelError.invalidInstallState(manifest.installState)
     }
-    let stagingDirectory = installationStagingDirectory(id: id, operationID: operationID)
-    try requireDirectory(stagingDirectory)
+    let stagingDirectory = bundleStore.installationStagingDirectory(
+      id: id,
+      operationID: operationID
+    )
+    try bundleStore.requireDirectory(stagingDirectory)
     manifest.markInstallationStarted(operationID: operationID)
-    try write(manifest, to: manifestURL(for: id))
+    try bundleStore.write(manifest, to: bundleStore.manifestURL(for: id))
   }
 
   func completeMacOSInstallation(id: UUID, operationID: UUID) throws {
@@ -895,16 +905,19 @@ actor VirtualMachineLibrary:
       throw MacVirtualMachineInstallationError.staleOperation(id)
     }
 
-    let stagingDirectory = installationStagingDirectory(id: id, operationID: operationID)
-    let installedDirectory = installationInstalledDirectory(id: id)
-    try requireDirectory(stagingDirectory)
+    let stagingDirectory = bundleStore.installationStagingDirectory(
+      id: id,
+      operationID: operationID
+    )
+    let installedDirectory = bundleStore.installationInstalledDirectory(id: id)
+    try bundleStore.requireDirectory(stagingDirectory)
     guard !fileManager.fileExists(atPath: installedDirectory.path) else {
       throw MacVirtualMachineInstallationError.invalidBundle(
         "installed artifact directory already exists"
       )
     }
 
-    let currentBundleURL = bundleURL(for: id)
+    let currentBundleURL = bundleStore.bundleURL(for: id)
     let previousDiskURL = try macVirtualMachineBundleResolver.resolveArtifact(
       manifest.diskImagePath,
       named: "diskImagePath",
@@ -934,7 +947,7 @@ actor VirtualMachineLibrary:
       auxiliaryStoragePath: installedAuxiliaryStoragePath
     )
     do {
-      try write(manifest, to: manifestURL(for: id))
+      try bundleStore.write(manifest, to: bundleStore.manifestURL(for: id))
     } catch {
       try? fileManager.moveItem(at: installedDirectory, to: stagingDirectory)
       throw error
@@ -973,9 +986,9 @@ actor VirtualMachineLibrary:
       throw MacVirtualMachineInstallationError.staleOperation(id)
     }
     try removeStagedMacOSInstallation(id: id, operationID: operationID)
-    let installedDirectory = installationInstalledDirectory(id: id)
+    let installedDirectory = bundleStore.installationInstalledDirectory(id: id)
     if fileManager.fileExists(atPath: installedDirectory.path) {
-      try requireDirectory(installedDirectory)
+      try bundleStore.requireDirectory(installedDirectory)
       try fileManager.removeItem(at: installedDirectory)
     }
     let normalizedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -984,28 +997,26 @@ actor VirtualMachineLibrary:
       message: normalizedMessage.isEmpty
         ? "macOS installation did not complete." : normalizedMessage
     )
-    try write(manifest, to: manifestURL(for: id))
+    try bundleStore.write(manifest, to: bundleStore.manifestURL(for: id))
   }
 
   func recoverInterruptedMacOSInstallations() throws -> MacVirtualMachineRecoveryOutcome {
     guard operationAccessTokens.isEmpty else { return .deferredToAnotherProcess }
-    try ensureRootExists()
+    try bundleStore.ensureRootExists()
     let recoveryToken = UUID()
     guard try acquireRecoveryAccess(token: recoveryToken) else {
       return .deferredToAnotherProcess
     }
     defer { releaseOperationAccess(token: recoveryToken) }
 
-    try removeDeletionTombstones()
-    try removeCloneStagingBundles()
-    try removeImportStagingBundles()
+    try bundleStore.removeRecoveryArtifacts()
     for var manifest in try list() {
-      try removeOrphanedInstallationStagingDirectories(id: manifest.id)
-      let installedDirectory = installationInstalledDirectory(id: manifest.id)
+      try bundleStore.removeOrphanedInstallationStagingDirectories(id: manifest.id)
+      let installedDirectory = bundleStore.installationInstalledDirectory(id: manifest.id)
 
       if manifest.installState == .installing {
         if fileManager.fileExists(atPath: installedDirectory.path) {
-          try requireDirectory(installedDirectory)
+          try bundleStore.requireDirectory(installedDirectory)
           try fileManager.removeItem(at: installedDirectory)
         }
         manifest.markInstallationAborted(
@@ -1013,11 +1024,14 @@ actor VirtualMachineLibrary:
           message:
             "The app exited before macOS installation completed. The pristine prepared media was restored."
         )
-        try write(manifest, to: manifestURL(for: manifest.id))
+        try bundleStore.write(
+          manifest,
+          to: bundleStore.manifestURL(for: manifest.id)
+        )
       } else if !manifest.diskImagePath.hasPrefix(
         "\(Self.installationInstalledDirectoryName)/"
       ), fileManager.fileExists(atPath: installedDirectory.path) {
-        try requireDirectory(installedDirectory)
+        try bundleStore.requireDirectory(installedDirectory)
         try fileManager.removeItem(at: installedDirectory)
       }
     }
@@ -1025,7 +1039,7 @@ actor VirtualMachineLibrary:
   }
 
   private func installationManifest(id: UUID) throws -> VirtualMachineManifest {
-    let manifest = try manifest(id: id)
+    let manifest = try bundleStore.manifest(id: id)
     guard manifest.guest == .macOS else {
       throw VirtualMachineModelError.requiresMacOSGuest(id)
     }
@@ -1054,164 +1068,6 @@ actor VirtualMachineLibrary:
     return active
   }
 
-  private func validateCloneBundle(_ transaction: VirtualMachineCloneTransaction) throws {
-    do {
-      let cloneIdentifierData = try validateStagedBundle(
-        manifest: transaction.clone,
-        bundleURL: transaction.stagingBundleURL,
-        allowsSharedDirectories: true
-      )
-      guard let sourceIdentifierPath = transaction.source.machineIdentifierPath else {
-        throw VirtualMachineBundleError.invalidBundle(
-          "the source manifest has no machine identifier path"
-        )
-      }
-      let sourceIdentifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
-        sourceIdentifierPath,
-        named: "sourceMachineIdentifierPath",
-        in: transaction.sourceBundleURL,
-        writable: false
-      )
-      let sourceIdentifierData = try Data(contentsOf: sourceIdentifierURL)
-      guard cloneIdentifierData != sourceIdentifierData,
-        try !machineIdentifierExists(cloneIdentifierData)
-      else {
-        throw VirtualMachineBundleError.duplicateMachineIdentifier
-      }
-    } catch let error as VirtualMachineCloneError {
-      throw error
-    } catch {
-      throw VirtualMachineCloneError.invalidBundle(error.localizedDescription)
-    }
-  }
-
-  private func validateImportedBundle(
-    _ transaction: VirtualMachineImportTransaction
-  ) throws {
-    do {
-      let identifierData = try validateStagedBundle(
-        manifest: transaction.imported,
-        bundleURL: transaction.stagingBundleURL,
-        allowsSharedDirectories: false
-      )
-      guard try !machineIdentifierExists(identifierData) else {
-        throw VirtualMachineTransferError.platformIdentityCollision
-      }
-    } catch let error as VirtualMachineTransferError {
-      throw error
-    } catch {
-      throw VirtualMachineTransferError.invalidPackage(error.localizedDescription)
-    }
-  }
-
-  private func validateStagedBundle(
-    manifest expectedManifest: VirtualMachineManifest,
-    bundleURL: URL,
-    allowsSharedDirectories: Bool
-  ) throws -> Data {
-    try requireDirectory(bundleURL)
-    let manifest = try readManifest(in: bundleURL)
-    guard manifest == expectedManifest,
-      manifest.guest == .macOS,
-      manifest.installState == .stopped,
-      manifest.installationOperationID == nil,
-      manifest.installationFailure == nil
-    else {
-      throw VirtualMachineBundleError.invalidBundle(
-        "the staged manifest does not match the transfer transaction"
-      )
-    }
-
-    _ = try macVirtualMachineBundleResolver.resolveArtifact(
-      manifest.diskImagePath,
-      named: "diskImagePath",
-      in: bundleURL,
-      writable: true
-    )
-    for (path, name, writable) in [
-      (manifest.auxiliaryStoragePath, "auxiliaryStoragePath", true),
-      (manifest.hardwareModelPath, "hardwareModelPath", false),
-      (manifest.machineIdentifierPath, "machineIdentifierPath", false),
-    ] {
-      guard let path else {
-        throw VirtualMachineBundleError.invalidBundle(
-          "the staged manifest is missing \(name)"
-        )
-      }
-      _ = try macVirtualMachineBundleResolver.resolveArtifact(
-        path,
-        named: name,
-        in: bundleURL,
-        writable: writable
-      )
-    }
-    guard let machineIdentifierPath = manifest.machineIdentifierPath else {
-      throw VirtualMachineBundleError.invalidBundle(
-        "the staged manifest has no machine identifier path"
-      )
-    }
-    let identifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
-      machineIdentifierPath,
-      named: "machineIdentifierPath",
-      in: bundleURL,
-      writable: false
-    )
-    let identifierData = try Data(contentsOf: identifierURL)
-    guard macMachineIdentifierValidator.isValidIdentifierData(identifierData) else {
-      throw VirtualMachineBundleError.invalidMachineIdentifier
-    }
-
-    if allowsSharedDirectories {
-      _ = try validatedSharedDirectoryConfiguration(in: bundleURL)
-    } else {
-      let sharedDirectoriesURL = bundleURL.appending(
-        path: FileMacVirtualMachineSharedDirectoryConfigurationStore.filename
-      )
-      guard !fileManager.fileExists(atPath: sharedDirectoriesURL.path) else {
-        throw VirtualMachineBundleError.invalidBundle(
-          "host shared-folder capabilities remain in the portable package"
-        )
-      }
-    }
-
-    let entries = try fileManager.contentsOfDirectory(
-      at: bundleURL,
-      includingPropertiesForKeys: nil,
-      options: []
-    )
-    guard !entries.contains(where: { isTransientBundleEntry($0.lastPathComponent) }) else {
-      throw VirtualMachineBundleError.invalidBundle(
-        "runtime, installation, or saved-state transaction data remains in the staged bundle"
-      )
-    }
-    return identifierData
-  }
-
-  private func machineIdentifierExists(_ candidate: Data) throws -> Bool {
-    for manifest in try list() {
-      guard let path = manifest.machineIdentifierPath else { continue }
-      let identifierURL = try macVirtualMachineBundleResolver.resolveArtifact(
-        path,
-        named: "machineIdentifierPath",
-        in: bundleURL(for: manifest.id),
-        writable: false
-      )
-      if try Data(contentsOf: identifierURL) == candidate {
-        return true
-      }
-    }
-    return false
-  }
-
-  private func isTransientBundleEntry(_ name: String) -> Bool {
-    name == Self.runtimeLockFilename
-      || name == Self.runtimeOwnerFilename
-      || name == MacVirtualMachineSavedStateStore.directoryName
-      || name == VirtualMachineDiskImageMigrationArtifacts.journalFilename
-      || name.hasPrefix(Self.installationStagingPrefix)
-      || name.hasPrefix(MacVirtualMachineSavedStateStore.stagingPrefix)
-  }
-
   private func requireConfigurationMutationLease(
     _ lease: MacVirtualMachineRuntimeLease
   ) throws -> URL {
@@ -1219,145 +1075,14 @@ actor VirtualMachineLibrary:
     guard manifest.installState == .stopped else {
       throw VirtualMachineModelError.invalidInstallState(manifest.installState)
     }
-    let bundleURL = bundleURL(for: manifest.id).standardizedFileURL
+    let bundleURL = bundleStore.bundleURL(for: manifest.id).standardizedFileURL
     guard bundleURL == lease.machine.bundleURL.standardizedFileURL,
       lease.machine.manifest.id == manifest.id
     else {
       throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
     }
-    try requireDirectory(bundleURL)
+    try bundleStore.requireDirectory(bundleURL)
     return bundleURL
-  }
-
-  private func validatedSharedDirectoryConfiguration(
-    in bundleURL: URL
-  ) throws -> MacVirtualMachineSharedDirectoryConfiguration {
-    let configuration = try sharedDirectoryStore.load(from: bundleURL)
-    for directory in configuration.directories {
-      try sharedDirectoryNameValidator.validatePersistedName(
-        directory.guestName
-      )
-    }
-    return configuration
-  }
-
-  private func manifest(id: UUID) throws -> VirtualMachineManifest {
-    let bundleURL = bundleURL(for: id)
-    guard fileManager.fileExists(atPath: bundleURL.path) else {
-      throw VirtualMachineModelError.virtualMachineNotFound(id)
-    }
-    let manifest = try readManifest(in: bundleURL)
-    guard manifest.id == id else {
-      throw VirtualMachineModelError.bundleIdentifierMismatch(
-        expected: manifest.id,
-        bundleName: bundleURL.lastPathComponent
-      )
-    }
-    return manifest
-  }
-
-  private func manifestURL(for id: UUID) -> URL {
-    bundleURL(for: id).appending(path: Self.manifestFilename)
-  }
-
-  private func removeOrphanedInstallationStagingDirectories(id: UUID) throws {
-    let entries = try fileManager.contentsOfDirectory(
-      at: bundleURL(for: id),
-      includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-      options: []
-    )
-    for entry in entries {
-      let name = entry.lastPathComponent
-      guard name.hasPrefix(Self.installationStagingPrefix),
-        name.hasSuffix(Self.installationStagingSuffix)
-      else {
-        continue
-      }
-      try requireDirectory(entry)
-      try fileManager.removeItem(at: entry)
-    }
-  }
-
-  private func removeDeletionTombstones() throws {
-    let entries = try fileManager.contentsOfDirectory(
-      at: rootURL,
-      includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-      options: []
-    )
-    for entry in entries {
-      let name = entry.lastPathComponent
-      guard name.hasPrefix(Self.deletionTombstonePrefix),
-        name.hasSuffix(Self.deletionTombstoneSuffix)
-      else {
-        continue
-      }
-      try requireDirectory(entry)
-      try fileManager.removeItem(at: entry)
-    }
-  }
-
-  private func removeCloneStagingBundles() throws {
-    let entries = try fileManager.contentsOfDirectory(
-      at: rootURL,
-      includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-      options: []
-    )
-    for entry in entries {
-      let name = entry.lastPathComponent
-      guard name.hasPrefix(Self.cloneStagingPrefix),
-        name.hasSuffix(Self.cloneStagingSuffix)
-      else {
-        continue
-      }
-      try requireDirectory(entry)
-      try fileManager.removeItem(at: entry)
-    }
-  }
-
-  private func removeImportStagingBundles() throws {
-    let entries = try fileManager.contentsOfDirectory(
-      at: rootURL,
-      includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-      options: []
-    )
-    for entry in entries {
-      let name = entry.lastPathComponent
-      guard name.hasPrefix(Self.importStagingPrefix),
-        name.hasSuffix(Self.importStagingSuffix)
-      else {
-        continue
-      }
-      try requireDirectory(entry)
-      try fileManager.removeItem(at: entry)
-    }
-  }
-
-  private func installationStagingDirectory(id: UUID, operationID: UUID) -> URL {
-    bundleURL(for: id).appending(
-      path:
-        "\(Self.installationStagingPrefix)\(operationID.uuidString.lowercased())\(Self.installationStagingSuffix)",
-      directoryHint: .isDirectory
-    )
-  }
-
-  private func installationInstalledDirectory(id: UUID) -> URL {
-    bundleURL(for: id).appending(
-      path: Self.installationInstalledDirectoryName,
-      directoryHint: .isDirectory
-    )
-  }
-
-  private func requireDirectory(_ url: URL) throws {
-    let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
-    guard values.isDirectory == true, values.isSymbolicLink != true else {
-      throw MacVirtualMachineInstallationError.invalidBundle(
-        "installation workspace is missing or symbolic"
-      )
-    }
-  }
-
-  private func ensureRootExists() throws {
-    try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
   }
 
   private func acquireOperationAccess(token: UUID) throws {
@@ -1426,69 +1151,9 @@ actor VirtualMachineLibrary:
     releaseOperationAccess(token: operationID)
   }
 
-  private func bundleURL(for id: UUID) -> URL {
-    rootURL
-      .appending(path: id.uuidString.lowercased(), directoryHint: .isDirectory)
-      .appendingPathExtension(Self.bundleExtension)
-  }
-
-  private func isSameOrDescendant(_ candidate: URL, of directory: URL) -> Bool {
-    let resolvedDirectory = directory.resolvingSymlinksInPath().standardizedFileURL
-    let resolvedCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
-    let directoryComponents = resolvedDirectory.pathComponents
-    let candidateComponents = resolvedCandidate.pathComponents
-    guard candidateComponents.count >= directoryComponents.count else { return false }
-    return candidateComponents.prefix(directoryComponents.count)
-      .elementsEqual(directoryComponents)
-  }
-
-  private func readManifest(in bundleURL: URL) throws -> VirtualMachineManifest {
-    let data = try Data(contentsOf: bundleURL.appending(path: Self.manifestFilename))
-    let manifest = try Self.decoder.decode(VirtualMachineManifest.self, from: data)
-    guard manifest.schemaVersion == VirtualMachineManifest.currentSchemaVersion else {
-      throw VirtualMachineModelError.unsupportedSchema(manifest.schemaVersion)
-    }
-    return manifest
-  }
-
-  private func validatePreparedArtifacts(_ artifacts: MacPlatformArtifactURLs) throws {
-    for artifact in artifacts.all {
-      var isDirectory: ObjCBool = false
-      guard fileManager.fileExists(atPath: artifact.path, isDirectory: &isDirectory),
-        !isDirectory.boolValue
-      else {
-        throw MacPlatformArtifactError.missingArtifact(artifact.lastPathComponent)
-      }
-    }
-  }
-
-  private func createSparseDisk(at url: URL, size: UInt64) throws {
-    guard fileManager.createFile(atPath: url.path, contents: nil) else {
-      throw CocoaError(.fileWriteUnknown)
-    }
-    let handle = try FileHandle(forWritingTo: url)
-    defer { try? handle.close() }
-    try handle.truncate(atOffset: size)
-  }
-
-  private func write(_ manifest: VirtualMachineManifest, to url: URL) throws {
-    let data = try Self.encoder.encode(manifest)
-    try data.write(to: url, options: [.atomic])
-  }
-
-  private static func defaultRootURL(fileManager: FileManager) -> URL {
-    let supportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    return
-      supportURL
-      .appending(path: "NativeContainers", directoryHint: .isDirectory)
-      .appending(path: "Virtual Machines", directoryHint: .isDirectory)
-  }
-
   private static let encoder: JSONEncoder = {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     return encoder
   }()
-
-  private static let decoder = JSONDecoder()
 }
