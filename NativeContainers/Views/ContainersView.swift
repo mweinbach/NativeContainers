@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 struct ContainersView: View {
   let model: AppModel
   @State private var pendingDeletion: ContainerRecord?
-  @State private var selectedContainerID: ContainerRecord.ID?
   @State private var isShowingCreation = false
 
   var body: some View {
@@ -24,7 +23,7 @@ struct ContainersView: View {
                 ContainerRow(
                   container: container,
                   isSelected: selectedContainerID == container.id,
-                  onSelect: { selectedContainerID = container.id },
+                  onSelect: { model.navigate(to: .container(container.id)) },
                   onStart: { Task { await model.startContainer(id: container.id) } },
                   onStop: { Task { await model.stopContainer(id: container.id) } },
                   onRestart: { Task { await model.restartContainer(id: container.id) } },
@@ -68,7 +67,7 @@ struct ContainersView: View {
       Button("Delete \(container.id)", role: .destructive) {
         pendingDeletion = nil
         if selectedContainerID == container.id {
-          selectedContainerID = nil
+          model.navigate(to: .containers)
         }
         Task { await model.deleteContainer(id: container.id) }
       }
@@ -93,9 +92,16 @@ struct ContainersView: View {
     model.containers.first { $0.id == selectedContainerID }
   }
 
+  private var selectedContainerID: ContainerRecord.ID? {
+    guard case .container(let id) = model.workspaceRoute else { return nil }
+    return id
+  }
+
   private func synchronizeSelection() {
     guard selectedContainer == nil else { return }
-    selectedContainerID = model.containers.first?.id
+    if let id = model.containers.first?.id {
+      model.navigate(to: .container(id))
+    }
   }
 }
 

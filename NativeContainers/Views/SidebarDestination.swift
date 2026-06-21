@@ -13,6 +13,46 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
 
   var id: Self { self }
 
+  var workspaceRoute: WorkspaceRoute {
+    switch self {
+    case .overview: .overview
+    case .containers: .containers
+    case .images: .images
+    case .builds: .builds
+    case .volumes: .volumes
+    case .networks: .networks
+    case .linuxMachines: .linuxMachines
+    case .macOSVirtualMachines: .macOSVirtualMachines
+    case .settings: .settings
+    }
+  }
+
+  init(workspaceRoute: WorkspaceRoute) {
+    switch workspaceRoute.baseRoute {
+    case .overview:
+      self = .overview
+    case .containers:
+      self = .containers
+    case .images:
+      self = .images
+    case .builds:
+      self = .builds
+    case .volumes:
+      self = .volumes
+    case .networks:
+      self = .networks
+    case .linuxMachines:
+      self = .linuxMachines
+    case .macOSVirtualMachines:
+      self = .macOSVirtualMachines
+    case .settings:
+      self = .settings
+    case .container, .image, .volume, .network, .linuxMachine,
+      .macOSVirtualMachine:
+      preconditionFailure("A base workspace route cannot be a resource route.")
+    }
+  }
+
   var title: LocalizedStringResource {
     switch self {
     case .overview: "Overview"

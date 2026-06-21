@@ -27,6 +27,10 @@ struct VirtualMachinesView: View {
             machine: machine,
             availability: model.virtualMachineAvailability,
             runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
+            isSelected: selectedMachineID == machine.id,
+            onSelect: {
+              model.navigate(to: .macOSVirtualMachine(machine.id))
+            },
             prepare: { machineToPrepare = machine },
             install: { machineToInstall = machine },
             open: { machineToOpen = machine },
@@ -37,6 +41,9 @@ struct VirtualMachinesView: View {
       }
     }
     .navigationTitle("macOS VMs")
+    .onChange(of: model.virtualMachines, initial: true) {
+      synchronizeSelection()
+    }
     .toolbar {
       ToolbarItem {
         Button("Create VM", systemImage: "plus") {
@@ -92,6 +99,19 @@ struct VirtualMachinesView: View {
         "This permanently removes \(machine.name), its virtual disk, and its platform identity. Cached restore images are retained."
       )
     }
+  }
+
+  private var selectedMachineID: VirtualMachineManifest.ID? {
+    guard case .macOSVirtualMachine(let id) = model.workspaceRoute else { return nil }
+    return id
+  }
+
+  private func synchronizeSelection() {
+    guard
+      let id = model.virtualMachines.first?.id,
+      !model.virtualMachines.contains(where: { $0.id == selectedMachineID })
+    else { return }
+    model.navigate(to: .macOSVirtualMachine(id))
   }
 }
 

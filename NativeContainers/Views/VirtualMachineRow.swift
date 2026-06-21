@@ -4,6 +4,8 @@ struct VirtualMachineRow: View {
   let machine: VirtualMachineManifest
   let availability: MacVirtualMachineAvailability
   let runtime: MacVirtualMachineRuntimeModel
+  let isSelected: Bool
+  let onSelect: () -> Void
   let prepare: () -> Void
   let install: () -> Void
   let open: () -> Void
@@ -110,6 +112,14 @@ struct VirtualMachineRow: View {
       }
     }
     .padding(.vertical, 7)
+    .padding(.horizontal, 8)
+    .background(
+      isSelected ? Color.accentColor.opacity(0.14) : Color.clear,
+      in: RoundedRectangle(cornerRadius: 9)
+    )
+    .contentShape(Rectangle())
+    .onTapGesture(perform: onSelect)
+    .accessibilityValue(isSelected ? "Selected" : "Not selected")
     .task { await runtime.observe() }
     .confirmationDialog(
       "Start \(machine.name) without its saved state?",

@@ -45,6 +45,10 @@ struct LinuxMachinesView: View {
         List(appModel.linuxMachines) { machine in
           LinuxMachineRow(
             machine: machine,
+            isSelected: selectedMachineID == machine.id,
+            onSelect: {
+              appModel.navigate(to: .linuxMachine(machine.id))
+            },
             onStart: {
               Task { await managementModel.start(machine) }
             },
@@ -69,6 +73,9 @@ struct LinuxMachinesView: View {
       }
     }
     .navigationTitle("Linux Machines")
+    .onChange(of: appModel.linuxMachines, initial: true) {
+      synchronizeSelection()
+    }
     .toolbar {
       ToolbarItemGroup {
         if managementModel.isWorking {
@@ -135,6 +142,19 @@ struct LinuxMachinesView: View {
       )
     }
   }
+
+  private var selectedMachineID: LinuxMachineRecord.ID? {
+    guard case .linuxMachine(let id) = appModel.workspaceRoute else { return nil }
+    return id
+  }
+
+  private func synchronizeSelection() {
+    guard
+      let id = appModel.linuxMachines.first?.id,
+      !appModel.linuxMachines.contains(where: { $0.id == selectedMachineID })
+    else { return }
+    appModel.navigate(to: .linuxMachine(id))
+  }
 }
 
 #Preview {
@@ -146,6 +166,8 @@ struct LinuxMachinesView: View {
 
 struct LinuxMachineRow: View {
   let machine: LinuxMachineRecord
+  let isSelected: Bool
+  let onSelect: () -> Void
   let onStart: () -> Void
   let onStop: () -> Void
   let onForceStop: () -> Void
@@ -155,34 +177,41 @@ struct LinuxMachineRow: View {
 
   var body: some View {
     HStack(spacing: 14) {
-      RuntimeStatusIndicator(state: machine.state)
-      VStack(alignment: .leading, spacing: 4) {
-        HStack(spacing: 8) {
-          Text(machine.id)
-            .font(.headline)
-          RuntimeStateBadge(state: machine.state)
-          if !machine.isInitialized {
-            Text("Setup required")
-              .font(.caption2.weight(.medium))
-              .padding(.horizontal, 7)
-              .padding(.vertical, 2)
-              .background(.orange.opacity(0.15), in: Capsule())
-              .foregroundStyle(.orange)
+      Button(action: onSelect) {
+        HStack(spacing: 14) {
+          RuntimeStatusIndicator(state: machine.state)
+          VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+              Text(machine.id)
+                .font(.headline)
+              RuntimeStateBadge(state: machine.state)
+              if !machine.isInitialized {
+                Text("Setup required")
+                  .font(.caption2.weight(.medium))
+                  .padding(.horizontal, 7)
+                  .padding(.vertical, 2)
+                  .background(.orange.opacity(0.15), in: Capsule())
+                  .foregroundStyle(.orange)
+              }
+            }
+            Text(machine.imageReference)
+              .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+              Label("\(machine.cpuCount) CPUs", systemImage: "cpu")
+              Label(machine.memoryDescription, systemImage: "memorychip")
+              if let ipAddress = machine.ipAddress {
+                Label(ipAddress, systemImage: "network")
+              }
+            }
+            .font(.caption)
+            .foregroundStyle(.tertiary)
           }
+          Spacer()
         }
-        Text(machine.imageReference)
-          .foregroundStyle(.secondary)
-        HStack(spacing: 12) {
-          Label("\(machine.cpuCount) CPUs", systemImage: "cpu")
-          Label(machine.memoryDescription, systemImage: "memorychip")
-          if let ipAddress = machine.ipAddress {
-            Label(ipAddress, systemImage: "network")
-          }
-        }
-        .font(.caption)
-        .foregroundStyle(.tertiary)
       }
-      Spacer()
+      .buttonStyle(.plain)
+      .accessibilityValue(isSelected ? "Selected" : "Not selected")
+
       Menu("Machine Tools", systemImage: "terminal") {
         Button(
           machine.state == .stopped ? "Start & Open Terminal" : "Open Terminal",
@@ -213,6 +242,11 @@ struct LinuxMachineRow: View {
       )
     }
     .padding(.vertical, 7)
+    .padding(.horizontal, 8)
+    .background(
+      isSelected ? Color.accentColor.opacity(0.14) : Color.clear,
+      in: RoundedRectangle(cornerRadius: 9)
+    )
   }
 
   private var canUseTools: Bool {

@@ -147,6 +147,11 @@
 		1F9D2BBA2FE7AF040076F5B9 /* MacVirtualMachineConfigurationDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BB92FE7AF040076F5B9 /* MacVirtualMachineConfigurationDescriptor.swift */; };
 		1F9D2BBC2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BBB2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift */; };
 		1F9D2BBE2FE7B0E80076F5B9 /* MacVirtualMachineSavedStateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BBD2FE7B0E80076F5B9 /* MacVirtualMachineSavedStateServiceTests.swift */; };
+		1F9D2BC02FE7B6FC0076F5B9 /* WorkspaceRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BBF2FE7B6FC0076F5B9 /* WorkspaceRoute.swift */; };
+		1F9D2BC22FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC12FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift */; };
+		1F9D2BC42FE7B7100076F5B9 /* WorkspaceNavigationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC32FE7B7100076F5B9 /* WorkspaceNavigationModel.swift */; };
+		1F9D2BC62FE7B73E0076F5B9 /* ResourceQuickOpenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC52FE7B73E0076F5B9 /* ResourceQuickOpenView.swift */; };
+		1F9D2BC82FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2BC72FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
@@ -405,6 +410,11 @@
 		1F9D2BB92FE7AF040076F5B9 /* MacVirtualMachineConfigurationDescriptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineConfigurationDescriptor.swift; sourceTree = "<group>"; };
 		1F9D2BBB2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSavedStateService.swift; sourceTree = "<group>"; };
 		1F9D2BBD2FE7B0E80076F5B9 /* MacVirtualMachineSavedStateServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacVirtualMachineSavedStateServiceTests.swift; sourceTree = "<group>"; };
+		1F9D2BBF2FE7B6FC0076F5B9 /* WorkspaceRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRoute.swift; sourceTree = "<group>"; };
+		1F9D2BC12FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceResourceCatalog.swift; sourceTree = "<group>"; };
+		1F9D2BC32FE7B7100076F5B9 /* WorkspaceNavigationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceNavigationModel.swift; sourceTree = "<group>"; };
+		1F9D2BC52FE7B73E0076F5B9 /* ResourceQuickOpenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceQuickOpenView.swift; sourceTree = "<group>"; };
+		1F9D2BC72FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceNavigationTests.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -571,6 +581,7 @@
 				1F9D2B8D2FE7A1650076F5B9 /* CreateVirtualMachineView.swift */,
 				1F9D2B8F2FE7A1700076F5B9 /* MacVirtualMachineInstallationView.swift */,
 				1F9D2BAF2FE7AB450076F5B9 /* MacVirtualMachineRuntimeView.swift */,
+				1F9D2BC52FE7B73E0076F5B9 /* ResourceQuickOpenView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -597,6 +608,7 @@
 				1F9D2B9F2FE7AA010076F5B9 /* MacVirtualMachineRuntimeModels.swift */,
 				1F9D2BB32FE7AE290076F5B9 /* MacVirtualMachineSavedStateModels.swift */,
 				1F9D2BB92FE7AF040076F5B9 /* MacVirtualMachineConfigurationDescriptor.swift */,
+				1F9D2BBF2FE7B6FC0076F5B9 /* WorkspaceRoute.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -656,6 +668,7 @@
 				1F9D2BB12FE7AB750076F5B9 /* MacVirtualMachineRuntimeModelTests.swift */,
 				1F9D2BB72FE7AE5C0076F5B9 /* MacVirtualMachineSavedStateStoreTests.swift */,
 				1F9D2BBD2FE7B0E80076F5B9 /* MacVirtualMachineSavedStateServiceTests.swift */,
+				1F9D2BC72FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -726,6 +739,7 @@
 				1F9D2BA92FE7AAAA0076F5B9 /* AppleMacVirtualMachineRuntimeEngine.swift */,
 				1F9D2BB52FE7AE2A0076F5B9 /* MacVirtualMachineSavedStateStore.swift */,
 				1F9D2BBB2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift */,
+				1F9D2BC12FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -787,6 +801,7 @@
 				1F9D2B792FE79C8A0076F5B9 /* LinuxMachineCommandModel.swift */,
 				1F9D2B872FE7A1440076F5B9 /* MacVirtualMachineInstallationModel.swift */,
 				1F9D2BAD2FE7AB360076F5B9 /* MacVirtualMachineRuntimeModel.swift */,
+				1F9D2BC32FE7B7100076F5B9 /* WorkspaceNavigationModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1018,6 +1033,7 @@
 				1F9D2ACF2FE754CA0076F5B9 /* InfrastructureManagementTests.swift in Sources */,
 				A84C9E71E18B6F05297928CC /* MacRestoreImagePreparationModelTests.swift in Sources */,
 				1F9D2AF52FE765380076F5B9 /* AppleContainerToolServiceTests.swift in Sources */,
+				1F9D2BC82FE7B7F50076F5B9 /* WorkspaceNavigationTests.swift in Sources */,
 				37D4EF5F6055D1A226C3BA44 /* RegistrySettingsModelTests.swift in Sources */,
 				1F9D2B682FE796DA0076F5B9 /* AppleMachineXPCTransportTests.swift in Sources */,
 				1F9D2AE52FE761110076F5B9 /* OwnedContainerRecoveryServiceTests.swift in Sources */,
@@ -1079,6 +1095,7 @@
 				1F9D2B542FE792100076F5B9 /* AppleMachineManagementService.swift in Sources */,
 				DF37C616A057253634297F83 /* ContainerTerminalModel.swift in Sources */,
 				1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */,
+				1F9D2BC02FE7B6FC0076F5B9 /* WorkspaceRoute.swift in Sources */,
 				1F9D2B152FE76B040076F5B9 /* ContainerCreationSections.swift in Sources */,
 				1F9D2B092FE769800076F5B9 /* ApplePublishedSocketWorkspace.swift in Sources */,
 				1F9D2AD12FE7564A0076F5B9 /* AppleInfrastructureClient.swift in Sources */,
@@ -1110,6 +1127,7 @@
 				1F9D2B762FE79C2C0076F5B9 /* AppleLinuxMachineProcessService.swift in Sources */,
 				3DCB281F5AF84FBC4DDE6AD2 /* ImageInspectorModel.swift in Sources */,
 				1F9D2B642FE796720076F5B9 /* AppleContainerProcessXPCClient.swift in Sources */,
+				1F9D2BC22FE7B7090076F5B9 /* WorkspaceResourceCatalog.swift in Sources */,
 				1F9D2AD72FE75F420076F5B9 /* AppleXPCRequestClient.swift in Sources */,
 				1F9D2B432FE77DDF0076F5B9 /* PrivateImageBuildHistoryDirectory.swift in Sources */,
 				AEF8A0C79D65EBF3BC79F55A /* ImageInspectorView.swift in Sources */,
@@ -1130,6 +1148,7 @@
 				1F9D2ADF2FE760400076F5B9 /* AppleRuntimeInventoryService.swift in Sources */,
 				78D8757B9A4FE8F19E8883AF /* MacPlatformArtifactPreparer.swift in Sources */,
 				1F9D2BA02FE7AA010076F5B9 /* MacVirtualMachineRuntimeModels.swift in Sources */,
+				1F9D2BC62FE7B73E0076F5B9 /* ResourceQuickOpenView.swift in Sources */,
 				ABEE87307ABFB2C102B3C269 /* MacRestoreImagePreparationModel.swift in Sources */,
 				8753FE26B39E232AECFF3010 /* MacRestoreImageService.swift in Sources */,
 				1F9D2B072FE7695B0076F5B9 /* AppleContainerHostAccessService.swift in Sources */,
@@ -1181,6 +1200,7 @@
 				1F9D2B4A2FE78B6F0076F5B9 /* ImageBuildOutputSection.swift in Sources */,
 				4DBEA60A3A33B0528C68106A /* VirtualMachineModels.swift in Sources */,
 				1F9D2AFB2FE765F10076F5B9 /* AppleContainerProgressRelay.swift in Sources */,
+				1F9D2BC42FE7B7100076F5B9 /* WorkspaceNavigationModel.swift in Sources */,
 				1F9D2B3D2FE77B6B0076F5B9 /* ImageBuildHistoryModel.swift in Sources */,
 				236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */,
 				1F9D2B562FE7923C0076F5B9 /* LinuxMachineManagementModel.swift in Sources */,

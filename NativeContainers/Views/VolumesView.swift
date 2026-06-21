@@ -3,7 +3,6 @@ import SwiftUI
 struct VolumesView: View {
   let appModel: AppModel
   @State private var operations: VolumeManagementModel
-  @State private var selectedVolumeID: VolumeRecord.ID?
   @State private var isShowingCreation = false
   @State private var deletionPlan: VolumeDeletionPlan?
   @State private var prunePlan: VolumePrunePlan?
@@ -12,7 +11,6 @@ struct VolumesView: View {
   init(model: AppModel) {
     appModel = model
     _operations = State(initialValue: model.makeVolumeManagementModel())
-    _selectedVolumeID = State(initialValue: model.volumes.first?.id)
   }
 
   var body: some View {
@@ -29,7 +27,7 @@ struct VolumesView: View {
             LazyVStack(spacing: 4) {
               ForEach(appModel.volumes) { volume in
                 Button {
-                  selectedVolumeID = volume.id
+                  appModel.navigate(to: .volume(volume.id))
                 } label: {
                   VolumeRow(
                     name: volume.name,
@@ -166,6 +164,11 @@ struct VolumesView: View {
     appModel.volumes.first { $0.id == selectedVolumeID }
   }
 
+  private var selectedVolumeID: VolumeRecord.ID? {
+    guard case .volume(let id) = appModel.workspaceRoute else { return nil }
+    return id
+  }
+
   private var deletionPlanPresentation: Binding<Bool> {
     Binding(
       get: { deletionPlan != nil },
@@ -182,7 +185,9 @@ struct VolumesView: View {
 
   private func synchronizeSelection() {
     guard selectedVolume == nil else { return }
-    selectedVolumeID = appModel.volumes.first?.id
+    if let id = appModel.volumes.first?.id {
+      appModel.navigate(to: .volume(id))
+    }
   }
 
   private func prepareDeletion(_ name: String) {
@@ -386,9 +391,11 @@ struct VolumeCreationView: View {
               Text(mode.title).tag(mode)
             }
           }
-          Text("Volumes use Apple’s local sparse ext4 driver. Capacity and host allocation are reported separately.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+          Text(
+            "Volumes use Apple’s local sparse ext4 driver. Capacity and host allocation are reported separately."
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
         }
         Section("Labels") {
           TextEditor(text: $labelsText)

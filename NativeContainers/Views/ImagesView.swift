@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ImagesView: View {
   let model: AppModel
-  @State private var selectedReference: ImageRecord.ID?
   @State private var isShowingPull = false
   @State private var isShowingPrune = false
 
@@ -23,7 +22,7 @@ struct ImagesView: View {
                 ImageRow(
                   image: image,
                   isSelected: selectedReference == image.id,
-                  onSelect: { selectedReference = image.id }
+                  onSelect: { model.navigate(to: .image(image.id)) }
                 )
               }
             }
@@ -74,9 +73,16 @@ struct ImagesView: View {
     model.images.first { $0.id == selectedReference }
   }
 
+  private var selectedReference: ImageRecord.ID? {
+    guard case .image(let reference) = model.workspaceRoute else { return nil }
+    return reference
+  }
+
   private func synchronizeSelection() {
     guard selectedImage == nil else { return }
-    selectedReference = model.images.first?.id
+    if let reference = model.images.first?.id {
+      model.navigate(to: .image(reference))
+    }
   }
 }
 

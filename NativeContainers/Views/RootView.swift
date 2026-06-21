@@ -5,6 +5,7 @@ struct RootView: View {
 
   var body: some View {
     @Bindable var model = model
+    @Bindable var navigation = model.workspaceNavigation
 
     NavigationSplitView {
       SidebarView(
@@ -19,13 +20,27 @@ struct RootView: View {
     }
     .navigationSplitViewStyle(.balanced)
     .toolbar {
-      ToolbarItem(placement: .primaryAction) {
+      ToolbarItemGroup(placement: .primaryAction) {
+        Button("Quick Open", systemImage: "magnifyingglass") {
+          model.presentQuickOpen()
+        }
+        .help("Find and open a managed resource (Command-K)")
+
         Button("Refresh", systemImage: "arrow.clockwise") {
           Task { await model.refresh() }
         }
         .disabled(model.isRefreshing)
         .help("Refresh container and virtual machine state")
       }
+    }
+    .sheet(isPresented: $navigation.isQuickOpenPresented) {
+      ResourceQuickOpenView(
+        navigation: navigation,
+        lockedRoute: model.isBuildWorkspaceNavigationLocked ? .builds : nil,
+        onOpen: { route in
+          _ = model.navigate(to: route)
+        }
+      )
     }
     .task {
       await model.loadIfNeeded()

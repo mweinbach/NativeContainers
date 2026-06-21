@@ -3,7 +3,6 @@ import SwiftUI
 struct NetworksView: View {
   let appModel: AppModel
   @State private var operations: NetworkManagementModel
-  @State private var selectedNetworkID: NetworkRecord.ID?
   @State private var isShowingCreation = false
   @State private var deletionPlan: NetworkDeletionPlan?
   @State private var prunePlan: NetworkPrunePlan?
@@ -12,7 +11,6 @@ struct NetworksView: View {
   init(model: AppModel) {
     appModel = model
     _operations = State(initialValue: model.makeNetworkManagementModel())
-    _selectedNetworkID = State(initialValue: model.networks.first?.id)
   }
 
   var body: some View {
@@ -21,7 +19,8 @@ struct NetworksView: View {
         ContentUnavailableView(
           "No networks",
           systemImage: "network",
-          description: Text("Apple’s built-in container network appears when the runtime is initialized.")
+          description: Text(
+            "Apple’s built-in container network appears when the runtime is initialized.")
         )
       } else {
         HSplitView {
@@ -29,7 +28,7 @@ struct NetworksView: View {
             LazyVStack(spacing: 4) {
               ForEach(appModel.networks) { network in
                 Button {
-                  selectedNetworkID = network.id
+                  appModel.navigate(to: .network(network.id))
                 } label: {
                   NetworkRow(
                     name: network.name,
@@ -168,6 +167,11 @@ struct NetworksView: View {
     appModel.networks.first { $0.id == selectedNetworkID }
   }
 
+  private var selectedNetworkID: NetworkRecord.ID? {
+    guard case .network(let id) = appModel.workspaceRoute else { return nil }
+    return id
+  }
+
   private var deletionPlanPresentation: Binding<Bool> {
     Binding(
       get: { deletionPlan != nil },
@@ -184,7 +188,9 @@ struct NetworksView: View {
 
   private func synchronizeSelection() {
     guard selectedNetwork == nil else { return }
-    selectedNetworkID = appModel.networks.first?.id
+    if let id = appModel.networks.first?.id {
+      appModel.navigate(to: .network(id))
+    }
   }
 
   private func prepareDeletion(_ id: String) {
@@ -426,9 +432,11 @@ struct NetworkCreationView: View {
             text: $ipv6Subnet,
             prompt: Text("Disabled, or fd00:100::/64")
           )
-          Text("Apple’s network service assigns container addresses; static per-container IP requests are not exposed.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+          Text(
+            "Apple’s network service assigns container addresses; static per-container IP requests are not exposed."
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
         }
         Section("Labels") {
           TextEditor(text: $labelsText)

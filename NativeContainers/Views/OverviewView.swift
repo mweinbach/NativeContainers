@@ -18,11 +18,13 @@ struct OverviewView: View {
           volumeCount: model.volumes.count,
           networkCount: model.networks.count,
           linuxMachineCount: model.linuxMachines.count,
-          virtualMachineCount: model.virtualMachines.count
+          virtualMachineCount: model.virtualMachines.count,
+          onNavigate: { route in model.navigate(to: route) }
         )
         ActiveResourcesSection(
           containers: model.containers.filter { $0.state.isRunning },
-          machines: model.linuxMachines.filter { $0.state.isRunning }
+          machines: model.linuxMachines.filter { $0.state.isRunning },
+          onOpen: { route in model.navigate(to: route) }
         )
       }
       .padding(28)
@@ -78,6 +80,7 @@ struct ResourceSummaryGrid: View {
   let networkCount: Int
   let linuxMachineCount: Int
   let virtualMachineCount: Int
+  let onNavigate: (WorkspaceRoute) -> Void
 
   private let columns = [
     GridItem(.adaptive(minimum: 170, maximum: 260), spacing: 14)
@@ -90,42 +93,48 @@ struct ResourceSummaryGrid: View {
         value: "\(runningContainers) / \(containerCount)",
         detail: "running",
         systemImage: "shippingbox",
-        tint: .blue
+        tint: .blue,
+        action: { onNavigate(.containers) }
       )
       SummaryCard(
         title: "Images",
         value: imageCount.formatted(),
         detail: "locally available",
         systemImage: "square.stack.3d.up",
-        tint: .purple
+        tint: .purple,
+        action: { onNavigate(.images) }
       )
       SummaryCard(
         title: "Volumes",
         value: volumeCount.formatted(),
         detail: "persistent stores",
         systemImage: "externaldrive",
-        tint: .orange
+        tint: .orange,
+        action: { onNavigate(.volumes) }
       )
       SummaryCard(
         title: "Networks",
         value: networkCount.formatted(),
         detail: "virtual subnets",
         systemImage: "network",
-        tint: .teal
+        tint: .teal,
+        action: { onNavigate(.networks) }
       )
       SummaryCard(
         title: "Linux Machines",
         value: linuxMachineCount.formatted(),
         detail: "development VMs",
         systemImage: "terminal",
-        tint: .green
+        tint: .green,
+        action: { onNavigate(.linuxMachines) }
       )
       SummaryCard(
         title: "macOS VMs",
         value: virtualMachineCount.formatted(),
         detail: "managed bundles",
         systemImage: "macwindow",
-        tint: .indigo
+        tint: .indigo,
+        action: { onNavigate(.macOSVirtualMachines) }
       )
     }
   }
@@ -137,33 +146,40 @@ struct SummaryCard: View {
   let detail: LocalizedStringResource
   let systemImage: String
   let tint: Color
+  let action: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack {
-        Image(systemName: systemImage)
-          .font(.title2)
-          .foregroundStyle(tint)
-        Spacer()
-        Text(value)
-          .font(.title2.bold().monospacedDigit())
+    Button(action: action) {
+      VStack(alignment: .leading, spacing: 14) {
+        HStack {
+          Image(systemName: systemImage)
+            .font(.title2)
+            .foregroundStyle(tint)
+          Spacer()
+          Text(value)
+            .font(.title2.bold().monospacedDigit())
+        }
+        VStack(alignment: .leading, spacing: 2) {
+          Text(title)
+            .font(.headline)
+          Text(detail)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
       }
-      VStack(alignment: .leading, spacing: 2) {
-        Text(title)
-          .font(.headline)
-        Text(detail)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
+      .padding(16)
+      .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+      .contentShape(RoundedRectangle(cornerRadius: 14))
     }
-    .padding(16)
-    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+    .buttonStyle(.plain)
+    .accessibilityHint("Opens this resource category")
   }
 }
 
 struct ActiveResourcesSection: View {
   let containers: [ContainerRecord]
   let machines: [LinuxMachineRecord]
+  let onOpen: (WorkspaceRoute) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -184,7 +200,8 @@ struct ActiveResourcesSection: View {
               name: container.id,
               detail: container.imageReference,
               address: container.ipAddress,
-              systemImage: "shippingbox.fill"
+              systemImage: "shippingbox.fill",
+              action: { onOpen(.container(container.id)) }
             )
             if container.id != containers.last?.id || !machines.isEmpty {
               Divider()
@@ -195,7 +212,8 @@ struct ActiveResourcesSection: View {
               name: machine.id,
               detail: machine.imageReference,
               address: machine.ipAddress,
-              systemImage: "terminal.fill"
+              systemImage: "terminal.fill",
+              action: { onOpen(.linuxMachine(machine.id)) }
             )
             if machine.id != machines.last?.id {
               Divider()
@@ -217,27 +235,33 @@ struct ActiveResourceRow: View {
   let detail: String
   let address: String?
   let systemImage: String
+  let action: () -> Void
 
   var body: some View {
-    HStack(spacing: 12) {
-      Image(systemName: systemImage)
-        .foregroundStyle(.green)
-        .frame(width: 26)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(name)
-          .font(.headline)
-        Text(detail)
-          .font(.caption)
-          .foregroundStyle(.secondary)
+    Button(action: action) {
+      HStack(spacing: 12) {
+        Image(systemName: systemImage)
+          .foregroundStyle(.green)
+          .frame(width: 26)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(name)
+            .font(.headline)
+          Text(detail)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Spacer()
+        if let address {
+          Text(address)
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+        }
       }
-      Spacer()
-      if let address {
-        Text(address)
-          .font(.caption.monospaced())
-          .foregroundStyle(.secondary)
-          .textSelection(.enabled)
-      }
+      .padding(14)
+      .contentShape(Rectangle())
     }
-    .padding(14)
+    .buttonStyle(.plain)
+    .accessibilityHint("Opens this resource")
   }
 }

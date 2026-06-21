@@ -4,7 +4,14 @@ import Observation
 @MainActor
 @Observable
 final class AppModel {
-  var selection: SidebarDestination = .overview
+  let workspaceNavigation: WorkspaceNavigationModel
+
+  var selection: SidebarDestination {
+    get { SidebarDestination(workspaceRoute: workspaceNavigation.route) }
+    set { selectSidebarDestination(newValue) }
+  }
+
+  var workspaceRoute: WorkspaceRoute { workspaceNavigation.route }
 
   private(set) var systemInfo: ContainerSystemInfo?
   private(set) var containers: [ContainerRecord] = []
@@ -44,9 +51,11 @@ final class AppModel {
   init(
     services: AppServices,
     initialInventory: ContainerInventory? = nil,
-    initialVirtualMachines: [VirtualMachineManifest] = []
+    initialVirtualMachines: [VirtualMachineManifest] = [],
+    workspaceNavigation: WorkspaceNavigationModel = WorkspaceNavigationModel()
   ) {
     self.services = services
+    self.workspaceNavigation = workspaceNavigation
     if let initialInventory {
       systemInfo = initialInventory.system
       containers = initialInventory.containers
@@ -58,6 +67,7 @@ final class AppModel {
       hasLoaded = true
       lastRefresh = Date()
     }
+    updateWorkspaceNavigation()
   }
 
   convenience init(
@@ -182,6 +192,8 @@ final class AppModel {
       messages.append("Virtual machine library: \(error.localizedDescription)")
     }
 
+    updateWorkspaceNavigation()
+
     errorMessage = messages.isEmpty ? nil : messages.joined(separator: "\n")
     lastRefresh = Date()
   }
@@ -231,6 +243,7 @@ final class AppModel {
       resources: resources
     )
     virtualMachines = try await services.virtualMachineLibrary.list()
+    updateWorkspaceNavigation()
   }
 
   func discardVirtualMachine(id: UUID) async {
@@ -250,6 +263,7 @@ final class AppModel {
       virtualMachines.append(prepared)
     }
     virtualMachines.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    updateWorkspaceNavigation()
   }
 
   func clearError() {
@@ -346,8 +360,19 @@ final class AppModel {
   }
 
   func selectSidebarDestination(_ destination: SidebarDestination) {
-    guard !isBuildWorkspaceNavigationLocked || destination == .builds else { return }
-    selection = destination
+    _ = navigate(to: destination.workspaceRoute)
+  }
+
+  @discardableResult
+  func navigate(to route: WorkspaceRoute) -> Bool {
+    workspaceNavigation.navigate(
+      to: route,
+      lockedTo: isBuildWorkspaceNavigationLocked ? .builds : nil
+    )
+  }
+
+  func presentQuickOpen() {
+    workspaceNavigation.presentQuickOpen()
   }
 
   func makeImageBuildModel() -> ImageBuildModel {
@@ -421,6 +446,19 @@ final class AppModel {
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineRuntimeModels.removeValue(forKey: identifier)?.stopObserving()
     }
+  }
+
+  private func updateWorkspaceNavigation() {
+    workspaceNavigation.update(
+      WorkspaceResourceSnapshot(
+        containers: containers,
+        images: images,
+        volumes: volumes,
+        networks: networks,
+        linuxMachines: linuxMachines,
+        macOSVirtualMachines: virtualMachines
+      )
+    )
   }
 
   private func performMutation(
