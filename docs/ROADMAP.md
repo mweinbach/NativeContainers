@@ -83,8 +83,10 @@ must leave a usable, test-backed product slice.
 - [x] Implement a reviewed Compose desired-state parser and review coordinator
       with private source pinning, stable full/active canonical renders,
       redacted typed planning, and explicit lifecycle intent.
-- [ ] Implement the exact-ID Compose mutation coordinator and crash-safe
-      operation journal required to unlock reviewed execution.
+- [x] Implement an exact-ID Compose mutation coordinator, opaque prepared-plan
+      store, private canonical execution workspace, crash-safe operation journal,
+      explicit TERM-to-KILL policy, and manual-only recovery records for the
+      reviewed executable subset.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [ ] SSH agent forwarding and safe host-directory sharing.

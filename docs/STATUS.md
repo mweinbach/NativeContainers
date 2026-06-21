@@ -611,10 +611,10 @@ Updated: 2026-06-21.
   consumers and foreign resource identities block, and the review freezes exact
   observed container/volume/network identities. Generic network prune now
   mirrors volume prune by preserving every Compose-labeled resource.
-- The Compose workspace exposes a source-backed review sheet with explicit Up or
-  Down intent, profiles, pull policy, orphan/volume choices, hashes, affected
-  resources, and findings. Review cancellation and sheet dismissal are explicit
-  kill points.
+- The Compose workspace exposes a source-backed review sheet with explicit Up,
+  Start, Stop, or Down intent, profiles, pull policy, orphan/volume choices,
+  hashes, affected resources, and findings. Review and execution cancellation
+  are explicit kill points.
 - Host command cancellation now completes an uncancelled TERM, grace period,
   KILL, and confirmed-exit sequence. Failure to confirm SIGKILL is surfaced
   instead of being mistaken for cancellation or timeout completion.
@@ -624,13 +624,26 @@ Updated: 2026-06-21.
   blockers. The complete facade then reviewed a fresh project against current
   Apple inventory, found no observed containers or parser blockers, and retained
   the expected execution-policy lock.
-- User-project execution remains intentionally locked. Exact-ID mutation,
-  commit-time source/inventory revalidation, and a crash-safe operation journal
-  are required before the policy blocker can be lifted; the live fixture's
-  automatic native cleanup remains fixture-only.
-- The full Xcode plan passes all 545 outcomes: 527 deterministic tests passed
-  and 18 explicitly gated live tests skipped, with no failures. The build adds
-  no warnings from this slice.
+- The executable subset is now split across an opaque prepared-plan store,
+  commit-time revalidation coordinator, exact-ID Apple mutation transport,
+  private canonical execution workspace, and durable operation journal. Fresh
+  Up uses the verified private Compose client; Start, Stop, and declared-service
+  Down use exact Apple container IDs in dependency order. Graceful stop sends the
+  configured signal, then optionally revalidates and sends KILL after the bounded
+  timeout.
+- Journal entries contain redacted fingerprints, typed phases, and cumulative
+  completed resource IDs. Interrupted or uncertain work is never auto-resumed or
+  rolled back; the workspace shows a manual reconciliation record that requires
+  explicit reviewed discard.
+- Existing-project Up/convergence, named-volume deletion, orphan deletion,
+  health/restart dependencies, configs, secrets, bind mounts, and other
+  unsupported features remain policy blockers. Apple 1.0 stop/kill/delete APIs
+  accept no expected-identity/CAS token, so the app-level mutation lock and final
+  revalidation cannot eliminate a same-ID replacement race from an external CLI
+  or XPC client.
+- The full Xcode plan passes all 577 outcomes: 559 deterministic tests passed
+  and 18 explicitly gated live tests skipped, with no failures. Xcode also built
+  for testing and rendered the Compose workspace preview without errors.
 
 ## Known configuration issue
 
@@ -654,6 +667,6 @@ entitlement; no developer-team or provisioning-profile change should be needed.
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, and transactional same-host save/restore against a local
    IPSW.
-4. Add an exact-ID Compose mutation session and crash-safe operation journal,
-   then re-render and revalidate source, binary, inventory, consumers, and every
-   frozen target at commit time before lifting the user-project lifecycle block.
+4. Extend the typed Compose action model to existing-project convergence,
+   separately reviewed orphan deletion, and exact named-volume deletion; add a
+   gated live project lifecycle probe before widening any current policy block.

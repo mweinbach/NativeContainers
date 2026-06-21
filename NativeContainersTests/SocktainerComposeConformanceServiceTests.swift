@@ -14,18 +14,18 @@ struct SocktainerComposeConformanceServiceTests {
     #expect(report.results.map(\.id).count == Set(report.results.map(\.id)).count)
     #expect(report.supportedCount == 4)
     #expect(report.gapCount == 5)
-    #expect(!report.projectLifecycleIsEligible)
+    #expect(report.projectLifecycleIsEligible)
 
     #expect(try result("compose-project-labels", in: report).status == .supported)
     #expect(try result("compose-container-lifecycle", in: report).status == .supported)
     #expect(try result("compose-project-networks", in: report).status == .partial)
     #expect(try result("compose-healthchecks", in: report).status == .unsupported)
-    #expect(try result("compose-project-lifecycle", in: report).status == .policyBlocked)
+    #expect(try result("compose-project-lifecycle", in: report).status == .partial)
   }
 
   @Test
   func missingRouteDegradesAnOtherwiseSupportedFixture() throws {
-    let pinned = SocktainerComposeConformanceManifest.version1_0_0
+    let pinned = SocktainerComposeConformanceManifest.version100
     let manifest = SocktainerComposeConformanceManifest(
       bridgeVersion: pinned.bridgeVersion,
       engineAPIVersion: pinned.engineAPIVersion,

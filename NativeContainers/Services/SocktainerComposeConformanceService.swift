@@ -61,7 +61,7 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
   let implementedOperations: Set<DockerEngineComposeOperation>
   let fixtures: [SocktainerComposeConformanceFixture]
 
-  static let version1_0_0 = SocktainerComposeConformanceManifest(
+  static let version100 = SocktainerComposeConformanceManifest(
     bridgeVersion: "1.0.0",
     engineAPIVersion: "1.51",
     sourceRevision: "876c2fc",
@@ -143,9 +143,10 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
         title: "Project lifecycle",
         requiredOperations: [],
         evidence:
-          "NativeContainers now renders a stable full/active Compose model, decodes a redacted desired state, and freezes observed resource identities for review.",
-        policyBlockReason:
-          "Project start, stop, and down remain disabled until exact-ID mutation, source revalidation at commit time, and crash-safe operation journaling are available."
+          "NativeContainers renders a stable full/active model, stores opaque reviewed plans, revalidates source/binary/environment/inventory at commit time, and journals exact-ID mutations.",
+        limitations: [
+          "Execution currently covers fresh Up plus exact-ID Start, Stop, and declared-service Down; existing-project convergence, orphan deletion, and named-volume deletion remain policy-blocked."
+        ]
       ),
     ]
   )
@@ -154,7 +155,7 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
 struct SocktainerComposeConformanceService: ComposeBridgeConformanceReporting {
   private let manifest: SocktainerComposeConformanceManifest
 
-  init(manifest: SocktainerComposeConformanceManifest = .version1_0_0) {
+  init(manifest: SocktainerComposeConformanceManifest = .version100) {
     self.manifest = manifest
   }
 

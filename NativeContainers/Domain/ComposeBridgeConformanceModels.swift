@@ -31,6 +31,8 @@ struct ComposeBridgeConformanceReport: Equatable, Sendable {
   }
 
   var projectLifecycleIsEligible: Bool {
-    results.first(where: { $0.id == "compose-project-lifecycle" })?.status == .supported
+    guard let status = results.first(where: { $0.id == "compose-project-lifecycle" })?.status
+    else { return false }
+    return status == .supported || status == .partial
   }
 }
