@@ -360,7 +360,7 @@ private enum StorageByteFormatter {
 }
 
 private struct PreviewStorageUsageService: StorageUsageLoading {
-  func loadAppleRuntimeStorageUsage() async throws -> AppleRuntimeStorageUsage {
+  static var appleRuntimeUsage: AppleRuntimeStorageUsage {
     AppleRuntimeStorageUsage(
       capturedAt: .now,
       images: StorageResourceUsage(
@@ -384,7 +384,7 @@ private struct PreviewStorageUsageService: StorageUsageLoading {
     )
   }
 
-  func loadVirtualMachineStorageUsage() async throws -> VirtualMachineStorageSummary {
+  static var virtualMachineUsage: VirtualMachineStorageSummary {
     let machineID = UUID()
     return VirtualMachineStorageSummary(
       capturedAt: .now,
@@ -417,20 +417,27 @@ private struct PreviewStorageUsageService: StorageUsageLoading {
       issues: []
     )
   }
+
+  func loadAppleRuntimeStorageUsage() async throws -> AppleRuntimeStorageUsage {
+    Self.appleRuntimeUsage
+  }
+
+  func loadVirtualMachineStorageUsage() async throws -> VirtualMachineStorageSummary {
+    Self.virtualMachineUsage
+  }
 }
 
 private struct StorageOverviewLoadedPreview: View {
   @State private var model = StorageOverviewModel(
-    service: PreviewStorageUsageService()
+    service: PreviewStorageUsageService(),
+    appleRuntimeUsage: PreviewStorageUsageService.appleRuntimeUsage,
+    virtualMachineUsage: PreviewStorageUsageService.virtualMachineUsage
   )
 
   var body: some View {
     ScrollView {
       StorageOverviewSection(model: model)
         .padding(28)
-    }
-    .task {
-      await model.refresh()
     }
   }
 }

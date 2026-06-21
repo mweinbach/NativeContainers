@@ -600,6 +600,23 @@ than sharing presentation state across an implied multi-window group.
   manifest-relative artifact, portable-state absence, and platform-identity
   uniqueness immediately before the UUID-named bundle is atomically published.
   Launch recovery removes import partials left by a hard exit.
+- Storage accounting is an independent read-only service graph. The Apple lane
+  sends the pinned `systemDiskUsage` XPC request through the app's bounded,
+  cancellation-closing request client and validates every count and byte
+  relationship before mapping it into app-domain values. The VM lane asks the
+  library actor for one canonical root/manifest snapshot, then performs one
+  utility-priority descriptor-relative traversal with `openat`, `fstatat`, and
+  `AT_SYMLINK_NOFOLLOW`. It includes hidden install/import/clone/deletion
+  partials, refuses mount crossings, deduplicates hard links by device/inode,
+  and buckets canonical `.nativevm` packages without rescanning each bundle.
+  Caller cancellation explicitly cancels the detached scan, which checks at
+  every directory entry; leaving Overview invokes the same cancellation path.
+  The `StorageUsageService` facade and stable `StorageOverviewModel` keep the
+  two lanes independently replaceable, concurrent, and error-isolated. A
+  failed lane retains its prior snapshot, and neither lane participates in
+  ordinary inventory refresh. Apple category sums are labeled as sums, while
+  VM allocation is labeled filesystem-reported because APFS clone sharing does
+  not expose unique per-bundle physical ownership.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before

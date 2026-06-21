@@ -1,6 +1,6 @@
 # Research notes
 
-Last updated: 2026-06-20.
+Last updated: 2026-06-21.
 
 ## Host baseline
 
@@ -589,6 +589,32 @@ at kickoff, so the foundation does not depend on it.
   `SharedDirectories.json` security-scoped bookmarks are also host-local and
   are removed. The disk, auxiliary storage, hardware model, manifest UUID, and
   `VZMacMachineIdentifier` remain the restore identity.
+
+## Storage-accounting findings
+
+- The pinned `apple/container` 1.0.0 API exposes `systemDiskUsage` and returns
+  `DiskUsageStats` with image, container, and volume `ResourceUsage` values:
+  total count, active count, allocated bytes, and reclaimable bytes. The server
+  calculates the categories concurrently, so the result is a point-in-time
+  operational snapshot rather than an atomic deletion plan.
+- Image activity means referenced by a container; container activity means
+  running; volume activity means referenced by any container configuration.
+  Stopped container bundles and unreferenced volumes may therefore appear in
+  Apple's reclaimable estimate. The GUI must not translate those estimates into
+  an unreviewed prune action.
+- The package convenience call has no caller-selected deadline. Reusing
+  `AppleXPCRequestClient` preserves the app's 60-second watchdog and closes the
+  XPC connection on cancellation while still decoding the pinned response
+  shape.
+- Sparse VM disks require two values: logical bytes from `st_size` and
+  filesystem allocation from `st_blocks * 512`. A single descriptor-relative
+  traversal is safer than URL enumeration because it can inspect every entry
+  with `AT_SYMLINK_NOFOLLOW`, reject mount crossings, include hidden operation
+  partials, and deduplicate hard-linked `(device, inode)` identities.
+- APFS clones may share physical extents even though each file reports allocated
+  blocks. Public file metadata does not expose uniquely owned physical bytes per
+  `.nativevm` bundle, so bundle allocation remains an estimate and cannot be
+  labeled reclaimable without a separate mutation-time proof.
 
 ## Public-API boundaries
 

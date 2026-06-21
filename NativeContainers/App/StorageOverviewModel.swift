@@ -18,8 +18,22 @@ final class StorageOverviewModel {
   @ObservationIgnored
   private var operationTask: Task<Void, Never>?
 
-  init(service: any StorageUsageLoading) {
+  init(
+    service: any StorageUsageLoading,
+    appleRuntimeUsage: AppleRuntimeStorageUsage? = nil,
+    virtualMachineUsage: VirtualMachineStorageSummary? = nil,
+    appleRuntimeErrorMessage: String? = nil,
+    virtualMachineErrorMessage: String? = nil
+  ) {
     self.service = service
+    self.appleRuntimeUsage = appleRuntimeUsage
+    self.virtualMachineUsage = virtualMachineUsage
+    self.appleRuntimeErrorMessage = appleRuntimeErrorMessage
+    self.virtualMachineErrorMessage = virtualMachineErrorMessage
+    hasAttemptedAppleRuntime =
+      appleRuntimeUsage != nil || appleRuntimeErrorMessage != nil
+    hasAttemptedVirtualMachines =
+      virtualMachineUsage != nil || virtualMachineErrorMessage != nil
   }
 
   var isLoading: Bool {

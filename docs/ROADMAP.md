@@ -157,7 +157,11 @@ must leave a usable, test-backed product slice.
 
 - [ ] Launch-on-login and demand-started services.
 - [ ] Battery/thermal-aware defaults and idle suspension.
-- [ ] Sparse image compaction and transparent disk-usage accounting.
+- [x] On-demand Apple runtime and macOS VM library storage accounting with
+      category-level reclaimable estimates, sparse logical-versus-allocated
+      bytes, hidden-partial attribution, and cancellable scans outside ordinary
+      inventory refresh.
+- [ ] Sparse image compaction.
 - [ ] Accessibility, localization, keyboard navigation, and command menus.
 - [ ] Signed/notarized packaging, updater, migration, crash diagnostics.
 - [ ] Performance benchmarks for cold start, warm start, I/O, network, build,

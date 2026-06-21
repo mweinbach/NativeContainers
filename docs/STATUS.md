@@ -691,6 +691,18 @@ Updated: 2026-06-21.
   no failures. Build-for-testing, zero Xcode navigator warnings, the clone-sheet
   Preview, and an app launch/stop smoke on `My Mac` also succeeded; no app
   process remains running.
+- On-demand storage accounting is live behind independent Apple-runtime and VM
+  library services, one app-facing facade, and a stable Overview model. The
+  Apple lane uses the bounded cancellation-closing XPC client; the VM lane uses
+  one descriptor-relative no-follow traversal that includes hidden partials,
+  deduplicates hard links, attributes managed bundles, and propagates caller
+  cancellation into its detached utility task. Overview never measures during
+  ordinary inventory refresh, retains prior values on partial failure, exposes
+  Cancel, and automatically cancels when the view disappears. The full Xcode
+  plan passes all 621 outcomes: 602 deterministic tests passed and 19 gated live
+  tests skipped, with no failures. The deterministic loaded-state Preview also
+  renders in light and dark appearances, build-for-testing succeeds, and the
+  app launch/stop smoke leaves no NativeContainers process running.
 
 ## Known configuration issue
 
@@ -705,13 +717,13 @@ entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Reuse the cancellable bundle-transfer engine for transactional VM
-   export/import and portable backup. Export preserves platform identity; import
-   must explicitly choose collision rejection or import-as-clone semantics.
-2. Add on-demand Apple-runtime and VM-bundle storage accounting before any
-   reclaim/compaction action. Report point-in-time reclaimable runtime bytes and
-   sparse VM logical-versus-allocated bytes without putting filesystem walks in
-   ordinary inventory refresh.
+1. Build reviewed, candidate-specific storage reclamation services on top of
+   the new accounting snapshots. Revalidate every resource and identity at
+   commit time; keep Apple estimates informational until a mutation plan names
+   exactly what will be removed.
+2. Add stopped-only sparse VM compaction as a separate transactional service
+   with runtime/library leases, free-space checks, cancellation cleanup, atomic
+   replacement, and post-operation logical/allocated verification.
 3. Add the entitlement through a functioning Xcode capability surface, then
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot

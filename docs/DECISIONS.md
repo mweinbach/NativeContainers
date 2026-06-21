@@ -943,3 +943,29 @@ service, not either picker callback, owns security-scope lifetime, leases,
 copying, cancellation, and cleanup. System-owned `FileDocument` /
 `Transferable` export is not used for multi-gigabyte packages because macOS 26
 does not expose its final copy lifetime to these transaction boundaries.
+
+## ADR-036: Keep storage accounting on demand and service isolated
+
+**Status:** Accepted — 2026-06-21
+
+Storage measurement is a separate `StorageUsageLoading` facade with independent
+Apple-runtime and app-owned-VM implementations. It is never folded into the
+ordinary inventory service: Apple disk usage can wait on runtime XPC, while a
+large VM library requires a filesystem traversal. Overview starts both lanes
+only after an explicit Measure action, retains successful snapshots across a
+partial failure, exposes Cancel, and cancels an in-flight measurement when the
+view disappears.
+
+The Apple adapter uses the existing bounded `AppleXPCRequestClient` rather than
+the package's unbounded convenience call. The VM scanner receives a canonical
+library inventory snapshot, opens the root without following links, performs
+one descriptor-relative traversal, includes hidden transactional residue,
+refuses cross-device descent, and deduplicates hard-linked inodes. Its detached
+utility task is explicitly cancelled by the awaiting task's cancellation
+handler.
+
+Apple's reclaimable values remain point-in-time runtime classifications, not
+deletion authorization. VM logical and allocated values are accounting signals,
+not a reclaimability promise: APFS may share clone extents without exposing
+unique physical ownership per bundle. Reclamation and sparse compaction remain
+separate reviewed mutations.
