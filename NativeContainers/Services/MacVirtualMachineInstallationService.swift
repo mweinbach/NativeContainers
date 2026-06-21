@@ -6,7 +6,7 @@ protocol MacVirtualMachineInstalling: Sendable {
     id: UUID,
     progress: @escaping MacVirtualMachineInstallationProgressHandler
   ) async throws
-  func recoverInterruptedInstallations() async throws
+  func recoverInterruptedInstallations() async throws -> MacVirtualMachineRecoveryOutcome
 }
 
 extension MacVirtualMachineInstalling {
@@ -120,7 +120,7 @@ final class MacVirtualMachineInstallationService: MacVirtualMachineInstalling {
     }
   }
 
-  func recoverInterruptedInstallations() async throws {
+  func recoverInterruptedInstallations() async throws -> MacVirtualMachineRecoveryOutcome {
     try await store.recoverInterruptedMacOSInstallations()
   }
 }
@@ -134,5 +134,7 @@ struct UnavailableMacVirtualMachineInstaller: MacVirtualMachineInstalling {
     throw MacVirtualMachineInstallationError.unavailable
   }
 
-  func recoverInterruptedInstallations() async throws {}
+  func recoverInterruptedInstallations() async throws -> MacVirtualMachineRecoveryOutcome {
+    .recovered
+  }
 }

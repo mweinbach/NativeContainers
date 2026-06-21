@@ -101,7 +101,13 @@ final class AppModel {
 
   private func recoverVirtualMachineState() async {
     do {
-      try await services.virtualMachineInstaller.recoverInterruptedInstallations()
+      let recoveryOutcome =
+        try await services.virtualMachineInstaller.recoverInterruptedInstallations()
+      guard recoveryOutcome == .recovered else {
+        virtualMachineRecoveryErrorMessage =
+          "Virtual machine recovery is waiting for another NativeContainers process to finish its active operation."
+        return
+      }
       let referencedRestoreImages = Set(
         try await services.virtualMachineLibrary.list().compactMap(\.restoreImageURL)
       )

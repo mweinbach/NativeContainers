@@ -29,6 +29,11 @@ struct MacVirtualMachineInstallationProgress: Equatable, Sendable {
 typealias MacVirtualMachineInstallationProgressHandler =
   @MainActor @Sendable (MacVirtualMachineInstallationProgress) -> Void
 
+enum MacVirtualMachineRecoveryOutcome: Equatable, Sendable {
+  case recovered
+  case deferredToAnotherProcess
+}
+
 enum VirtualMachineInstallationFailureKind: String, Codable, Equatable, Sendable {
   case cancelled
   case failed

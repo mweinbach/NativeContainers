@@ -131,7 +131,9 @@ private final class ModelTestMacInstaller: MacVirtualMachineInstalling {
     }
   }
 
-  func recoverInterruptedInstallations() async throws {}
+  func recoverInterruptedInstallations() async throws -> MacVirtualMachineRecoveryOutcome {
+    .recovered
+  }
 
   func waitUntilStarted() async {
     if didStart { return }

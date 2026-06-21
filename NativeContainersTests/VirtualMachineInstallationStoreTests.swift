@@ -117,7 +117,7 @@ struct VirtualMachineInstallationStoreTests {
       operationID: operationID
     )
 
-    await #expect(throws: VirtualMachineModelError.invalidInstallState(.installing)) {
+    await #expect(throws: VirtualMachineModelError.libraryInUse) {
       try await fixture.library.discardVirtualMachine(id: manifest.id)
     }
 
@@ -172,8 +172,10 @@ struct VirtualMachineInstallationStoreTests {
       rootURL: fixture.libraryRoot,
       macPlatformArtifactPreparer: InstallationStoreArtifactPreparer()
     )
-    try await competingLibrary.recoverInterruptedMacOSInstallations()
+    let recoveryOutcome =
+      try await competingLibrary.recoverInterruptedMacOSInstallations()
 
+    #expect(recoveryOutcome == .deferredToAnotherProcess)
     let stillInstalling = try #require(
       try await fixture.library.list().first { $0.id == manifest.id }
     )

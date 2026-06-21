@@ -184,5 +184,7 @@ private struct PreviewMacVirtualMachineInstaller: MacVirtualMachineInstalling {
     )
   }
 
-  func recoverInterruptedInstallations() async throws {}
+  func recoverInterruptedInstallations() async throws -> MacVirtualMachineRecoveryOutcome {
+    .recovered
+  }
 }

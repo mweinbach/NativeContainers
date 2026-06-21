@@ -253,8 +253,9 @@ private actor TestMacInstallationStore: MacVirtualMachineInstallationStoring {
     )
   }
 
-  func recoverInterruptedMacOSInstallations() {
+  func recoverInterruptedMacOSInstallations() -> MacVirtualMachineRecoveryOutcome {
     events.append(TestMacInstallationEvent(.recover))
+    return .recovered
   }
 }
 

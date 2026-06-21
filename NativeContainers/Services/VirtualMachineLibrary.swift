@@ -53,7 +53,7 @@ protocol MacVirtualMachineInstallationStoring: Sendable {
     kind: VirtualMachineInstallationFailureKind,
     message: String
   ) async throws
-  func recoverInterruptedMacOSInstallations() async throws
+  func recoverInterruptedMacOSInstallations() async throws -> MacVirtualMachineRecoveryOutcome
 }
 
 actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineInstallationStoring {
@@ -437,11 +437,13 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
     try write(manifest, to: manifestURL(for: id))
   }
 
-  func recoverInterruptedMacOSInstallations() throws {
-    guard operationAccessTokens.isEmpty else { return }
+  func recoverInterruptedMacOSInstallations() throws -> MacVirtualMachineRecoveryOutcome {
+    guard operationAccessTokens.isEmpty else { return .deferredToAnotherProcess }
     try ensureRootExists()
     let recoveryToken = UUID()
-    guard try acquireRecoveryAccess(token: recoveryToken) else { return }
+    guard try acquireRecoveryAccess(token: recoveryToken) else {
+      return .deferredToAnotherProcess
+    }
     defer { releaseOperationAccess(token: recoveryToken) }
 
     try removeDeletionTombstones()
@@ -467,6 +469,7 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
         try fileManager.removeItem(at: installedDirectory)
       }
     }
+    return .recovered
   }
 
   private func installationManifest(id: UUID) throws -> VirtualMachineManifest {
@@ -561,10 +564,12 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
   }
 
   private func acquireOperationAccess(token: UUID) throws {
+    guard operationAccessTokens.isEmpty, operationLockLease == nil else {
+      throw VirtualMachineModelError.libraryInUse
+    }
     guard operationAccessTokens.insert(token).inserted else {
       throw VirtualMachineModelError.libraryInUse
     }
-    guard operationLockLease == nil else { return }
 
     do {
       guard

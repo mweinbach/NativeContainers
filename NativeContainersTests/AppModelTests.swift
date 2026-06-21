@@ -1045,10 +1045,11 @@ private final class RetryableRecoveryInstaller: MacVirtualMachineInstalling {
     progress: @escaping MacVirtualMachineInstallationProgressHandler
   ) async throws {}
 
-  func recoverInterruptedInstallations() async throws {
+  func recoverInterruptedInstallations() async throws -> MacVirtualMachineRecoveryOutcome {
     recoveryAttempts += 1
     if recoveryAttempts <= failuresBeforeSuccess {
       throw AppModelTestError.runtimeUnavailable
     }
+    return .recovered
   }
 }

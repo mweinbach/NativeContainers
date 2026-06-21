@@ -140,8 +140,46 @@ struct VirtualMachineLibraryTests {
     #expect(tombstones.count == 1)
 
     let recoveredLibrary = VirtualMachineLibrary(rootURL: root)
-    try await recoveredLibrary.recoverInterruptedMacOSInstallations()
+    let recoveryOutcome = try await recoveredLibrary.recoverInterruptedMacOSInstallations()
+    #expect(recoveryOutcome == .recovered)
     #expect(!FileManager.default.fileExists(atPath: tombstones[0].path))
+  }
+
+  @Test
+  func suspendedPreparationDoesNotPermitAReentrantDiscard() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let preparer = BlockingMacPlatformArtifactPreparer()
+    let library = VirtualMachineLibrary(
+      rootURL: root,
+      macPlatformArtifactPreparer: preparer
+    )
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 8 * VirtualMachineResources.bytesPerGiB
+    )
+    let draft = try await library.createDraft(
+      name: "Busy Mac",
+      guest: .macOS,
+      resources: resources
+    )
+
+    let preparation = Task {
+      try await library.prepareMacVM(
+        id: draft.id,
+        restoreImageURL: root.appending(path: "Restore.ipsw")
+      )
+    }
+    await preparer.waitUntilStarted()
+
+    await #expect(throws: VirtualMachineModelError.libraryInUse) {
+      try await library.discardVirtualMachine(id: draft.id)
+    }
+
+    await preparer.resume()
+    _ = try await preparation.value
   }
 
   @Test
@@ -379,6 +417,41 @@ private actor TestMacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
     if behavior != .omitMachineIdentifier {
       try Data("machine".utf8).write(to: destination.machineIdentifier)
     }
+  }
+}
+
+private actor BlockingMacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
+  private var didStart = false
+  private var startWaiters: [CheckedContinuation<Void, Never>] = []
+  private var resumeContinuation: CheckedContinuation<Void, Never>?
+
+  func prepare(
+    restoreImageURL: URL,
+    resources: VirtualMachineResources,
+    destination: MacPlatformArtifactURLs
+  ) async throws {
+    didStart = true
+    let waiters = startWaiters
+    startWaiters.removeAll()
+    waiters.forEach { $0.resume() }
+    await withCheckedContinuation { continuation in
+      resumeContinuation = continuation
+    }
+    try Data("hardware".utf8).write(to: destination.hardwareModel)
+    try Data("auxiliary".utf8).write(to: destination.auxiliaryStorage)
+    try Data("machine".utf8).write(to: destination.machineIdentifier)
+  }
+
+  func waitUntilStarted() async {
+    if didStart { return }
+    await withCheckedContinuation { continuation in
+      startWaiters.append(continuation)
+    }
+  }
+
+  func resume() {
+    resumeContinuation?.resume()
+    resumeContinuation = nil
   }
 }
 
