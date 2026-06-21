@@ -105,6 +105,10 @@ final class AppModel {
   private var macVirtualMachineSharedDirectoryModels:
     [UUID: MacVirtualMachineSharedDirectoriesModel] = [:]
 
+  @ObservationIgnored
+  private var virtualMachineDiskImageMigrationModels:
+    [UUID: VirtualMachineDiskImageMigrationModel] = [:]
+
   private var hasLoaded = false
   private var refreshRequested = false
   private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
@@ -163,6 +167,8 @@ final class AppModel {
       UnavailableMacVirtualMachineRuntimeService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
+    virtualMachineDiskImageMigration: any VirtualMachineDiskImageMigrationManaging =
+      UnavailableVirtualMachineDiskImageMigrationService(),
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -194,6 +200,7 @@ final class AppModel {
         virtualMachineInstaller: virtualMachineInstaller,
         virtualMachineRuntime: virtualMachineRuntime,
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
+        virtualMachineDiskImageMigration: virtualMachineDiskImageMigration,
         virtualMachineAvailability: virtualMachineAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
         restoreImageAcquisition: restoreImageAcquisition,
@@ -220,8 +227,19 @@ final class AppModel {
           "Virtual machine recovery is waiting for another NativeContainers process to finish its active operation."
         return
       }
+      let diskRecovery =
+        try await services.virtualMachineDiskImageMigration
+        .recoverInterruptedMigrations()
       try await services.restoreImageStoreRecovery.recover()
-      virtualMachineRecoveryErrorMessage = nil
+      if let failure = diskRecovery.failures.first {
+        virtualMachineRecoveryErrorMessage =
+          "Disk migration recovery needs attention for \(diskRecovery.failures.count) virtual machine(s): \(failure.diagnostic)"
+      } else if !diskRecovery.deferredMachineIDs.isEmpty {
+        virtualMachineRecoveryErrorMessage =
+          "Disk migration recovery is waiting for another NativeContainers process to release \(diskRecovery.deferredMachineIDs.count) virtual machine(s)."
+      } else {
+        virtualMachineRecoveryErrorMessage = nil
+      }
     } catch {
       virtualMachineRecoveryErrorMessage =
         "Virtual machine recovery: \(error.localizedDescription)"
@@ -642,6 +660,25 @@ final class AppModel {
     return model
   }
 
+  func makeVirtualMachineDiskImageMigrationModel(
+    for machine: VirtualMachineManifest
+  ) -> VirtualMachineDiskImageMigrationModel {
+    if let model = virtualMachineDiskImageMigrationModels[machine.id] {
+      return model
+    }
+    let runtime = makeMacVirtualMachineRuntimeModel(for: machine)
+    let model = VirtualMachineDiskImageMigrationModel(
+      machineID: machine.id,
+      service: services.virtualMachineDiskImageMigration
+    ) { [weak self] in
+      await self?.refreshVirtualMachineStorageAfterMutation()
+    } didSettle: {
+      await runtime.refreshSavedState()
+    }
+    virtualMachineDiskImageMigrationModels[machine.id] = model
+    return model
+  }
+
   func makeMacVirtualMachineSharedDirectoriesModel(
     for machine: VirtualMachineManifest
   ) -> MacVirtualMachineSharedDirectoriesModel {
@@ -665,6 +702,11 @@ final class AppModel {
     for identifier in Array(macVirtualMachineSharedDirectoryModels.keys)
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineSharedDirectoryModels.removeValue(forKey: identifier)
+    }
+    for identifier in Array(virtualMachineDiskImageMigrationModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      virtualMachineDiskImageMigrationModels.removeValue(forKey: identifier)?
+        .cancelMigration()
     }
   }
 

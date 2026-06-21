@@ -1,10 +1,12 @@
-import Darwin
 import Foundation
 
 protocol VirtualMachineDiskImageMigrationStoring:
-  MacVirtualMachineRuntimeLeasing,
-  VirtualMachineInventoryLoading
+  VirtualMachineStorageInventoryLoading
 {
+  func acquireDiskImageMigrationRuntime(
+    id: UUID
+  ) async throws -> MacVirtualMachineRuntimeLease
+
   func commitDiskImageMigration(
     _ commit: VirtualMachineDiskImageMigrationCommit,
     for lease: MacVirtualMachineRuntimeLease
@@ -38,7 +40,9 @@ final class VirtualMachineDiskImageMigrationService:
   private let savedStates: any MacVirtualMachineSavedStateInspecting
   private let converter: any VirtualMachineDiskImageConverting
   private let imageInspector: any VirtualMachineDiskImageInspecting
+  private let hostBootSession: any HostBootSessionIdentifying
   private let files: VirtualMachineDiskImageMigrationFileOperations
+  private var quarantinedLeases: [UUID: MacVirtualMachineRuntimeLease] = [:]
 
   init(
     store: any VirtualMachineDiskImageMigrationStoring,
@@ -51,12 +55,15 @@ final class VirtualMachineDiskImageMigrationService:
       FileVirtualMachineStorageArtifactInspector(),
     journalStore: any VirtualMachineDiskImageMigrationJournaling =
       FileVirtualMachineDiskImageMigrationJournalStore(),
+    hostBootSession: any HostBootSessionIdentifying =
+      DarwinHostBootSessionIdentifier(),
     fileManager: FileManager = .default
   ) {
     self.store = store
     self.savedStates = savedStates
     self.converter = converter
     self.imageInspector = imageInspector
+    self.hostBootSession = hostBootSession
     files = VirtualMachineDiskImageMigrationFileOperations(
       artifactInspector: artifactInspector,
       journalStore: journalStore,
@@ -70,9 +77,19 @@ final class VirtualMachineDiskImageMigrationService:
     guard #available(macOS 27.0, *) else {
       throw VirtualMachineDiskImageMigrationError.unavailable
     }
+    guard quarantinedLeases[machineID] == nil else {
+      throw VirtualMachineDiskImageMigrationError.converterTerminationUnconfirmed(
+        "the previous converter is still quarantined in this app session"
+      )
+    }
 
-    let lease = try await store.acquireMacOSRuntime(id: machineID)
-    defer { lease.release() }
+    let lease = try await store.acquireDiskImageMigrationRuntime(id: machineID)
+    var shouldReleaseLease = true
+    defer {
+      if shouldReleaseLease {
+        lease.release()
+      }
+    }
 
     if let journal = try files.loadJournal(in: lease.machine.bundleURL) {
       try await recover(journal: journal, lease: lease)
@@ -127,7 +144,8 @@ final class VirtualMachineDiskImageMigrationService:
       sourceIdentity: sourceIdentity,
       sourceLogicalBytes: sourceDescriptor.logicalBytes,
       destinationIdentity: nil,
-      phase: .planned
+      phase: .planned,
+      hostBootIdentifier: try hostBootSession.currentBootIdentifier()
     )
     try files.saveJournal(journal, in: lease.machine.bundleURL)
 
@@ -157,6 +175,7 @@ final class VirtualMachineDiskImageMigrationService:
         at: stagingURL
       )
       convertedJournal.phase = .converted
+      convertedJournal.hostBootIdentifier = nil
       try files.saveJournal(convertedJournal, in: lease.machine.bundleURL)
       journal = convertedJournal
 
@@ -213,6 +232,38 @@ final class VirtualMachineDiskImageMigrationService:
         sourceAllocatedBytes: sourceIdentity.allocatedBytes,
         destinationAllocatedBytes: destinationIdentity.allocatedBytes
       )
+    } catch let error as HostProcessError
+      where error.leavesOwnedProcessTerminationUnconfirmed
+    {
+      quarantinedLeases[machineID] = lease
+      shouldReleaseLease = false
+      var quarantinedJournal = journal
+      quarantinedJournal.phase = .terminationQuarantined
+      switch error {
+      case .signalFailed:
+        quarantinedJournal.terminationQuarantine = .untilHostRestart
+      case .didNotExitAfterKill:
+        quarantinedJournal.terminationQuarantine = .untilAppRestart
+        quarantinedJournal.hostBootIdentifier = nil
+      case .launchFailed, .timedOut:
+        quarantinedJournal.terminationQuarantine = .manualIntervention
+        quarantinedJournal.hostBootIdentifier = nil
+      }
+      do {
+        try files.saveJournal(
+          quarantinedJournal,
+          in: lease.machine.bundleURL
+        )
+      } catch {
+        throw
+          VirtualMachineDiskImageMigrationError
+          .converterTerminationUnconfirmed(
+            "the kill result and restart boundary could not be persisted; keep NativeContainers open and restart the Mac before retrying (\(error.localizedDescription))"
+          )
+      }
+      throw VirtualMachineDiskImageMigrationError.converterTerminationUnconfirmed(
+        quarantineMessage(for: quarantinedJournal)
+      )
     } catch let error as VirtualMachineDiskImageMigrationError {
       if case .committedCleanupPending = error {
         throw error
@@ -245,32 +296,57 @@ final class VirtualMachineDiskImageMigrationService:
   {
     var recovered: [UUID] = []
     var deferred: [UUID] = []
+    var failures: [VirtualMachineDiskImageMigrationRecoveryFailure] = []
 
-    for manifest in try await store.list() where manifest.installState == .stopped {
-      let lease: MacVirtualMachineRuntimeLease
+    let inventory = try await store.loadVirtualMachineStorageInventory()
+    for target in inventory.targets where target.manifest.installState == .stopped {
       do {
-        lease = try await store.acquireMacOSRuntime(id: manifest.id)
-      } catch let error as MacVirtualMachineRuntimeError {
-        if case .ownedElsewhere = error {
-          deferred.append(manifest.id)
+        try Task.checkCancellation()
+        if quarantinedLeases[target.manifest.id] != nil {
+          deferred.append(target.manifest.id)
           continue
         }
-        throw error
-      }
-      defer { lease.release() }
+        guard try files.loadJournal(in: target.bundleURL) != nil else {
+          continue
+        }
 
-      guard
-        let journal = try files.loadJournal(in: lease.machine.bundleURL)
-      else {
-        continue
+        let lease: MacVirtualMachineRuntimeLease
+        do {
+          lease = try await store.acquireDiskImageMigrationRuntime(
+            id: target.manifest.id
+          )
+        } catch let error as MacVirtualMachineRuntimeError {
+          if case .ownedElsewhere = error {
+            deferred.append(target.manifest.id)
+            continue
+          }
+          throw error
+        }
+        defer { lease.release() }
+
+        guard
+          let journal = try files.loadJournal(in: lease.machine.bundleURL)
+        else {
+          continue
+        }
+        try await recover(journal: journal, lease: lease)
+        recovered.append(target.manifest.id)
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        failures.append(
+          VirtualMachineDiskImageMigrationRecoveryFailure(
+            machineID: target.manifest.id,
+            diagnostic: error.localizedDescription
+          )
+        )
       }
-      try await recover(journal: journal, lease: lease)
-      recovered.append(manifest.id)
     }
 
     return VirtualMachineDiskImageMigrationRecoveryReport(
       recoveredMachineIDs: recovered,
-      deferredMachineIDs: deferred
+      deferredMachineIDs: deferred,
+      failures: failures
     )
   }
 
@@ -281,6 +357,7 @@ final class VirtualMachineDiskImageMigrationService:
     guard journal.machineID == lease.target.machineID else {
       throw VirtualMachineDiskImageMigrationError.invalidJournal
     }
+    try requireRecoveryIsSafe(journal)
     let manifest = lease.machine.manifest
 
     if manifest.diskImagePath == journal.destinationPath,
@@ -340,6 +417,59 @@ final class VirtualMachineDiskImageMigrationService:
     }
   }
 
+  private func requireRecoveryIsSafe(
+    _ journal: VirtualMachineDiskImageMigrationJournal
+  ) throws {
+    if journal.phase == .planned {
+      guard let originatingBoot = journal.hostBootIdentifier else {
+        throw VirtualMachineDiskImageMigrationError.invalidJournal
+      }
+      if originatingBoot == (try hostBootSession.currentBootIdentifier()) {
+        throw
+          VirtualMachineDiskImageMigrationError
+          .converterTerminationUnconfirmed(
+            "the app exited while conversion may have been active; restart the Mac before recovery"
+          )
+      }
+    }
+    guard journal.phase == .terminationQuarantined else { return }
+    switch journal.terminationQuarantine {
+    case .untilAppRestart:
+      return
+    case .untilHostRestart:
+      guard let originatingBoot = journal.hostBootIdentifier,
+        originatingBoot != (try hostBootSession.currentBootIdentifier())
+      else {
+        throw
+          VirtualMachineDiskImageMigrationError
+          .converterTerminationUnconfirmed(
+            "SIGKILL could not be delivered; restart the Mac before recovery"
+          )
+      }
+    case .manualIntervention:
+      throw
+        VirtualMachineDiskImageMigrationError
+        .converterTerminationUnconfirmed(
+          "automatic recovery is unsafe; restart the Mac and remove the quarantine with a newer NativeContainers build"
+        )
+    case nil:
+      throw VirtualMachineDiskImageMigrationError.invalidJournal
+    }
+  }
+
+  private func quarantineMessage(
+    for journal: VirtualMachineDiskImageMigrationJournal
+  ) -> String {
+    switch journal.terminationQuarantine {
+    case .untilAppRestart:
+      "SIGKILL was sent, but exit was not confirmed; restart NativeContainers before retrying"
+    case .untilHostRestart:
+      "SIGKILL could not be delivered; restart the Mac before recovery"
+    case .manualIntervention, nil:
+      "automatic recovery is unsafe; restart the Mac before retrying"
+    }
+  }
+
   private func rollback(
     journal: VirtualMachineDiskImageMigrationJournal,
     bundleURL: URL
@@ -369,7 +499,7 @@ final class VirtualMachineDiskImageMigrationService:
     let baseName = (source.lastPathComponent as NSString).deletingPathExtension
     let destinationName = "\(baseName).asif"
     let stagingName =
-      ".DiskImageMigration-\(operationID.uuidString.lowercased()).asif.partial"
+      "\(VirtualMachineDiskImageMigrationArtifacts.stagingPrefix)\(operationID.uuidString.lowercased())\(VirtualMachineDiskImageMigrationArtifacts.stagingSuffix)"
     if directory.isEmpty {
       return (destinationName, stagingName)
     }
@@ -394,230 +524,5 @@ struct UnavailableVirtualMachineDiskImageMigrationService:
     -> VirtualMachineDiskImageMigrationRecoveryReport
   {
     .empty
-  }
-}
-
-private struct VirtualMachineDiskImageMigrationFileOperations:
-  @unchecked Sendable
-{
-  private let artifactInspector: any VirtualMachineStorageArtifactInspecting
-  private let journalStore: any VirtualMachineDiskImageMigrationJournaling
-  private let fileManager: FileManager
-
-  init(
-    artifactInspector: any VirtualMachineStorageArtifactInspecting,
-    journalStore: any VirtualMachineDiskImageMigrationJournaling,
-    fileManager: FileManager
-  ) {
-    self.artifactInspector = artifactInspector
-    self.journalStore = journalStore
-    self.fileManager = fileManager
-  }
-
-  func loadJournal(
-    in bundleURL: URL
-  ) throws -> VirtualMachineDiskImageMigrationJournal? {
-    try journalStore.load(in: bundleURL)
-  }
-
-  func saveJournal(
-    _ journal: VirtualMachineDiskImageMigrationJournal,
-    in bundleURL: URL
-  ) throws {
-    try journalStore.save(journal, in: bundleURL)
-  }
-
-  func inspectOwnedFile(
-    at url: URL
-  ) throws -> VirtualMachineStorageArtifactIdentity {
-    let identity = try artifactInspector.inspect(at: url)
-    guard identity.fileType == .regularFile,
-      identity.ownerUserID == UInt32(geteuid()),
-      identity.linkCount == 1
-    else {
-      throw VirtualMachineDiskImageMigrationError.unsafeArtifact(
-        url.lastPathComponent
-      )
-    }
-    return identity
-  }
-
-  func requireIdentity(
-    _ expected: VirtualMachineStorageArtifactIdentity,
-    at url: URL
-  ) throws {
-    guard try inspectOwnedFile(at: url).refersToSameStableFile(as: expected) else {
-      throw VirtualMachineDiskImageMigrationError.staleSource
-    }
-  }
-
-  func inspectRenamedFile(
-    _ previous: VirtualMachineStorageArtifactIdentity?,
-    at url: URL
-  ) throws -> VirtualMachineStorageArtifactIdentity {
-    guard let previous else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
-    }
-    let current = try inspectOwnedFile(at: url)
-    guard current.refersToSameStableFile(as: previous) else {
-      throw VirtualMachineDiskImageMigrationError.staleSource
-    }
-    return current
-  }
-
-  func resolve(_ path: String, in bundleURL: URL) throws -> URL {
-    let string = NSString(string: path)
-    let components = string.pathComponents
-    guard !string.isAbsolutePath,
-      !components.isEmpty,
-      !components.contains(".."),
-      components.allSatisfy({ $0 != "/" && $0 != "." })
-    else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
-    }
-    let candidate = bundleURL.appending(path: path).standardizedFileURL
-    let bundleComponents = bundleURL.standardizedFileURL.pathComponents
-    guard candidate.pathComponents.count > bundleComponents.count,
-      candidate.pathComponents.prefix(bundleComponents.count)
-        .elementsEqual(bundleComponents)
-    else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
-    }
-    return candidate
-  }
-
-  func requireAbsent(_ url: URL) throws {
-    var metadata = stat()
-    if Darwin.lstat(url.path(percentEncoded: false), &metadata) == 0 {
-      throw VirtualMachineDiskImageMigrationError.destinationExists(url)
-    }
-    guard errno == ENOENT else {
-      throw VirtualMachineDiskImageMigrationError.unsafeArtifact(
-        url.lastPathComponent
-      )
-    }
-  }
-
-  func securePrivateArtifact(at url: URL) throws {
-    _ = try inspectOwnedFile(at: url)
-    try fileManager.setAttributes(
-      [.posixPermissions: 0o600],
-      ofItemAtPath: url.path
-    )
-    var excludedURL = url
-    var values = URLResourceValues()
-    values.isExcludedFromBackup = true
-    try excludedURL.setResourceValues(values)
-  }
-
-  func promote(from stagingURL: URL, to destinationURL: URL) throws {
-    try requireAbsent(destinationURL)
-    try fileManager.moveItem(at: stagingURL, to: destinationURL)
-    try synchronizeDirectory(destinationURL.deletingLastPathComponent())
-  }
-
-  func rollback(
-    _ journal: VirtualMachineDiskImageMigrationJournal,
-    in bundleURL: URL
-  ) throws {
-    let sourceURL = try resolve(journal.sourcePath, in: bundleURL)
-    try requireIdentity(journal.sourceIdentity, at: sourceURL)
-
-    let stagingURL = try resolve(journal.stagingPath, in: bundleURL)
-    let destinationURL = try resolve(journal.destinationPath, in: bundleURL)
-    let stagingExists = exists(stagingURL)
-    let destinationExists = exists(destinationURL)
-
-    switch journal.phase {
-    case .planned:
-      guard !destinationExists else {
-        throw VirtualMachineDiskImageMigrationError.invalidJournal
-      }
-      if stagingExists {
-        try removeOwnedFile(at: stagingURL)
-      }
-    case .converted:
-      guard !(stagingExists && destinationExists),
-        let expected = journal.destinationIdentity
-      else {
-        throw VirtualMachineDiskImageMigrationError.invalidJournal
-      }
-      if stagingExists || destinationExists {
-        let artifactURL = stagingExists ? stagingURL : destinationURL
-        let identity = try inspectOwnedFile(at: artifactURL)
-        guard identity.refersToSameStableFile(as: expected) else {
-          throw VirtualMachineDiskImageMigrationError.invalidJournal
-        }
-        try fileManager.removeItem(at: artifactURL)
-      }
-    case .promoted:
-      guard !stagingExists,
-        let expected = journal.destinationIdentity
-      else {
-        throw VirtualMachineDiskImageMigrationError.invalidJournal
-      }
-      if destinationExists {
-        try requireIdentity(expected, at: destinationURL)
-        try fileManager.removeItem(at: destinationURL)
-      }
-    case .manifestUpdated:
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
-    }
-
-    try journalStore.remove(journal, from: bundleURL)
-    try synchronizeDirectory(destinationURL.deletingLastPathComponent())
-  }
-
-  func finishCommitted(
-    _ journal: VirtualMachineDiskImageMigrationJournal,
-    in bundleURL: URL
-  ) throws {
-    guard journal.phase == .promoted || journal.phase == .manifestUpdated,
-      let destinationIdentity = journal.destinationIdentity
-    else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
-    }
-
-    let destinationURL = try resolve(journal.destinationPath, in: bundleURL)
-    try requireIdentity(destinationIdentity, at: destinationURL)
-
-    let stagingURL = try resolve(journal.stagingPath, in: bundleURL)
-    guard !exists(stagingURL) else {
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
-    }
-
-    let sourceURL = try resolve(journal.sourcePath, in: bundleURL)
-    if exists(sourceURL) {
-      try requireIdentity(journal.sourceIdentity, at: sourceURL)
-      try fileManager.removeItem(at: sourceURL)
-      try synchronizeDirectory(sourceURL.deletingLastPathComponent())
-    }
-    try journalStore.remove(journal, from: bundleURL)
-  }
-
-  private func removeOwnedFile(at url: URL) throws {
-    _ = try inspectOwnedFile(at: url)
-    try fileManager.removeItem(at: url)
-  }
-
-  private func exists(_ url: URL) -> Bool {
-    var metadata = stat()
-    return Darwin.lstat(url.path(percentEncoded: false), &metadata) == 0
-  }
-
-  private func synchronizeDirectory(_ url: URL) throws {
-    let descriptor = Darwin.open(
-      url.path(percentEncoded: false),
-      O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
-    )
-    guard descriptor >= 0 else {
-      throw VirtualMachineDiskImageMigrationError.unsafeArtifact(
-        url.lastPathComponent
-      )
-    }
-    defer { Darwin.close(descriptor) }
-    guard Darwin.fsync(descriptor) == 0 else {
-      throw CocoaError(.fileWriteUnknown)
-    }
   }
 }

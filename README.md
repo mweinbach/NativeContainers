@@ -45,7 +45,12 @@ generation-safe runtime/console controls, same-host suspend, persistent
 VirtioFS shares, and stopped-only VM cloning with fresh platform identity and
 cancellable APFS/sparse transfer. Portable VM package export/import now supports
 identity-preserving restore or an explicit fresh-identity copy, with cancellable
-transaction cleanup and no destination replacement. Persistent Linux machines now have native
+transaction cleanup and no destination replacement. Installed macOS VMs can now
+convert a stopped RAW disk to ASIF through a journaled, out-of-place transaction;
+the runtime reads logical capacity through DiskImageKit instead of mistaking the
+sparse container's host file length for guest capacity. TERM-to-KILL cancellation
+keeps uncertain exits quarantined, and pending migration journals block runtime,
+discard, clone, and transfer paths until recovery is safe. Persistent Linux machines now have native
 create/start/stop/Force Stop/delete controls, cancellable first-boot user
 provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
 memory, and reviewed home-directory configuration. The same machines now expose

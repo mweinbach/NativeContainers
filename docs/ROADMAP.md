@@ -166,7 +166,7 @@ must leave a usable, test-backed product slice.
   - [x] Opt-in reviewed restore-image reclamation with shared cache leases,
         fresh manifest-reference checks, exact filesystem seals, aged-partial
         policy, atomic retirement, and crash-tombstone recovery.
-  - [ ] Stopped-only sparse compaction through an explicit RAW-to-ASIF
+  - [x] Stopped-only sparse compaction through an explicit RAW-to-ASIF
         migration; raw truncation remains prohibited.
 
 ## M5 — Optimization and polish

@@ -49,9 +49,32 @@ enum VirtualMachineDiskImageError: LocalizedError, Equatable, Sendable {
 
 enum VirtualMachineDiskImageMigrationPhase: String, Codable, CaseIterable, Sendable {
   case planned
+  case terminationQuarantined
   case converted
   case promoted
   case manifestUpdated
+}
+
+enum VirtualMachineDiskImageMigrationTerminationQuarantine:
+  String,
+  Codable,
+  Sendable
+{
+  case untilAppRestart
+  case untilHostRestart
+  case manualIntervention
+}
+
+enum VirtualMachineDiskImageMigrationArtifacts {
+  static let journalFilename = ".DiskImageMigration.json"
+  static let stagingPrefix = ".DiskImageMigration-"
+  static let stagingSuffix = ".asif.partial"
+
+  static func isControlArtifact(relativePath: String) -> Bool {
+    let name = NSString(string: relativePath).lastPathComponent
+    return name == journalFilename
+      || (name.hasPrefix(stagingPrefix) && name.hasSuffix(stagingSuffix))
+  }
 }
 
 struct VirtualMachineDiskImageMigrationJournal: Codable, Equatable, Sendable {
@@ -67,6 +90,8 @@ struct VirtualMachineDiskImageMigrationJournal: Codable, Equatable, Sendable {
   let sourceLogicalBytes: UInt64
   var destinationIdentity: VirtualMachineStorageArtifactIdentity?
   var phase: VirtualMachineDiskImageMigrationPhase
+  var terminationQuarantine: VirtualMachineDiskImageMigrationTerminationQuarantine? = nil
+  var hostBootIdentifier: String? = nil
 }
 
 struct VirtualMachineDiskImageMigrationCommit: Equatable, Sendable {
@@ -93,8 +118,18 @@ struct VirtualMachineDiskImageMigrationResult: Equatable, Sendable {
 struct VirtualMachineDiskImageMigrationRecoveryReport: Equatable, Sendable {
   let recoveredMachineIDs: [UUID]
   let deferredMachineIDs: [UUID]
+  let failures: [VirtualMachineDiskImageMigrationRecoveryFailure]
 
-  static let empty = Self(recoveredMachineIDs: [], deferredMachineIDs: [])
+  static let empty = Self(
+    recoveredMachineIDs: [],
+    deferredMachineIDs: [],
+    failures: []
+  )
+}
+
+struct VirtualMachineDiskImageMigrationRecoveryFailure: Equatable, Sendable {
+  let machineID: UUID
+  let diagnostic: String
 }
 
 enum VirtualMachineDiskImageMigrationError:
@@ -112,6 +147,7 @@ enum VirtualMachineDiskImageMigrationError:
   case unsafeArtifact(String)
   case staleSource
   case invalidJournal
+  case converterTerminationUnconfirmed(String)
   case operationAndCleanupFailed(operation: String, cleanup: String)
   case committedCleanupPending(String)
 
@@ -139,6 +175,8 @@ enum VirtualMachineDiskImageMigrationError:
       "The source disk changed during conversion, so the migrated image was not committed."
     case .invalidJournal:
       "The disk migration journal is invalid or no longer matches this virtual machine."
+    case .converterTerminationUnconfirmed(let reason):
+      "The disk converter did not confirm exit, so its staging data remains quarantined: \(reason)"
     case .operationAndCleanupFailed(let operation, let cleanup):
       "Disk migration failed (\(operation)), and its private staging cleanup also failed (\(cleanup))."
     case .committedCleanupPending(let reason):

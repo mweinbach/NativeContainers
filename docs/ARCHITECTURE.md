@@ -492,6 +492,32 @@ recursive cleanup cannot poison inventory reads. Runtime-only
 `VZVirtualMachine`, `VZMacOSInstaller`, progress observation, and cancellation
 state never enter persistence.
 
+Disk format is an explicit manifest concern. Schema-1 manifests may omit
+`diskImageFormat`, which decodes as RAW for backward compatibility; new and
+migrated manifests persist the format. `AppleVirtualMachineDiskImageService`
+owns format-aware inspection and attachment. RAW capacity comes from its block
+mapping, while macOS 27 ASIF capacity comes from `DiskImage.size`; the runtime
+never compares an ASIF container's host file length with guest capacity.
+
+`VirtualMachineDiskImageMigrationService` owns RAW-to-ASIF conversion rather
+than the VM library actor or SwiftUI. It takes the same stopped-VM runtime lease
+used by lifecycle/configuration mutations, requires no saved state, seals the
+source identity, and runs the documented `/usr/sbin/diskutil image create from
+--format ASIF` command into a sibling hidden partial. The converter inherits the
+host-process service's exact-PID TERM-to-KILL cancellation contract. A durable
+`planned -> converted -> promoted -> manifestUpdated` journal makes every hard
+exit recoverable; `terminationQuarantined` records the exceptional case where
+process exit could not be proven. A failed SIGKILL is pinned to the current host
+boot and cannot recover until a reboot proves quiescence. Ordinary runtime and
+discard leases reject every pending migration journal, while the migration
+service alone owns a maintenance lease that can recover it. Clone, export, and
+import reject migration journals and nested partials before copying.
+DiskImageKit validates format and logical geometry before the library performs
+one narrow atomic manifest commit; only then does uncancelled cleanup retire the
+RAW source. Launch recovery continues across per-VM failures, rolls back safe
+pre-commit artifacts, or completes post-commit cleanup. Neither migration nor
+recovery truncates or resizes a guest filesystem.
+
 ### UI lane
 
 The SwiftUI shell uses a `NavigationSplitView` with separate screens for:

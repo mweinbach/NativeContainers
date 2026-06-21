@@ -5,6 +5,32 @@ import Testing
 
 struct VirtualMachineCloneServiceTests {
   @Test
+  func cloneRejectsPendingDiskMigrationJournal() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let library = VirtualMachineLibrary(rootURL: root)
+    let source = try await makeStoppedMachine(
+      library: library,
+      root: root,
+      name: "Pending Migration"
+    )
+    let sourceBundle = bundleURL(root: root, id: source.id)
+    try Data("pending".utf8).write(
+      to: sourceBundle.appending(
+        path: VirtualMachineDiskImageMigrationArtifacts.journalFilename
+      )
+    )
+
+    await #expect(throws: VirtualMachineCloneError.self) {
+      _ = try await VirtualMachineCloneService(store: library)
+        .cloneVirtualMachine(id: source.id, name: "Unsafe Copy")
+    }
+
+    #expect(try await library.list() == [source])
+    try expectNoCloneStagingBundles(in: root)
+  }
+
+  @Test
   func clonesStoppedBundleAndRemovesTransientRuntimeState() async throws {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -113,8 +139,12 @@ struct VirtualMachineCloneServiceTests {
         ).path
       )
     )
-    #expect(!FileManager.default.fileExists(atPath: cloneBundle.appending(path: savedStateStaging.lastPathComponent).path))
-    #expect(!FileManager.default.fileExists(atPath: cloneBundle.appending(path: installationStaging.lastPathComponent).path))
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: cloneBundle.appending(path: savedStateStaging.lastPathComponent).path))
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: cloneBundle.appending(path: installationStaging.lastPathComponent).path))
 
     #expect(FileManager.default.fileExists(atPath: savedState.path))
     #expect(FileManager.default.fileExists(atPath: savedStateStaging.path))
@@ -288,7 +318,8 @@ struct VirtualMachineCloneServiceTests {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
     let orphan = root.appending(
-      path: "\(VirtualMachineLibrary.cloneStagingPrefix)orphan\(VirtualMachineLibrary.cloneStagingSuffix)",
+      path:
+        "\(VirtualMachineLibrary.cloneStagingPrefix)orphan\(VirtualMachineLibrary.cloneStagingSuffix)",
       directoryHint: .isDirectory
     )
     try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: false)

@@ -477,6 +477,7 @@ actor VirtualMachineLibrary:
       throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
     }
     defer { runtimeLock.release() }
+    try requireNoDiskImageMigrationJournal(in: bundleURL, machineID: id)
     let tombstoneURL = rootURL.appending(
       path:
         "\(Self.deletionTombstonePrefix)\(id.uuidString.lowercased())-\(UUID().uuidString.lowercased())\(Self.deletionTombstoneSuffix)",
@@ -703,6 +704,19 @@ actor VirtualMachineLibrary:
   }
 
   func acquireMacOSRuntime(id: UUID) throws -> MacVirtualMachineRuntimeLease {
+    try acquireMacOSRuntime(id: id, allowsDiskImageMigrationJournal: false)
+  }
+
+  func acquireDiskImageMigrationRuntime(
+    id: UUID
+  ) throws -> MacVirtualMachineRuntimeLease {
+    try acquireMacOSRuntime(id: id, allowsDiskImageMigrationJournal: true)
+  }
+
+  private func acquireMacOSRuntime(
+    id: UUID,
+    allowsDiskImageMigrationJournal: Bool
+  ) throws -> MacVirtualMachineRuntimeLease {
     try ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
@@ -714,6 +728,12 @@ actor VirtualMachineLibrary:
     }
     let bundleURL = bundleURL(for: manifest.id)
     try requireDirectory(bundleURL)
+    if !allowsDiskImageMigrationJournal {
+      try requireNoDiskImageMigrationJournal(
+        in: bundleURL,
+        machineID: id
+      )
+    }
     let lockURL = bundleURL.appending(path: Self.runtimeLockFilename)
     guard let runtimeLock = try AdvisoryFileLock.acquire(at: lockURL) else {
       throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
@@ -755,6 +775,25 @@ actor VirtualMachineLibrary:
     } catch {
       runtimeLock.release()
       throw error
+    }
+  }
+
+  private func requireNoDiskImageMigrationJournal(
+    in bundleURL: URL,
+    machineID: UUID
+  ) throws {
+    do {
+      guard
+        try FileVirtualMachineDiskImageMigrationJournalStore(
+          fileManager: fileManager
+        ).load(in: bundleURL) == nil
+      else {
+        throw MacVirtualMachineRuntimeError.diskMigrationPending(machineID)
+      }
+    } catch let error as MacVirtualMachineRuntimeError {
+      throw error
+    } catch {
+      throw MacVirtualMachineRuntimeError.diskMigrationPending(machineID)
     }
   }
 
@@ -1168,6 +1207,7 @@ actor VirtualMachineLibrary:
     name == Self.runtimeLockFilename
       || name == Self.runtimeOwnerFilename
       || name == MacVirtualMachineSavedStateStore.directoryName
+      || name == VirtualMachineDiskImageMigrationArtifacts.journalFilename
       || name.hasPrefix(Self.installationStagingPrefix)
       || name.hasPrefix(MacVirtualMachineSavedStateStore.stagingPrefix)
   }

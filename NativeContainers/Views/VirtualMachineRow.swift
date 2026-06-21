@@ -4,6 +4,7 @@ struct VirtualMachineRow: View {
   let machine: VirtualMachineManifest
   let availability: MacVirtualMachineAvailability
   let runtime: MacVirtualMachineRuntimeModel
+  let diskMigration: VirtualMachineDiskImageMigrationModel
   let isSelected: Bool
   let onSelect: () -> Void
   let prepare: () -> Void
@@ -113,6 +114,7 @@ struct VirtualMachineRow: View {
             Image(systemName: "ellipsis.circle")
           }
           .menuStyle(.borderlessButton)
+          .disabled(diskMigration.isBusy)
           .help("More virtual machine actions")
           .accessibilityLabel("More virtual machine actions")
         }
@@ -179,32 +181,41 @@ struct VirtualMachineRow: View {
 
   @ViewBuilder
   private var runtimeAction: some View {
-    switch runtime.snapshot.state {
-    case .stopped, .ownedElsewhere:
-      if case .incompatible = runtime.snapshot.savedStateStatus {
-        Button("Start Fresh…") {
-          isConfirmingStartFresh = true
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(availability != .available || !runtime.snapshot.canStartFresh)
-      } else {
-        Button(runtimeActionTitle) {
-          Task { await runtime.start() }
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(availability != .available || !runtime.snapshot.canStart)
-        .help(availability.unavailableReason ?? "Start macOS")
-      }
-    case .running, .paused, .stopping:
-      Button("Open", action: open)
-        .buttonStyle(.borderedProminent)
-    case .inspectingSavedState, .starting, .pausing, .resuming, .saving, .restoring,
-      .discardingSavedState:
+    if diskMigration.isBusy {
       HStack(spacing: 6) {
         ProgressView()
           .controlSize(.small)
-        Text(runtime.snapshot.state.label)
+        Text("Converting disk")
           .font(.caption)
+      }
+    } else {
+      switch runtime.snapshot.state {
+      case .stopped, .ownedElsewhere:
+        if case .incompatible = runtime.snapshot.savedStateStatus {
+          Button("Start Fresh…") {
+            isConfirmingStartFresh = true
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(availability != .available || !runtime.snapshot.canStartFresh)
+        } else {
+          Button(runtimeActionTitle) {
+            Task { await runtime.start() }
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(availability != .available || !runtime.snapshot.canStart)
+          .help(availability.unavailableReason ?? "Start macOS")
+        }
+      case .running, .paused, .stopping:
+        Button("Open", action: open)
+          .buttonStyle(.borderedProminent)
+      case .inspectingSavedState, .starting, .pausing, .resuming, .saving, .restoring,
+        .discardingSavedState:
+        HStack(spacing: 6) {
+          ProgressView()
+            .controlSize(.small)
+          Text(runtime.snapshot.state.label)
+            .font(.caption)
+        }
       }
     }
   }

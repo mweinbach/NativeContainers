@@ -7,8 +7,8 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 612 test declarations. The current full
-  app-hosted Xcode run passed all 593 deterministic tests, with 19 destructive
+- The suite currently contains 726 test declarations. The current full
+  app-hosted Xcode run passed all 707 deterministic tests, with 19 destructive
   or external-service integrations skipped behind explicit live gates and no
   failures. Existing opt-in tests cover Apple runtime provisioning, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
@@ -777,6 +777,26 @@ Updated: 2026-06-21.
   Mac, Xcode stopped its exact PID, and the Issue Navigator reported no warnings
   or errors. Launch emitted only the existing macOS 27 beta
   `com.apple.linkd.autoShortcut`/SetStore registration noise.
+- macOS VM disks now have an explicit RAW/ASIF model and a modular macOS 27
+  migration lane. DiskImageKit supplies ASIF virtual geometry and the native VZ
+  attachment, so sparse host length is never mistaken for guest capacity.
+  Conversion is stopped-only and saved-state-free, runs out of place through
+  the documented `diskutil image create from --format ASIF` route, inherits
+  exact-PID TERM-to-KILL cancellation, seals both files, journals five durable
+  phases, atomically switches the manifest, and finishes old-RAW cleanup without
+  another cancellation point. Unconfirmed exit retains the runtime lease and
+  journal; failed KILL delivery is tied to `kern.bootsessionuuid` and cannot
+  recover until a reboot proves quiescence. Runtime/discard leases and
+  clone/export/import paths reject pending migration state. Relaunch continues
+  recovery across per-VM failures, rolls back only safe pre-commit artifacts,
+  or completes post-commit cleanup. The VM configuration screen exposes the operation, its
+  blockers, cancellation, uncancellable refresh, and measured savings; competing
+  controls remain disabled, and raw truncation remains prohibited.
+  Xcode MCP's complete 726-test plan passed 707 deterministic tests, skipped the
+  19 explicit live gates, and left no failures or unrun tests. Build-for-testing
+  passed in 10.115 seconds, the refreshed VM inspector rendered in Preview, the
+  app launched as PID 46995 and Xcode stopped that exact PID, and the Issue
+  Navigator reported no warnings or errors.
 
 ## Known configuration issue
 
@@ -791,9 +811,9 @@ entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Design an explicit RAW-to-ASIF migration path for the macOS 27 tier before
-   offering compaction. The macOS 26 path must not use raw truncation because
-   public APIs do not resize the guest filesystem and can destroy data.
+1. Add a separately reviewed ASIF-to-ASIF transactional rewrite that reports
+   measured reclaimed bytes without calling it a guaranteed compact primitive;
+   exclude stacked layers until UUID/parent semantics are fully modeled.
 2. Add the entitlement through a functioning Xcode capability surface, then
    live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot

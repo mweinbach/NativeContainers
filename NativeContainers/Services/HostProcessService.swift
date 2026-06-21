@@ -69,6 +69,47 @@ protocol HostCommandExecuting: Sendable {
   ) async throws -> HostCommandResult
 }
 
+protocol HostBootSessionIdentifying: Sendable {
+  func currentBootIdentifier() throws -> String
+}
+
+struct DarwinHostBootSessionIdentifier: HostBootSessionIdentifying {
+  func currentBootIdentifier() throws -> String {
+    var size = 0
+    guard
+      sysctlbyname("kern.bootsessionuuid", nil, &size, nil, 0) == 0,
+      size > 1,
+      size <= 128
+    else {
+      throw CocoaError(.fileReadUnknown)
+    }
+    var buffer = [CChar](repeating: 0, count: size)
+    let result = buffer.withUnsafeMutableBytes { bytes in
+      sysctlbyname(
+        "kern.bootsessionuuid",
+        bytes.baseAddress,
+        &size,
+        nil,
+        0
+      )
+    }
+    guard result == 0 else {
+      throw CocoaError(.fileReadUnknown)
+    }
+    guard let terminator = buffer.firstIndex(of: 0), terminator > 0 else {
+      throw CocoaError(.fileReadCorruptFile)
+    }
+    let identifier = String(
+      decoding: buffer[..<terminator].map { UInt8(bitPattern: $0) },
+      as: UTF8.self
+    )
+    guard let uuid = UUID(uuidString: identifier) else {
+      throw CocoaError(.fileReadCorruptFile)
+    }
+    return uuid.uuidString.lowercased()
+  }
+}
+
 extension HostCommandExecuting {
   func execute(
     executableURL: URL,
@@ -100,6 +141,15 @@ enum HostProcessError: LocalizedError, Equatable, Sendable {
       "The host command timed out."
     case .didNotExitAfterKill:
       "The host command did not confirm exit after SIGKILL."
+    }
+  }
+
+  var leavesOwnedProcessTerminationUnconfirmed: Bool {
+    switch self {
+    case .signalFailed, .didNotExitAfterKill:
+      true
+    case .launchFailed, .timedOut:
+      false
     }
   }
 }
@@ -184,13 +234,17 @@ actor FoundationHostCommandExecutor: HostCommandExecuting {
 
     try await Task.detached(priority: .userInitiated) {
       if session.isRunning {
-        try session.send(signal: SIGTERM)
-        if await Self.waitForExitUncancelled(
-          session,
-          timeout: terminationGracePeriod,
-          pollInterval: pollInterval
-        ) {
-          return
+        do {
+          try session.send(signal: SIGTERM)
+          if await Self.waitForExitUncancelled(
+            session,
+            timeout: terminationGracePeriod,
+            pollInterval: pollInterval
+          ) {
+            return
+          }
+        } catch {
+          // A failed graceful signal must still fall through to the exact-PID kill point.
         }
       }
       if session.isRunning {

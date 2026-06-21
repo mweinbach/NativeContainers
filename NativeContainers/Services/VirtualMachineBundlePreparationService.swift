@@ -58,6 +58,7 @@ struct VirtualMachineBundlePreparationService:
   func prepare(_ request: VirtualMachineBundlePreparationRequest) async throws {
     try Task.checkCancellation()
     let sourceSnapshot = try inspector.snapshot(of: request.sourceBundleURL)
+    try requireNoDiskImageMigrationArtifacts(in: sourceSnapshot)
     try await transfer.copyBundle(
       from: request.sourceBundleURL,
       to: request.destinationBundleURL
@@ -78,6 +79,22 @@ struct VirtualMachineBundlePreparationService:
     try write(request.destinationManifest, to: request.destinationBundleURL)
     _ = try inspector.snapshot(of: request.destinationBundleURL)
     try Task.checkCancellation()
+  }
+
+  private func requireNoDiskImageMigrationArtifacts(
+    in snapshot: VirtualMachineBundleSnapshot
+  ) throws {
+    guard
+      !snapshot.entries.contains(where: {
+        VirtualMachineDiskImageMigrationArtifacts.isControlArtifact(
+          relativePath: $0.relativePath
+        )
+      })
+    else {
+      throw VirtualMachineBundleError.invalidBundle(
+        "disk-image migration data is pending recovery"
+      )
+    }
   }
 
   private func applyIdentityPolicy(

@@ -19,7 +19,7 @@ struct FileVirtualMachineDiskImageMigrationJournalStore:
   VirtualMachineDiskImageMigrationJournaling,
   @unchecked Sendable
 {
-  static let filename = ".DiskImageMigration.json"
+  static let filename = VirtualMachineDiskImageMigrationArtifacts.journalFilename
 
   private let fileManager: FileManager
 
@@ -115,6 +115,29 @@ struct FileVirtualMachineDiskImageMigrationJournalStore:
   private func validate(
     _ journal: VirtualMachineDiskImageMigrationJournal
   ) throws {
+    let hasUnconvertedImage =
+      journal.phase == .planned || journal.phase == .terminationQuarantined
+    let hasValidQuarantine: Bool
+    if journal.phase == .terminationQuarantined {
+      switch journal.terminationQuarantine {
+      case .untilAppRestart, .manualIntervention:
+        hasValidQuarantine = journal.hostBootIdentifier == nil
+      case .untilHostRestart:
+        hasValidQuarantine =
+          journal.hostBootIdentifier
+          .flatMap { UUID(uuidString: $0) } != nil
+      case nil:
+        hasValidQuarantine = false
+      }
+    } else if journal.phase == .planned {
+      hasValidQuarantine =
+        journal.terminationQuarantine == nil
+        && journal.hostBootIdentifier.flatMap { UUID(uuidString: $0) } != nil
+    } else {
+      hasValidQuarantine =
+        journal.terminationQuarantine == nil
+        && journal.hostBootIdentifier == nil
+    }
     guard journal.version == VirtualMachineDiskImageMigrationJournal.currentVersion,
       journal.sourceLogicalBytes > 0,
       isSafeRelativePath(journal.sourcePath),
@@ -127,12 +150,13 @@ struct FileVirtualMachineDiskImageMigrationJournalStore:
       ]).count == 3,
       journal.destinationPath.lowercased().hasSuffix(".asif"),
       journal.stagingPath.hasSuffix(
-        ".DiskImageMigration-\(journal.operationID.uuidString.lowercased()).asif.partial"
+        "\(VirtualMachineDiskImageMigrationArtifacts.stagingPrefix)\(journal.operationID.uuidString.lowercased())\(VirtualMachineDiskImageMigrationArtifacts.stagingSuffix)"
       ),
       journal.sourceIdentity.fileType == .regularFile,
       journal.sourceIdentity.ownerUserID == UInt32(geteuid()),
       journal.sourceIdentity.linkCount == 1,
-      (journal.phase == .planned) == (journal.destinationIdentity == nil)
+      hasUnconvertedImage == (journal.destinationIdentity == nil),
+      hasValidQuarantine
     else {
       throw VirtualMachineDiskImageMigrationError.invalidJournal
     }
@@ -162,18 +186,21 @@ struct FileVirtualMachineDiskImageMigrationJournalStore:
       throw VirtualMachineDiskImageMigrationError.invalidJournal
     }
 
-    let expectedPhase: VirtualMachineDiskImageMigrationPhase
+    let hasValidPhaseTransition: Bool
     switch current.phase {
     case .planned:
-      expectedPhase = .converted
+      hasValidPhaseTransition =
+        updated.phase == .converted || updated.phase == .terminationQuarantined
+    case .terminationQuarantined:
+      hasValidPhaseTransition = false
     case .converted:
-      expectedPhase = .promoted
+      hasValidPhaseTransition = updated.phase == .promoted
     case .promoted:
-      expectedPhase = .manifestUpdated
+      hasValidPhaseTransition = updated.phase == .manifestUpdated
     case .manifestUpdated:
-      throw VirtualMachineDiskImageMigrationError.invalidJournal
+      hasValidPhaseTransition = false
     }
-    guard updated.phase == expectedPhase else {
+    guard hasValidPhaseTransition else {
       throw VirtualMachineDiskImageMigrationError.invalidJournal
     }
 

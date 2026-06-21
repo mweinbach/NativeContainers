@@ -514,6 +514,58 @@ struct VirtualMachineLibraryTests {
     #expect(FileManager.default.fileExists(atPath: destinationURL.path))
   }
 
+  @Test
+  func pendingDiskMigrationBlocksRuntimeAndDiscardButAllowsRecoveryLease()
+    async throws
+  {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let sourceURL = fixture.bundle.appending(
+      path: fixture.manifest.diskImagePath
+    )
+    let operationID = UUID()
+    try FileVirtualMachineDiskImageMigrationJournalStore().save(
+      VirtualMachineDiskImageMigrationJournal(
+        version: VirtualMachineDiskImageMigrationJournal.currentVersion,
+        operationID: operationID,
+        machineID: fixture.manifest.id,
+        sourcePath: fixture.manifest.diskImagePath,
+        destinationPath: "Disk.asif",
+        stagingPath:
+          "\(VirtualMachineDiskImageMigrationArtifacts.stagingPrefix)\(operationID.uuidString.lowercased())\(VirtualMachineDiskImageMigrationArtifacts.stagingSuffix)",
+        sourceIdentity: try FileVirtualMachineStorageArtifactInspector()
+          .inspect(at: sourceURL),
+        sourceLogicalBytes: fixture.manifest.resources.diskBytes,
+        destinationIdentity: nil,
+        phase: .planned,
+        hostBootIdentifier: UUID().uuidString.lowercased()
+      ),
+      in: fixture.bundle
+    )
+
+    await #expect(
+      throws: MacVirtualMachineRuntimeError.diskMigrationPending(
+        fixture.manifest.id
+      )
+    ) {
+      _ = try await fixture.library.acquireMacOSRuntime(
+        id: fixture.manifest.id
+      )
+    }
+    await #expect(
+      throws: MacVirtualMachineRuntimeError.diskMigrationPending(
+        fixture.manifest.id
+      )
+    ) {
+      try await fixture.library.discardVirtualMachine(id: fixture.manifest.id)
+    }
+
+    let recoveryLease = try await fixture.library
+      .acquireDiskImageMigrationRuntime(id: fixture.manifest.id)
+    recoveryLease.release()
+  }
+
   private func installedLibraryFixture(
     root: URL
   ) throws -> (

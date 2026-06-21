@@ -19,6 +19,7 @@ struct VirtualMachineDiskImageMigrationJournalTests {
     let destinationIdentity = identity(inode: 2, statusNanoseconds: 1)
     journal.destinationIdentity = destinationIdentity
     journal.phase = .converted
+    journal.hostBootIdentifier = nil
     try store.save(journal, in: bundle)
 
     journal.destinationIdentity = identity(inode: 2, statusNanoseconds: 2)
@@ -73,6 +74,23 @@ struct VirtualMachineDiskImageMigrationJournalTests {
     }
   }
 
+  @Test
+  func rejectsAPlannedJournalWithoutABootSessionUUID() throws {
+    let bundle = temporaryBundle()
+    defer { try? FileManager.default.removeItem(at: bundle) }
+    var journal = migrationJournal(operationID: UUID())
+    journal.hostBootIdentifier = nil
+
+    #expect(
+      throws: VirtualMachineDiskImageMigrationError.invalidJournal
+    ) {
+      try FileVirtualMachineDiskImageMigrationJournalStore().save(
+        journal,
+        in: bundle
+      )
+    }
+  }
+
   private func temporaryBundle() -> URL {
     let url = FileManager.default.temporaryDirectory.appending(
       path: UUID().uuidString,
@@ -99,7 +117,8 @@ struct VirtualMachineDiskImageMigrationJournalTests {
       sourceIdentity: identity(inode: 1),
       sourceLogicalBytes: 8 * VirtualMachineResources.bytesPerGiB,
       destinationIdentity: nil,
-      phase: .planned
+      phase: .planned,
+      hostBootIdentifier: UUID().uuidString.lowercased()
     )
   }
 

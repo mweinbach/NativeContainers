@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -29,6 +30,10 @@ struct VirtualMachineDiskImageMigrationServiceTests {
     #expect(await converter.callCount == 1)
     #expect(!FileManager.default.fileExists(atPath: fixture.sourceURL.path))
     #expect(FileManager.default.fileExists(atPath: fixture.destinationURL.path))
+    let destinationValues = try fixture.destinationURL.resourceValues(
+      forKeys: [.isExcludedFromBackupKey]
+    )
+    #expect(destinationValues.isExcludedFromBackup != true)
     #expect(
       try FileVirtualMachineDiskImageMigrationJournalStore().load(
         in: fixture.bundleURL
@@ -130,6 +135,110 @@ struct VirtualMachineDiskImageMigrationServiceTests {
   }
 
   @Test
+  func unconfirmedConverterTerminationQuarantinesTheLeaseJournalAndPartial()
+    async throws
+  {
+    let fixture = try MigrationFixture()
+    defer { fixture.remove() }
+    let store = MigrationStoreDouble(
+      manifest: fixture.manifest,
+      bundleURL: fixture.bundleURL
+    )
+    let converter = RecordingMigrationConverter(
+      behavior: .terminationUnconfirmed
+    )
+    let service = makeService(
+      store: store,
+      converter: converter,
+      savedState: .none,
+      logicalBytes: fixture.manifest.resources.diskBytes
+    )
+
+    do {
+      _ = try await service.migrateToASIF(machineID: fixture.manifest.id)
+      Issue.record("Expected the converter termination to remain quarantined.")
+    } catch let error as VirtualMachineDiskImageMigrationError {
+      guard case .converterTerminationUnconfirmed = error else {
+        Issue.record("Unexpected migration error: \(error)")
+        return
+      }
+    }
+
+    #expect(store.commits.isEmpty)
+    #expect(store.acquireCount == 1)
+    #expect(try migrationPartials(in: fixture.installedURL).count == 1)
+    #expect(
+      try FileVirtualMachineDiskImageMigrationJournalStore().load(
+        in: fixture.bundleURL
+      )?.phase == .terminationQuarantined
+    )
+
+    await #expect(
+      throws: VirtualMachineDiskImageMigrationError.self
+    ) {
+      _ = try await service.migrateToASIF(machineID: fixture.manifest.id)
+    }
+    #expect(store.acquireCount == 1)
+    #expect(try migrationPartials(in: fixture.installedURL).count == 1)
+  }
+
+  @Test
+  func failedKillSignalRequiresAHostRestartBeforeRecovery() async throws {
+    let fixture = try MigrationFixture()
+    defer { fixture.remove() }
+    let store = MigrationStoreDouble(
+      manifest: fixture.manifest,
+      bundleURL: fixture.bundleURL
+    )
+    let bootA = UUID().uuidString.lowercased()
+    let bootB = UUID().uuidString.lowercased()
+    var service: VirtualMachineDiskImageMigrationService? = makeService(
+      store: store,
+      converter: RecordingMigrationConverter(behavior: .killSignalFailed),
+      savedState: .none,
+      logicalBytes: fixture.manifest.resources.diskBytes,
+      hostBootSession: StubHostBootSession(identifier: bootA)
+    )
+
+    await #expect(throws: VirtualMachineDiskImageMigrationError.self) {
+      _ = try await service?.migrateToASIF(machineID: fixture.manifest.id)
+    }
+    let journalStore = FileVirtualMachineDiskImageMigrationJournalStore()
+    let journal = try #require(
+      try journalStore.load(in: fixture.bundleURL)
+    )
+    #expect(journal.phase == .terminationQuarantined)
+    #expect(journal.terminationQuarantine == .untilHostRestart)
+    #expect(journal.hostBootIdentifier == bootA)
+    service = nil
+
+    let sameBootService = makeService(
+      store: store,
+      converter: RecordingMigrationConverter(behavior: .succeed),
+      savedState: .none,
+      logicalBytes: fixture.manifest.resources.diskBytes,
+      hostBootSession: StubHostBootSession(identifier: bootA)
+    )
+    let blocked = try await sameBootService.recoverInterruptedMigrations()
+    #expect(blocked.recoveredMachineIDs.isEmpty)
+    #expect(blocked.failures.count == 1)
+    #expect(try migrationPartials(in: fixture.installedURL).count == 1)
+
+    let nextBootService = makeService(
+      store: store,
+      converter: RecordingMigrationConverter(behavior: .succeed),
+      savedState: .none,
+      logicalBytes: fixture.manifest.resources.diskBytes,
+      hostBootSession: StubHostBootSession(identifier: bootB)
+    )
+    let recovered = try await nextBootService.recoverInterruptedMigrations()
+    #expect(recovered.recoveredMachineIDs == [fixture.manifest.id])
+    #expect(recovered.failures.isEmpty)
+    #expect(try migrationPartials(in: fixture.installedURL).isEmpty)
+    #expect(try journalStore.load(in: fixture.bundleURL) == nil)
+  }
+
+  @Test
   func rejectsAConvertedImageWithDifferentVirtualCapacity() async throws {
     let fixture = try MigrationFixture()
     defer { fixture.remove() }
@@ -161,6 +270,27 @@ struct VirtualMachineDiskImageMigrationServiceTests {
   }
 
   @Test
+  func startupRecoveryDoesNotLeaseMachinesWithoutAJournal() async throws {
+    let fixture = try MigrationFixture()
+    defer { fixture.remove() }
+    let store = MigrationStoreDouble(
+      manifest: fixture.manifest,
+      bundleURL: fixture.bundleURL
+    )
+    let service = makeService(
+      store: store,
+      converter: RecordingMigrationConverter(behavior: .succeed),
+      savedState: .none,
+      logicalBytes: fixture.manifest.resources.diskBytes
+    )
+
+    let report = try await service.recoverInterruptedMigrations()
+
+    #expect(report == .empty)
+    #expect(store.acquireCount == 0)
+  }
+
+  @Test
   func startupRecoveryRollsBackAnUncommittedPartial() async throws {
     let fixture = try MigrationFixture()
     defer { fixture.remove() }
@@ -182,7 +312,8 @@ struct VirtualMachineDiskImageMigrationServiceTests {
       sourceIdentity: sourceIdentity,
       sourceLogicalBytes: fixture.manifest.resources.diskBytes,
       destinationIdentity: nil,
-      phase: .planned
+      phase: .planned,
+      hostBootIdentifier: UUID().uuidString.lowercased()
     )
     try FileVirtualMachineDiskImageMigrationJournalStore().save(
       journal,
@@ -231,12 +362,14 @@ struct VirtualMachineDiskImageMigrationServiceTests {
       sourceIdentity: sourceIdentity,
       sourceLogicalBytes: fixture.manifest.resources.diskBytes,
       destinationIdentity: nil,
-      phase: .planned
+      phase: .planned,
+      hostBootIdentifier: UUID().uuidString.lowercased()
     )
     let journalStore = FileVirtualMachineDiskImageMigrationJournalStore()
     try journalStore.save(journal, in: fixture.bundleURL)
     journal.destinationIdentity = stagingIdentity
     journal.phase = .converted
+    journal.hostBootIdentifier = nil
     try journalStore.save(journal, in: fixture.bundleURL)
     try FileManager.default.moveItem(
       at: stagingURL,
@@ -268,12 +401,71 @@ struct VirtualMachineDiskImageMigrationServiceTests {
     #expect(try journalStore.load(in: fixture.bundleURL) == nil)
   }
 
+  @Test
+  func startupRecoveryContinuesPastAMalformedJournal() async throws {
+    let malformed = try MigrationFixture()
+    let recoverable = try MigrationFixture()
+    defer {
+      malformed.remove()
+      recoverable.remove()
+    }
+    try Data("not-json".utf8).write(
+      to: malformed.bundleURL.appending(
+        path: FileVirtualMachineDiskImageMigrationJournalStore.filename
+      )
+    )
+
+    let sourceIdentity = try FileVirtualMachineStorageArtifactInspector()
+      .inspect(at: recoverable.sourceURL)
+    let operationID = UUID()
+    let stagingPath =
+      "Installed/\(VirtualMachineDiskImageMigrationArtifacts.stagingPrefix)\(operationID.uuidString.lowercased())\(VirtualMachineDiskImageMigrationArtifacts.stagingSuffix)"
+    let stagingURL = recoverable.bundleURL.appending(path: stagingPath)
+    try Data("partial".utf8).write(to: stagingURL)
+    try FileVirtualMachineDiskImageMigrationJournalStore().save(
+      VirtualMachineDiskImageMigrationJournal(
+        version: VirtualMachineDiskImageMigrationJournal.currentVersion,
+        operationID: operationID,
+        machineID: recoverable.manifest.id,
+        sourcePath: recoverable.manifest.diskImagePath,
+        destinationPath: "Installed/Disk.asif",
+        stagingPath: stagingPath,
+        sourceIdentity: sourceIdentity,
+        sourceLogicalBytes: recoverable.manifest.resources.diskBytes,
+        destinationIdentity: nil,
+        phase: .planned,
+        hostBootIdentifier: UUID().uuidString.lowercased()
+      ),
+      in: recoverable.bundleURL
+    )
+    let store = RecoveryMigrationStoreDouble(fixtures: [malformed, recoverable])
+    let service = VirtualMachineDiskImageMigrationService(
+      store: store,
+      savedStates: SavedStateInspectorDouble(status: .none),
+      converter: RecordingMigrationConverter(behavior: .succeed),
+      imageInspector: StubDiskImageInspector(
+        rawLogicalBytes: recoverable.manifest.resources.diskBytes,
+        asifLogicalBytes: recoverable.manifest.resources.diskBytes
+      )
+    )
+
+    let report = try await service.recoverInterruptedMigrations()
+
+    #expect(report.recoveredMachineIDs == [recoverable.manifest.id])
+    #expect(report.deferredMachineIDs.isEmpty)
+    #expect(report.failures.count == 1)
+    #expect(report.failures.first?.machineID == malformed.manifest.id)
+    #expect(!FileManager.default.fileExists(atPath: stagingURL.path))
+  }
+
   private func makeService(
     store: MigrationStoreDouble,
     converter: any VirtualMachineDiskImageConverting,
     savedState: MacVirtualMachineSavedStateStatus,
     logicalBytes: UInt64,
-    asifLogicalBytes: UInt64? = nil
+    asifLogicalBytes: UInt64? = nil,
+    hostBootSession: any HostBootSessionIdentifying =
+      DarwinHostBootSessionIdentifier()
   ) -> VirtualMachineDiskImageMigrationService {
     VirtualMachineDiskImageMigrationService(
       store: store,
@@ -282,7 +474,8 @@ struct VirtualMachineDiskImageMigrationServiceTests {
       imageInspector: StubDiskImageInspector(
         rawLogicalBytes: logicalBytes,
         asifLogicalBytes: asifLogicalBytes ?? logicalBytes
-      )
+      ),
+      hostBootSession: hostBootSession
     )
   }
 
@@ -360,6 +553,7 @@ private final class MigrationStoreDouble:
 {
   private(set) var currentManifest: VirtualMachineManifest
   private(set) var commits: [VirtualMachineDiskImageMigrationCommit] = []
+  private(set) var acquireCount = 0
   private let bundleURL: URL
 
   init(manifest: VirtualMachineManifest, bundleURL: URL) {
@@ -367,13 +561,24 @@ private final class MigrationStoreDouble:
     self.bundleURL = bundleURL
   }
 
-  func list() async throws -> [VirtualMachineManifest] {
-    [currentManifest]
+  func loadVirtualMachineStorageInventory() async throws
+    -> VirtualMachineStorageInventory
+  {
+    VirtualMachineStorageInventory(
+      rootURL: bundleURL.deletingLastPathComponent(),
+      targets: [
+        VirtualMachineStorageTarget(
+          manifest: currentManifest,
+          bundleURL: bundleURL
+        )
+      ]
+    )
   }
 
-  func acquireMacOSRuntime(
+  func acquireDiskImageMigrationRuntime(
     id: UUID
   ) async throws -> MacVirtualMachineRuntimeLease {
+    acquireCount += 1
     guard id == currentManifest.id else {
       throw VirtualMachineModelError.virtualMachineNotFound(id)
     }
@@ -465,6 +670,8 @@ private actor RecordingMigrationConverter:
   enum Behavior: Equatable, Sendable {
     case succeed
     case failAfterWriting
+    case terminationUnconfirmed
+    case killSignalFailed
   }
 
   private let behavior: Behavior
@@ -484,6 +691,82 @@ private actor RecordingMigrationConverter:
     if behavior == .failAfterWriting {
       throw TestDiskMigrationError.expected
     }
+    if behavior == .terminationUnconfirmed {
+      throw HostProcessError.didNotExitAfterKill
+    }
+    if behavior == .killSignalFailed {
+      throw HostProcessError.signalFailed(signal: SIGKILL, code: EPERM)
+    }
+  }
+}
+
+private struct StubHostBootSession: HostBootSessionIdentifying {
+  let identifier: String
+
+  func currentBootIdentifier() throws -> String {
+    identifier
+  }
+}
+
+@MainActor
+private final class RecoveryMigrationStoreDouble:
+  VirtualMachineDiskImageMigrationStoring
+{
+  private let fixtures: [MigrationFixture]
+
+  init(fixtures: [MigrationFixture]) {
+    self.fixtures = fixtures
+  }
+
+  func loadVirtualMachineStorageInventory() async throws
+    -> VirtualMachineStorageInventory
+  {
+    VirtualMachineStorageInventory(
+      rootURL: fixtures[0].rootURL,
+      targets: fixtures.map {
+        VirtualMachineStorageTarget(
+          manifest: $0.manifest,
+          bundleURL: $0.bundleURL
+        )
+      }
+    )
+  }
+
+  func acquireDiskImageMigrationRuntime(
+    id: UUID
+  ) async throws -> MacVirtualMachineRuntimeLease {
+    guard let fixture = fixtures.first(where: { $0.manifest.id == id }) else {
+      throw VirtualMachineModelError.virtualMachineNotFound(id)
+    }
+    let manifest = fixture.manifest
+    return MacVirtualMachineRuntimeLease(
+      machine: ResolvedMacVirtualMachine(
+        manifest: manifest,
+        bundleURL: fixture.bundleURL,
+        diskImageURL: fixture.bundleURL.appending(path: manifest.diskImagePath),
+        auxiliaryStorageURL: fixture.bundleURL.appending(
+          path: manifest.auxiliaryStoragePath!
+        ),
+        hardwareModelURL: fixture.bundleURL.appending(
+          path: manifest.hardwareModelPath!
+        ),
+        machineIdentifierURL: fixture.bundleURL.appending(
+          path: manifest.machineIdentifierPath!
+        )
+      ),
+      target: MacVirtualMachineRuntimeTarget(
+        machineID: id,
+        generation: UUID()
+      ),
+      release: {}
+    )
+  }
+
+  func commitDiskImageMigration(
+    _: VirtualMachineDiskImageMigrationCommit,
+    for _: MacVirtualMachineRuntimeLease
+  ) async throws -> VirtualMachineManifest {
+    throw TestDiskMigrationError.expected
   }
 }
 

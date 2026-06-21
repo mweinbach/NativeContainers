@@ -209,6 +209,7 @@ enum MacVirtualMachineRuntimeError: LocalizedError, Equatable, Sendable {
   case unavailable
   case requiresAppleSilicon
   case ownedElsewhere(UUID)
+  case diskMigrationPending(UUID)
   case duplicateSession(UUID)
   case operationInProgress(UUID)
   case noActiveSession(UUID)
@@ -225,6 +226,8 @@ enum MacVirtualMachineRuntimeError: LocalizedError, Equatable, Sendable {
       "macOS virtual machines require a Mac with Apple silicon."
     case .ownedElsewhere(let identifier):
       "Virtual machine \(identifier.uuidString) is active in another NativeContainers process."
+    case .diskMigrationPending(let identifier):
+      "Virtual machine \(identifier.uuidString) has disk migration recovery pending."
     case .duplicateSession(let identifier):
       "Virtual machine \(identifier.uuidString) already has an active runtime session."
     case .operationInProgress(let identifier):

@@ -6,20 +6,24 @@ struct MacVirtualMachineConfigurationView: View {
   let runtime: MacVirtualMachineRuntimeModel
 
   @State private var sharedDirectories: MacVirtualMachineSharedDirectoriesModel
+  let diskMigration: VirtualMachineDiskImageMigrationModel
   @State private var isChoosingDirectory = false
   @State private var isPresentingAddSheet = false
   @State private var pendingDirectoryURL: URL?
   @State private var directoryToRemove: MacVirtualMachineSharedDirectorySummary?
   @State private var isConfirmingDiscardSavedState = false
+  @State private var isConfirmingDiskMigration = false
 
   init(
     machine: VirtualMachineManifest,
     runtime: MacVirtualMachineRuntimeModel,
-    sharedDirectories: MacVirtualMachineSharedDirectoriesModel
+    sharedDirectories: MacVirtualMachineSharedDirectoriesModel,
+    diskMigration: VirtualMachineDiskImageMigrationModel
   ) {
     self.machine = machine
     self.runtime = runtime
     _sharedDirectories = State(initialValue: sharedDirectories)
+    self.diskMigration = diskMigration
   }
 
   var body: some View {
@@ -27,7 +31,16 @@ struct MacVirtualMachineConfigurationView: View {
       VStack(alignment: .leading, spacing: 20) {
         MacVirtualMachineConfigurationHeader(
           machine: machine,
-          runtimeState: runtime.snapshot.state
+          runtimeState: runtime.snapshot.state,
+          isDiskMigrationActive: diskMigration.isBusy
+        )
+        MacVirtualMachineDiskImageSection(
+          format: machine.effectiveDiskImageFormat,
+          migration: diskMigration,
+          migrationBlockReason: diskMigrationBlockReason,
+          requestMigration: { isConfirmingDiskMigration = true },
+          discardSavedState: canDiscardSavedState
+            ? { isConfirmingDiscardSavedState = true } : nil
         )
         MacVirtualMachineSharedDirectoriesSection(
           directories: sharedDirectories.directories,
@@ -39,11 +52,16 @@ struct MacVirtualMachineConfigurationView: View {
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
-        if let errorMessage = sharedDirectories.errorMessage ?? runtime.errorMessage {
+        if let errorMessage =
+          sharedDirectories.errorMessage
+          ?? diskMigration.errorMessage
+          ?? runtime.errorMessage
+        {
           MacVirtualMachineConfigurationErrorBanner(
             message: errorMessage,
             dismiss: {
               sharedDirectories.clearError()
+              diskMigration.clearError()
               runtime.clearActionError()
             }
           )
@@ -109,6 +127,18 @@ struct MacVirtualMachineConfigurationView: View {
       )
     }
     .confirmationDialog(
+      "Convert \(machine.name) to ASIF?",
+      isPresented: $isConfirmingDiskMigration
+    ) {
+      Button("Convert Virtual Disk") {
+        diskMigration.startMigration()
+      }
+    } message: {
+      Text(
+        "The VM stays powered off while a verified Apple sparse image is created. The RAW disk remains authoritative until the manifest commit, and cancellation stops the owned converter before removing its partial output."
+      )
+    }
+    .confirmationDialog(
       "Discard the saved state for \(machine.name)?",
       isPresented: $isConfirmingDiscardSavedState
     ) {
@@ -123,10 +153,45 @@ struct MacVirtualMachineConfigurationView: View {
   }
 
   private var canDiscardSavedState: Bool {
-    machine.installState == .stopped && runtime.snapshot.canDiscardSavedState
+    machine.installState == .stopped && !diskMigration.isBusy
+      && runtime.snapshot.canDiscardSavedState
+  }
+
+  private var diskMigrationBlockReason: LocalizedStringResource? {
+    guard machine.installState == .stopped else {
+      return "Finish installing this VM before changing its disk format."
+    }
+    guard machine.effectiveDiskImageFormat == .raw else { return nil }
+    guard #available(macOS 27.0, *) else {
+      return "ASIF migration requires macOS 27 or later."
+    }
+    guard runtime.snapshot.target == nil else {
+      return "Shut down this VM before changing its disk format."
+    }
+    switch runtime.snapshot.state {
+    case .stopped:
+      break
+    case .ownedElsewhere:
+      return "Another NativeContainers process owns this VM."
+    case .inspectingSavedState:
+      return "Checking the VM’s saved state…"
+    default:
+      return "Wait for this VM to finish changing state."
+    }
+    switch runtime.snapshot.savedStateStatus {
+    case .none:
+      return nil
+    case .unknown:
+      return "Checking the VM’s saved state…"
+    case .available, .incompatible:
+      return "Discard the saved state before changing the disk format."
+    }
   }
 
   private var editBlockReason: LocalizedStringResource? {
+    guard !diskMigration.isBusy else {
+      return "Wait for the virtual disk conversion to finish."
+    }
     guard machine.installState == .stopped else {
       return "Finish preparing and installing this VM before adding shared folders."
     }
@@ -161,6 +226,7 @@ struct MacVirtualMachineConfigurationView: View {
 private struct MacVirtualMachineConfigurationHeader: View {
   let machine: VirtualMachineManifest
   let runtimeState: MacVirtualMachineRuntimeState
+  let isDiskMigrationActive: Bool
 
   var body: some View {
     HStack(alignment: .top, spacing: 16) {
@@ -173,9 +239,17 @@ private struct MacVirtualMachineConfigurationHeader: View {
         Text(machine.name)
           .font(.title2.weight(.semibold))
         HStack(spacing: 8) {
-          MacVirtualMachineRuntimeStatusIndicator(state: runtimeState)
-          Text(runtimeState.label)
-            .foregroundStyle(.secondary)
+          Group {
+            if isDiskMigrationActive {
+              ProgressView()
+                .controlSize(.small)
+              Text("Converting virtual disk")
+            } else {
+              MacVirtualMachineRuntimeStatusIndicator(state: runtimeState)
+              Text(runtimeState.label)
+            }
+          }
+          .foregroundStyle(.secondary)
         }
         .font(.subheadline)
         VirtualMachineResourceSummary(resources: machine.resources)

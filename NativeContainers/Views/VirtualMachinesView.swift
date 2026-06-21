@@ -48,6 +48,9 @@ struct VirtualMachinesView: View {
               machine: machine,
               availability: model.virtualMachineAvailability,
               runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
+              diskMigration: model.makeVirtualMachineDiskImageMigrationModel(
+                for: machine
+              ),
               isSelected: selectedMachineID == machine.id,
               onSelect: {
                 model.navigate(to: .macOSVirtualMachine(machine.id))
@@ -68,6 +71,9 @@ struct VirtualMachinesView: View {
               machine: selectedMachine,
               runtime: model.makeMacVirtualMachineRuntimeModel(for: selectedMachine),
               sharedDirectories: model.makeMacVirtualMachineSharedDirectoriesModel(
+                for: selectedMachine
+              ),
+              diskMigration: model.makeVirtualMachineDiskImageMigrationModel(
                 for: selectedMachine
               )
             )

@@ -173,6 +173,35 @@ struct VirtualMachineTransferServiceTests {
   }
 
   @Test
+  func exportRejectsPendingDiskMigrationJournalBeforeCopy() async throws {
+    let fixture = try VirtualMachineTransferFixture()
+    defer { fixture.remove() }
+    let source = try await fixture.makeStoppedMachine(
+      library: fixture.sourceLibrary,
+      libraryRoot: fixture.sourceLibraryRoot,
+      name: "Pending Migration"
+    )
+    let sourceBundle = fixture.bundleURL(
+      root: fixture.sourceLibraryRoot,
+      id: source.id
+    )
+    try Data("pending".utf8).write(
+      to: sourceBundle.appending(
+        path: VirtualMachineDiskImageMigrationArtifacts.journalFilename
+      )
+    )
+    let destination = fixture.root.appending(path: "Rejected.nativevm")
+
+    await #expect(throws: VirtualMachineBundleError.self) {
+      _ = try await fixture.service(library: fixture.sourceLibrary)
+        .exportVirtualMachine(id: source.id, to: destination)
+    }
+
+    #expect(!FileManager.default.fileExists(atPath: destination.path))
+    try fixture.expectNoExportPartials()
+  }
+
+  @Test
   func preserveImportRoundTripsManifestAndPlatformIdentity() async throws {
     let fixture = try VirtualMachineTransferFixture()
     defer { fixture.remove() }
@@ -247,6 +276,37 @@ struct VirtualMachineTransferServiceTests {
       AppleMacVirtualMachineIdentifierGenerator()
         .isValidIdentifierData(importedIdentifier)
     )
+    try fixture.expectNoImportPartials()
+  }
+
+  @Test
+  func importRejectsNestedDiskMigrationPartialBeforeCopy() async throws {
+    let fixture = try VirtualMachineTransferFixture()
+    defer { fixture.remove() }
+    let source = try await fixture.makeStoppedMachine(
+      library: fixture.sourceLibrary,
+      libraryRoot: fixture.sourceLibraryRoot,
+      name: "Migration Partial"
+    )
+    let package = fixture.root.appending(
+      path: "Migration Partial.nativevm",
+      directoryHint: .isDirectory
+    )
+    _ = try await fixture.service(library: fixture.sourceLibrary)
+      .exportVirtualMachine(id: source.id, to: package)
+    let operationID = UUID()
+    let partial = package.appending(
+      path:
+        "MacPlatform/\(VirtualMachineDiskImageMigrationArtifacts.stagingPrefix)\(operationID.uuidString.lowercased())\(VirtualMachineDiskImageMigrationArtifacts.stagingSuffix)"
+    )
+    try Data("partial".utf8).write(to: partial)
+
+    await #expect(throws: VirtualMachineBundleError.self) {
+      _ = try await fixture.service(library: fixture.importLibrary)
+        .importVirtualMachine(from: package, mode: .preserveIdentity)
+    }
+
+    #expect(try await fixture.importLibrary.list().isEmpty)
     try fixture.expectNoImportPartials()
   }
 

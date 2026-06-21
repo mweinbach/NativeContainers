@@ -9,6 +9,14 @@ struct HostProcessServiceTests {
   private let executableURL = URL(filePath: "/usr/bin/true")
 
   @Test
+  func readsTheStableHostBootSessionUUID() throws {
+    let identifier = try DarwinHostBootSessionIdentifier()
+      .currentBootIdentifier()
+
+    #expect(UUID(uuidString: identifier) != nil)
+  }
+
+  @Test
   func timeoutEscalatesFromTermToKillAndConfirmsExit() async {
     let session = HostCommandSessionDouble(exitSignal: SIGKILL)
     let executor = FoundationHostCommandExecutor(
@@ -89,6 +97,32 @@ struct HostProcessServiceTests {
 
     #expect(session.receivedSignals == [SIGTERM, SIGKILL])
   }
+
+  @Test
+  func failedTermSignalStillFallsThroughToConfirmedKill() async {
+    let session = HostCommandSessionDouble(
+      exitSignal: SIGKILL,
+      failedSignals: [SIGTERM]
+    )
+    let executor = FoundationHostCommandExecutor(
+      launcher: HostCommandLauncherDouble(session: session),
+      pollInterval: .milliseconds(1),
+      terminationGracePeriod: .milliseconds(1),
+      killConfirmationTimeout: .milliseconds(10)
+    )
+
+    await #expect(throws: HostProcessError.timedOut) {
+      try await executor.execute(
+        executableURL: executableURL,
+        arguments: [],
+        environment: nil,
+        timeout: .milliseconds(1)
+      )
+    }
+
+    #expect(session.receivedSignals == [SIGTERM, SIGKILL])
+    #expect(!session.isRunning)
+  }
 }
 
 private final class HostCommandLauncherDouble: HostProcessLaunching, @unchecked Sendable {
@@ -121,6 +155,7 @@ private final class HostCommandSessionDouble: HostProcessSession, @unchecked Sen
 
   private let lock = NSLock()
   private let exitSignal: Int32?
+  private let failedSignals: Set<Int32>
   private var state = State()
 
   let processID: Int32 = 9_999
@@ -137,13 +172,17 @@ private final class HostCommandSessionDouble: HostProcessSession, @unchecked Sen
     lock.withLock { state.signals }
   }
 
-  init(exitSignal: Int32?) {
+  init(exitSignal: Int32?, failedSignals: Set<Int32> = []) {
     self.exitSignal = exitSignal
+    self.failedSignals = failedSignals
   }
 
   func send(signal: Int32) throws {
-    lock.withLock {
+    try lock.withLock {
       state.signals.append(signal)
+      if failedSignals.contains(signal) {
+        throw HostProcessError.signalFailed(signal: signal, code: EPERM)
+      }
       if signal == exitSignal {
         state.isRunning = false
         state.terminationStatus = signal == SIGKILL ? SIGKILL : 0

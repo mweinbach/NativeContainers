@@ -640,6 +640,43 @@ at kickoff, so the foundation does not depend on it.
   `.nativevm` bundle, so bundle allocation remains an estimate and cannot be
   labeled reclaimable without a separate mutation-time proof.
 
+## ASIF disk-image findings
+
+Primary sources:
+
+- [DiskImageKit](https://developer.apple.com/documentation/diskimagekit)
+- [Virtualization framework updates](https://developer.apple.com/documentation/updates/virtualization)
+- [`VZDiskImageStorageDeviceAttachment`](https://developer.apple.com/documentation/virtualization/vzdiskimagestoragedeviceattachment)
+- [WWDC26: What's new in DiskImageKit](https://developer.apple.com/videos/play/wwdc2026/224/)
+- [`apple/containerization` disk attachment](https://github.com/apple/containerization/blob/6b7b42ca3efeee8c706070e4355e6a807c5336ae/Sources/Containerization/Mount.swift#L188-L244)
+
+- ASIF attachment support begins on macOS 26. DiskImageKit and the
+  `VZDiskImageStorageDeviceAttachment(diskImage:...)` initializer are macOS 27
+  APIs. DiskImageKit exposes create, open, metadata, stacking, and capacity
+  truncation, but no populated-image conversion, block copy, trim, or compact
+  operation.
+- `DiskImage.size`, `blockCount`, and `blockSize` describe virtual geometry.
+  An ASIF file's host length describes its sparse container, not guest disk
+  capacity, so `stat.st_size == manifest.diskBytes` is invalid for ASIF.
+- The shipped, documented conversion route is
+  `/usr/sbin/diskutil image create from --format ASIF source destination`.
+  A local macOS 27 probe rejected same-path RAW-to-ASIF conversion with
+  `In-place conversion to this image format is not supported`; migration must
+  use sibling staging and a transactional manifest switch.
+- `DiskImage.truncate(blockCount:)` changes image capacity only. It does not
+  resize GPT, partitions, or filesystems, and shrinking can destroy data.
+  `diskutil image resize` is in-place and has different cancellation/rollback
+  semantics, so neither operation is a compaction substitute.
+- There is no public `compact` command. A local standalone ASIF-to-ASIF rewrite
+  reclaimed stale unmapped allocation while retaining virtual capacity, but
+  Apple does not document that outcome as a compact contract. A future UI must
+  present it as a measured transactional rewrite, not guaranteed in-place
+  compaction, and must exclude individual stack layers.
+- Apple's current Containerization sources still create sparse RAW ext4 files
+  and attach them by URL. Containerization 0.34 exposes guest FITRIM, but the
+  current `apple/container` application does not yet invoke it. That Linux path
+  remains separate from macOS VM ASIF migration.
+
 ## Public-API boundaries
 
 - No public Linux GPU/Metal passthrough.

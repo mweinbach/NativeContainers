@@ -1115,3 +1115,46 @@ the migration control files. It retains the now-unreferenced legacy IPSW rather
 than deleting it as a hidden migration side effect. The current review service
 owns only the durable store; composite legacy-store review remains a separate
 follow-up, and the OS may purge the legacy Caches copy independently.
+
+## ADR-041: Migrate stopped RAW VM disks to ASIF out of place
+
+**Status:** Accepted — 2026-06-21
+
+Disk format is persisted beside `diskImagePath`. The optional schema-1 field is
+backward compatible: absence means RAW, while new manifests write RAW
+explicitly and conversion writes ASIF. Runtime attachment is delegated to
+`AppleVirtualMachineDiskImageService`. RAW uses the URL attachment; macOS 27
+ASIF is opened with DiskImageKit and passed through the native disk-image
+attachment initializer. Capacity validation uses virtual image geometry, never
+the ASIF container's host file length.
+
+Conversion is a dedicated application service. It acquires the per-bundle
+runtime lease, requires a stopped macOS VM with no saved state, seals the RAW
+filesystem identity, and invokes Apple's documented `diskutil image create from
+--format ASIF` command against a sibling hidden partial. The existing host
+process executor owns exactly the child PID, sends TERM on cancellation or
+timeout, escalates to KILL after a grace period, and confirms exit before the
+partial can be removed. This hard watchdog is safe because conversion never
+mutates the source. A failed TERM still reaches the KILL point. If KILL delivery
+or exit cannot be proven, the service retains the runtime lease and transitions
+the journal to `terminationQuarantined` instead of unlinking live output.
+Successful KILL with delayed exit confirmation requires an app restart; failed
+KILL delivery records the stable `kern.bootsessionuuid` and requires a reboot
+before automatic recovery.
+
+A mode-0600 journal records `planned`, `terminationQuarantined`, `converted`,
+`promoted`, and `manifestUpdated` phases with source/destination identities and
+virtual capacity. ASIF format and geometry are verified before promotion. The
+library exposes one narrow commit port that revalidates both sealed regular
+files under the still-borrowed maintenance lease and atomically updates the
+manifest. Every ordinary runtime or discard lease rejects a pending migration
+journal; clone/export/import reject the journal and nested partials before copy.
+After the manifest commit, cancellation is ignored while the old RAW source and
+journal are retired. Launch recovery removes only proven-quiescent pre-commit
+staging/destinations or completes post-commit cleanup, continues past failures
+for unrelated VMs, and never guesses across an invalid identity or journal.
+
+DiskImageKit exposes no populated-image converter or compact API, and its
+truncate operation does not resize guest content. Raw truncation, same-path
+conversion, and in-place resize are therefore prohibited. ASIF-to-ASIF rewrite
+with measured reclaimed bytes remains a separate future maintenance action.

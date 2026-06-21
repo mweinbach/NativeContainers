@@ -107,6 +107,10 @@ final class MacVirtualMachineRuntimeModel {
     actionErrorMessage = nil
   }
 
+  func refreshSavedState() async {
+    await service.refreshSavedState(id: machineID)
+  }
+
   func stopObserving() {
     observationTask?.cancel()
     observationTask = nil
