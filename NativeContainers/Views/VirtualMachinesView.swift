@@ -291,6 +291,9 @@ private struct GuestVirtualMachineConfigurationView: View {
         runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
         audio: model.makeMacVirtualMachineAudioModel(for: machine),
         network: model.makeMacVirtualMachineNetworkModel(for: machine),
+        diskSnapshots: model.makeMacVirtualMachineDiskSnapshotModel(
+          for: machine
+        ),
         sharedDirectories: model.makeMacVirtualMachineSharedDirectoriesModel(
           for: machine
         ),

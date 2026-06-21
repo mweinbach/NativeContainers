@@ -6,6 +6,7 @@ struct MacVirtualMachineConfigurationView: View {
 
   @State private var audio: MacVirtualMachineAudioModel
   @State private var network: MacVirtualMachineNetworkModel
+  @State private var diskSnapshots: MacVirtualMachineDiskSnapshotModel
   @State private var sharedDirectories: MacVirtualMachineSharedDirectoriesModel
   let diskMaintenance: VirtualMachineDiskImageMaintenanceModel
   @State private var isConfirmingDiscardSavedState = false
@@ -15,6 +16,7 @@ struct MacVirtualMachineConfigurationView: View {
     runtime: MacVirtualMachineRuntimeModel,
     audio: MacVirtualMachineAudioModel,
     network: MacVirtualMachineNetworkModel,
+    diskSnapshots: MacVirtualMachineDiskSnapshotModel,
     sharedDirectories: MacVirtualMachineSharedDirectoriesModel,
     diskMaintenance: VirtualMachineDiskImageMaintenanceModel
   ) {
@@ -22,6 +24,7 @@ struct MacVirtualMachineConfigurationView: View {
     self.runtime = runtime
     _audio = State(initialValue: audio)
     _network = State(initialValue: network)
+    _diskSnapshots = State(initialValue: diskSnapshots)
     _sharedDirectories = State(initialValue: sharedDirectories)
     self.diskMaintenance = diskMaintenance
   }
@@ -33,13 +36,14 @@ struct MacVirtualMachineConfigurationView: View {
           machine: machine,
           runtimeState: runtime.snapshot.state,
           diskMaintenanceOperation: diskMaintenance.operation,
+          diskSnapshotOperation: diskSnapshots.operation,
           isRefreshingDiskState: diskMaintenance.isRefreshing
         )
         MacVirtualMachineNetworkSection(
           installState: machine.installState,
           runtime: runtime,
           network: network,
-          diskMaintenanceIsBusy: diskMaintenance.isBusy,
+          diskMaintenanceIsBusy: diskMaintenance.isBusy || diskSnapshots.isBusy,
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
@@ -47,7 +51,7 @@ struct MacVirtualMachineConfigurationView: View {
           installState: machine.installState,
           runtime: runtime,
           audio: audio,
-          diskMaintenanceIsBusy: diskMaintenance.isBusy,
+          diskMaintenanceIsBusy: diskMaintenance.isBusy || diskSnapshots.isBusy,
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
@@ -55,6 +59,15 @@ struct MacVirtualMachineConfigurationView: View {
           machine: machine,
           runtime: runtime,
           maintenance: diskMaintenance,
+          snapshotOperationIsBusy: diskSnapshots.isBusy,
+          discardSavedState: canDiscardSavedState
+            ? { isConfirmingDiscardSavedState = true } : nil
+        )
+        MacVirtualMachineDiskSnapshotsSection(
+          installState: machine.installState,
+          runtime: runtime,
+          snapshots: diskSnapshots,
+          diskMaintenanceIsBusy: diskMaintenance.isBusy,
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
@@ -62,13 +75,15 @@ struct MacVirtualMachineConfigurationView: View {
           machine: machine,
           runtime: runtime,
           sharedDirectories: sharedDirectories,
-          diskMaintenanceIsBusy: diskMaintenance.isBusy,
+          diskMaintenanceIsBusy: diskMaintenance.isBusy || diskSnapshots.isBusy,
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
         if let errorMessage =
           network.errorMessage
           ?? audio.errorMessage
+          ?? diskSnapshots.errorMessage
+          ?? diskSnapshots.warningMessage
           ?? sharedDirectories.errorMessage
           ?? diskMaintenance.errorMessage
           ?? runtime.errorMessage
@@ -78,6 +93,7 @@ struct MacVirtualMachineConfigurationView: View {
             dismiss: {
               network.clearError()
               audio.clearError()
+              diskSnapshots.clearMessages()
               sharedDirectories.clearError()
               diskMaintenance.clearError()
               runtime.clearActionError()
@@ -102,14 +118,14 @@ struct MacVirtualMachineConfigurationView: View {
       }
     } message: {
       Text(
-        "The VM remains powered off, but its suspended session cannot be resumed. Virtual disk maintenance, network changes, audio changes, and shared-folder changes can then proceed."
+        "The VM remains powered off, but its suspended session cannot be resumed. Disk snapshot and maintenance operations, network changes, audio changes, and shared-folder changes can then proceed."
       )
     }
   }
 
   private var canDiscardSavedState: Bool {
     machine.installState == .stopped && !diskMaintenance.isBusy
-      && runtime.snapshot.canDiscardSavedState
+      && !diskSnapshots.isBusy && runtime.snapshot.canDiscardSavedState
   }
 }
 
@@ -117,6 +133,7 @@ private struct MacVirtualMachineConfigurationHeader: View {
   let machine: VirtualMachineManifest
   let runtimeState: MacVirtualMachineRuntimeState
   let diskMaintenanceOperation: VirtualMachineDiskImageMaintenanceOperation?
+  let diskSnapshotOperation: MacVirtualMachineDiskSnapshotOperation?
   let isRefreshingDiskState: Bool
 
   var body: some View {
@@ -139,6 +156,10 @@ private struct MacVirtualMachineConfigurationHeader: View {
               ProgressView()
                 .controlSize(.small)
               Text(diskMaintenanceOperation.progressLabel)
+            } else if let diskSnapshotOperation {
+              ProgressView()
+                .controlSize(.small)
+              Text(diskSnapshotOperation.progressLabel)
             } else {
               MacVirtualMachineRuntimeStatusIndicator(state: runtimeState)
               Text(runtimeState.label)

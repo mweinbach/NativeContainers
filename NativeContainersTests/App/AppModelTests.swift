@@ -101,6 +101,17 @@ struct AppModelTests {
   }
 
   @Test
+  func macVirtualMachineDiskSnapshotsUseAStableAppScopedModel() throws {
+    let model = AppModel.previewVirtualMachines
+    let machine = try #require(model.virtualMachines.first)
+
+    #expect(
+      model.makeMacVirtualMachineDiskSnapshotModel(for: machine)
+        === model.makeMacVirtualMachineDiskSnapshotModel(for: machine)
+    )
+  }
+
+  @Test
   func macVirtualMachineSharingUsesAStableAppScopedModel() throws {
     let model = AppModel.previewVirtualMachines
     let machine = try #require(model.virtualMachines.first)

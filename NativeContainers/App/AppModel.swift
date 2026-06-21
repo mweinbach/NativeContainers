@@ -126,6 +126,10 @@ final class AppModel {
   private var macVirtualMachineNetworkModels: [UUID: MacVirtualMachineNetworkModel] = [:]
 
   @ObservationIgnored
+  private var macVirtualMachineDiskSnapshotModels:
+    [UUID: MacVirtualMachineDiskSnapshotModel] = [:]
+
+  @ObservationIgnored
   private var macVirtualMachineSharedDirectoryModels:
     [UUID: MacVirtualMachineSharedDirectoriesModel] = [:]
 
@@ -215,6 +219,8 @@ final class AppModel {
       any LinuxVirtualMachineSharedDirectoryManaging =
       UnavailableLinuxVirtualMachineSharedDirectoryService(),
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
+    virtualMachineDiskSnapshots: any MacVirtualMachineDiskSnapshotManaging =
+      UnavailableMacVirtualMachineDiskSnapshotService(),
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -256,6 +262,7 @@ final class AppModel {
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
         linuxVirtualMachineSharedDirectories: linuxVirtualMachineSharedDirectories,
         virtualMachineDiskImages: virtualMachineDiskImages,
+        virtualMachineDiskSnapshots: virtualMachineDiskSnapshots,
         virtualMachineAvailability: virtualMachineAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
         restoreImageAcquisition: restoreImageAcquisition,
@@ -802,6 +809,28 @@ final class AppModel {
     return model
   }
 
+  func makeMacVirtualMachineDiskSnapshotModel(
+    for machine: VirtualMachineManifest
+  ) -> MacVirtualMachineDiskSnapshotModel {
+    if let model = macVirtualMachineDiskSnapshotModels[machine.id] {
+      return model
+    }
+    let runtime = makeMacVirtualMachineRuntimeModel(for: machine)
+    let model = MacVirtualMachineDiskSnapshotModel(
+      machineID: machine.id,
+      initialConfiguration:
+        machine.effectiveMacOSDiskSnapshotConfiguration,
+      service: services.virtualMachineDiskSnapshots
+    ) { [weak self] manifest in
+      self?.publishVirtualMachineManifest(manifest)
+      await self?.refreshVirtualMachineStorageAfterMutation()
+    } didSettle: {
+      await runtime.refreshSavedState()
+    }
+    macVirtualMachineDiskSnapshotModels[machine.id] = model
+    return model
+  }
+
   func makeMacVirtualMachineAudioModel(
     for machine: VirtualMachineManifest
   ) -> MacVirtualMachineAudioModel {
@@ -891,6 +920,10 @@ final class AppModel {
     for identifier in Array(macVirtualMachineNetworkModels.keys)
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineNetworkModels.removeValue(forKey: identifier)
+    }
+    for identifier in Array(macVirtualMachineDiskSnapshotModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      macVirtualMachineDiskSnapshotModels.removeValue(forKey: identifier)
     }
     for identifier in Array(macVirtualMachineSharedDirectoryModels.keys)
     where !currentIdentifiers.contains(identifier) {

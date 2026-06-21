@@ -4,6 +4,7 @@ struct MacVirtualMachineDiskImageMaintenanceView: View {
   let machine: VirtualMachineManifest
   let runtime: MacVirtualMachineRuntimeModel
   let maintenance: VirtualMachineDiskImageMaintenanceModel
+  let snapshotOperationIsBusy: Bool
   let discardSavedState: (() -> Void)?
 
   @State private var isConfirmingMigration = false
@@ -50,6 +51,12 @@ struct MacVirtualMachineDiskImageMaintenanceView: View {
     }
     guard #available(macOS 27.0, *) else {
       return "ASIF disk maintenance requires macOS 27 or later."
+    }
+    guard !snapshotOperationIsBusy else {
+      return "Wait for the disk snapshot operation to finish."
+    }
+    guard !machine.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots else {
+      return "Virtual disk conversion and rewrite are unavailable while snapshot history exists."
     }
     guard runtime.snapshot.target == nil else {
       return "Shut down this VM before maintaining its virtual disk."

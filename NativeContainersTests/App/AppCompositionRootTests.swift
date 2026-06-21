@@ -64,6 +64,10 @@ struct AppCompositionRootTests {
         is VirtualMachineDiskImageReplacementCoordinator
     )
     #expect(
+      services.virtualMachineDiskSnapshots
+        is MacVirtualMachineDiskSnapshotService
+    )
+    #expect(
       services.virtualMachineAvailability
         is AppleMacVirtualMachineAvailabilityChecker
     )
