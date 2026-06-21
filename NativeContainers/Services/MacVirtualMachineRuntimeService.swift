@@ -1,55 +1,5 @@
 import Foundation
 
-typealias MacVirtualMachineRuntimeEventHandler =
-  @MainActor @Sendable (MacVirtualMachineRuntimeEvent) -> Void
-
-@MainActor
-protocol MacVirtualMachineRuntimeEngine: Sendable {
-  func makeSession(
-    for machine: ResolvedMacVirtualMachine,
-    target: MacVirtualMachineRuntimeTarget
-  ) throws -> any MacVirtualMachineRuntimeEngineSession
-}
-
-@MainActor
-protocol MacVirtualMachineRuntimeEngineSession: AnyObject {
-  var target: MacVirtualMachineRuntimeTarget { get }
-  var console: MacVirtualMachineConsole? { get }
-  var saveRestoreSupport: MacVirtualMachineSaveRestoreSupport { get }
-  var canForceStop: Bool { get }
-  var eventHandler: MacVirtualMachineRuntimeEventHandler? { get set }
-
-  func start() async throws
-  func saveState(to url: URL) async throws
-  func restoreState(from url: URL) async throws
-  func pause() async throws
-  func resume() async throws
-  func requestStop() throws
-  func forceStop() async throws
-  func close()
-}
-
-extension MacVirtualMachineRuntimeEngineSession {
-  func close() {}
-}
-
-@MainActor
-protocol MacVirtualMachineRuntimeManaging: Sendable {
-  func snapshot(for machineID: UUID) -> MacVirtualMachineRuntimeSnapshot
-  func updates(for machineID: UUID) -> AsyncStream<MacVirtualMachineRuntimeSnapshot>
-  func console(for target: MacVirtualMachineRuntimeTarget) -> MacVirtualMachineConsole?
-
-  func refreshSavedState(id: UUID) async
-  func start(id: UUID) async throws
-  func startFresh(id: UUID) async throws
-  func pause(target: MacVirtualMachineRuntimeTarget) async throws
-  func resume(target: MacVirtualMachineRuntimeTarget) async throws
-  func suspend(target: MacVirtualMachineRuntimeTarget) async throws
-  func requestStop(target: MacVirtualMachineRuntimeTarget) throws
-  func forceStop(target: MacVirtualMachineRuntimeTarget) async throws
-  func discardSavedState(id: UUID) async throws
-}
-
 @MainActor
 final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   private enum OperationKind: Equatable {
@@ -79,23 +29,14 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     let session: any MacVirtualMachineRuntimeEngineSession
   }
 
-  private struct ShutdownFallback {
-    let target: MacVirtualMachineRuntimeTarget
-    let token: UUID
-    let scheduledShutdown: MacVirtualMachineScheduledShutdown
-  }
-
   private let leasingStore: any MacVirtualMachineRuntimeLeasing
   private let engine: any MacVirtualMachineRuntimeEngine
   private let savedStateService: any MacVirtualMachineSavedStateManaging
   private let shutdownPolicy: MacVirtualMachineShutdownPolicy
-  private let shutdownScheduler: any MacVirtualMachineShutdownScheduling
+  private let observations = MacVirtualMachineRuntimeObservations()
+  private let shutdownFallbacks: MacVirtualMachineShutdownFallbackRegistry
   private var sessions: [UUID: SessionRecord] = [:]
   private var operations: [UUID: InFlightOperation] = [:]
-  private var shutdownFallbacks: [UUID: ShutdownFallback] = [:]
-  private var snapshots: [UUID: MacVirtualMachineRuntimeSnapshot] = [:]
-  private var subscribers:
-    [UUID: [UUID: AsyncStream<MacVirtualMachineRuntimeSnapshot>.Continuation]] = [:]
 
   init(
     leasingStore: any MacVirtualMachineRuntimeLeasing,
@@ -109,31 +50,18 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     self.engine = engine
     self.savedStateService = savedStateService
     self.shutdownPolicy = shutdownPolicy
-    self.shutdownScheduler = shutdownScheduler
+    self.shutdownFallbacks = MacVirtualMachineShutdownFallbackRegistry(
+      timeout: shutdownPolicy.gracefulStopTimeout,
+      scheduler: shutdownScheduler
+    )
   }
 
   func snapshot(for machineID: UUID) -> MacVirtualMachineRuntimeSnapshot {
-    snapshots[machineID]
-      ?? MacVirtualMachineRuntimeSnapshot(
-        machineID: machineID,
-        state: .inspectingSavedState
-      )
+    observations.snapshot(for: machineID)
   }
 
   func updates(for machineID: UUID) -> AsyncStream<MacVirtualMachineRuntimeSnapshot> {
-    let subscriptionID = UUID()
-    let pair = AsyncStream.makeStream(
-      of: MacVirtualMachineRuntimeSnapshot.self,
-      bufferingPolicy: .bufferingNewest(1)
-    )
-    subscribers[machineID, default: [:]][subscriptionID] = pair.continuation
-    _ = pair.continuation.yield(snapshot(for: machineID))
-    pair.continuation.onTermination = { [weak self] _ in
-      Task { @MainActor [weak self] in
-        self?.removeSubscriber(subscriptionID, for: machineID)
-      }
-    }
-    return pair.stream
+    observations.updates(for: machineID)
   }
 
   func console(for target: MacVirtualMachineRuntimeTarget) -> MacVirtualMachineConsole? {
@@ -845,33 +773,22 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   private func scheduleShutdownFallback(
     for target: MacVirtualMachineRuntimeTarget
   ) {
-    cancelShutdownFallback(machineID: target.machineID)
-    let token = UUID()
-    let scheduledShutdown = shutdownScheduler.schedule(
-      after: shutdownPolicy.gracefulStopTimeout
-    ) { [weak self] in
+    shutdownFallbacks.schedule(for: target) { [weak self] token in
       await self?.performAutomaticForceStop(target: target, token: token)
     }
-    shutdownFallbacks[target.machineID] = ShutdownFallback(
-      target: target,
-      token: token,
-      scheduledShutdown: scheduledShutdown
-    )
   }
 
   private func performAutomaticForceStop(
     target: MacVirtualMachineRuntimeTarget,
     token: UUID
   ) async {
-    guard let fallback = shutdownFallbacks[target.machineID],
-      fallback.target == target,
-      fallback.token == token,
+    guard shutdownFallbacks.isScheduled(for: target, token: token),
       isCurrent(target),
       snapshot(for: target.machineID).state == .stopping
     else {
       return
     }
-    shutdownFallbacks[target.machineID] = nil
+    shutdownFallbacks.consume(target: target, token: token)
     do {
       try await forceStop(target: target)
     } catch {
@@ -883,12 +800,7 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   private func cancelShutdownFallback(
     for target: MacVirtualMachineRuntimeTarget
   ) {
-    guard shutdownFallbacks[target.machineID]?.target == target else { return }
-    cancelShutdownFallback(machineID: target.machineID)
-  }
-
-  private func cancelShutdownFallback(machineID: UUID) {
-    shutdownFallbacks.removeValue(forKey: machineID)?.scheduledShutdown.cancel()
+    shutdownFallbacks.cancel(for: target)
   }
 
   private func clearFailedQueuedForceStop(
@@ -1026,88 +938,16 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
     isForceStopCompleteAwaitingCleanup: Bool = false,
     errorMessage: String? = nil
   ) {
-    let current = snapshot(for: machineID)
-    let value = MacVirtualMachineRuntimeSnapshot(
+    observations.publish(
       machineID: machineID,
-      revision: current.revision + 1,
       target: target,
       state: state,
-      savedStateStatus: savedStateStatus ?? current.savedStateStatus,
-      saveRestoreSupport: saveRestoreSupport ?? current.saveRestoreSupport,
+      savedStateStatus: savedStateStatus,
+      saveRestoreSupport: saveRestoreSupport,
       isForceStopQueued: isForceStopQueued,
       isForceStopCompleteAwaitingCleanup:
         isForceStopCompleteAwaitingCleanup,
       errorMessage: errorMessage
     )
-    snapshots[machineID] = value
-    if let continuations = subscribers[machineID]?.values {
-      for continuation in continuations {
-        _ = continuation.yield(value)
-      }
-    }
-  }
-
-  private func removeSubscriber(_ subscriptionID: UUID, for machineID: UUID) {
-    subscribers[machineID]?[subscriptionID] = nil
-    if subscribers[machineID]?.isEmpty == true {
-      subscribers[machineID] = nil
-    }
-  }
-}
-
-extension MacVirtualMachineRuntimeEvent {
-  fileprivate var errorMessage: String? {
-    switch self {
-    case .guestStopped:
-      nil
-    case .stoppedWithError(let message):
-      message
-    }
-  }
-}
-
-@MainActor
-struct UnavailableMacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
-  func snapshot(for machineID: UUID) -> MacVirtualMachineRuntimeSnapshot {
-    MacVirtualMachineRuntimeSnapshot(
-      machineID: machineID,
-      savedStateStatus: .none
-    )
-  }
-
-  func updates(for machineID: UUID) -> AsyncStream<MacVirtualMachineRuntimeSnapshot> {
-    AsyncStream { continuation in
-      continuation.yield(snapshot(for: machineID))
-      continuation.finish()
-    }
-  }
-
-  func console(for target: MacVirtualMachineRuntimeTarget) -> MacVirtualMachineConsole? { nil }
-  func refreshSavedState(id: UUID) async {}
-  func start(id: UUID) async throws { throw MacVirtualMachineRuntimeError.unavailable }
-  func startFresh(id: UUID) async throws { throw MacVirtualMachineRuntimeError.unavailable }
-
-  func pause(target: MacVirtualMachineRuntimeTarget) async throws {
-    throw MacVirtualMachineRuntimeError.unavailable
-  }
-
-  func resume(target: MacVirtualMachineRuntimeTarget) async throws {
-    throw MacVirtualMachineRuntimeError.unavailable
-  }
-
-  func suspend(target: MacVirtualMachineRuntimeTarget) async throws {
-    throw MacVirtualMachineRuntimeError.unavailable
-  }
-
-  func requestStop(target: MacVirtualMachineRuntimeTarget) throws {
-    throw MacVirtualMachineRuntimeError.unavailable
-  }
-
-  func forceStop(target: MacVirtualMachineRuntimeTarget) async throws {
-    throw MacVirtualMachineRuntimeError.unavailable
-  }
-
-  func discardSavedState(id: UUID) async throws {
-    throw MacVirtualMachineRuntimeError.unavailable
   }
 }
