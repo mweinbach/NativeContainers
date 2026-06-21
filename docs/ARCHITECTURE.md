@@ -13,6 +13,23 @@
    narrowly scoped helper in a later phase.
 5. Make every destructive operation explicit and test the state transitions.
 
+## Composition and startup
+
+`AppServices` is the dependency value consumed by `AppModel`; the live graph is
+assembled separately under `App/Composition`. Launch-critical container
+inventory and VM installation/disk/store recovery remain eager because the
+first authoritative refresh depends on them.
+
+Docker compatibility and Compose are one optional integration module behind
+protocol-preserving facades. `DemandStartedService` protects a synchronous,
+side-effect-free module factory with a lock, publishes the completed graph only
+once, and releases the factory afterward. The three facades resolve that same
+holder, so concurrent first access cannot create duplicate Socktainer process
+owners, Docker Compose installers, or operation journals. Merely constructing
+`AppModel` or running its initial inventory/VM-recovery path does not allocate
+that optional graph; opening and loading Docker settings or the Compose
+workspace does.
+
 ## Runtime lanes
 
 ```mermaid

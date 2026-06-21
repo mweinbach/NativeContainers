@@ -217,7 +217,9 @@ must leave a usable, test-backed product slice.
 
 - [x] Launch-on-login through `SMAppService.mainApp`, with approval and
       unavailable states surfaced rather than inferred.
-- [ ] Demand-started services.
+- [x] Demand-started optional integrations: Docker compatibility and Compose
+      share one thread-safe lazy module, while launch-critical inventory and VM
+      recovery remain eager.
 - [x] Low-Power-Mode and serious/critical-thermal-aware CPU defaults for newly
       opened container, persistent-machine, and GUI-VM creation flows, sampled
       through an injectable Foundation adapter without changing existing work.

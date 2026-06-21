@@ -1536,3 +1536,26 @@ also does not infer guest idleness from application inactivity, window
 visibility, or console attachment. Automatic idle suspension remains deferred
 until a public, authoritative guest-activity signal or an explicit guest-side
 contract can distinguish an idle VM from unattended work.
+
+## ADR-055: Demand-start optional integrations as one shared service module
+
+**Status:** Accepted — 2026-06-21
+
+NativeContainers keeps launch-critical inventory and VM recovery services eager.
+Those paths establish authoritative state and reconcile interrupted durable
+operations before the first refresh, so delaying them would change correctness
+rather than merely improve startup allocation.
+
+Docker compatibility and Compose are optional, view-initiated lanes. Their live
+installers, Socktainer process owner, Docker context, Compose config client,
+mutation executor, and operation journal are assembled by one module factory.
+Protocol-preserving facades share a single `DemandStartedService` holder and
+resolve it only on first use. The holder serializes concurrent first access,
+publishes one complete graph, then releases its factory. This prevents duplicate
+process ownership and journal authority while keeping `AppServices` mockable.
+
+The holder is synchronous because module construction performs no network,
+filesystem mutation, or process launch; those operations remain in async service
+methods. A factory must not recursively resolve its own holder. Deterministic
+tests prove zero construction before access, exactly one construction across
+concurrent resolvers, and shared activation across all three live facades.

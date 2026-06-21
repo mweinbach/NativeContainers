@@ -8,14 +8,14 @@ Updated: 2026-06-21.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing and the normal app build succeed; refreshed source
   diagnostics and the Issue Navigator report no warnings or errors.
-- The current full app-hosted Xcode run contains 923 expanded outcomes: all 902
+- The current full app-hosted Xcode run contains 935 expanded outcomes: all 914
   deterministic outcomes passed, with 21 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
   tests. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
   none run against public services by default.
-- The app launched through Xcode as PID 62221 and Xcode stopped that exact
+- The app launched through Xcode as PID 93433 and Xcode stopped that exact
   process. Preview-owned PID 57859 accepted bounded TERM cleanup, and no
   NativeContainers or Preview process remained.
 - A native menu-bar control plane shares the app-scoped `AppModel`, inventory,
@@ -1089,6 +1089,27 @@ Updated: 2026-06-21.
   only the existing macOS 27 beta SetStore/CoreSpotlight donation error.
 - Idle suspension remains open because app, window, and console inactivity do
   not prove that an unattended guest has stopped useful work.
+
+## Demand-started service checkpoint
+
+- `AppServices` and `AppCompositionRoot` now live in separate files, with the
+  live assembly organized under `App/Composition` instead of sharing the
+  dependency-value file.
+- Launch-critical inventory plus VM installation, disk-replacement, and
+  restore-image recovery stay eager. Docker compatibility and Compose share one
+  `DemandStartedService` module behind their existing protocols, so ordinary
+  app construction and first refresh allocate no Socktainer, Docker context,
+  Compose client/config, mutation, or journal service.
+- The holder serializes first access and releases its factory after publishing
+  one complete graph. Two focused holder tests cover zero work before resolve
+  and 64 concurrent resolvers; the composition-root regression proves all three
+  optional facades observe the same activation. The focused run passes 3/3.
+- The full Xcode plan passes all 935 outcomes: 914 deterministic tests passed,
+  21 explicit live gates skipped, and no outcome failed or remained unrun. The
+  normal build succeeds and the Issue Navigator reports no warnings or errors.
+  The signed app launched through Xcode as PID 93433 and Xcode stopped that exact
+  process; console output contained only the existing macOS 27 beta
+  SetStore/CoreSpotlight donation-service error.
 
 ## Remaining live verification gap
 
