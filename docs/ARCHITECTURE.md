@@ -83,11 +83,13 @@ and verifies absence without holding the global mutation lease.
 runtime mutation coordinator across container, infrastructure, and image-build
 mutations. `AppModel` depends on named narrow facets through `AppServices`, not
 the complete runtime adapter. `AppleRuntimeInventoryService`,
-`AppleInfrastructureService`, `AppleOwnedContainerRecoveryService`, and
-`AppleXPCRequestClient` own their focused vertical slices. The legacy
-`AppleContainerService` forwards those facets while remaining the temporary
-compatibility facade for image, lifecycle, inspection/tooling, terminal, and
-machine implementations that have not yet moved.
+`AppleInfrastructureService`, `AppleContainerCreationService`,
+`AppleContainerLifecycleService`, `AppleContainerInspectionService`,
+`AppleContainerToolService`, `AppleContainerTerminalService`,
+`AppleImageService`, `AppleMachineLifecycleService`,
+`AppleOwnedContainerRecoveryService`, and `AppleXPCRequestClient` own their
+focused vertical slices. The legacy `AppleContainerService` is a forwarding-only
+compatibility facade and owns no runtime behavior.
 
 Browser opening is intentionally outside the service mutation layer. The
 service re-fetches the same container creation identity, its running state, and

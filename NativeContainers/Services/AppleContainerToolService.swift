@@ -184,6 +184,7 @@ enum AppleContainerToolProcessWaiter {
         guard let outcome = try await group.next() else {
           throw CancellationError()
         }
+        try Task.checkCancellation()
         switch outcome {
         case .exited(let result):
           return result

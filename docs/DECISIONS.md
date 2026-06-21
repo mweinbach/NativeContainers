@@ -333,10 +333,10 @@ exposes narrow inventory, lifecycle, creation, inspection, tooling, terminal,
 machine, image, volume, network, and browser facets to `AppModel`; views keep
 their existing model factories and do not act as service locators.
 
-Low-level XPC sending, runtime inventory aggregation, volume/network/browser
-management, and owned-container recovery are separate injectable services.
-`AppleContainerService` remains a forwarding compatibility facade while the
-remaining lifecycle, image, inspection/tooling, and machine implementations are
-extracted incrementally. This preserves public call sites and one global
-mutation order while allowing deterministic timeout, cancellation,
-reconciliation, malformed-reply, and cleanup tests.
+Low-level XPC sending, runtime inventory aggregation, creation, lifecycle,
+inspection, tooling, terminal sessions, image management,
+volume/network/browser management, machine lifecycle, and owned-container
+recovery are separate services. `AppleContainerService` remains a
+forwarding-only compatibility facade. This preserves complete-API call sites
+and one global mutation order while allowing deterministic timeout,
+cancellation, reconciliation, malformed-reply, routing, and cleanup tests.

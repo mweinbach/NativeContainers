@@ -23,26 +23,28 @@ struct AppleContainerToolServiceTests {
 
   @Test
   func callerCancellationKillsWaitingProcess() async {
-    let process = KillReleasesWaitProcess()
-    let operation = Task {
-      try await AppleContainerToolProcessWaiter.wait(
-        for: process,
-        timeoutSeconds: 60
-      )
-    }
-    while !(await process.hasStartedWaiting) {
-      await Task.yield()
-    }
+    for _ in 0..<25 {
+      let process = KillReleasesWaitProcess()
+      let operation = Task {
+        try await AppleContainerToolProcessWaiter.wait(
+          for: process,
+          timeoutSeconds: 60
+        )
+      }
+      while !(await process.hasStartedWaiting) {
+        await Task.yield()
+      }
 
-    operation.cancel()
+      operation.cancel()
 
-    await #expect(throws: CancellationError.self) {
-      try await operation.value
+      await #expect(throws: CancellationError.self) {
+        try await operation.value
+      }
+      while (await process.killSignals).isEmpty {
+        await Task.yield()
+      }
+      #expect(await process.killSignals == [SIGKILL])
     }
-    while (await process.killSignals).isEmpty {
-      await Task.yield()
-    }
-    #expect(await process.killSignals == [SIGKILL])
   }
 }
 

@@ -7,8 +7,8 @@ Updated: 2026-06-20.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 186 test declarations. The current full
-  app-hosted Xcode run passed all 179 deterministic tests, with seven destructive
+- The suite currently contains 194 test declarations. The current full
+  app-hosted Xcode run passed all 187 deterministic tests, with seven destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes the short-pipe framing, builder mount normalization, and strict
   path-component-containment regressions. Existing opt-in tests pass against
@@ -56,11 +56,13 @@ Updated: 2026-06-20.
   retries with bounded backoff, and verifies that it is absent; an unverifiable
   cleanup is surfaced instead of being silently ignored.
 - The runtime integration now has an explicit composition root and narrow
-  inventory, lifecycle, inspection, tooling, image, volume, network, browser,
-  and machine facets. Inventory aggregation, infrastructure lifecycle,
-  owned-container recovery, and bounded XPC requests are separate injectable
-  services; the legacy `AppleContainerService` remains a forwarding facade for
-  callers that still need the complete API.
+  inventory, creation, lifecycle, inspection, tooling, terminal, image, volume,
+  network, browser, and machine facets. Every runtime capability has a focused
+  service; the 304-line legacy `AppleContainerService` contains forwarding only
+  for callers that still need the complete API.
+- Command timeout arbitration publishes a timeout outcome before issuing
+  `KILL`, so a signal-induced process exit cannot race the timeout into a false
+  success. Caller cancellation also triggers cancellation-independent `KILL`.
 - Published TCP port ranges are expanded into exact endpoints. Creation
   validates literal IPv4/IPv6 hosts, brackets IPv6 for Apple's parser, and
   rejects host-port/protocol overlap before image work begins. The inspector
@@ -200,13 +202,10 @@ no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Finish extracting container lifecycle, image, inspection/tooling, and machine
-   implementations from the compatibility facade into their existing narrow
-   service facets.
-2. Add named-volume/network attachment selection plus Unix-socket publishing
+1. Add named-volume/network attachment selection plus Unix-socket publishing
    and privileged host-access helpers.
-3. Add explicit builder-cache management plus build secrets, SSH forwarding,
+2. Add explicit builder-cache management plus build secrets, SSH forwarding,
    cache import/export, history, and alternate outputs.
-4. Add the entitlement through a functioning Xcode capability surface, then
+3. Add the entitlement through a functioning Xcode capability surface, then
    implement and live-verify macOS installation and VM lifecycle.
-5. Spike a pinned Socktainer process and a product-specific Docker context.
+4. Spike a pinned Socktainer process and a product-specific Docker context.

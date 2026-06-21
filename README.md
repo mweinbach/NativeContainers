@@ -36,10 +36,11 @@ Apple Keychain-backed registry login management, reviewed native pull/push
 transfers, reviewed Dockerfile/Containerfile builds through Apple’s public
 BuildKit APIs, and macOS restore-image preparation.
 
-The app is composed from narrow injectable service facets. Inventory,
-infrastructure management, bounded XPC transport, and owned-resource recovery
-are independent services behind a compatibility facade, which keeps UI models
-small and makes failure paths deterministic to test.
+The app is composed from narrow injectable service facets. Inventory, container
+creation and lifecycle, inspection, command tools, terminal sessions, image
+management, infrastructure, machine lifecycle, bounded XPC transport, and
+owned-resource recovery are independent services. A forwarding-only
+compatibility facade preserves callers that still need the complete API.
 
 ## Build
 
