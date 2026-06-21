@@ -293,6 +293,9 @@
 		1FEC46E12FE824A700DC60B2 /* VirtualMachineDiskImageMigrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46E02FE824A700DC60B2 /* VirtualMachineDiskImageMigrationView.swift */; };
 		1FEC46E32FE824E100DC60B2 /* VirtualMachineDiskImageMigrationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46E22FE824E100DC60B2 /* VirtualMachineDiskImageMigrationModelTests.swift */; };
 		1FEC46E52FE8265200DC60B2 /* VirtualMachineDiskImageMigrationFileOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46E42FE8265200DC60B2 /* VirtualMachineDiskImageMigrationFileOperations.swift */; };
+		1FEC46E72FE82E9E00DC60B2 /* ComposeContainerLifecyclePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46E62FE82E9E00DC60B2 /* ComposeContainerLifecyclePlanner.swift */; };
+		1FEC46E92FE82E9E00DC60B2 /* ComposeResourceLifecyclePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46E82FE82E9E00DC60B2 /* ComposeResourceLifecyclePlanner.swift */; };
+		1FEC46EB2FE82E9F00DC60B2 /* ComposeLifecyclePolicyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46EA2FE82E9F00DC60B2 /* ComposeLifecyclePolicyValidator.swift */; };
 		21F1991F0C1032C29962E257 /* ImageTransferModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170AA8D0525AD135E6D45B6 /* ImageTransferModels.swift */; };
 		236A6E649357810DB1C263BE /* VirtualMachinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DF3F25F33C4AA6D2E4A4A2 /* VirtualMachinesView.swift */; };
 		2556B0C38DDD5700704BE145 /* NativeContainersBuildWorker in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 754A88C661F8562B691EA099 /* NativeContainersBuildWorker */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -695,6 +698,9 @@
 		1FEC46E02FE824A700DC60B2 /* VirtualMachineDiskImageMigrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageMigrationView.swift; sourceTree = "<group>"; };
 		1FEC46E22FE824E100DC60B2 /* VirtualMachineDiskImageMigrationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageMigrationModelTests.swift; sourceTree = "<group>"; };
 		1FEC46E42FE8265200DC60B2 /* VirtualMachineDiskImageMigrationFileOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageMigrationFileOperations.swift; sourceTree = "<group>"; };
+		1FEC46E62FE82E9E00DC60B2 /* ComposeContainerLifecyclePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeContainerLifecyclePlanner.swift; sourceTree = "<group>"; };
+		1FEC46E82FE82E9E00DC60B2 /* ComposeResourceLifecyclePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeResourceLifecyclePlanner.swift; sourceTree = "<group>"; };
+		1FEC46EA2FE82E9F00DC60B2 /* ComposeLifecyclePolicyValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeLifecyclePolicyValidator.swift; sourceTree = "<group>"; };
 		21606C50CA075B2067F2E320 /* SecureRegularFileValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureRegularFileValidator.swift; sourceTree = "<group>"; };
 		25B22569E6E84558346EB362 /* LinuxMachinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxMachinesView.swift; sourceTree = "<group>"; };
 		280A42C7C276FAA6BAF42AA0 /* ContainerCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerCreationView.swift; sourceTree = "<group>"; };
@@ -1150,6 +1156,9 @@
 				1FEC46D42FE8234400DC60B2 /* VirtualMachineDiskImageMigrationJournal.swift */,
 				1FEC46D62FE8237500DC60B2 /* VirtualMachineDiskImageMigrationService.swift */,
 				1FEC46E42FE8265200DC60B2 /* VirtualMachineDiskImageMigrationFileOperations.swift */,
+				1FEC46E62FE82E9E00DC60B2 /* ComposeContainerLifecyclePlanner.swift */,
+				1FEC46E82FE82E9E00DC60B2 /* ComposeResourceLifecyclePlanner.swift */,
+				1FEC46EA2FE82E9F00DC60B2 /* ComposeLifecyclePolicyValidator.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1525,6 +1534,7 @@
 				1F9D2BA42FE7AA240076F5B9 /* AppleMacVirtualMachineConfigurationFactory.swift in Sources */,
 				1F9D2CBA2FE80A7B0076F5B9 /* RestoreImageCacheModels.swift in Sources */,
 				1F9D2CA82FE8056C0076F5B9 /* MacVirtualMachineSavedStateReclamationService.swift in Sources */,
+				1FEC46E92FE82E9E00DC60B2 /* ComposeResourceLifecyclePlanner.swift in Sources */,
 				1F9D2BFA2FE7C81B0076F5B9 /* ComposeTopologyService.swift in Sources */,
 				1F9D2C2B2FE7DC0D0076F5B9 /* AppOwnedBuildCacheService.swift in Sources */,
 				1F9D2B3B2FE77AA90076F5B9 /* RecordingImageBuildService.swift in Sources */,
@@ -1537,6 +1547,7 @@
 				5FAF17401045B705B8CECC61 /* AppleContainerBuildService.swift in Sources */,
 				BC4ED80883CAB8BB12C639AE /* AppleContainerConfiguration.swift in Sources */,
 				9797C01E4560B0E89E706FBF /* AppleContainerService.swift in Sources */,
+				1FEC46E72FE82E9E00DC60B2 /* ComposeContainerLifecyclePlanner.swift in Sources */,
 				AD177B51B351BFC74B0C8D1F /* AppleContainerTerminalSession.swift in Sources */,
 				1F9D2C592FE7EFBA0076F5B9 /* ComposeProjectActions.swift in Sources */,
 				913DA2E6216BA0CB90140534 /* AppleRegistryService.swift in Sources */,
@@ -1569,6 +1580,7 @@
 				CF01A590ABF08323E6B93DC7 /* ContainerInspectorModel.swift in Sources */,
 				1F9D2ADB2FE75FF80076F5B9 /* AppleContainerSnapshotReader.swift in Sources */,
 				1F9D2BCA2FE7BD260076F5B9 /* MacVirtualMachineSharedDirectoryModels.swift in Sources */,
+				1FEC46EB2FE82E9F00DC60B2 /* ComposeLifecyclePolicyValidator.swift in Sources */,
 				1F9D2BBA2FE7AF040076F5B9 /* MacVirtualMachineConfigurationDescriptor.swift in Sources */,
 				1F9D2C352FE7E7360076F5B9 /* DockerComposeConfigService.swift in Sources */,
 				9B0B0A2D8D7E816F5DB11F1E /* ContainerManaging.swift in Sources */,
