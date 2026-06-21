@@ -152,7 +152,7 @@ struct MacVirtualMachineSharedDirectoryStorageTests {
   }
 
   @Test
-  func identityPreservingRenameStillResolvesTheBookmark() throws {
+  func staleBookmarkAfterRenameFailsClosed() throws {
     let root = try makeSharedDirectoryTestRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let source = root.appending(path: "Before", directoryHint: .isDirectory)
@@ -172,14 +172,11 @@ struct MacVirtualMachineSharedDirectoryStorageTests {
     )
     try FileManager.default.moveItem(at: source, to: renamed)
 
-    let access = try service.resolve([record])
-    defer { access.release() }
-
     #expect(
-      access.directories.first?.sourceURL.standardizedFileURL
-        == renamed.standardizedFileURL
-    )
-    #expect(access.directories.first?.sourceIdentity == record.sourceIdentity)
+      throws: MacVirtualMachineSharedDirectoryError.staleBookmark("Shared")
+    ) {
+      _ = try service.resolve([record])
+    }
   }
 
   @Test

@@ -74,6 +74,60 @@ struct MacVirtualMachineRuntimeServiceTests {
   }
 
   @Test
+  func terminalEventFinalizesAutomaticStopWhileCapabilityIsUnavailable() async throws {
+    let fixture = try RuntimeServiceFixture()
+    try await fixture.service.start(id: fixture.machineID)
+    let target = try #require(fixture.service.snapshot(for: fixture.machineID).target)
+    let session = fixture.engine.sessions[0]
+    session.canForceStop = false
+
+    try fixture.service.requestStop(target: target)
+    let fallback = Task { @MainActor in
+      await fixture.shutdownScheduler.fireNext()
+    }
+    for _ in 0..<20
+    where !fixture.service.snapshot(for: fixture.machineID).isForceStopQueued {
+      await Task.yield()
+    }
+    #expect(fixture.service.snapshot(for: fixture.machineID).isForceStopQueued)
+
+    session.emit(.guestStopped)
+    await fallback.value
+
+    let snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.state == .stopped)
+    #expect(snapshot.target == nil)
+    #expect(snapshot.errorMessage == nil)
+    #expect(session.forceStopCount == 0)
+    #expect(session.closeCount == 1)
+    #expect(fixture.releaseRecorder.count == 1)
+  }
+
+  @Test
+  func unavailableForceStopCapabilityFailsWithinBoundAndKeepsRecovery() async throws {
+    let fixture = try RuntimeServiceFixture(
+      forceStopCapabilityTimeout: .milliseconds(5)
+    )
+    try await fixture.service.start(id: fixture.machineID)
+    let target = try #require(fixture.service.snapshot(for: fixture.machineID).target)
+    let session = fixture.engine.sessions[0]
+    session.canForceStop = false
+
+    await #expect(throws: MacVirtualMachineRuntimeError.self) {
+      try await fixture.service.forceStop(target: target)
+    }
+
+    let snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.state == .running)
+    #expect(snapshot.target == target)
+    #expect(snapshot.canForceStop)
+    #expect(snapshot.errorMessage?.isEmpty == false)
+    #expect(session.forceStopCount == 0)
+    #expect(session.closeCount == 0)
+    #expect(fixture.releaseRecorder.count == 0)
+  }
+
+  @Test
   func failedAutomaticForceStopKeepsManualRecoveryAvailable() async throws {
     let fixture = try RuntimeServiceFixture()
     try await fixture.service.start(id: fixture.machineID)
@@ -569,7 +623,8 @@ private struct RuntimeServiceFixture {
 
   init(
     startWaits: Bool = false,
-    resumeError: RuntimeServiceTestError? = nil
+    resumeError: RuntimeServiceTestError? = nil,
+    forceStopCapabilityTimeout: Duration = .seconds(1)
   ) throws {
     machine = try makeRuntimeServiceMachine()
     store = RuntimeServiceLeaseStore(machine: machine, releaseRecorder: releaseRecorder)
@@ -584,7 +639,9 @@ private struct RuntimeServiceFixture {
       engine: engine,
       savedStateService: savedStateService,
       shutdownPolicy: MacVirtualMachineShutdownPolicy(
-        gracefulStopTimeout: .seconds(1)
+        gracefulStopTimeout: .seconds(1),
+        forceStopCapabilityTimeout: forceStopCapabilityTimeout,
+        forceStopPollInterval: .milliseconds(1)
       ),
       shutdownScheduler: shutdownScheduler
     )

@@ -100,6 +100,11 @@ struct MacVirtualMachineSharedDirectoryBookmarkService:
             directory.guestName
           )
         }
+        guard !isStale else {
+          throw MacVirtualMachineSharedDirectoryError.staleBookmark(
+            directory.guestName
+          )
+        }
         guard sourceURL.startAccessingSecurityScopedResource() else {
           throw MacVirtualMachineSharedDirectoryError.accessDenied(
             directory.lastKnownPath

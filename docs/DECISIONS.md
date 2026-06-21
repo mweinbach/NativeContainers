@@ -685,12 +685,15 @@ Configuration changes are stopped-only and fail closed while the runtime is
 owned, transitioning, or checkpointed. Runtime acquisition takes the advisory
 lock before reading the sidecar. Resolved security scopes live for the complete
 VZ session and are explicitly closed when the runtime coordinator finalizes the
-generation. Identity-preserving host-folder renames remain usable, while a
-replacement at the bookmarked path fails the device/inode check.
+generation. Stale bookmarks fail closed and require the user to choose the
+folder again until an atomic capability-renewal path exists; a replacement at
+the bookmarked path also fails the device/inode check.
 
 Graceful VM shutdown separately arms a service-owned 30-second watchdog. The
 watchdog is pinned to the runtime generation and reuses the explicit Force Stop
 path; delegate completion, manual Force Stop, or generation replacement cancels
 it. A failed automatic stop retains ownership and leaves manual recovery
-available. There is no process-level PID kill fallback because the public,
+available. Waiting for Apple’s destructive-stop capability is itself bounded,
+and a terminal delegate event finalizes that wait immediately. There is no
+process-level PID kill fallback because the public,
 state-aware `VZVirtualMachine.stop` API is the only safe destructive boundary.

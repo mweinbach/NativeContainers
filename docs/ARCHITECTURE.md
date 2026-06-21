@@ -385,7 +385,9 @@ than sharing presentation state across an implied multi-window group.
   Force Stop action. Force Stop wraps Apple's destructive stop API and does not
   claim the VM stopped when the framework reports an error. A service-owned,
   generation-pinned watchdog invokes that same path after a 30-second graceful
-  shutdown timeout; view lifetime and caller cancellation never arm or cancel it.
+  shutdown timeout. Its wait for Apple’s `canStop` capability is bounded and a
+  terminal delegate event cancels it immediately; view lifetime and caller
+  cancellation never arm or cancel it.
 - macOS VM suspension is split across three focused layers: the runtime service
   owns the generation-safe lifecycle state machine, the saved-state service
   sequences Virtualization.framework callbacks, and the saved-state store owns

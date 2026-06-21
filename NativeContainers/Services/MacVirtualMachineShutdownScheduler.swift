@@ -2,9 +2,23 @@ import Foundation
 
 struct MacVirtualMachineShutdownPolicy: Equatable, Sendable {
   let gracefulStopTimeout: Duration
+  let forceStopCapabilityTimeout: Duration
+  let forceStopPollInterval: Duration
+
+  init(
+    gracefulStopTimeout: Duration,
+    forceStopCapabilityTimeout: Duration = .seconds(5),
+    forceStopPollInterval: Duration = .milliseconds(100)
+  ) {
+    self.gracefulStopTimeout = gracefulStopTimeout
+    self.forceStopCapabilityTimeout = forceStopCapabilityTimeout
+    self.forceStopPollInterval = forceStopPollInterval
+  }
 
   static let standard = MacVirtualMachineShutdownPolicy(
-    gracefulStopTimeout: .seconds(30)
+    gracefulStopTimeout: .seconds(30),
+    forceStopCapabilityTimeout: .seconds(5),
+    forceStopPollInterval: .milliseconds(100)
   )
 }
 

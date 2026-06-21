@@ -492,6 +492,7 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
       }
       finishSession(target)
     } catch {
+      guard isCurrent(target) else { return }
       restoreAfterFailedOperation(
         target: target,
         token: token,
@@ -823,10 +824,19 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   private func makeForceStopTask(
     for session: any MacVirtualMachineRuntimeEngineSession
   ) -> Task<Void, any Error> {
-    Task { @MainActor in
+    let capabilityTimeout = shutdownPolicy.forceStopCapabilityTimeout
+    let pollInterval = shutdownPolicy.forceStopPollInterval
+    return Task { @MainActor in
+      let clock = ContinuousClock()
+      let deadline = clock.now.advanced(by: capabilityTimeout)
       while !session.canForceStop {
         try Task.checkCancellation()
-        try await Task.sleep(for: .milliseconds(100))
+        guard clock.now < deadline else {
+          throw MacVirtualMachineRuntimeError.operationUnavailable(
+            "force stop before Virtualization.framework’s capability window closed"
+          )
+        }
+        try await clock.sleep(for: pollInterval)
       }
       try await session.forceStop()
     }
@@ -939,6 +949,10 @@ final class MacVirtualMachineRuntimeService: MacVirtualMachineRuntimeManaging {
   ) {
     guard isCurrent(target) else { return }
     if var operation = operations[target.machineID], operation.target == target {
+      if operation.kind == .forceStop {
+        finishSession(target, errorMessage: event.errorMessage)
+        return
+      }
       if operation.terminalEvent == nil {
         operation.terminalEvent = event
         operations[target.machineID] = operation
