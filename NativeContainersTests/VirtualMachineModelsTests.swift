@@ -51,5 +51,29 @@ struct VirtualMachineModelsTests {
     #expect(manifest.name == "Developer macOS")
     #expect(manifest.schemaVersion == VirtualMachineManifest.currentSchemaVersion)
     #expect(manifest.diskImagePath == "Disk.img")
+    #expect(manifest.diskImageFormat == .raw)
+    #expect(manifest.effectiveDiskImageFormat == .raw)
+  }
+
+  @Test
+  func clonePreservesExplicitASIFFormat() throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var source = try VirtualMachineManifest(
+      name: "ASIF Source",
+      guest: .macOS,
+      installState: .stopped,
+      resources: resources
+    )
+    source.markDiskImageMigrated(to: "Installed/Disk.asif", format: .asif)
+
+    let clone = try VirtualMachineManifest(cloning: source, name: "ASIF Clone")
+
+    #expect(clone.diskImagePath == "Installed/Disk.asif")
+    #expect(clone.diskImageFormat == .asif)
+    #expect(clone.effectiveDiskImageFormat == .asif)
   }
 }

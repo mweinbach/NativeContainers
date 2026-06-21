@@ -49,6 +49,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   let createdAt: Date
   var updatedAt: Date
   var diskImagePath: String
+  var diskImageFormat: VirtualMachineDiskImageFormat? = nil
   var auxiliaryStoragePath: String?
   var hardwareModelPath: String?
   var machineIdentifierPath: String?
@@ -63,7 +64,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installState: VirtualMachineInstallState = .draft,
     resources: VirtualMachineResources,
     createdAt: Date = Date(),
-    diskImagePath: String = "Disk.img"
+    diskImagePath: String = "Disk.img",
+    diskImageFormat: VirtualMachineDiskImageFormat = .raw
   ) throws {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedName.isEmpty else {
@@ -79,6 +81,11 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.createdAt = createdAt
     self.updatedAt = createdAt
     self.diskImagePath = diskImagePath
+    self.diskImageFormat = diskImageFormat
+  }
+
+  var effectiveDiskImageFormat: VirtualMachineDiskImageFormat {
+    diskImageFormat ?? .raw
   }
 
   init(
@@ -101,6 +108,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.createdAt = createdAt
     updatedAt = createdAt
     diskImagePath = source.diskImagePath
+    diskImageFormat = source.effectiveDiskImageFormat
     auxiliaryStoragePath = source.auxiliaryStoragePath
     hardwareModelPath = source.hardwareModelPath
     machineIdentifierPath = source.machineIdentifierPath
@@ -126,10 +134,21 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   ) {
     installState = .stopped
     self.diskImagePath = diskImagePath
+    diskImageFormat = .raw
     self.auxiliaryStoragePath = auxiliaryStoragePath
     restoreImageURL = nil
     installationOperationID = nil
     installationFailure = nil
+    self.updatedAt = updatedAt
+  }
+
+  mutating func markDiskImageMigrated(
+    to path: String,
+    format: VirtualMachineDiskImageFormat,
+    updatedAt: Date = Date()
+  ) {
+    diskImagePath = path
+    diskImageFormat = format
     self.updatedAt = updatedAt
   }
 

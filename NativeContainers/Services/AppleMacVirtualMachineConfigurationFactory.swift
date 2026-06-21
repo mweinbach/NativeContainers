@@ -14,6 +14,7 @@ import Foundation
     private let sharedDirectoryBookmarkService:
       any MacVirtualMachineSharedDirectoryBookmarkResolving
     private let sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory
+    private let diskImageService: any AppleVirtualMachineDiskImageServicing
 
     init(
       descriptorService: any MacVirtualMachineConfigurationDescribing =
@@ -22,11 +23,14 @@ import Foundation
         any MacVirtualMachineSharedDirectoryBookmarkResolving =
         MacVirtualMachineSharedDirectoryBookmarkService(),
       sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory =
-        AppleMacVirtualMachineSharedDirectoryDeviceFactory()
+        AppleMacVirtualMachineSharedDirectoryDeviceFactory(),
+      diskImageService: any AppleVirtualMachineDiskImageServicing =
+        AppleVirtualMachineDiskImageService()
     ) {
       self.descriptorService = descriptorService
       self.sharedDirectoryBookmarkService = sharedDirectoryBookmarkService
       self.sharedDirectoryDeviceFactory = sharedDirectoryDeviceFactory
+      self.diskImageService = diskImageService
     }
 
     func makeConfiguration(
@@ -47,9 +51,13 @@ import Foundation
         )
       }
 
-      let diskSize = try diskSize(at: machine.diskImageURL)
-      guard diskSize == descriptor.diskBytes, diskSize.isMultiple(of: 512) else {
-        throw MacVirtualMachineInstallationError.invalidDiskSize(diskSize)
+      let diskImage = try diskImageService.descriptor(for: machine)
+      guard diskImage.logicalBytes == descriptor.diskBytes,
+        diskImage.logicalBytes.isMultiple(of: 512)
+      else {
+        throw MacVirtualMachineInstallationError.invalidDiskSize(
+          diskImage.logicalBytes
+        )
       }
 
       let hardwareModelData = try Data(contentsOf: machine.hardwareModelURL)
@@ -70,11 +78,8 @@ import Foundation
       platform.machineIdentifier = machineIdentifier
       platform.auxiliaryStorage = VZMacAuxiliaryStorage(url: machine.auxiliaryStorageURL)
 
-      let diskAttachment = try VZDiskImageStorageDeviceAttachment(
-        url: machine.diskImageURL,
-        readOnly: false,
-        cachingMode: .automatic,
-        synchronizationMode: .full
+      let diskAttachment = try diskImageService.makeWritableAttachment(
+        for: machine
       )
       let disk = VZVirtioBlockDeviceConfiguration(attachment: diskAttachment)
 
@@ -159,12 +164,5 @@ import Foundation
       )
     }
 
-    private func diskSize(at url: URL) throws -> UInt64 {
-      let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-      guard let number = attributes[.size] as? NSNumber else {
-        throw MacVirtualMachineInstallationError.invalidDiskSize(0)
-      }
-      return number.uint64Value
-    }
   }
 #endif

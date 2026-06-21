@@ -421,6 +421,8 @@ struct VirtualMachineLibraryTests {
     #expect(loaded.hardwareModelPath == nil)
     #expect(loaded.machineIdentifierPath == nil)
     #expect(loaded.restoreImageURL == nil)
+    #expect(loaded.diskImageFormat == nil)
+    #expect(loaded.effectiveDiskImageFormat == .raw)
 
     let prepared = try await library.prepareMacVM(
       id: identifier,
