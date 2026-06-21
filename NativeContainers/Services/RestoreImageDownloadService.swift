@@ -31,7 +31,8 @@ actor RestoreImageDownloadService: MacRestoreImageDownloading {
     cache: (any RestoreImageCacheManaging)? = nil
   ) {
     let downloadDirectoryURL =
-      (downloadDirectoryURL ?? RestoreImageCacheDirectory.defaultURL(fileManager: fileManager))
+      (downloadDirectoryURL
+      ?? RestoreImageStoreLocations.standard(fileManager: fileManager).current)
       .standardizedFileURL
     self.downloadDirectoryURL = downloadDirectoryURL
     self.cache =

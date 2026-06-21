@@ -331,7 +331,7 @@ struct AppModelTests {
   }
 
   @Test
-  func firstLoadRecoversPendingImportsAgainstPersistedRestoreImageReferences() async throws {
+  func firstLoadRunsTheDedicatedRestoreImageStoreRecoveryService() async throws {
     let resources = try VirtualMachineResources(
       cpuCount: 4,
       memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
@@ -349,16 +349,16 @@ struct AppModelTests {
       hardwareModelPath: "MacPlatform/HardwareModel",
       machineIdentifierPath: "MacPlatform/MachineIdentifier"
     )
-    let acquisition = RecoveryRecordingRestoreImageAcquisition()
+    let recovery = RecoveryRecordingRestoreImageStoreRecovery()
     let model = AppModel(
       containerService: MockContainerService(inventory: emptyInventory()),
       virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [prepared]),
-      restoreImageAcquisition: acquisition
+      restoreImageStoreRecovery: recovery
     )
 
     await model.loadIfNeeded()
 
-    #expect(await acquisition.recoveredReferences == [restoreImageURL])
+    #expect(await recovery.recoveryCount == 1)
   }
 
   @Test
@@ -1379,24 +1379,13 @@ private actor AppModelVirtualMachineTransferFixture:
   }
 }
 
-private actor RecoveryRecordingRestoreImageAcquisition: RestoreImageAcquiring {
-  private(set) var recoveredReferences = Set<URL>()
+private actor RecoveryRecordingRestoreImageStoreRecovery:
+  RestoreImageStoreRecovering
+{
+  private(set) var recoveryCount = 0
 
-  func acquire(
-    _ source: RestoreImageAcquisitionSource,
-    progress: @escaping RestoreImageDownloadProgressHandler
-  ) async throws -> RestoreImageCacheLease {
-    throw AppModelTestError.runtimeUnavailable
-  }
-
-  func commit(_ lease: RestoreImageCacheLease) async {}
-
-  func abandon(_ lease: RestoreImageCacheLease) async throws {}
-
-  func recoverCache(
-    referencedURLs: @Sendable () async throws -> Set<URL>
-  ) async throws {
-    recoveredReferences = try await referencedURLs()
+  func recover() async throws {
+    recoveryCount += 1
   }
 }
 

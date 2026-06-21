@@ -205,6 +205,7 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
   case requiresMacOSGuest(UUID)
   case invalidInstallState(VirtualMachineInstallState)
   case platformArtifactsAlreadyExist(UUID)
+  case invalidRestoreImageReference(URL)
   case macPlatformPreparationUnavailable
   case virtualMachineDiscardUnavailable
 
@@ -234,6 +235,8 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
       "A virtual machine in the \(state.rawValue) state cannot perform this operation."
     case .platformArtifactsAlreadyExist(let identifier):
       "macOS platform artifacts already exist for virtual machine \(identifier.uuidString)."
+    case .invalidRestoreImageReference(let url):
+      "The restore-image reference is invalid: \(url.absoluteString)"
     case .macPlatformPreparationUnavailable:
       "macOS platform preparation is unavailable for this virtual machine library."
     case .virtualMachineDiscardUnavailable:

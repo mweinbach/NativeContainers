@@ -1,7 +1,16 @@
 import Darwin
 import Foundation
 
-protocol RestoreImageCacheManaging: Sendable {
+protocol RestoreImageStoreOperationCoordinating: Sendable {
+  func withExclusiveAccess<T: Sendable>(
+    _ operation: @Sendable () async throws -> T
+  ) async throws -> T
+}
+
+protocol RestoreImageCacheManaging:
+  RestoreImageStoreOperationCoordinating,
+  Sendable
+{
   func acquireLease(
     for fileURL: URL,
     purpose: RestoreImageCacheLeasePurpose,
@@ -44,6 +53,7 @@ actor RestoreImageCacheService:
   private let cacheDirectoryURL: URL
   private let fileManager: FileManager
   private let artifactInspector: any VirtualMachineStorageArtifactInspecting
+  private let excludesFromBackup: Bool
   private let partialRetentionInterval: TimeInterval
   private let now: @Sendable () -> Date
   private var activeLeases: [UUID: ActiveLease] = [:]
@@ -56,17 +66,35 @@ actor RestoreImageCacheService:
     fileManager: FileManager = .default,
     artifactInspector: any VirtualMachineStorageArtifactInspecting =
       FileVirtualMachineStorageArtifactInspector(),
+    excludesFromBackup: Bool = true,
     partialRetentionInterval: TimeInterval =
       RestoreImageCacheService.defaultPartialRetentionInterval,
     now: @escaping @Sendable () -> Date = Date.init
   ) {
     self.cacheDirectoryURL =
-      (cacheDirectoryURL ?? RestoreImageCacheDirectory.defaultURL(fileManager: fileManager))
+      (cacheDirectoryURL ?? RestoreImageStoreLocations.standard(fileManager: fileManager).current)
       .standardizedFileURL
     self.fileManager = fileManager
     self.artifactInspector = artifactInspector
+    self.excludesFromBackup = excludesFromBackup
     self.partialRetentionInterval = max(0, partialRetentionInterval)
     self.now = now
+  }
+
+  func withExclusiveAccess<T: Sendable>(
+    _ operation: @Sendable () async throws -> T
+  ) async throws -> T {
+    guard activeLeases.isEmpty, exclusiveOperationToken == nil else {
+      throw RestoreImageCacheError.cacheInUse
+    }
+    try ensurePrivateStoreExists()
+
+    let token = UUID()
+    guard try acquireExclusiveOperationAccess(token: token) else {
+      throw RestoreImageCacheError.cacheInUse
+    }
+    defer { releaseExclusiveOperationAccess(token: token) }
+    return try await operation()
   }
 
   func acquireLease(
@@ -538,6 +566,16 @@ actor RestoreImageCacheService:
       withIntermediateDirectories: true,
       attributes: [.posixPermissions: 0o700]
     )
+    try fileManager.setAttributes(
+      [.posixPermissions: 0o700],
+      ofItemAtPath: cacheDirectoryURL.path
+    )
+    if excludesFromBackup {
+      var storeURL = cacheDirectoryURL
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      try storeURL.setResourceValues(values)
+    }
     let values = try cacheDirectoryURL.resourceValues(
       forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
     )
@@ -554,7 +592,8 @@ actor RestoreImageCacheService:
   private func requireDirectStoreChild(_ fileURL: URL) throws {
     let filename = fileURL.lastPathComponent
     guard fileURL.isFileURL,
-      fileURL.deletingLastPathComponent().standardizedFileURL == cacheDirectoryURL,
+      fileURL.deletingLastPathComponent().standardizedFileURL.path
+        == cacheDirectoryURL.path,
       !filename.isEmpty,
       filename != ".",
       filename != "..",
@@ -726,10 +765,25 @@ actor RestoreImageCacheService:
   }
 }
 
-enum RestoreImageCacheDirectory {
-  static func defaultURL(fileManager: FileManager = .default) -> URL {
-    fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-      .appending(path: "NativeContainers", directoryHint: .isDirectory)
-      .appending(path: "Restore Images", directoryHint: .isDirectory)
+struct RestoreImageStoreLocations: Equatable, Sendable {
+  let current: URL
+  let legacyCache: URL
+
+  static func standard(fileManager: FileManager = .default) -> Self {
+    let applicationSupport = fileManager.urls(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask
+    )[0]
+    let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    return Self(
+      current:
+        applicationSupport
+        .appending(path: "NativeContainers", directoryHint: .isDirectory)
+        .appending(path: "Restore Images", directoryHint: .isDirectory),
+      legacyCache:
+        caches
+        .appending(path: "NativeContainers", directoryHint: .isDirectory)
+        .appending(path: "Restore Images", directoryHint: .isDirectory)
+    )
   }
 }

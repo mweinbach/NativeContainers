@@ -29,7 +29,8 @@ actor RestoreImageImportService: MacRestoreImageImporting {
     cache: (any RestoreImageCacheManaging)? = nil
   ) {
     let cacheDirectoryURL =
-      (cacheDirectoryURL ?? RestoreImageCacheDirectory.defaultURL(fileManager: fileManager))
+      (cacheDirectoryURL
+      ?? RestoreImageStoreLocations.standard(fileManager: fileManager).current)
       .standardizedFileURL
     self.cacheDirectoryURL = cacheDirectoryURL
     self.fileManager = fileManager

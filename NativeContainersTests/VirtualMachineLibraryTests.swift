@@ -177,6 +177,12 @@ struct VirtualMachineLibraryTests {
     await #expect(throws: VirtualMachineModelError.libraryInUse) {
       try await library.discardVirtualMachine(id: draft.id)
     }
+    await #expect(throws: VirtualMachineModelError.libraryInUse) {
+      _ = try await library.migrateRestoreImageReferences(
+        from: root.appending(path: "Legacy.ipsw"),
+        to: root.appending(path: "Durable.ipsw")
+      )
+    }
 
     await preparer.resume()
     _ = try await preparation.value
@@ -239,6 +245,64 @@ struct VirtualMachineLibraryTests {
     #expect(recordedResources == resources)
     #expect(recordedRestoreImageURL == restoreImageURL)
     try expectNoPartialDirectories(in: bundleURL(root: root, id: draft.id))
+  }
+
+  @Test
+  func migratesSharedRestoreImageReferencesUnderOneLibraryOperation() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let library = VirtualMachineLibrary(
+      rootURL: root,
+      macPlatformArtifactPreparer: TestMacPlatformArtifactPreparer(
+        behavior: .success
+      )
+    )
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 8 * VirtualMachineResources.bytesPerGiB
+    )
+    let sourceURL = root.appending(path: "Legacy.ipsw")
+    let destinationURL = root.appending(path: "Durable.ipsw")
+    let first = try await library.createDraft(
+      name: "First Mac",
+      guest: .macOS,
+      resources: resources
+    )
+    let second = try await library.createDraft(
+      name: "Second Mac",
+      guest: .macOS,
+      resources: resources
+    )
+    _ = try await library.prepareMacVM(
+      id: first.id,
+      restoreImageURL: sourceURL
+    )
+    _ = try await library.prepareMacVM(
+      id: second.id,
+      restoreImageURL: sourceURL
+    )
+
+    #expect(try await library.loadRestoreImageReferences() == [sourceURL])
+    #expect(
+      try await library.migrateRestoreImageReferences(
+        from: sourceURL,
+        to: destinationURL
+      ) == 2
+    )
+    #expect(try await library.loadRestoreImageReferences() == [destinationURL])
+    #expect(
+      try await library.list().allSatisfy {
+        $0.restoreImageURL == destinationURL
+      }
+    )
+    #expect(
+      try await library.migrateRestoreImageReferences(
+        from: sourceURL,
+        to: destinationURL
+      ) == 0
+    )
   }
 
   @Test

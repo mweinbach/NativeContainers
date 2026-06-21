@@ -39,6 +39,7 @@ struct AppServices: Sendable {
   let virtualMachineAvailability: any MacVirtualMachineAvailabilityChecking
   let restoreImageDiscovery: any MacRestoreImageDiscovering
   let restoreImageAcquisition: any RestoreImageAcquiring
+  let restoreImageStoreRecovery: any RestoreImageStoreRecovering
 
   init(
     inventory: any ContainerInventoryLoading,
@@ -90,7 +91,9 @@ struct AppServices: Sendable {
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
     restoreImageDiscovery: any MacRestoreImageDiscovering,
-    restoreImageAcquisition: any RestoreImageAcquiring
+    restoreImageAcquisition: any RestoreImageAcquiring,
+    restoreImageStoreRecovery: any RestoreImageStoreRecovering =
+      NoopRestoreImageStoreRecoveryService()
   ) {
     self.inventory = inventory
     self.composeTopology = composeTopology
@@ -129,6 +132,7 @@ struct AppServices: Sendable {
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageAcquisition = restoreImageAcquisition
+    self.restoreImageStoreRecovery = restoreImageStoreRecovery
   }
 
   init(
@@ -170,7 +174,9 @@ struct AppServices: Sendable {
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
     restoreImageDiscovery: any MacRestoreImageDiscovering,
-    restoreImageAcquisition: any RestoreImageAcquiring
+    restoreImageAcquisition: any RestoreImageAcquiring,
+    restoreImageStoreRecovery: any RestoreImageStoreRecovering =
+      NoopRestoreImageStoreRecoveryService()
   ) {
     inventory = containerService
     self.composeTopology = composeTopology
@@ -209,6 +215,7 @@ struct AppServices: Sendable {
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageAcquisition = restoreImageAcquisition
+    self.restoreImageStoreRecovery = restoreImageStoreRecovery
   }
 }
 
@@ -296,9 +303,15 @@ enum AppCompositionRoot {
     let launchID = UUID()
     let imageBuildHistory = ImageBuildHistoryStore(launchID: launchID)
     let virtualMachineLibrary = VirtualMachineLibrary()
-    let restoreImageCacheURL = RestoreImageCacheDirectory.defaultURL()
+    let restoreImageStoreLocations = RestoreImageStoreLocations.standard()
+    let restoreImageCacheURL = restoreImageStoreLocations.current
     let restoreImageCache = RestoreImageCacheService(
-      cacheDirectoryURL: restoreImageCacheURL
+      cacheDirectoryURL: restoreImageCacheURL,
+      excludesFromBackup: true
+    )
+    let legacyRestoreImageCache = RestoreImageCacheService(
+      cacheDirectoryURL: restoreImageStoreLocations.legacyCache,
+      excludesFromBackup: false
     )
     let restoreImageAcquisition = RestoreImageAcquisitionService(
       downloader: RestoreImageDownloadService(
@@ -310,6 +323,18 @@ enum AppCompositionRoot {
         cache: restoreImageCache
       ),
       cache: restoreImageCache
+    )
+    let restoreImageStoreMigration = RestoreImageStoreMigrationService(
+      locations: restoreImageStoreLocations,
+      legacyStore: legacyRestoreImageCache,
+      currentStore: restoreImageCache,
+      references: virtualMachineLibrary
+    )
+    let restoreImageStoreRecovery = RestoreImageStoreRecoveryService(
+      legacyCache: legacyRestoreImageCache,
+      currentCache: restoreImageCache,
+      migration: restoreImageStoreMigration,
+      references: virtualMachineLibrary
     )
     let storageUsage = StorageUsageService(
       appleRuntime: AppleRuntimeStorageUsageService(),
@@ -453,7 +478,8 @@ enum AppCompositionRoot {
       virtualMachineAvailability:
         AppleMacVirtualMachineAvailabilityChecker(),
       restoreImageDiscovery: MacRestoreImageService(),
-      restoreImageAcquisition: restoreImageAcquisition
+      restoreImageAcquisition: restoreImageAcquisition,
+      restoreImageStoreRecovery: restoreImageStoreRecovery
     )
   }
 }

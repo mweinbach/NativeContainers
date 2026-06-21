@@ -62,6 +62,7 @@ actor VirtualMachineLibrary:
   VirtualMachineExportSourceLeasing,
   VirtualMachineImportStoring,
   VirtualMachineStorageInventoryLoading,
+  VirtualMachineRestoreImageReferenceStoring,
   MacVirtualMachineInstallationStoring,
   MacVirtualMachineRuntimeLeasing,
   MacVirtualMachineSharedDirectoryPersisting
@@ -157,6 +158,55 @@ actor VirtualMachineLibrary:
       return manifest
     }
     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+  }
+
+  func loadRestoreImageReferences() throws -> Set<URL> {
+    try ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+    return Set(
+      try list().compactMap { $0.restoreImageURL?.standardizedFileURL }
+    )
+  }
+
+  @discardableResult
+  func migrateRestoreImageReferences(
+    from sourceURL: URL,
+    to destinationURL: URL
+  ) throws -> Int {
+    let sourceURL = sourceURL.standardizedFileURL
+    let destinationURL = destinationURL.standardizedFileURL
+    guard sourceURL.isFileURL,
+      destinationURL.isFileURL,
+      sourceURL != destinationURL
+    else {
+      throw VirtualMachineModelError.invalidRestoreImageReference(sourceURL)
+    }
+
+    try ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
+    let matchingManifests = try list().filter {
+      $0.restoreImageURL?.standardizedFileURL.path == sourceURL.path
+    }
+    guard !matchingManifests.contains(where: { $0.installState == .draft }) else {
+      throw VirtualMachineModelError.invalidRestoreImageReference(sourceURL)
+    }
+
+    var updateCount = 0
+    for var manifest in matchingManifests {
+      if manifest.installState == .stopped {
+        manifest.restoreImageURL = nil
+      } else {
+        manifest.restoreImageURL = destinationURL
+      }
+      try write(manifest, to: manifestURL(for: manifest.id))
+      updateCount += 1
+    }
+    return updateCount
   }
 
   func loadVirtualMachineStorageInventory() throws

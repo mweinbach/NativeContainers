@@ -247,10 +247,6 @@ private actor TestRestoreImageAcquisition: RestoreImageAcquiring {
     abandonedURLs.append(lease.fileURL)
   }
 
-  func recoverCache(
-    referencedURLs: @Sendable () async throws -> Set<URL>
-  ) async throws {
-  }
 }
 
 private actor PreparedURLRecorder {

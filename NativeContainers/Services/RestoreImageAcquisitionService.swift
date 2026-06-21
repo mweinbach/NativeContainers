@@ -8,10 +8,6 @@ protocol RestoreImageAcquiring: Sendable {
 
   func commit(_ lease: RestoreImageCacheLease) async
   func abandon(_ lease: RestoreImageCacheLease) async throws
-
-  func recoverCache(
-    referencedURLs: @Sendable () async throws -> Set<URL>
-  ) async throws
 }
 
 extension RestoreImageAcquiring {
@@ -38,8 +34,11 @@ struct RestoreImageAcquisitionService: RestoreImageAcquiring {
   }
 
   static func standard() -> RestoreImageAcquisitionService {
-    let directoryURL = RestoreImageCacheDirectory.defaultURL()
-    let cache = RestoreImageCacheService(cacheDirectoryURL: directoryURL)
+    let directoryURL = RestoreImageStoreLocations.standard().current
+    let cache = RestoreImageCacheService(
+      cacheDirectoryURL: directoryURL,
+      excludesFromBackup: true
+    )
     return RestoreImageAcquisitionService(
       downloader: RestoreImageDownloadService(
         downloadDirectoryURL: directoryURL,
@@ -71,11 +70,5 @@ struct RestoreImageAcquisitionService: RestoreImageAcquiring {
 
   func abandon(_ lease: RestoreImageCacheLease) async throws {
     try await cache.abandon(lease)
-  }
-
-  func recoverCache(
-    referencedURLs: @Sendable () async throws -> Set<URL>
-  ) async throws {
-    try await cache.recover(referencedURLs: referencedURLs)
   }
 }

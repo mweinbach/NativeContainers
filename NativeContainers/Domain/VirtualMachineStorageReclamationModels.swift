@@ -66,12 +66,17 @@ enum VirtualMachineStorageReclamationCategory:
   }
 }
 
-enum VirtualMachineStorageArtifactFileType: String, Equatable, Sendable {
+enum VirtualMachineStorageArtifactFileType:
+  String,
+  Codable,
+  Equatable,
+  Sendable
+{
   case regularFile
   case directory
 }
 
-struct VirtualMachineStorageArtifactIdentity: Equatable, Sendable {
+struct VirtualMachineStorageArtifactIdentity: Codable, Equatable, Sendable {
   let device: UInt64
   let inode: UInt64
   let fileType: VirtualMachineStorageArtifactFileType

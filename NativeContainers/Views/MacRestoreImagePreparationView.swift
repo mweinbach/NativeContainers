@@ -296,9 +296,6 @@ private struct PreviewRestoreImageAcquisition: RestoreImageAcquiring {
 
   func commit(_ lease: RestoreImageCacheLease) async {}
   func abandon(_ lease: RestoreImageCacheLease) async throws {}
-  func recoverCache(
-    referencedURLs: @Sendable () async throws -> Set<URL>
-  ) async throws {}
 }
 
 extension RestoreImageAcquisitionSource {

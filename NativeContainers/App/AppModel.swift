@@ -169,6 +169,8 @@ final class AppModel {
     restoreImageDiscovery: any MacRestoreImageDiscovering = MacRestoreImageService(),
     restoreImageAcquisition: any RestoreImageAcquiring =
       RestoreImageAcquisitionService.standard(),
+    restoreImageStoreRecovery: any RestoreImageStoreRecovering =
+      NoopRestoreImageStoreRecoveryService(),
     initialInventory: ContainerInventory? = nil,
     initialVirtualMachines: [VirtualMachineManifest] = []
   ) {
@@ -194,7 +196,8 @@ final class AppModel {
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
         virtualMachineAvailability: virtualMachineAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
-        restoreImageAcquisition: restoreImageAcquisition
+        restoreImageAcquisition: restoreImageAcquisition,
+        restoreImageStoreRecovery: restoreImageStoreRecovery
       ),
       initialInventory: initialInventory,
       initialVirtualMachines: initialVirtualMachines
@@ -217,12 +220,7 @@ final class AppModel {
           "Virtual machine recovery is waiting for another NativeContainers process to finish its active operation."
         return
       }
-      try await services.restoreImageAcquisition.recoverCache {
-        Set(
-          try await services.virtualMachineLibrary.list()
-            .compactMap(\.restoreImageURL)
-        )
-      }
+      try await services.restoreImageStoreRecovery.recover()
       virtualMachineRecoveryErrorMessage = nil
     } catch {
       virtualMachineRecoveryErrorMessage =

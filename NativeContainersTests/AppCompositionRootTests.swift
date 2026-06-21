@@ -47,5 +47,6 @@ struct AppCompositionRootTests {
         is AppleMacVirtualMachineAvailabilityChecker
     )
     #expect(services.restoreImageAcquisition is RestoreImageAcquisitionService)
+    #expect(services.restoreImageStoreRecovery is RestoreImageStoreRecoveryService)
   }
 }
