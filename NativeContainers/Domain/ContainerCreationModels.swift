@@ -90,6 +90,7 @@ struct ContainerCreationRequest: Equatable, Sendable {
   let environment: [ContainerEnvironmentVariable]
   let workingDirectory: String?
   let publishedPorts: [ContainerPortPublication]
+  let attachments: ContainerAttachmentSelection
   let startAfterCreation: Bool
   let removeWhenStopped: Bool
   let forwardSSHAgent: Bool
@@ -107,6 +108,7 @@ struct ContainerCreationRequest: Equatable, Sendable {
     environment: [ContainerEnvironmentVariable] = [],
     workingDirectory: String? = nil,
     publishedPorts: [ContainerPortPublication] = [],
+    attachments: ContainerAttachmentSelection = .empty,
     startAfterCreation: Bool = true,
     removeWhenStopped: Bool = false,
     forwardSSHAgent: Bool = false,
@@ -158,6 +160,7 @@ struct ContainerCreationRequest: Equatable, Sendable {
     self.environment = environment
     self.workingDirectory = workingDirectory.flatMap { $0.isEmpty ? nil : $0 }
     self.publishedPorts = publishedPorts
+    self.attachments = attachments
     self.startAfterCreation = startAfterCreation
     self.removeWhenStopped = removeWhenStopped
     self.forwardSSHAgent = forwardSSHAgent
