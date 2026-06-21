@@ -736,6 +736,30 @@ Updated: 2026-06-21.
   launch/stop succeeds; an orphaned Preview process accepted exact-PID TERM,
   and no NativeContainers process remains. The only launch errors were the
   existing macOS 27 beta `com.apple.linkd.autoShortcut` registration noise.
+- Restore-image ownership is now a modular application service rather than a
+  handoff between the download and import UI paths. One acquisition facade
+  composes independent download/import services with a shared cache authority;
+  versioned markers and a cache-wide cross-process lease span byte acquisition,
+  Virtualization platform preparation, and manifest commit. Remote partials
+  remain resumable, failed private imports are discarded, already-cached files
+  receive real leases, completed URL-hash identities are immutable, and
+  startup recovery takes the cache lock before loading fresh manifest
+  references. Successful installation clears its now-unneeded reference while
+  cancellation and failure retain it for retry.
+- Restore images are also a third, explicitly opt-in VM reclamation category.
+  Planning admits only unreferenced current-user regular IPSWs with no active
+  marker; partial downloads must be at least seven days old. Execution reloads
+  references, revalidates exact filesystem identity, atomically retires the
+  reviewed file, and leaves a recovery-recognized tombstone if deletion is
+  interrupted. The review UI discloses redownload cost and keeps VM disks,
+  active leases, referenced images, replacements, links, and special files out
+  of scope. Build-for-testing succeeds and the full Xcode plan passes all 676
+  outcomes: 657 deterministic tests passed, 19 explicitly gated live tests
+  skipped, and no tests failed. Reviewing light, dark-variant, and large-text
+  previews render without clipping; Xcode launch/stop succeeds, the Preview
+  host accepted exact-PID TERM, the navigator has no issues, and no
+  NativeContainers process remains. Launch emitted only the existing macOS 27
+  beta `com.apple.linkd.autoShortcut` registration noise.
 
 ## Known configuration issue
 
@@ -750,8 +774,9 @@ entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
-1. Unify restore-image download/import/preparation ownership under a durable
-   cache lease, then add separately reviewed unreferenced-image reclamation.
+1. Migrate newly acquired restore images from the purgeable Caches directory to
+   private Application Support, with an atomic legacy-manifest/reference
+   migration so prepared VMs are never stranded.
 2. Design an explicit RAW-to-ASIF migration path for the macOS 27 tier before
    offering compaction. The macOS 26 path must not use raw truncation because
    public APIs do not resize the guest filesystem and can destroy data.

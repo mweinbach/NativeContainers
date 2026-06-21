@@ -122,7 +122,9 @@ must leave a usable, test-backed product slice.
 ## M4 — macOS VMs
 
 - [x] Discover latest supported restore image and validate selected local IPSWs.
-- [x] Download with resumable progress and integrity/error handling.
+- [x] Download/import through one cache authority with resumable progress,
+      immutable promotion, cross-process leases held through manifest commit,
+      and launch recovery against a fresh VM-reference set.
 - [x] Create bundle, disk, auxiliary storage, hardware model, and identifier.
 - [ ] Live-verify macOS installation after the entitlement is available. The
       service/UI path, progress, supported cancellation, operation leases,
@@ -158,8 +160,11 @@ must leave a usable, test-backed product slice.
   - [x] Reviewed VM saved-state and exact allowlisted interrupted-residue
         reclamation with runtime/library locks, filesystem identity seals,
         atomic retirement, cancellation checkpoints, and partial results.
-  - [ ] Stopped-only sparse compaction and cached restore-image reclamation;
-        cache deletion remains deferred until ownership leases are unified.
+  - [x] Opt-in reviewed restore-image reclamation with shared cache leases,
+        fresh manifest-reference checks, exact filesystem seals, aged-partial
+        policy, atomic retirement, and crash-tombstone recovery.
+  - [ ] Stopped-only sparse compaction through an explicit RAW-to-ASIF
+        migration; raw truncation remains prohibited.
 
 ## M5 — Optimization and polish
 

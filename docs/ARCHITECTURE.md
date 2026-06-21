@@ -635,7 +635,7 @@ than sharing presentation state across an implied multi-window group.
   inventory and only the Apple accounting lane refresh; the unrelated VM
   filesystem scan remains on demand.
 - VM reclamation is a separate sibling graph with a thin
-  `VirtualMachineStorageReclamationManaging` coordinator over two category
+  `VirtualMachineStorageReclamationManaging` coordinator over three category
   services. The saved-state service acquires the existing per-VM runtime lease
   and delegates exact checkpoint retirement to the saved-state store. The
   residue service owns only a strict top-level allowlist, takes the library
@@ -646,11 +646,25 @@ than sharing presentation state across an implied multi-window group.
   unrecognized hidden entries fail closed. Execution revalidates immediately
   before an atomic same-parent rename, then finishes deletion without another
   cancellation checkpoint; any surviving tombstone remains in an existing
-  recovery-recognized namespace. The app model binds plans to the VM accounting
-  and library revisions and refreshes only VM inventory plus the VM accounting
-  lane after accepted work. Disk images and restore-image cache entries are not
-  candidates, and no reclamation service invokes Start, Stop, Force Stop, or
-  KILL.
+  recovery-recognized namespace. The restore-image service is off by default
+  and shares one cache authority with download, import, and launch recovery.
+  That authority takes the cache operation lock before loading VM references;
+  only unreferenced regular IPSWs and seven-day-old partials are reviewable.
+  Execution reloads references and exact file identity before a same-parent
+  tombstone rename. The app model binds plans to the VM accounting and library
+  revisions and refreshes only VM inventory plus the VM accounting lane after
+  accepted work. Disk images are never candidates, and no reclamation service
+  invokes Start, Stop, Force Stop, or KILL.
+- Restore-image acquisition is exposed to application state as one
+  `RestoreImageAcquiring` facade. A shared cache actor issues typed leases to
+  independent HTTP-download and local-import services, persists a versioned
+  ownership marker, and holds its cross-process lock through platform
+  preparation and manifest commit. Remote cancellation keeps resumable bytes;
+  failed local import removes its private copy; completed downloads are
+  immutable URL-hash identities and are never replaced in place. Recovery,
+  preparation, and reclamation use cache-before-library lock order. A
+  successful installer commit clears the manifest reference, while a failed or
+  cancelled install retains it for retry.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before

@@ -392,6 +392,11 @@ The installed Apple documentation confirms:
   compatible hardware model and CPU/memory requirements.
 - Apple explicitly requires the network URL returned by latest-image discovery
   to be downloaded to a local file before constructing `VZMacOSInstaller`.
+- `VZMacOSRestoreImage.image(from:)` and
+  `VZMacOSInstaller.init(virtualMachine:restoringFromImageAt:)` both consume a
+  local file URL. No public descriptor-pinning or ownership-lease initializer
+  is exposed, so the app must retain its own cache lease across every Apple URL
+  consumer and the manifest commit.
 - New auxiliary storage is created with
   `VZMacAuxiliaryStorage(creatingStorageAt:hardwareModel:options:)`. The exact
   hardware model used there must also be set on the VM platform configuration.
@@ -591,6 +596,19 @@ at kickoff, so the foundation does not depend on it.
   `VZMacMachineIdentifier` remain the restore identity.
 
 ## Storage-accounting findings
+
+- The user Caches directory is reclaimable storage rather than a durable
+  archive. Cross-process leases prevent NativeContainers from racing itself,
+  but cannot promise that a prepared VM's referenced IPSW survives an OS cache
+  purge while the app is not running. Moving new restore images to Application
+  Support requires a deliberate legacy-manifest migration rather than a path
+  flip.
+- A restore-image cleanup plan must acquire the cache lock before reading VM
+  manifests. With the same cache-before-library order used by preparation, no
+  second current-version process can add a reference between that read and the
+  deletion decision. Execution still reloads references and the descriptor-
+  derived file identity because review is not authorization for a changed
+  artifact.
 
 - The pinned `apple/container` 1.0.0 API exposes `systemDiskUsage` and returns
   `DiskUsageStats` with image, container, and volume `ResourceUsage` values:

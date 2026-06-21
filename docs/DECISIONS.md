@@ -1005,11 +1005,11 @@ labeled estimated/reported removed bytes, never measured host free-space gain.
 
 VM accounting remains read-only. A sibling
 `VirtualMachineStorageReclamationManaging` service composes independently
-replaceable saved-state and interrupted-residue services, records the VM
-measurement and library revisions as review provenance, and executes only the
-immutable candidates shown in the confirmation sheet. This keeps filesystem
-ownership out of SwiftUI and avoids growing the library actor into a general
-cleanup facade.
+replaceable saved-state, interrupted-residue, and restore-image services,
+records the VM measurement and library revisions as review provenance, and
+executes only the immutable candidates shown in the confirmation sheet. This
+keeps filesystem ownership out of SwiftUI and avoids growing the library actor
+into a general cleanup facade.
 
 Committed saved states are planned and discarded by the existing saved-state
 store while a per-VM runtime lease is held. A replacement checkpoint cannot
@@ -1025,8 +1025,8 @@ Cancellation is observed before each candidate and immediately before its
 retirement rename. After that rename the mutation is committed and cleanup is
 finished without another cancellation checkpoint; partial results retain exact
 removed, stale, and failed identities. The feature never starts, stops,
-force-stops, or kills a VM and never considers a committed disk or cached
-restore image.
+force-stops, or kills a VM and never considers a committed disk. Restore-image
+reclamation is a separate opt-in category governed by ADR-039.
 
 Virtualization's RAW attachment remains a one-to-one block mapping. The public
 SDK exposes no RAW compaction operation; DiskImageKit exposes ASIF creation and
@@ -1034,3 +1034,45 @@ resize primitives on the newer platform, while truncation explicitly does not
 resize the guest filesystem and can destroy data. This change therefore does
 not approximate compaction with raw truncation. Compaction remains a separate
 format-migration or transactional rewrite decision.
+
+## ADR-039: Lease restore images through preparation and reclaim only reviewed references
+
+**Status:** Accepted — 2026-06-21
+
+Restore-image discovery remains independent, but every local or remote
+acquisition now enters through one `RestoreImageAcquiring` facade backed by a
+shared `RestoreImageCacheService`. The cache authority owns the private
+directory, cache-wide `.operations.lock`, versioned per-artifact marker, and
+opaque typed lease. Download and import services transfer bytes only after a
+lease exists; the application model commits that lease only after
+Virtualization preparation and the VM manifest write have returned. A remote
+abort retains its immutable completed file or resumable partial, while a local
+import abort removes its private copy. Files already inside the private cache
+receive real leases rather than bypassing ownership.
+
+Download identities combine a readable source name with a hash of the source
+URL. A completed file is immutable and reused; download promotion never
+replaces an existing file in place. Partial and source files are opened with
+`O_NOFOLLOW` and validated from their descriptors. Cache recovery takes the
+cache lock before loading the current VM-manifest reference set, so a second
+process using this version cannot publish a new reference between the decision
+and cleanup. The canonical order is cache lock, then VM library access. This is
+required because public Virtualization APIs consume local file URLs and expose
+no descriptor-pinning API.
+
+Restore-image deletion is the third VM-reclamation category and is off by
+default. Planning admits only app-owned, single-link regular IPSWs that have no
+active marker and no manifest reference. Abandoned `.ipsw.partial` files must
+also be at least seven days old. Execution reacquires the cache lock, reloads
+the complete reference set, and revalidates the exact device, inode, size,
+allocation, timestamps, and metadata fingerprint before a same-parent rename.
+That rename is the commit point; a recognized tombstone lets launch recovery
+finish an interrupted deletion. Successful macOS installation clears the
+manifest's restore-image reference, while cancelled or failed installation
+retains it for retry.
+
+The current location remains under the app's Caches directory. That directory
+is not a durable cross-launch archive and may be purged while the app is not
+running. Moving new artifacts to private Application Support therefore remains
+a separate migration: it must update legacy manifest references atomically and
+cannot silently strand prepared VMs.
