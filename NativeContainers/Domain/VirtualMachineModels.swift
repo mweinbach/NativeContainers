@@ -58,6 +58,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var installationFailure: VirtualMachineInstallationFailure? = nil
   var audioConfiguration: MacVirtualMachineAudioConfiguration? = nil
   var networkConfiguration: MacVirtualMachineNetworkConfiguration? = nil
+  var linuxConfiguration: LinuxVirtualMachineConfiguration? = nil
 
   init(
     id: UUID = UUID(),
@@ -119,6 +120,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installationFailure = nil
     audioConfiguration = nil
     networkConfiguration = source.networkConfiguration
+    linuxConfiguration = source.linuxConfiguration
   }
 
   var effectiveAudioConfiguration: MacVirtualMachineAudioConfiguration {
@@ -210,6 +212,17 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installationFailure = nil
     self.updatedAt = updatedAt
   }
+
+  mutating func markReadyToInstallLinux(
+    configuration: LinuxVirtualMachineConfiguration,
+    updatedAt: Date = Date()
+  ) {
+    installState = .readyToInstall
+    linuxConfiguration = configuration
+    installationOperationID = nil
+    installationFailure = nil
+    self.updatedAt = updatedAt
+  }
 }
 
 struct MacRestoreImageInfo: Codable, Equatable, Sendable {
@@ -234,10 +247,13 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
   case libraryInUse
   case virtualMachineNotFound(UUID)
   case requiresMacOSGuest(UUID)
+  case requiresLinuxGuest(UUID)
   case invalidInstallState(VirtualMachineInstallState)
   case platformArtifactsAlreadyExist(UUID)
+  case linuxPlatformArtifactsAlreadyExist(UUID)
   case invalidRestoreImageReference(URL)
   case macPlatformPreparationUnavailable
+  case linuxPlatformPreparationUnavailable
   case virtualMachineDiscardUnavailable
 
   var errorDescription: String? {
@@ -262,14 +278,20 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
       "No virtual machine with identifier \(identifier.uuidString) exists."
     case .requiresMacOSGuest(let identifier):
       "Virtual machine \(identifier.uuidString) is not configured for macOS."
+    case .requiresLinuxGuest(let identifier):
+      "Virtual machine \(identifier.uuidString) is not configured for Linux."
     case .invalidInstallState(let state):
       "A virtual machine in the \(state.rawValue) state cannot perform this operation."
     case .platformArtifactsAlreadyExist(let identifier):
       "macOS platform artifacts already exist for virtual machine \(identifier.uuidString)."
+    case .linuxPlatformArtifactsAlreadyExist(let identifier):
+      "Linux platform artifacts already exist for virtual machine \(identifier.uuidString)."
     case .invalidRestoreImageReference(let url):
       "The restore-image reference is invalid: \(url.absoluteString)"
     case .macPlatformPreparationUnavailable:
       "macOS platform preparation is unavailable for this virtual machine library."
+    case .linuxPlatformPreparationUnavailable:
+      "Linux platform preparation is unavailable for this virtual machine library."
     case .virtualMachineDiscardUnavailable:
       "Discarding virtual machines is unavailable for this virtual machine library."
     }

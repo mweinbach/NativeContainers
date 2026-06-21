@@ -16,6 +16,13 @@ protocol MacVirtualMachinePreparing: Sendable {
   func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest
 }
 
+protocol LinuxVirtualMachinePreparing: Sendable {
+  func prepareLinuxVM(
+    id: UUID,
+    installationMediaURL: URL
+  ) async throws -> VirtualMachineManifest
+}
+
 protocol VirtualMachineDiscarding: Sendable {
   func discardVirtualMachine(id: UUID) async throws
 }
@@ -24,12 +31,22 @@ protocol VirtualMachineLibraryProtocol:
   VirtualMachineInventoryLoading,
   VirtualMachineDraftCreating,
   MacVirtualMachinePreparing,
+  LinuxVirtualMachinePreparing,
   VirtualMachineDiscarding
 {}
 
 extension MacVirtualMachinePreparing {
   func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest {
     throw VirtualMachineModelError.macPlatformPreparationUnavailable
+  }
+}
+
+extension LinuxVirtualMachinePreparing {
+  func prepareLinuxVM(
+    id: UUID,
+    installationMediaURL: URL
+  ) async throws -> VirtualMachineManifest {
+    throw VirtualMachineModelError.linuxPlatformPreparationUnavailable
   }
 }
 
@@ -102,6 +119,7 @@ actor VirtualMachineLibrary:
   private let bundleValidator: VirtualMachineBundleValidator
   private let launchID: UUID
   private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
+  private let linuxPlatformArtifactPreparer: any LinuxPlatformArtifactPreparing
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
   private let sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring
   private let sharedDirectoryNameValidator: any MacVirtualMachineSharedDirectoryNameValidating
@@ -116,6 +134,8 @@ actor VirtualMachineLibrary:
     fileManager: FileManager = .default,
     launchID: UUID = UUID(),
     macPlatformArtifactPreparer: any MacPlatformArtifactPreparing = MacPlatformArtifactPreparer(),
+    linuxPlatformArtifactPreparer: any LinuxPlatformArtifactPreparing =
+      LinuxPlatformArtifactPreparer(),
     macMachineIdentifierValidator: any MacVirtualMachineIdentifierValidating =
       AppleMacVirtualMachineIdentifierGenerator(),
     sharedDirectoryStore: any MacVirtualMachineSharedDirectoryConfigurationStoring =
@@ -141,6 +161,7 @@ actor VirtualMachineLibrary:
     self.rootURL = resolvedRootURL
     self.bundleStore = bundleStore
     self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
+    self.linuxPlatformArtifactPreparer = linuxPlatformArtifactPreparer
     self.macVirtualMachineBundleResolver = bundleResolver
     self.sharedDirectoryStore = sharedDirectoryStore
     self.sharedDirectoryNameValidator = sharedDirectoryNameValidator
@@ -509,6 +530,81 @@ actor VirtualMachineLibrary:
         auxiliaryStoragePath: MacPlatformArtifactURLs.auxiliaryStorageManifestPath,
         hardwareModelPath: MacPlatformArtifactURLs.hardwareModelManifestPath,
         machineIdentifierPath: MacPlatformArtifactURLs.machineIdentifierManifestPath
+      )
+      try bundleStore.write(
+        manifest,
+        to: bundleURL.appending(path: Self.manifestFilename)
+      )
+      return manifest
+    } catch {
+      try? fileManager.removeItem(at: stagingDirectory)
+      if promotedArtifacts {
+        try? fileManager.removeItem(at: finalArtifactDirectory)
+      }
+      throw error
+    }
+  }
+
+  func prepareLinuxVM(
+    id: UUID,
+    installationMediaURL: URL
+  ) async throws -> VirtualMachineManifest {
+    try bundleStore.ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
+    let bundleURL = bundleStore.bundleURL(for: id)
+    guard fileManager.fileExists(atPath: bundleURL.path) else {
+      throw VirtualMachineModelError.virtualMachineNotFound(id)
+    }
+
+    var manifest = try bundleStore.readManifest(in: bundleURL)
+    guard manifest.guest == .linux else {
+      throw VirtualMachineModelError.requiresLinuxGuest(id)
+    }
+    guard manifest.installState == .draft else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+
+    let finalArtifactDirectory = bundleURL.appending(
+      path: LinuxPlatformArtifactURLs.directoryName,
+      directoryHint: .isDirectory
+    )
+    guard manifest.linuxConfiguration == nil,
+      !fileManager.fileExists(atPath: finalArtifactDirectory.path)
+    else {
+      throw VirtualMachineModelError.linuxPlatformArtifactsAlreadyExist(id)
+    }
+
+    let stagingDirectory = bundleURL.appending(
+      path: ".\(LinuxPlatformArtifactURLs.directoryName).partial-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    let stagingArtifacts = LinuxPlatformArtifactURLs(directory: stagingDirectory)
+    var promotedArtifacts = false
+
+    do {
+      try fileManager.createDirectory(
+        at: stagingDirectory,
+        withIntermediateDirectories: false
+      )
+      let preparation = try await linuxPlatformArtifactPreparer.prepare(
+        installationMediaURL: installationMediaURL,
+        destination: stagingArtifacts
+      )
+      try bundleStore.validatePreparedArtifacts(stagingArtifacts)
+
+      try fileManager.moveItem(at: stagingDirectory, to: finalArtifactDirectory)
+      promotedArtifacts = true
+
+      manifest.markReadyToInstallLinux(
+        configuration: LinuxVirtualMachineConfiguration(
+          efiVariableStorePath: LinuxPlatformArtifactURLs.efiVariableStoreManifestPath,
+          machineIdentifierPath: LinuxPlatformArtifactURLs.machineIdentifierManifestPath,
+          installationMediaPath: LinuxPlatformArtifactURLs.installationMediaManifestPath,
+          macAddress: preparation.macAddress
+        )
       )
       try bundleStore.write(
         manifest,

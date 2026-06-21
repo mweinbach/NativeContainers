@@ -92,13 +92,14 @@ struct VirtualMachineBundleStore {
   }
 
   func validatePreparedArtifacts(_ artifacts: MacPlatformArtifactURLs) throws {
-    for artifact in artifacts.all {
-      var isDirectory: ObjCBool = false
-      guard fileManager.fileExists(atPath: artifact.path, isDirectory: &isDirectory),
-        !isDirectory.boolValue
-      else {
-        throw MacPlatformArtifactError.missingArtifact(artifact.lastPathComponent)
-      }
+    if let missingArtifact = firstMissingArtifact(in: artifacts.all) {
+      throw MacPlatformArtifactError.missingArtifact(missingArtifact.lastPathComponent)
+    }
+  }
+
+  func validatePreparedArtifacts(_ artifacts: LinuxPlatformArtifactURLs) throws {
+    if let missingArtifact = firstMissingArtifact(in: artifacts.all) {
+      throw LinuxPlatformArtifactError.missingArtifact(missingArtifact.lastPathComponent)
     }
   }
 
@@ -176,6 +177,14 @@ struct VirtualMachineBundleStore {
       supportURL
       .appending(path: "NativeContainers", directoryHint: .isDirectory)
       .appending(path: "Virtual Machines", directoryHint: .isDirectory)
+  }
+
+  private func firstMissingArtifact(in artifacts: [URL]) -> URL? {
+    artifacts.first { artifact in
+      var isDirectory: ObjCBool = false
+      return !fileManager.fileExists(atPath: artifact.path, isDirectory: &isDirectory)
+        || isDirectory.boolValue
+    }
   }
 
   private func removeRootDirectories(prefix: String, suffix: String) throws {
