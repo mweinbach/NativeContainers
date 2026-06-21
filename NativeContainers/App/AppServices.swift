@@ -6,16 +6,6 @@ struct VirtualMachineDiskImageMaintenanceServices: Sendable {
   let rewrite: any VirtualMachineDiskImageRewriting
   let recovery: any VirtualMachineDiskImageReplacementRecovering
 
-  init(
-    migration: any VirtualMachineDiskImageMigrationManaging,
-    rewrite: any VirtualMachineDiskImageRewriting,
-    recovery: any VirtualMachineDiskImageReplacementRecovering
-  ) {
-    self.migration = migration
-    self.rewrite = rewrite
-    self.recovery = recovery
-  }
-
   static var unavailable: Self {
     Self(
       migration: UnavailableVirtualMachineDiskImageMigrationService(),
@@ -27,6 +17,7 @@ struct VirtualMachineDiskImageMaintenanceServices: Sendable {
 
 struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
+  let launchAtLogin: any LaunchAtLoginManaging
   let composeTopology: any ComposeTopologyDeriving
   let storageUsage: any StorageUsageLoading
   let storageReclamation: any StorageReclamationManaging
@@ -68,6 +59,7 @@ struct AppServices: Sendable {
 
   init(
     inventory: any ContainerInventoryLoading,
+    launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -122,6 +114,7 @@ struct AppServices: Sendable {
       NoopRestoreImageStoreRecoveryService()
   ) {
     self.inventory = inventory
+    self.launchAtLogin = launchAtLogin
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
@@ -164,6 +157,7 @@ struct AppServices: Sendable {
 
   init(
     containerService: any ContainerManaging,
+    launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -207,6 +201,7 @@ struct AppServices: Sendable {
       NoopRestoreImageStoreRecoveryService()
   ) {
     inventory = containerService
+    self.launchAtLogin = launchAtLogin
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
@@ -484,6 +479,7 @@ enum AppCompositionRoot {
     )
     return AppServices(
       inventory: inventoryService,
+      launchAtLogin: SMAppServiceLaunchAtLoginService(),
       composeTopology: ComposeTopologyService(),
       storageUsage: storageUsage,
       storageReclamation: storageReclamation,

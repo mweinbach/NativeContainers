@@ -21,6 +21,8 @@ final class AppModel {
   private(set) var linuxMachines: [LinuxMachineRecord] = []
   private(set) var composeTopology = ComposeTopologySnapshot.empty
   private(set) var virtualMachines: [VirtualMachineManifest] = []
+  private(set) var runningContainerCount = 0
+  private(set) var runningLinuxMachineCount = 0
   private(set) var isRefreshing = false
   private(set) var lastRefresh: Date?
   private(set) var errorMessage: String?
@@ -63,12 +65,13 @@ final class AppModel {
       return self.storageOverviewModel.reclamationSource(
         inventoryRevision: self.containerInventoryRevision
       )
+    },
+    didMutate: { [weak self] in
+      guard let self else { return }
+      await self.refresh()
+      await self.storageOverviewModel.refreshAppleRuntimeAfterMutation()
     }
-  ) { [weak self] in
-    guard let self else { return }
-    await self.refresh()
-    await self.storageOverviewModel.refreshAppleRuntimeAfterMutation()
-  }
+  )
 
   @ObservationIgnored
   private lazy var virtualMachineStorageReclamationModel =
@@ -79,16 +82,22 @@ final class AppModel {
         return self.storageOverviewModel.virtualMachineReclamationSource(
           libraryRevision: self.virtualMachineInventoryRevision
         )
+      },
+      didMutate: { [weak self] in
+        await self?.refreshVirtualMachineStorageAfterMutation()
       }
-    ) { [weak self] in
-      await self?.refreshVirtualMachineStorageAfterMutation()
-    }
+    )
 
   @ObservationIgnored
   private lazy var dockerCompatibilitySettingsModel = DockerCompatibilityModel(
     service: services.dockerCompatibility,
     composeConformance: services.composeBridgeConformance,
     composeClientService: services.dockerComposeClient
+  )
+
+  @ObservationIgnored
+  private lazy var launchAtLoginModel = LaunchAtLoginModel(
+    service: services.launchAtLogin
   )
 
   @ObservationIgnored
@@ -130,6 +139,8 @@ final class AppModel {
       volumes = initialInventory.volumes
       networks = initialInventory.networks
       linuxMachines = initialInventory.machines
+      runningContainerCount = initialInventory.containers.lazy.filter(\.state.isRunning).count
+      runningLinuxMachineCount = initialInventory.machines.lazy.filter(\.state.isRunning).count
       virtualMachines = initialVirtualMachines
       hasLoaded = true
       containerInventoryRevision = 1
@@ -141,6 +152,7 @@ final class AppModel {
 
   convenience init(
     containerService: any ContainerManaging = AppleContainerService(),
+    launchAtLoginService: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     composeTopologyService: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsageService: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamationService: any StorageReclamationManaging =
@@ -182,6 +194,7 @@ final class AppModel {
     self.init(
       services: AppServices(
         containerService: containerService,
+        launchAtLogin: launchAtLoginService,
         composeTopology: composeTopologyService,
         storageUsage: storageUsageService,
         storageReclamation: storageReclamationService,
@@ -285,6 +298,8 @@ final class AppModel {
       volumes = inventory.volumes
       networks = inventory.networks
       linuxMachines = inventory.machines
+      runningContainerCount = inventory.containers.lazy.filter(\.state.isRunning).count
+      runningLinuxMachineCount = inventory.machines.lazy.filter(\.state.isRunning).count
       composeTopology = topology
       containerInventoryRevision &+= 1
     } catch is CancellationError {
@@ -296,6 +311,8 @@ final class AppModel {
       volumes = []
       networks = []
       linuxMachines = []
+      runningContainerCount = 0
+      runningLinuxMachineCount = 0
       composeTopology = .empty
       messages.append("Apple container services: \(error.localizedDescription)")
     }
@@ -601,6 +618,10 @@ final class AppModel {
 
   func makeRegistrySettingsModel() -> RegistrySettingsModel {
     RegistrySettingsModel(service: services.registry)
+  }
+
+  func makeLaunchAtLoginModel() -> LaunchAtLoginModel {
+    launchAtLoginModel
   }
 
   func makeDockerCompatibilityModel() -> DockerCompatibilityModel {

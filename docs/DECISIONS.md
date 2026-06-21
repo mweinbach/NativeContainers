@@ -1219,3 +1219,29 @@ digest/config hash, resource identities, and per-container attachments.
 This lane does not permit scale-down or replacement. Socktainer 1.0.0 still lacks
 the rename and network connect/disconnect routes required by Compose's replacement
 flow, so all recreation remains a blocker.
+
+## ADR-044: Keep menu-bar and login behavior inside the native app control plane
+
+**Status:** Accepted — 2026-06-21
+
+Menu-bar controls reuse the app-scoped `AppModel`, current Apple inventory, and
+existing exact-identity lifecycle services. They do not create another poller,
+persist a shadow resource database, or call Apple adapters directly from a
+view. Rows may retain only transient in-flight button state. Start, graceful
+Stop, Restart, and Force Stop therefore have the same serialization,
+revalidation, refresh, and error behavior in the menu bar and main window.
+Force Stop remains a named destructive action inside the row's secondary menu,
+including while graceful Stop is in flight or inventory reports `stopping`.
+
+Because NativeContainers also owns regular Window and Settings scenes, its
+`MenuBarExtra` uses an explicit persistent insertion binding. Removing the extra
+does not terminate the app, and Settings remains the recovery path for showing
+it again. Main-window navigation uses SwiftUI's environment-provided
+`OpenWindowAction` and the existing `WorkspaceRoute` authority.
+
+Launch at login uses only `SMAppService.mainApp`. A focused protocol and stable
+observable model map system status into disabled, enabled, approval-required,
+and unavailable states. Registration is not represented as a Boolean preference:
+System Settings remains authoritative, revoked approval remains visible, and
+non-installable development copies fail closed. NativeContainers does not write
+or bootstrap a parallel launch-agent plist.

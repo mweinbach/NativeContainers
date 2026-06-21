@@ -7,14 +7,23 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds; refreshed source diagnostics report no issues.
-- The suite currently contains 742 test declarations and 747 expanded outcomes.
-  The current full app-hosted Xcode run passed all 728 deterministic outcomes,
+- The suite currently contains 759 test declarations and 764 expanded outcomes.
+  The current full app-hosted Xcode run passed all 745 deterministic outcomes,
   with 19 destructive or external-service integrations skipped behind explicit
   live gates and no failures. Existing opt-in tests cover Apple runtime provisioning, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
   none run against public services by default.
 - The app launches and stops through Xcode. A Preview-owned orphan was terminated
   with a bounded TERM/KILL cleanup, and no residual app process remained.
+- A native menu-bar control plane shares the app-scoped `AppModel`, inventory,
+  lifecycle services, routing, and error state instead of introducing a second
+  poller. It reports runtime and machine counts, exposes bounded container
+  Start/Stop/Restart/Force Stop actions, and deep-links into the unique main
+  window. App Behavior settings persist menu-bar visibility and route launch at
+  login through an injectable `SMAppService.mainApp` adapter with explicit
+  approval, unavailable, and failure reconciliation states. Persistent system
+  scenes are suppressed in hosted tests and Preview agents so those auxiliary
+  processes terminate deterministically without changing production behavior.
 - The app target is automatically Apple Development signed with
   `com.apple.security.virtualization`, while `ENABLE_APP_SANDBOX` remains `NO`
   as required by the checked-in project specification and the app's private
@@ -27,6 +36,8 @@ Updated: 2026-06-21.
   render successfully in Xcode Preview
   in light mode. The app-wide Quick Open sheet, actionable Overview, and
   initial-selection paths for Volumes and Networks also render successfully.
+  Menu-bar quick controls and App Behavior settings render successfully in both
+  light and dark appearance.
 - A typed workspace navigator now unifies sidebar state, exact resource
   selection, Overview links, and Command-K search. Its pure catalog derives
   stable entries from live inventory, ranks exact/prefix/word/substring matches,

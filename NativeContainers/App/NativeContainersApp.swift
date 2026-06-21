@@ -4,6 +4,9 @@ import SwiftUI
 struct NativeContainersApp: App {
   @State private var model = AppModel(services: AppCompositionRoot.live())
 
+  @AppStorage(AppPreferenceKey.menuBarExtraInserted)
+  private var isMenuBarExtraInserted = true
+
   var body: some Scene {
     Window("NativeContainers", id: "main") {
       RootView(model: model)
@@ -29,5 +32,16 @@ struct NativeContainersApp: App {
       SettingsView(model: model)
         .frame(width: 680, height: 700)
     }
+
+    MenuBarExtra(
+      "NativeContainers",
+      systemImage: "shippingbox.fill",
+      isInserted: AppExecutionContext.current.allowsPersistentSystemScenes
+        ? $isMenuBarExtraInserted
+        : .constant(false)
+    ) {
+      MenuBarQuickControlsView(model: model)
+    }
+    .menuBarExtraStyle(.window)
   }
 }

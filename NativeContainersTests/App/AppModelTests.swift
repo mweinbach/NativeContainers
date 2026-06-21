@@ -26,6 +26,10 @@ struct AppModelTests {
       model.makeStorageReclamationModel()
         === model.makeStorageReclamationModel()
     )
+    #expect(
+      model.makeLaunchAtLoginModel()
+        === model.makeLaunchAtLoginModel()
+    )
   }
 
   @Test
@@ -144,6 +148,8 @@ struct AppModelTests {
 
     #expect(model.systemInfo == inventory.system)
     #expect(model.containers == inventory.containers)
+    #expect(model.runningContainerCount == 1)
+    #expect(model.runningLinuxMachineCount == 0)
     #expect(model.networks == inventory.networks)
     #expect(model.composeProjects.map(\.name) == ["store"])
     #expect(model.composeProjects.first?.services.map(\.name) == ["web"])

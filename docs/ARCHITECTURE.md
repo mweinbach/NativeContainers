@@ -541,6 +541,19 @@ Feature views take narrow values. AppKit bridges are intentionally narrow:
 `VZVirtualMachineView` for VM display. SwiftUI remains the source of truth for
 selection and lifecycle commands.
 
+The menu-bar control is a `MenuBarExtra` scene over that same app model, not a
+second control plane. It reads the already sorted Apple inventory, keeps only
+per-row transient button state, and routes Start, graceful Stop, Restart, and
+explicit Force Stop through the existing exact-identity lifecycle methods.
+Force Stop remains reachable while graceful Stop is in flight or inventory is
+already `stopping`; duplicate destructive requests are suppressed per row.
+Opening a resource reuses the main window's `WorkspaceRoute`; failures remain
+on the shared error channel. A persistent `AppStorage` preference controls only
+menu-bar insertion. Launch-at-login policy is separate: an injectable focused
+service maps `SMAppService.mainApp` into typed disabled, enabled,
+approval-required, and unavailable states. The app never installs a custom
+launch agent or treats registration as proof of user approval.
+
 Workspace navigation is a separate focused slice. `WorkspaceRoute` represents
 both top-level destinations and exact resource identities. A pure
 `WorkspaceResourceCatalog` derives searchable entries from the current Apple

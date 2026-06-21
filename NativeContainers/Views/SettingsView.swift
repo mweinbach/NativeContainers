@@ -5,6 +5,10 @@ struct SettingsView: View {
 
   var body: some View {
     Form {
+      AppBehaviorSettingsSection(
+        launchAtLogin: model.makeLaunchAtLoginModel()
+      )
+
       Section("Apple container runtime") {
         LabeledContent("Status") {
           Text(model.systemInfo == nil ? "Unavailable" : "Running")

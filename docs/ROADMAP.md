@@ -101,7 +101,9 @@ must leave a usable, test-backed product slice.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [ ] SSH agent forwarding and safe host-directory sharing.
-- [ ] Native notifications and menu-bar quick controls.
+- [x] Native menu-bar quick controls backed by the shared app inventory and
+      exact container lifecycle services, including explicit Force Stop.
+- [ ] Native notifications.
 - [ ] Shell discovery and fallback beyond `/bin/sh`.
 - [ ] Detachable terminal windows, tabs, saved shell presets, and session
       restoration.
@@ -174,7 +176,9 @@ must leave a usable, test-backed product slice.
 
 ## M5 — Optimization and polish
 
-- [ ] Launch-on-login and demand-started services.
+- [x] Launch-on-login through `SMAppService.mainApp`, with approval and
+      unavailable states surfaced rather than inferred.
+- [ ] Demand-started services.
 - [ ] Battery/thermal-aware defaults and idle suspension.
 - [x] On-demand Apple runtime and macOS VM library storage accounting with
       category-level reclaimable estimates, sparse logical-versus-allocated
