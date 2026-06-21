@@ -6,6 +6,7 @@ struct VirtualMachinesView: View {
   @State private var isCreating = false
   @State private var machineToPrepare: VirtualMachineManifest?
   @State private var machineToInstall: VirtualMachineManifest?
+  @State private var machineToDiscard: VirtualMachineManifest?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -22,8 +23,10 @@ struct VirtualMachinesView: View {
         List(model.virtualMachines) { machine in
           VirtualMachineRow(
             machine: machine,
+            installationAvailability: model.virtualMachineInstallationAvailability,
             prepare: { machineToPrepare = machine },
-            install: { machineToInstall = machine }
+            install: { machineToInstall = machine },
+            discard: { machineToDiscard = machine }
           )
         }
       }
@@ -44,6 +47,23 @@ struct VirtualMachinesView: View {
     }
     .sheet(item: $machineToInstall) { machine in
       MacVirtualMachineInstallationView(machine: machine, appModel: model)
+    }
+    .confirmationDialog(
+      "Discard virtual machine?",
+      isPresented: Binding(
+        get: { machineToDiscard != nil },
+        set: { if !$0 { machineToDiscard = nil } }
+      ),
+      presenting: machineToDiscard
+    ) { machine in
+      Button("Discard \(machine.name)", role: .destructive) {
+        machineToDiscard = nil
+        Task { await model.discardVirtualMachine(id: machine.id) }
+      }
+    } message: { machine in
+      Text(
+        "This permanently removes \(machine.name), its virtual disk, and its platform identity. Cached restore images are retained."
+      )
     }
   }
 }

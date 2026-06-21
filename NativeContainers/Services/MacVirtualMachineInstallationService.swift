@@ -51,15 +51,19 @@ final class MacVirtualMachineInstallationService: MacVirtualMachineInstalling {
     defer { activeMachineIDs.remove(id) }
 
     progress(MacVirtualMachineInstallationProgress(phase: .preparing))
-    let preparedMachine = try await store.resolvePreparedMacVM(id: id)
-    let session = try engine.makeSession(for: preparedMachine)
-    try Task.checkCancellation()
-
     let operationID = UUID()
-    try await store.beginMacOSInstallation(id: id, operationID: operationID)
-
-    var lastFraction = 0.0
+    var leaseStarted = false
     do {
+      let preparedMachine = try await store.stageMacOSInstallation(
+        id: id,
+        operationID: operationID
+      )
+      let session = try engine.makeSession(for: preparedMachine)
+      try Task.checkCancellation()
+      try await store.beginMacOSInstallation(id: id, operationID: operationID)
+      leaseStarted = true
+
+      var lastFraction = 0.0
       try await session.install { update in
         let normalizedFraction = update.fractionCompleted.map {
           max(lastFraction, min(1, max(0, $0)))
@@ -83,14 +87,32 @@ final class MacVirtualMachineInstallationService: MacVirtualMachineInstalling {
       try await store.completeMacOSInstallation(id: id, operationID: operationID)
     } catch {
       let wasCancelled = error is CancellationError || Task.isCancelled
-      try? await store.failMacOSInstallation(
-        id: id,
-        operationID: operationID,
-        kind: wasCancelled ? .cancelled : .failed,
-        message: wasCancelled
-          ? "macOS installation was cancelled. Reset the VM before trying again."
-          : error.localizedDescription
-      )
+      let operationMessage =
+        wasCancelled
+        ? "macOS installation was cancelled. The pristine prepared media is ready to retry."
+        : error.localizedDescription
+
+      do {
+        if leaseStarted {
+          try await store.abortMacOSInstallation(
+            id: id,
+            operationID: operationID,
+            kind: wasCancelled ? .cancelled : .failed,
+            message: operationMessage
+          )
+        } else {
+          try await store.discardStagedMacOSInstallation(
+            id: id,
+            operationID: operationID
+          )
+        }
+      } catch let persistenceError {
+        throw MacVirtualMachineInstallationError.statePersistenceFailed(
+          operation: operationMessage,
+          persistence: persistenceError.localizedDescription
+        )
+      }
+
       if wasCancelled {
         throw CancellationError()
       }

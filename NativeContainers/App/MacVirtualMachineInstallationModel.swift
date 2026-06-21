@@ -48,7 +48,7 @@ final class MacVirtualMachineInstallationModel {
       phase = nil
       fractionCompleted = nil
       errorMessage =
-        "Installation was cancelled safely through Virtualization.framework. Reset this VM before trying again."
+        "Installation was cancelled safely through Virtualization.framework. The pristine prepared media is ready to retry."
       await refresh()
       return false
     } catch {

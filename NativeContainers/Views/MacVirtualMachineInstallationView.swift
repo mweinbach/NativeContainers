@@ -137,13 +137,13 @@ private struct MacVirtualMachineInstallationStatus: View {
 private struct MacVirtualMachineInstallationSafetyNotice: View {
   var body: some View {
     GroupBox {
-      Label {
+      HStack(alignment: .top, spacing: 8) {
+        Image(systemName: "shield.lefthalf.filled")
+          .foregroundStyle(.indigo)
         Text(
           "Cancel uses the installer’s supported progress cancellation. The app never pauses or force-stops a VM during installation because Apple defines that behavior as unsafe."
         )
-      } icon: {
-        Image(systemName: "shield.lefthalf.filled")
-          .foregroundStyle(.indigo)
+        .fixedSize(horizontal: false, vertical: true)
       }
       .font(.caption)
       .frame(maxWidth: .infinity, alignment: .leading)

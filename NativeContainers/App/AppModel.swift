@@ -36,6 +36,7 @@ final class AppModel {
   private var hasLoaded = false
   private var refreshRequested = false
   private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
+  private var virtualMachineRecoveryErrorMessage: String?
 
   init(
     services: AppServices,
@@ -64,6 +65,9 @@ final class AppModel {
     virtualMachineLibrary: any VirtualMachineLibraryProtocol = VirtualMachineLibrary(),
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
+    virtualMachineInstallationAvailability:
+      any MacVirtualMachineInstallationAvailabilityChecking =
+      StaticMacVirtualMachineInstallationAvailabilityChecker(value: .available),
     restoreImageDiscovery: any MacRestoreImageDiscovering = MacRestoreImageService(),
     restoreImageDownloader: any MacRestoreImageDownloading = RestoreImageDownloadService(),
     restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService(),
@@ -78,6 +82,7 @@ final class AppModel {
         registry: registryService,
         virtualMachineLibrary: virtualMachineLibrary,
         virtualMachineInstaller: virtualMachineInstaller,
+        virtualMachineInstallationAvailability: virtualMachineInstallationAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
         restoreImageDownloader: restoreImageDownloader,
         restoreImageImporter: restoreImageImporter
@@ -90,8 +95,24 @@ final class AppModel {
   func loadIfNeeded() async {
     guard !hasLoaded else { return }
     hasLoaded = true
-    try? await services.virtualMachineInstaller.recoverInterruptedInstallations()
+    await recoverVirtualMachineState()
     await refresh()
+  }
+
+  private func recoverVirtualMachineState() async {
+    do {
+      try await services.virtualMachineInstaller.recoverInterruptedInstallations()
+      let referencedRestoreImages = Set(
+        try await services.virtualMachineLibrary.list().compactMap(\.restoreImageURL)
+      )
+      try await services.restoreImageImporter.recoverPendingImports(
+        referencedURLs: referencedRestoreImages
+      )
+      virtualMachineRecoveryErrorMessage = nil
+    } catch {
+      virtualMachineRecoveryErrorMessage =
+        "Virtual machine recovery: \(error.localizedDescription)"
+    }
   }
 
   func refresh() async {
@@ -103,6 +124,9 @@ final class AppModel {
       return
     }
     isRefreshing = true
+    if virtualMachineRecoveryErrorMessage != nil {
+      await recoverVirtualMachineState()
+    }
     repeat {
       refreshRequested = false
       await performRefreshPass()
@@ -117,7 +141,7 @@ final class AppModel {
   }
 
   private func performRefreshPass() async {
-    var messages: [String] = []
+    var messages = virtualMachineRecoveryErrorMessage.map { [$0] } ?? []
 
     do {
       let inventory = try await services.inventory.loadInventory()
@@ -179,6 +203,10 @@ final class AppModel {
     }
   }
 
+  var virtualMachineInstallationAvailability: MacVirtualMachineInstallationAvailability {
+    services.virtualMachineInstallationAvailability.availability()
+  }
+
   func createVirtualMachineDraft(
     name: String,
     guest: VirtualMachineGuest,
@@ -192,12 +220,23 @@ final class AppModel {
     virtualMachines = try await services.virtualMachineLibrary.list()
   }
 
+  func discardVirtualMachine(id: UUID) async {
+    await performMutation {
+      try await self.services.virtualMachineLibrary.discardVirtualMachine(id: id)
+    }
+  }
+
   func prepareMacVirtualMachine(id: UUID, restoreImageURL: URL) async throws {
-    _ = try await services.virtualMachineLibrary.prepareMacVM(
+    let prepared = try await services.virtualMachineLibrary.prepareMacVM(
       id: id,
       restoreImageURL: restoreImageURL
     )
-    virtualMachines = try await services.virtualMachineLibrary.list()
+    if let index = virtualMachines.firstIndex(where: { $0.id == prepared.id }) {
+      virtualMachines[index] = prepared
+    } else {
+      virtualMachines.append(prepared)
+    }
+    virtualMachines.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
 
   func clearError() {

@@ -304,6 +304,30 @@ selected local URL, while the hardware model, machine identifier, and auxiliary
 storage derived from that image remain bundle-owned and are promoted
 transactionally.
 
+Locally selected IPSWs are imported into that same private cache while the file
+picker's security scope is active. The importer streams cancellable chunks to a
+partial file and promotes only a complete copy, so later installation never
+depends on an expired external-file grant. A durable pending marker lets launch
+recovery delete an orphaned import after a crash while preserving any image a
+persisted manifest already references. A private advisory lock prevents another
+app process—or actor-reentrant recovery—from treating an active import as
+abandoned.
+
+The VM library owns only durable bundle state. A strict bundle resolver turns a
+prepared manifest into verified regular-file URLs. For each attempt the library
+creates an operation-scoped sparse disk and auxiliary-storage copy. A dedicated
+installation service validates that staged configuration, acquires an
+operation-ID lease, and delegates to a main-actor installer session. Success
+renames the staged directory and atomically points the manifest at it; failure,
+cancellation, or relaunch recovery removes the staged media and returns the
+pristine prepared VM to a retryable state. Completion and recovery can mutate
+the manifest only while the expected lease remains current. A library-wide
+advisory lock extends that ownership boundary across app processes, and VM
+discard first atomically renames a bundle to a hidden tombstone so interrupted
+recursive cleanup cannot poison inventory reads. Runtime-only
+`VZVirtualMachine`, `VZMacOSInstaller`, progress observation, and cancellation
+state never enter persistence.
+
 ### UI lane
 
 The SwiftUI shell uses a `NavigationSplitView` with separate screens for:
@@ -329,6 +353,12 @@ selection and lifecycle commands.
 - Writes use temporary files plus atomic replacement.
 - VM creation is staged so cancellation cannot leave a valid-looking partial
   bundle.
+- VM installation validates staged media before taking its lease, rejects stale
+  lease completion, and treats a persisted lease with no live session as
+  interrupted. Installer cancellation uses `Progress.cancel()` only after
+  installation has started and waits for termination; pause and force-stop are
+  forbidden during installation because Virtualization.framework defines them
+  as unsafe.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before

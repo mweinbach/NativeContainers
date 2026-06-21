@@ -29,7 +29,7 @@ struct VirtualMachineLibraryTests {
     let bundles = try FileManager.default.contentsOfDirectory(
       at: root,
       includingPropertiesForKeys: nil
-    )
+    ).filter { $0.pathExtension == VirtualMachineLibrary.bundleExtension }
     #expect(bundles.count == 1)
     #expect(bundles[0].pathExtension == VirtualMachineLibrary.bundleExtension)
 
@@ -73,6 +73,75 @@ struct VirtualMachineLibraryTests {
     await #expect(throws: VirtualMachineModelError.unsupportedSchema(999)) {
       _ = try await library.list()
     }
+  }
+
+  @Test
+  func listRejectsARenamedBundleBeforeItCanTargetTheCanonicalMachine() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let library = VirtualMachineLibrary(rootURL: root)
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 8 * VirtualMachineResources.bytesPerGiB
+    )
+    let original = try await library.createDraft(
+      name: "Original",
+      guest: .macOS,
+      resources: resources
+    )
+    let copiedBundle = root.appending(
+      path: "Copied.\(VirtualMachineLibrary.bundleExtension)",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.copyItem(
+      at: bundleURL(root: root, id: original.id),
+      to: copiedBundle
+    )
+
+    await #expect(
+      throws: VirtualMachineModelError.bundleIdentifierMismatch(
+        expected: original.id,
+        bundleName: copiedBundle.lastPathComponent
+      )
+    ) {
+      _ = try await library.list()
+    }
+    #expect(FileManager.default.fileExists(atPath: bundleURL(root: root, id: original.id).path))
+  }
+
+  @Test
+  func failedDiscardLeavesOnlyAHiddenTombstoneThatRecoveryCanRetry() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let fileManager = TombstoneRemovalFailingFileManager()
+    let library = VirtualMachineLibrary(rootURL: root, fileManager: fileManager)
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 8 * VirtualMachineResources.bytesPerGiB
+    )
+    let machine = try await library.createDraft(
+      name: "Discarded",
+      guest: .macOS,
+      resources: resources
+    )
+
+    await #expect(throws: TombstoneRemovalError.expected) {
+      try await library.discardVirtualMachine(id: machine.id)
+    }
+    #expect(try await library.list().isEmpty)
+    let tombstones = try FileManager.default.contentsOfDirectory(
+      at: root,
+      includingPropertiesForKeys: nil
+    ).filter { $0.lastPathComponent.hasPrefix(VirtualMachineLibrary.deletionTombstonePrefix) }
+    #expect(tombstones.count == 1)
+
+    let recoveredLibrary = VirtualMachineLibrary(rootURL: root)
+    try await recoveredLibrary.recoverInterruptedMacOSInstallations()
+    #expect(!FileManager.default.fileExists(atPath: tombstones[0].path))
   }
 
   @Test
@@ -315,4 +384,17 @@ private actor TestMacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
 
 private enum TestMacPlatformPreparationError: Error, Equatable {
   case failed
+}
+
+private enum TombstoneRemovalError: Error, Equatable {
+  case expected
+}
+
+private final class TombstoneRemovalFailingFileManager: FileManager, @unchecked Sendable {
+  override func removeItem(at URL: URL) throws {
+    guard !URL.lastPathComponent.hasPrefix(VirtualMachineLibrary.deletionTombstonePrefix) else {
+      throw TombstoneRemovalError.expected
+    }
+    try super.removeItem(at: URL)
+  }
 }

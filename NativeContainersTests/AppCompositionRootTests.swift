@@ -29,6 +29,10 @@ struct AppCompositionRootTests {
     #expect(services.builder is AppleContainerBuilderManagementService)
     #expect(services.virtualMachineLibrary is VirtualMachineLibrary)
     #expect(services.virtualMachineInstaller is MacVirtualMachineInstallationService)
+    #expect(
+      services.virtualMachineInstallationAvailability
+        is AppleMacVirtualMachineInstallationAvailabilityChecker
+    )
     #expect(services.restoreImageImporter is RestoreImageImportService)
   }
 }

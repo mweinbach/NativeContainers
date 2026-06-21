@@ -7,8 +7,8 @@ Updated: 2026-06-21.
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing succeeds with no warnings.
-- The suite currently contains 328 test declarations. The current full
-  app-hosted Xcode run passed all 318 deterministic tests, with ten destructive
+- The suite currently contains 359 test declarations. The current full
+  app-hosted Xcode run passed all 349 deterministic tests, with ten destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes Linux-machine recovery/XPC/inventory coverage, build-history
   privacy/durability, short-pipe framing, builder mount normalization, and
@@ -19,8 +19,9 @@ Updated: 2026-06-21.
   services.
 - The app launches through Xcode and stops cleanly.
 - The SwiftUI overview, split container inspector, Linux-machine list,
-  Linux-machine creation form, and machine command runner render successfully
-  in Xcode Preview in light mode.
+  Linux-machine creation form, machine command runner, macOS VM list,
+  restore-image preparation sheet, and macOS installation sheet render
+  successfully in Xcode Preview in light mode.
 - A live Xcode snippet called `AppleContainerService.loadInventory()` against
   the installed XPC services and returned the 1.0.0 server plus live container,
   image, volume, network, and machine counts.
@@ -39,6 +40,36 @@ Updated: 2026-06-21.
   storage are created in a staging directory, validated as a set, atomically
   promoted into the VM bundle, and then committed to the manifest. Tests prove
   both successful reload and rollback on partial failure.
+- Local IPSWs are now copied into the app-owned restore-image cache while their
+  security scope is active. The import streams bounded chunks, reports progress,
+  removes partial copies on cancellation, discards a promoted cache copy if
+  platform preparation fails, and persists only the durable cache URL needed by
+  a later installation. Pending markers and a private advisory lock make launch
+  cleanup crash-durable without deleting an import still owned by this or
+  another app process; referenced promoted images survive recovery.
+- macOS installation is split into focused bundle-resolution, persistence,
+  configuration, engine, orchestration, observable-model, and SwiftUI view
+  services. Bundle resolution rejects absolute, escaping, symbolic, missing,
+  or special artifacts before Virtualization.framework sees them. Each install
+  owns an operation-ID lease; stale completion cannot commit, app relaunch marks
+  an orphaned lease interrupted, and only a successful matching operation moves
+  the manifest to `stopped`. A cross-process advisory lock prevents competing
+  recovery from removing a live installation workspace. Discard atomically
+  renames the bundle to a hidden tombstone before recursive cleanup, and launch
+  recovery retries a leftover tombstone without exposing a half-deleted VM.
+- The Apple installation adapter rebuilds and validates the persisted Mac
+  platform, RAW disk, display, input, entropy, memory-balloon, and NAT devices on
+  the main VM queue. Installation mutates an operation-scoped sparse disk and
+  auxiliary-storage copy, atomically adopts that directory only after success,
+  and discards it on cancellation, failure, or relaunch recovery so the prepared
+  media remains retryable. Cancellation uses only
+  `VZMacOSInstaller.progress.cancel()` after installation has started and then
+  awaits the installer result; the app never pauses or force-stops an installing
+  VM. Deterministic tests cover preflight failure, monotonic progress,
+  cancellation, failure, durable-state errors, stale leases, interruption
+  recovery, cross-process ownership, path traversal, symlinks, transactional
+  discard, and cache cleanup. A failed startup recovery is retried by Refresh
+  instead of remaining latched until restart.
 - Container detail inspection uses Apple’s direct API client for configuration,
   disk usage, one-shot CPU/memory/network/block/process statistics, stdout, and
   boot logs. Log reads are bounded to the newest 512 KiB per stream.
@@ -342,5 +373,6 @@ no developer-team or provisioning-profile change should be needed.
 2. Package a signed and notarized privileged helper if automated host-access
    mutation is still desired after the explicit command handoff is exercised.
 3. Add the entitlement through a functioning Xcode capability surface, then
-   implement and live-verify macOS installation and VM lifecycle.
+   live-verify the implemented macOS installer against a local IPSW before
+   adding VM lifecycle and console session ownership.
 4. Spike a pinned Socktainer process and a product-specific Docker context.

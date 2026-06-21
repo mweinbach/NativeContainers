@@ -24,11 +24,15 @@ import SwiftUI
     private func configure(_ view: VZVirtualMachineView, coordinator: Coordinator) {
       if #available(macOS 27.0, *) {
         let adaptor: VZVirtualMachineViewAdaptor
-        if let existing = coordinator.adaptorStorage as? VZVirtualMachineViewAdaptor {
+        let identifier = ObjectIdentifier(virtualMachine)
+        if let existing = coordinator.adaptorStorage as? VZVirtualMachineViewAdaptor,
+          coordinator.virtualMachineIdentifier == identifier
+        {
           adaptor = existing
         } else {
           adaptor = VZVirtualMachineViewAdaptor(virtualMachine: virtualMachine)
           coordinator.adaptorStorage = adaptor
+          coordinator.virtualMachineIdentifier = identifier
         }
         view.adaptor = adaptor
       } else {
@@ -41,6 +45,7 @@ import SwiftUI
     @MainActor
     final class Coordinator {
       var adaptorStorage: Any?
+      var virtualMachineIdentifier: ObjectIdentifier?
     }
   }
 #endif

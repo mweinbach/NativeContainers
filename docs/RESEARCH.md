@@ -371,6 +371,13 @@ The installed Apple documentation confirms:
 - A macOS VM must persist its hardware model, machine identifier, auxiliary
   storage, and main disk together.
 - `VZVirtualMachineConfiguration.validate()` is the preflight gate.
+- macOS guest configuration and installation APIs are Apple-silicon-only in the
+  installed SDK. Universal app sources therefore keep the live adapter behind
+  `#if arch(arm64)` and return an explicit unsupported-host error on Intel.
+- `VZMacOSInstaller` must begin with a stopped VM. Its documented cancellation
+  surface is `installer.progress.cancel()` after installation starts; pausing or
+  stopping the VM during installation has undefined behavior, so the app never
+  escalates installer cancellation to force stop.
 - Save/restore support has its own configuration validation and is not assumed
   for every configuration.
 - `VZVirtualMachineView` is the native interactive display. It supports

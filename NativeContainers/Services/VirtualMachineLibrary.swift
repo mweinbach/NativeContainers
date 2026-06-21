@@ -16,10 +16,15 @@ protocol MacVirtualMachinePreparing: Sendable {
   func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest
 }
 
+protocol VirtualMachineDiscarding: Sendable {
+  func discardVirtualMachine(id: UUID) async throws
+}
+
 protocol VirtualMachineLibraryProtocol:
   VirtualMachineInventoryLoading,
   VirtualMachineDraftCreating,
-  MacVirtualMachinePreparing
+  MacVirtualMachinePreparing,
+  VirtualMachineDiscarding
 {}
 
 extension MacVirtualMachinePreparing {
@@ -28,11 +33,21 @@ extension MacVirtualMachinePreparing {
   }
 }
 
+extension VirtualMachineDiscarding {
+  func discardVirtualMachine(id: UUID) async throws {
+    throw VirtualMachineModelError.virtualMachineDiscardUnavailable
+  }
+}
+
 protocol MacVirtualMachineInstallationStoring: Sendable {
-  func resolvePreparedMacVM(id: UUID) async throws -> PreparedMacVirtualMachine
+  func stageMacOSInstallation(
+    id: UUID,
+    operationID: UUID
+  ) async throws -> PreparedMacVirtualMachine
+  func discardStagedMacOSInstallation(id: UUID, operationID: UUID) async throws
   func beginMacOSInstallation(id: UUID, operationID: UUID) async throws
   func completeMacOSInstallation(id: UUID, operationID: UUID) async throws
-  func failMacOSInstallation(
+  func abortMacOSInstallation(
     id: UUID,
     operationID: UUID,
     kind: VirtualMachineInstallationFailureKind,
@@ -44,11 +59,22 @@ protocol MacVirtualMachineInstallationStoring: Sendable {
 actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineInstallationStoring {
   static let bundleExtension = "nativevm"
   static let manifestFilename = "manifest.json"
+  static let installationStagingPrefix = ".Installation-"
+  static let installationStagingSuffix = ".partial"
+  static let installationInstalledDirectoryName = "Installed"
+  static let installationDiskFilename = "Disk.img"
+  static let installationAuxiliaryStorageFilename = "AuxiliaryStorage"
+  static let operationLockFilename = ".operations.lock"
+  static let deletionTombstonePrefix = ".Deletion-"
+  static let deletionTombstoneSuffix = ".partial"
 
   private let rootURL: URL
   private let fileManager: FileManager
   private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
+  private var operationLockLease: AdvisoryFileLockLease?
+  private var operationAccessTokens = Set<UUID>()
+  private var installationOperationIDs = Set<UUID>()
 
   init(
     rootURL: URL? = nil,
@@ -79,7 +105,15 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
       let values = try bundleURL.resourceValues(forKeys: resourceKeys)
       guard values.isDirectory == true, values.isHidden != true else { return nil }
 
-      return try readManifest(in: bundleURL)
+      let manifest = try readManifest(in: bundleURL)
+      let bundleName = bundleURL.deletingPathExtension().lastPathComponent
+      guard bundleName.caseInsensitiveCompare(manifest.id.uuidString) == .orderedSame else {
+        throw VirtualMachineModelError.bundleIdentifierMismatch(
+          expected: manifest.id,
+          bundleName: bundleURL.lastPathComponent
+        )
+      }
+      return manifest
     }
     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
@@ -90,6 +124,10 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
     resources: VirtualMachineResources
   ) throws -> VirtualMachineManifest {
     try ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
     let manifest = try VirtualMachineManifest(name: name, guest: guest, resources: resources)
     let finalURL = bundleURL(for: manifest.id)
     guard !fileManager.fileExists(atPath: finalURL.path) else {
@@ -118,6 +156,9 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
 
   func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest {
     try ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
 
     let bundleURL = bundleURL(for: id)
     guard fileManager.fileExists(atPath: bundleURL.path) else {
@@ -185,53 +226,210 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
     }
   }
 
-  func resolvePreparedMacVM(id: UUID) throws -> PreparedMacVirtualMachine {
+  func discardVirtualMachine(id: UUID) async throws {
     try ensureRootExists()
-    let bundleURL = bundleURL(for: id)
-    guard fileManager.fileExists(atPath: bundleURL.path) else {
-      throw VirtualMachineModelError.virtualMachineNotFound(id)
-    }
-    let manifest = try readManifest(in: bundleURL)
-    guard manifest.installState == .readyToInstall else {
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
+    let manifest = try manifest(id: id)
+    guard manifest.installState != .installing else {
       throw VirtualMachineModelError.invalidInstallState(manifest.installState)
     }
-    return try macVirtualMachineBundleResolver.resolve(manifest)
+    let bundleURL = bundleURL(for: id)
+    try requireDirectory(bundleURL)
+    let tombstoneURL = rootURL.appending(
+      path:
+        "\(Self.deletionTombstonePrefix)\(id.uuidString.lowercased())-\(UUID().uuidString.lowercased())\(Self.deletionTombstoneSuffix)",
+      directoryHint: .isDirectory
+    )
+    try fileManager.moveItem(at: bundleURL, to: tombstoneURL)
+    try fileManager.removeItem(at: tombstoneURL)
+  }
+
+  func stageMacOSInstallation(
+    id: UUID,
+    operationID: UUID
+  ) throws -> PreparedMacVirtualMachine {
+    try ensureRootExists()
+    try acquireOperationAccess(token: operationID)
+    var staged = false
+    defer {
+      if !staged {
+        releaseOperationAccess(token: operationID)
+      }
+    }
+
+    let manifest = try installationManifest(id: id)
+    guard manifest.installState == .readyToInstall, manifest.installationOperationID == nil else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+    let preparedMachine = try macVirtualMachineBundleResolver.resolve(manifest)
+    let stagingDirectory = installationStagingDirectory(id: id, operationID: operationID)
+    let installedDirectory = installationInstalledDirectory(id: id)
+    guard !fileManager.fileExists(atPath: stagingDirectory.path),
+      !fileManager.fileExists(atPath: installedDirectory.path)
+    else {
+      throw MacVirtualMachineInstallationError.invalidBundle(
+        "installation workspace already exists"
+      )
+    }
+
+    do {
+      try fileManager.createDirectory(
+        at: stagingDirectory,
+        withIntermediateDirectories: false
+      )
+      let stagedDisk = stagingDirectory.appending(path: Self.installationDiskFilename)
+      try createSparseDisk(at: stagedDisk, size: manifest.resources.diskBytes)
+      let stagedAuxiliaryStorage = stagingDirectory.appending(
+        path: Self.installationAuxiliaryStorageFilename
+      )
+      try fileManager.copyItem(
+        at: preparedMachine.auxiliaryStorageURL,
+        to: stagedAuxiliaryStorage
+      )
+      let prepared = PreparedMacVirtualMachine(
+        manifest: manifest,
+        bundleURL: preparedMachine.bundleURL,
+        restoreImageURL: preparedMachine.restoreImageURL,
+        diskImageURL: stagedDisk,
+        auxiliaryStorageURL: stagedAuxiliaryStorage,
+        hardwareModelURL: preparedMachine.hardwareModelURL,
+        machineIdentifierURL: preparedMachine.machineIdentifierURL
+      )
+      installationOperationIDs.insert(operationID)
+      staged = true
+      return prepared
+    } catch {
+      try? fileManager.removeItem(at: stagingDirectory)
+      throw error
+    }
+  }
+
+  func discardStagedMacOSInstallation(id: UUID, operationID: UUID) throws {
+    guard installationOperationIDs.contains(operationID) else { return }
+    defer { finishInstallationOperation(operationID) }
+    try removeStagedMacOSInstallation(id: id, operationID: operationID)
+  }
+
+  private func removeStagedMacOSInstallation(id: UUID, operationID: UUID) throws {
+    let stagingDirectory = installationStagingDirectory(id: id, operationID: operationID)
+    guard fileManager.fileExists(atPath: stagingDirectory.path) else { return }
+    try requireDirectory(stagingDirectory)
+    try fileManager.removeItem(at: stagingDirectory)
   }
 
   func beginMacOSInstallation(id: UUID, operationID: UUID) throws {
+    guard installationOperationIDs.contains(operationID) else {
+      throw MacVirtualMachineInstallationError.staleOperation(id)
+    }
     var manifest = try installationManifest(id: id)
     guard manifest.installState == .readyToInstall, manifest.installationOperationID == nil else {
       throw VirtualMachineModelError.invalidInstallState(manifest.installState)
     }
+    let stagingDirectory = installationStagingDirectory(id: id, operationID: operationID)
+    try requireDirectory(stagingDirectory)
     manifest.markInstallationStarted(operationID: operationID)
     try write(manifest, to: manifestURL(for: id))
   }
 
   func completeMacOSInstallation(id: UUID, operationID: UUID) throws {
+    guard installationOperationIDs.contains(operationID) else {
+      throw MacVirtualMachineInstallationError.staleOperation(id)
+    }
     var manifest = try installationManifest(id: id)
     guard manifest.installState == .installing,
       manifest.installationOperationID == operationID
     else {
       throw MacVirtualMachineInstallationError.staleOperation(id)
     }
-    manifest.markInstallationCompleted()
-    try write(manifest, to: manifestURL(for: id))
+
+    let stagingDirectory = installationStagingDirectory(id: id, operationID: operationID)
+    let installedDirectory = installationInstalledDirectory(id: id)
+    try requireDirectory(stagingDirectory)
+    guard !fileManager.fileExists(atPath: installedDirectory.path) else {
+      throw MacVirtualMachineInstallationError.invalidBundle(
+        "installed artifact directory already exists"
+      )
+    }
+
+    let currentBundleURL = bundleURL(for: id)
+    let previousDiskURL = try macVirtualMachineBundleResolver.resolveArtifact(
+      manifest.diskImagePath,
+      named: "diskImagePath",
+      in: currentBundleURL,
+      writable: true
+    )
+    guard let previousAuxiliaryStoragePath = manifest.auxiliaryStoragePath else {
+      throw MacVirtualMachineInstallationError.missingManifestValue(
+        "auxiliaryStoragePath"
+      )
+    }
+    let previousAuxiliaryStorageURL =
+      try macVirtualMachineBundleResolver.resolveArtifact(
+        previousAuxiliaryStoragePath,
+        named: "auxiliaryStoragePath",
+        in: currentBundleURL,
+        writable: true
+      )
+    try fileManager.moveItem(at: stagingDirectory, to: installedDirectory)
+
+    let installedDiskPath =
+      "\(Self.installationInstalledDirectoryName)/\(Self.installationDiskFilename)"
+    let installedAuxiliaryStoragePath =
+      "\(Self.installationInstalledDirectoryName)/\(Self.installationAuxiliaryStorageFilename)"
+    manifest.markInstallationCompleted(
+      diskImagePath: installedDiskPath,
+      auxiliaryStoragePath: installedAuxiliaryStoragePath
+    )
+    do {
+      try write(manifest, to: manifestURL(for: id))
+    } catch {
+      try? fileManager.moveItem(at: installedDirectory, to: stagingDirectory)
+      throw error
+    }
+
+    if previousDiskURL.standardizedFileURL
+      != installedDirectory.appending(path: Self.installationDiskFilename).standardizedFileURL
+    {
+      try? fileManager.removeItem(at: previousDiskURL)
+    }
+    if previousAuxiliaryStorageURL.standardizedFileURL
+      != installedDirectory.appending(
+        path: Self.installationAuxiliaryStorageFilename
+      ).standardizedFileURL
+    {
+      try? fileManager.removeItem(at: previousAuxiliaryStorageURL)
+    }
+    finishInstallationOperation(operationID)
   }
 
-  func failMacOSInstallation(
+  func abortMacOSInstallation(
     id: UUID,
     operationID: UUID,
     kind: VirtualMachineInstallationFailureKind,
     message: String
   ) throws {
+    guard installationOperationIDs.contains(operationID) else {
+      throw MacVirtualMachineInstallationError.staleOperation(id)
+    }
+    defer { finishInstallationOperation(operationID) }
+
     var manifest = try installationManifest(id: id)
     guard manifest.installState == .installing,
       manifest.installationOperationID == operationID
     else {
       throw MacVirtualMachineInstallationError.staleOperation(id)
     }
+    try removeStagedMacOSInstallation(id: id, operationID: operationID)
+    let installedDirectory = installationInstalledDirectory(id: id)
+    if fileManager.fileExists(atPath: installedDirectory.path) {
+      try requireDirectory(installedDirectory)
+      try fileManager.removeItem(at: installedDirectory)
+    }
     let normalizedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
-    manifest.markInstallationFailed(
+    manifest.markInstallationAborted(
       kind: kind,
       message: normalizedMessage.isEmpty
         ? "macOS installation did not complete." : normalizedMessage
@@ -240,23 +438,56 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
   }
 
   func recoverInterruptedMacOSInstallations() throws {
-    for var manifest in try list() where manifest.installState == .installing {
-      manifest.markInstallationFailed(
-        kind: .interrupted,
-        message: "The app exited before macOS installation completed."
-      )
-      try write(manifest, to: manifestURL(for: manifest.id))
+    guard operationAccessTokens.isEmpty else { return }
+    try ensureRootExists()
+    let recoveryToken = UUID()
+    guard try acquireRecoveryAccess(token: recoveryToken) else { return }
+    defer { releaseOperationAccess(token: recoveryToken) }
+
+    try removeDeletionTombstones()
+    for var manifest in try list() {
+      try removeOrphanedInstallationStagingDirectories(id: manifest.id)
+      let installedDirectory = installationInstalledDirectory(id: manifest.id)
+
+      if manifest.installState == .installing {
+        if fileManager.fileExists(atPath: installedDirectory.path) {
+          try requireDirectory(installedDirectory)
+          try fileManager.removeItem(at: installedDirectory)
+        }
+        manifest.markInstallationAborted(
+          kind: .interrupted,
+          message:
+            "The app exited before macOS installation completed. The pristine prepared media was restored."
+        )
+        try write(manifest, to: manifestURL(for: manifest.id))
+      } else if !manifest.diskImagePath.hasPrefix(
+        "\(Self.installationInstalledDirectoryName)/"
+      ), fileManager.fileExists(atPath: installedDirectory.path) {
+        try requireDirectory(installedDirectory)
+        try fileManager.removeItem(at: installedDirectory)
+      }
     }
   }
 
   private func installationManifest(id: UUID) throws -> VirtualMachineManifest {
+    let manifest = try manifest(id: id)
+    guard manifest.guest == .macOS else {
+      throw VirtualMachineModelError.requiresMacOSGuest(id)
+    }
+    return manifest
+  }
+
+  private func manifest(id: UUID) throws -> VirtualMachineManifest {
     let bundleURL = bundleURL(for: id)
     guard fileManager.fileExists(atPath: bundleURL.path) else {
       throw VirtualMachineModelError.virtualMachineNotFound(id)
     }
     let manifest = try readManifest(in: bundleURL)
-    guard manifest.guest == .macOS else {
-      throw VirtualMachineModelError.requiresMacOSGuest(id)
+    guard manifest.id == id else {
+      throw VirtualMachineModelError.bundleIdentifierMismatch(
+        expected: manifest.id,
+        bundleName: bundleURL.lastPathComponent
+      )
     }
     return manifest
   }
@@ -265,8 +496,121 @@ actor VirtualMachineLibrary: VirtualMachineLibraryProtocol, MacVirtualMachineIns
     bundleURL(for: id).appending(path: Self.manifestFilename)
   }
 
+  private func removeOrphanedInstallationStagingDirectories(id: UUID) throws {
+    let entries = try fileManager.contentsOfDirectory(
+      at: bundleURL(for: id),
+      includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+      options: []
+    )
+    for entry in entries {
+      let name = entry.lastPathComponent
+      guard name.hasPrefix(Self.installationStagingPrefix),
+        name.hasSuffix(Self.installationStagingSuffix)
+      else {
+        continue
+      }
+      try requireDirectory(entry)
+      try fileManager.removeItem(at: entry)
+    }
+  }
+
+  private func removeDeletionTombstones() throws {
+    let entries = try fileManager.contentsOfDirectory(
+      at: rootURL,
+      includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+      options: []
+    )
+    for entry in entries {
+      let name = entry.lastPathComponent
+      guard name.hasPrefix(Self.deletionTombstonePrefix),
+        name.hasSuffix(Self.deletionTombstoneSuffix)
+      else {
+        continue
+      }
+      try requireDirectory(entry)
+      try fileManager.removeItem(at: entry)
+    }
+  }
+
+  private func installationStagingDirectory(id: UUID, operationID: UUID) -> URL {
+    bundleURL(for: id).appending(
+      path:
+        "\(Self.installationStagingPrefix)\(operationID.uuidString.lowercased())\(Self.installationStagingSuffix)",
+      directoryHint: .isDirectory
+    )
+  }
+
+  private func installationInstalledDirectory(id: UUID) -> URL {
+    bundleURL(for: id).appending(
+      path: Self.installationInstalledDirectoryName,
+      directoryHint: .isDirectory
+    )
+  }
+
+  private func requireDirectory(_ url: URL) throws {
+    let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+    guard values.isDirectory == true, values.isSymbolicLink != true else {
+      throw MacVirtualMachineInstallationError.invalidBundle(
+        "installation workspace is missing or symbolic"
+      )
+    }
+  }
+
   private func ensureRootExists() throws {
     try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
+  }
+
+  private func acquireOperationAccess(token: UUID) throws {
+    guard operationAccessTokens.insert(token).inserted else {
+      throw VirtualMachineModelError.libraryInUse
+    }
+    guard operationLockLease == nil else { return }
+
+    do {
+      guard
+        let lease = try AdvisoryFileLock.acquire(
+          at: rootURL.appending(path: Self.operationLockFilename)
+        )
+      else {
+        operationAccessTokens.remove(token)
+        throw VirtualMachineModelError.libraryInUse
+      }
+      operationLockLease = lease
+    } catch {
+      operationAccessTokens.remove(token)
+      throw error
+    }
+  }
+
+  private func acquireRecoveryAccess(token: UUID) throws -> Bool {
+    guard operationAccessTokens.insert(token).inserted else { return false }
+    do {
+      guard
+        let lease = try AdvisoryFileLock.acquire(
+          at: rootURL.appending(path: Self.operationLockFilename)
+        )
+      else {
+        operationAccessTokens.remove(token)
+        return false
+      }
+      operationLockLease = lease
+      return true
+    } catch {
+      operationAccessTokens.remove(token)
+      throw error
+    }
+  }
+
+  private func releaseOperationAccess(token: UUID) {
+    guard operationAccessTokens.remove(token) != nil else { return }
+    guard operationAccessTokens.isEmpty else { return }
+    operationLockLease?.release()
+    operationLockLease = nil
+  }
+
+  private func finishInstallationOperation(_ operationID: UUID) {
+    installationOperationIDs.remove(operationID)
+    releaseOperationAccess(token: operationID)
   }
 
   private func bundleURL(for id: UUID) -> URL {

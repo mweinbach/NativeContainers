@@ -88,7 +88,9 @@ must leave a usable, test-backed product slice.
 - [x] Discover latest supported restore image and validate selected local IPSWs.
 - [x] Download with resumable progress and integrity/error handling.
 - [x] Create bundle, disk, auxiliary storage, hardware model, and identifier.
-- [ ] Install macOS with progress and cancellation-safe cleanup.
+- [ ] Live-verify macOS installation after the entitlement is available. The
+      service/UI path, progress, supported cancellation, operation leases,
+      interruption recovery, and deterministic cleanup tests are implemented.
 - [ ] Start, pause, resume, request stop, force stop, and save/restore.
 - [ ] Native console with automatic display reconfiguration and system-key
       capture controls.

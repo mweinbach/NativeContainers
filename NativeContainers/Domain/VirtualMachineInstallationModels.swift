@@ -56,6 +56,7 @@ enum MacVirtualMachineInstallationError: LocalizedError, Equatable, Sendable {
   case invalidDiskSize(UInt64)
   case invalidConfiguration(String)
   case staleOperation(UUID)
+  case statePersistenceFailed(operation: String, persistence: String)
 
   var errorDescription: String? {
     switch self {
@@ -87,6 +88,8 @@ enum MacVirtualMachineInstallationError: LocalizedError, Equatable, Sendable {
       "Virtualization.framework rejected the virtual machine configuration: \(reason)"
     case .staleOperation(let identifier):
       "The installation lease for virtual machine \(identifier.uuidString) is no longer current."
+    case .statePersistenceFailed(let operation, let persistence):
+      "The VM operation ended (\(operation)), but its durable state could not be updated (\(persistence)). Restart the app before taking another action."
     }
   }
 }

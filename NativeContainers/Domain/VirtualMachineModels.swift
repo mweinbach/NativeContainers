@@ -48,7 +48,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   let resources: VirtualMachineResources
   let createdAt: Date
   var updatedAt: Date
-  let diskImagePath: String
+  var diskImagePath: String
   var auxiliaryStoragePath: String?
   var hardwareModelPath: String?
   var machineIdentifierPath: String?
@@ -91,10 +91,31 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.updatedAt = updatedAt
   }
 
-  mutating func markInstallationCompleted(updatedAt: Date = Date()) {
+  mutating func markInstallationCompleted(
+    diskImagePath: String,
+    auxiliaryStoragePath: String,
+    updatedAt: Date = Date()
+  ) {
     installState = .stopped
+    self.diskImagePath = diskImagePath
+    self.auxiliaryStoragePath = auxiliaryStoragePath
     installationOperationID = nil
     installationFailure = nil
+    self.updatedAt = updatedAt
+  }
+
+  mutating func markInstallationAborted(
+    kind: VirtualMachineInstallationFailureKind,
+    message: String,
+    updatedAt: Date = Date()
+  ) {
+    installState = .readyToInstall
+    installationOperationID = nil
+    installationFailure = VirtualMachineInstallationFailure(
+      kind: kind,
+      message: message,
+      occurredAt: updatedAt
+    )
     self.updatedAt = updatedAt
   }
 
@@ -149,11 +170,14 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
   case insufficientDisk
   case unsupportedSchema(Int)
   case duplicateIdentifier(UUID)
+  case bundleIdentifierMismatch(expected: UUID, bundleName: String)
+  case libraryInUse
   case virtualMachineNotFound(UUID)
   case requiresMacOSGuest(UUID)
   case invalidInstallState(VirtualMachineInstallState)
   case platformArtifactsAlreadyExist(UUID)
   case macPlatformPreparationUnavailable
+  case virtualMachineDiscardUnavailable
 
   var errorDescription: String? {
     switch self {
@@ -169,6 +193,10 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
       "This virtual machine uses unsupported manifest version \(version)."
     case .duplicateIdentifier(let identifier):
       "A virtual machine with identifier \(identifier.uuidString) already exists."
+    case .bundleIdentifierMismatch(let expected, let bundleName):
+      "Virtual machine bundle \(bundleName) does not match manifest identifier \(expected.uuidString)."
+    case .libraryInUse:
+      "Another NativeContainers process is changing the virtual machine library. Try again when that operation finishes."
     case .virtualMachineNotFound(let identifier):
       "No virtual machine with identifier \(identifier.uuidString) exists."
     case .requiresMacOSGuest(let identifier):
@@ -179,6 +207,8 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
       "macOS platform artifacts already exist for virtual machine \(identifier.uuidString)."
     case .macPlatformPreparationUnavailable:
       "macOS platform preparation is unavailable for this virtual machine library."
+    case .virtualMachineDiscardUnavailable:
+      "Discarding virtual machines is unavailable for this virtual machine library."
     }
   }
 }

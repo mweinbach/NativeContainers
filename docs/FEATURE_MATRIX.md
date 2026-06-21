@@ -24,7 +24,7 @@ called out rather than papered over.
 | Persistent Linux dev machines | Bounded machine/process XPC transports + focused lifecycle, process-target, command, terminal, and inventory services | M3 | Native create, first-boot provisioning, start, graceful stop, identity-pinned KILL, stopped-only delete, CPU/memory, reviewed home mounts, mapped-user shell commands, and interactive PTY are live; Apple 1.0 deletion is ID-only, configuration editing remains future work, and boot forwards host `SSH_AUTH_SOCK` when present even with no home mount |
 | Shared-kernel/project density | Experimental `LinuxPod` | M5 | Opt-in only after upstream stabilization |
 | Kubernetes | k3s in a dedicated Linux machine | M5 | Separate lifecycle and storage plan |
-| macOS restore/install | `VZMacOSRestoreImage` / `VZMacOSInstaller` | M4 | Download/preparation live; install awaits entitlement |
+| macOS restore/install | Focused restore cache, bundle resolver, staged media, durable/cross-process operation leases, configuration factory, and `VZMacOSInstaller` session | M4 | Download/preparation are live; install UI, progress, supported cancellation, retry-safe staged cleanup, interruption recovery, and deterministic tests are complete, while a real install still awaits the Virtualization entitlement and local-IPSW smoke gate |
 | macOS display/input | `VZVirtualMachineView` | M4 | Native AppKit bridge already scaffolded |
 | VM pause/resume/stop/recovery | `VZVirtualMachine` | M4 | Validate state before each action |
 | VM shared folders | VirtioFS | M4 | Guest support and scoped host access |

@@ -64,7 +64,7 @@ struct MacVirtualMachineInstallationModelTests {
     let succeeded = await task.value
 
     #expect(!succeeded)
-    #expect(model.errorMessage?.contains("Reset this VM") == true)
+    #expect(model.errorMessage?.contains("ready to retry") == true)
   }
 
   private func makeMachine() throws -> VirtualMachineManifest {

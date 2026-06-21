@@ -2,8 +2,10 @@ import SwiftUI
 
 struct VirtualMachineRow: View {
   let machine: VirtualMachineManifest
+  let installationAvailability: MacVirtualMachineInstallationAvailability
   let prepare: () -> Void
   let install: () -> Void
+  let discard: () -> Void
 
   var body: some View {
     HStack(spacing: 14) {
@@ -22,7 +24,18 @@ struct VirtualMachineRow: View {
       }
 
       Spacer()
-      action
+      HStack(spacing: 8) {
+        action
+        if machine.installState != .installing {
+          Menu {
+            Button("Discard VM…", role: .destructive, action: discard)
+          } label: {
+            Image(systemName: "ellipsis.circle")
+          }
+          .menuStyle(.borderlessButton)
+          .help("More virtual machine actions")
+        }
+      }
     }
     .padding(.vertical, 7)
   }
@@ -33,9 +46,13 @@ struct VirtualMachineRow: View {
     case .draft:
       Button("Prepare…", action: prepare)
         .buttonStyle(.borderedProminent)
+        .disabled(installationAvailability != .available)
+        .help(installationAvailability.unavailableReason ?? "Prepare macOS")
     case .readyToInstall:
       Button("Install…", action: install)
         .buttonStyle(.borderedProminent)
+        .disabled(installationAvailability != .available)
+        .help(installationAvailability.unavailableReason ?? "Install macOS")
     case .installing:
       ProgressView()
         .controlSize(.small)
@@ -45,7 +62,7 @@ struct VirtualMachineRow: View {
         .disabled(true)
         .help("VM lifecycle and console ownership are the next implementation slice.")
     case .failed:
-      Label("Reset required", systemImage: "exclamationmark.triangle.fill")
+      Label("Needs attention", systemImage: "exclamationmark.triangle.fill")
         .font(.caption)
         .foregroundStyle(.orange)
         .help(machine.installationFailure?.message ?? "The VM needs attention.")

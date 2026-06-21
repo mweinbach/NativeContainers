@@ -56,7 +56,7 @@ final class AppleMacVirtualMachineInstallationEngine: MacVirtualMachineInstallat
       }
 
       let diskSize = try diskSize(at: machine.diskImageURL)
-      guard diskSize > 0, diskSize.isMultiple(of: 512) else {
+      guard diskSize == resources.diskBytes, diskSize.isMultiple(of: 512) else {
         throw MacVirtualMachineInstallationError.invalidDiskSize(diskSize)
       }
 
@@ -106,8 +106,14 @@ final class AppleMacVirtualMachineInstallationEngine: MacVirtualMachineInstallat
       configuration.storageDevices = [disk]
       configuration.graphicsDevices = [graphics]
       configuration.networkDevices = [network]
-      configuration.keyboards = [VZMacKeyboardConfiguration()]
-      configuration.pointingDevices = [VZMacTrackpadConfiguration()]
+      configuration.keyboards = [
+        VZMacKeyboardConfiguration(),
+        VZUSBKeyboardConfiguration(),
+      ]
+      configuration.pointingDevices = [
+        VZMacTrackpadConfiguration(),
+        VZUSBScreenCoordinatePointingDeviceConfiguration(),
+      ]
       configuration.entropyDevices = [VZVirtioEntropyDeviceConfiguration()]
       configuration.memoryBalloonDevices = [
         VZVirtioTraditionalMemoryBalloonDeviceConfiguration()
@@ -190,7 +196,7 @@ final class AppleMacVirtualMachineInstallationEngine: MacVirtualMachineInstallat
       ) { [weak self] observedProgress, _ in
         let fraction = observedProgress.fractionCompleted
         Task { @MainActor [weak self] in
-          guard let self else { return }
+          guard let self, !hasFinished else { return }
           let normalized = max(lastFraction, min(1, max(0, fraction)))
           lastFraction = normalized
           handler(

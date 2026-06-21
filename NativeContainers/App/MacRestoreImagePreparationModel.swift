@@ -131,14 +131,27 @@ final class MacRestoreImagePreparationModel {
 
     do {
       try Task.checkCancellation()
-      let importedURL = try await importer.importImage(at: url) { [weak self] update in
+      let importLease = try await importer.importImage(at: url) { [weak self] update in
         await self?.receive(update)
       }
-      try Task.checkCancellation()
-      stage = .preparing
-      try await prepare(importedURL)
-      stage = .finished
-      return true
+      do {
+        try Task.checkCancellation()
+        stage = .preparing
+        try await prepare(importLease.fileURL)
+        await importer.commitImport(importLease)
+        stage = .finished
+        return true
+      } catch {
+        do {
+          try await importer.discardImport(importLease)
+        } catch let cleanupError {
+          throw RestoreImageImportError.cleanupFailed(
+            operation: error.localizedDescription,
+            cleanup: cleanupError.localizedDescription
+          )
+        }
+        throw error
+      }
     } catch is CancellationError {
       stage = .idle
       errorMessage = "Restore-image import or preparation was cancelled. No partial copy was kept."

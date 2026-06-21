@@ -24,7 +24,7 @@ struct MacVirtualMachineInstallationServiceTests {
     }
 
     let events = await store.events
-    #expect(events.map(\.kind) == [.resolve, .begin, .complete])
+    #expect(events.map(\.kind) == [.stage, .begin, .complete])
     #expect(recorder.fractions == [0.4, 0.4, 0.8, 1])
     #expect(recorder.phases.first == .preparing)
     #expect(recorder.phases.last == .finalizing)
@@ -46,11 +46,11 @@ struct MacVirtualMachineInstallationServiceTests {
       // Expected.
     }
 
-    #expect(await store.events.map(\.kind) == [.resolve])
+    #expect(await store.events.map(\.kind) == [.stage, .discard])
   }
 
   @Test
-  func installerFailurePersistsFailedLease() async throws {
+  func installerFailureAbortsStagedLeaseForRetry() async throws {
     let machine = try makePreparedMachine()
     let store = TestMacInstallationStore(machine: machine)
     let session = TestMacInstallationSession(
@@ -70,12 +70,41 @@ struct MacVirtualMachineInstallationServiceTests {
     }
 
     let events = await store.events
-    #expect(events.map(\.kind) == [.resolve, .begin, .fail])
+    #expect(events.map(\.kind) == [.stage, .begin, .abort])
     #expect(events.last?.failureKind == .failed)
   }
 
   @Test
-  func cancellationPersistsCancelledLeaseAndWaitsForSession() async throws {
+  func durableAbortFailureIsSurfacedInsteadOfSilentlyLeavingInstallingState() async throws {
+    let machine = try makePreparedMachine()
+    let store = TestMacInstallationStore(
+      machine: machine,
+      abortError: TestMacInstallationError.persistence
+    )
+    let session = TestMacInstallationSession(
+      behavior: .fail,
+      fractions: []
+    )
+    let service = MacVirtualMachineInstallationService(
+      store: store,
+      engine: TestMacInstallationEngine(session: session)
+    )
+
+    do {
+      try await service.install(id: machine.manifest.id)
+      Issue.record("A durable-state failure must be surfaced.")
+    } catch let error as MacVirtualMachineInstallationError {
+      guard case .statePersistenceFailed(let operation, let persistence) = error else {
+        Issue.record("Unexpected installation error: \(error)")
+        return
+      }
+      #expect(operation.contains("expected"))
+      #expect(persistence.contains("persistence"))
+    }
+  }
+
+  @Test
+  func cancellationAbortsStagedLeaseAndWaitsForSession() async throws {
     let machine = try makePreparedMachine()
     let store = TestMacInstallationStore(machine: machine)
     let signal = MacInstallationSignal()
@@ -103,7 +132,7 @@ struct MacVirtualMachineInstallationServiceTests {
 
     #expect(await signal.didFinish)
     let events = await store.events
-    #expect(events.map(\.kind) == [.resolve, .begin, .fail])
+    #expect(events.map(\.kind) == [.stage, .begin, .abort])
     #expect(events.last?.failureKind == .cancelled)
   }
 
@@ -137,15 +166,26 @@ struct MacVirtualMachineInstallationServiceTests {
   }
 }
 
-private enum TestMacInstallationError: Error {
+private enum TestMacInstallationError: LocalizedError {
   case expected
+  case persistence
+
+  var errorDescription: String? {
+    switch self {
+    case .expected:
+      "expected installation failure"
+    case .persistence:
+      "persistence failure"
+    }
+  }
 }
 
 private enum TestMacInstallationEventKind: Equatable {
-  case resolve
+  case stage
+  case discard
   case begin
   case complete
-  case fail
+  case abort
   case recover
 }
 
@@ -167,15 +207,24 @@ private struct TestMacInstallationEvent: Equatable {
 
 private actor TestMacInstallationStore: MacVirtualMachineInstallationStoring {
   let machine: PreparedMacVirtualMachine
+  let abortError: (any Error)?
   private(set) var events: [TestMacInstallationEvent] = []
 
-  init(machine: PreparedMacVirtualMachine) {
+  init(machine: PreparedMacVirtualMachine, abortError: (any Error)? = nil) {
     self.machine = machine
+    self.abortError = abortError
   }
 
-  func resolvePreparedMacVM(id: UUID) -> PreparedMacVirtualMachine {
-    events.append(TestMacInstallationEvent(.resolve))
+  func stageMacOSInstallation(
+    id: UUID,
+    operationID: UUID
+  ) -> PreparedMacVirtualMachine {
+    events.append(TestMacInstallationEvent(.stage, operationID: operationID))
     return machine
+  }
+
+  func discardStagedMacOSInstallation(id: UUID, operationID: UUID) {
+    events.append(TestMacInstallationEvent(.discard, operationID: operationID))
   }
 
   func beginMacOSInstallation(id: UUID, operationID: UUID) {
@@ -186,15 +235,18 @@ private actor TestMacInstallationStore: MacVirtualMachineInstallationStoring {
     events.append(TestMacInstallationEvent(.complete, operationID: operationID))
   }
 
-  func failMacOSInstallation(
+  func abortMacOSInstallation(
     id: UUID,
     operationID: UUID,
     kind: VirtualMachineInstallationFailureKind,
     message: String
-  ) {
+  ) throws {
+    if let abortError {
+      throw abortError
+    }
     events.append(
       TestMacInstallationEvent(
-        .fail,
+        .abort,
         operationID: operationID,
         failureKind: kind
       )

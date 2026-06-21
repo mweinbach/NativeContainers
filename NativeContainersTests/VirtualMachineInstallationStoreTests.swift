@@ -11,7 +11,10 @@ struct VirtualMachineInstallationStoreTests {
     let manifest = try await fixture.prepare()
     let operationID = UUID()
 
-    let resolved = try await fixture.library.resolvePreparedMacVM(id: manifest.id)
+    let resolved = try await fixture.library.stageMacOSInstallation(
+      id: manifest.id,
+      operationID: operationID
+    )
     try await fixture.library.beginMacOSInstallation(
       id: manifest.id,
       operationID: operationID
@@ -40,6 +43,8 @@ struct VirtualMachineInstallationStoreTests {
     #expect(installing.installState == .stopped)
     #expect(installing.installationOperationID == nil)
     #expect(installing.installationFailure == nil)
+    #expect(installing.diskImagePath == "Installed/Disk.img")
+    #expect(installing.auxiliaryStoragePath == "Installed/AuxiliaryStorage")
   }
 
   @Test
@@ -49,11 +54,15 @@ struct VirtualMachineInstallationStoreTests {
     let manifest = try await fixture.prepare()
     let operationID = UUID()
 
+    _ = try await fixture.library.stageMacOSInstallation(
+      id: manifest.id,
+      operationID: operationID
+    )
     try await fixture.library.beginMacOSInstallation(
       id: manifest.id,
       operationID: operationID
     )
-    try await fixture.library.failMacOSInstallation(
+    try await fixture.library.abortMacOSInstallation(
       id: manifest.id,
       operationID: operationID,
       kind: .cancelled,
@@ -63,10 +72,63 @@ struct VirtualMachineInstallationStoreTests {
     let failed = try #require(
       try await fixture.library.list().first { $0.id == manifest.id }
     )
-    #expect(failed.installState == .failed)
+    #expect(failed.installState == .readyToInstall)
     #expect(failed.installationOperationID == nil)
     #expect(failed.installationFailure?.kind == .cancelled)
     #expect(failed.installationFailure?.message == "Cancelled by test")
+  }
+
+  @Test
+  func launchRecoveryRemovesAWorkspaceStagedBeforeLeaseCommit() async throws {
+    let fixture = try InstallationStoreFixture()
+    defer { fixture.remove() }
+    let manifest = try await fixture.prepare()
+    let operationID = UUID()
+    let staged = try await fixture.simulateInterruptedInstallation(
+      id: manifest.id,
+      operationID: operationID,
+      begin: false
+    )
+    let stagingDirectory = staged.diskImageURL.deletingLastPathComponent()
+    #expect(FileManager.default.fileExists(atPath: stagingDirectory.path))
+
+    try await fixture.library.recoverInterruptedMacOSInstallations()
+
+    let existsAfterRecovery = FileManager.default.fileExists(atPath: stagingDirectory.path)
+    #expect(existsAfterRecovery == false)
+    let recovered = try #require(
+      try await fixture.library.list().first { $0.id == manifest.id }
+    )
+    #expect(recovered.installState == .readyToInstall)
+  }
+
+  @Test
+  func discardRemovesAStoppedOrPreparedBundleButNeverAnActiveInstall() async throws {
+    let fixture = try InstallationStoreFixture()
+    defer { fixture.remove() }
+    let manifest = try await fixture.prepare()
+    let operationID = UUID()
+    _ = try await fixture.library.stageMacOSInstallation(
+      id: manifest.id,
+      operationID: operationID
+    )
+    try await fixture.library.beginMacOSInstallation(
+      id: manifest.id,
+      operationID: operationID
+    )
+
+    await #expect(throws: VirtualMachineModelError.invalidInstallState(.installing)) {
+      try await fixture.library.discardVirtualMachine(id: manifest.id)
+    }
+
+    try await fixture.library.abortMacOSInstallation(
+      id: manifest.id,
+      operationID: operationID,
+      kind: .cancelled,
+      message: "Cancelled"
+    )
+    try await fixture.library.discardVirtualMachine(id: manifest.id)
+    #expect(try await fixture.library.list().isEmpty)
   }
 
   @Test
@@ -75,23 +137,61 @@ struct VirtualMachineInstallationStoreTests {
     defer { fixture.remove() }
     let manifest = try await fixture.prepare()
 
-    try await fixture.library.beginMacOSInstallation(
+    let operationID = UUID()
+    _ = try await fixture.simulateInterruptedInstallation(
       id: manifest.id,
-      operationID: UUID()
+      operationID: operationID,
+      begin: true
     )
     try await fixture.library.recoverInterruptedMacOSInstallations()
 
     let recovered = try #require(
       try await fixture.library.list().first { $0.id == manifest.id }
     )
-    #expect(recovered.installState == .failed)
+    #expect(recovered.installState == .readyToInstall)
     #expect(recovered.installationFailure?.kind == .interrupted)
     #expect(recovered.installationFailure?.message.contains("app exited") == true)
+  }
+
+  @Test
+  func competingProcessRecoveryLeavesALiveInstallationLeaseUntouched() async throws {
+    let fixture = try InstallationStoreFixture()
+    defer { fixture.remove() }
+    let manifest = try await fixture.prepare()
+    let operationID = UUID()
+    let staged = try await fixture.library.stageMacOSInstallation(
+      id: manifest.id,
+      operationID: operationID
+    )
+    try await fixture.library.beginMacOSInstallation(
+      id: manifest.id,
+      operationID: operationID
+    )
+
+    let competingLibrary = VirtualMachineLibrary(
+      rootURL: fixture.libraryRoot,
+      macPlatformArtifactPreparer: InstallationStoreArtifactPreparer()
+    )
+    try await competingLibrary.recoverInterruptedMacOSInstallations()
+
+    let stillInstalling = try #require(
+      try await fixture.library.list().first { $0.id == manifest.id }
+    )
+    #expect(stillInstalling.installState == .installing)
+    #expect(FileManager.default.fileExists(atPath: staged.diskImageURL.path))
+
+    try await fixture.library.abortMacOSInstallation(
+      id: manifest.id,
+      operationID: operationID,
+      kind: .cancelled,
+      message: "Cancelled by test"
+    )
   }
 }
 
 private struct InstallationStoreFixture {
   let root: URL
+  let libraryRoot: URL
   let library: VirtualMachineLibrary
   let restoreImage: URL
 
@@ -101,10 +201,11 @@ private struct InstallationStoreFixture {
       directoryHint: .isDirectory
     )
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    libraryRoot = root.appending(path: "Library", directoryHint: .isDirectory)
     restoreImage = root.appending(path: "Restore.ipsw")
     try Data([0x50]).write(to: restoreImage)
     library = VirtualMachineLibrary(
-      rootURL: root.appending(path: "Library", directoryHint: .isDirectory),
+      rootURL: libraryRoot,
       macPlatformArtifactPreparer: InstallationStoreArtifactPreparer()
     )
   }
@@ -124,6 +225,28 @@ private struct InstallationStoreFixture {
       id: draft.id,
       restoreImageURL: restoreImage
     )
+  }
+
+  func simulateInterruptedInstallation(
+    id: UUID,
+    operationID: UUID,
+    begin: Bool
+  ) async throws -> PreparedMacVirtualMachine {
+    let interruptedLibrary = VirtualMachineLibrary(
+      rootURL: libraryRoot,
+      macPlatformArtifactPreparer: InstallationStoreArtifactPreparer()
+    )
+    let staged = try await interruptedLibrary.stageMacOSInstallation(
+      id: id,
+      operationID: operationID
+    )
+    if begin {
+      try await interruptedLibrary.beginMacOSInstallation(
+        id: id,
+        operationID: operationID
+      )
+    }
+    return staged
   }
 
   func remove() {

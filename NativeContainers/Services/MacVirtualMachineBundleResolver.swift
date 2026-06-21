@@ -2,6 +2,12 @@ import Foundation
 
 protocol MacVirtualMachineBundleResolving: Sendable {
   func resolve(_ manifest: VirtualMachineManifest) throws -> PreparedMacVirtualMachine
+  func resolveArtifact(
+    _ path: String,
+    named name: String,
+    in bundleURL: URL,
+    writable: Bool
+  ) throws -> URL
 }
 
 struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unchecked Sendable {
@@ -80,7 +86,7 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, @unche
     return try resolveArtifact(path, named: name, in: bundleURL, writable: writable)
   }
 
-  private func resolveArtifact(
+  func resolveArtifact(
     _ path: String,
     named name: String,
     in bundleURL: URL,

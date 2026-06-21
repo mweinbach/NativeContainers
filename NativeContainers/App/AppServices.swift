@@ -23,6 +23,7 @@ struct AppServices: Sendable {
   let registry: any RegistryManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   let virtualMachineInstaller: any MacVirtualMachineInstalling
+  let virtualMachineInstallationAvailability: any MacVirtualMachineInstallationAvailabilityChecking
   let restoreImageDiscovery: any MacRestoreImageDiscovering
   let restoreImageDownloader: any MacRestoreImageDownloading
   let restoreImageImporter: any MacRestoreImageImporting
@@ -50,6 +51,9 @@ struct AppServices: Sendable {
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
+    virtualMachineInstallationAvailability:
+      any MacVirtualMachineInstallationAvailabilityChecking =
+      StaticMacVirtualMachineInstallationAvailabilityChecker(value: .available),
     restoreImageDiscovery: any MacRestoreImageDiscovering,
     restoreImageDownloader: any MacRestoreImageDownloading,
     restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService()
@@ -75,6 +79,7 @@ struct AppServices: Sendable {
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
+    self.virtualMachineInstallationAvailability = virtualMachineInstallationAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageDownloader = restoreImageDownloader
     self.restoreImageImporter = restoreImageImporter
@@ -92,6 +97,9 @@ struct AppServices: Sendable {
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     virtualMachineInstaller: any MacVirtualMachineInstalling =
       UnavailableMacVirtualMachineInstaller(),
+    virtualMachineInstallationAvailability:
+      any MacVirtualMachineInstallationAvailabilityChecking =
+      StaticMacVirtualMachineInstallationAvailabilityChecker(value: .available),
     restoreImageDiscovery: any MacRestoreImageDiscovering,
     restoreImageDownloader: any MacRestoreImageDownloading,
     restoreImageImporter: any MacRestoreImageImporting = RestoreImageImportService()
@@ -117,6 +125,7 @@ struct AppServices: Sendable {
     self.registry = registry
     self.virtualMachineLibrary = virtualMachineLibrary
     self.virtualMachineInstaller = virtualMachineInstaller
+    self.virtualMachineInstallationAvailability = virtualMachineInstallationAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageDownloader = restoreImageDownloader
     self.restoreImageImporter = restoreImageImporter
@@ -238,6 +247,8 @@ enum AppCompositionRoot {
       registry: AppleRegistryService(),
       virtualMachineLibrary: virtualMachineLibrary,
       virtualMachineInstaller: virtualMachineInstaller,
+      virtualMachineInstallationAvailability:
+        AppleMacVirtualMachineInstallationAvailabilityChecker(),
       restoreImageDiscovery: MacRestoreImageService(),
       restoreImageDownloader: RestoreImageDownloadService(),
       restoreImageImporter: RestoreImageImportService()

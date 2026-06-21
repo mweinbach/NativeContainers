@@ -84,6 +84,93 @@ struct AppModelTests {
   }
 
   @Test
+  func macPreparationPublishesThePersistedManifestWithoutASecondLibraryRead() async throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    let draft = try VirtualMachineManifest(
+      name: "Prepared Mac",
+      guest: .macOS,
+      resources: resources
+    )
+    let restoreImageURL = URL(filePath: "/private/cache/Prepared.ipsw")
+    var prepared = draft
+    prepared.markReadyToInstallMacOS(
+      restoreImageURL: restoreImageURL,
+      auxiliaryStoragePath: "MacPlatform/AuxiliaryStorage",
+      hardwareModelPath: "MacPlatform/HardwareModel",
+      machineIdentifierPath: "MacPlatform/MachineIdentifier"
+    )
+    let library = PostPersistenceReadFailingVirtualMachineLibrary(prepared: prepared)
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      virtualMachineLibrary: library,
+      initialInventory: emptyInventory(),
+      initialVirtualMachines: [draft]
+    )
+
+    try await model.prepareMacVirtualMachine(
+      id: draft.id,
+      restoreImageURL: restoreImageURL
+    )
+
+    #expect(model.virtualMachines == [prepared])
+    #expect(await library.listCount == 0)
+  }
+
+  @Test
+  func firstLoadRecoversPendingImportsAgainstPersistedRestoreImageReferences() async throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var prepared = try VirtualMachineManifest(
+      name: "Recovery Mac",
+      guest: .macOS,
+      resources: resources
+    )
+    let restoreImageURL = URL(filePath: "/private/cache/Recovery.ipsw")
+    prepared.markReadyToInstallMacOS(
+      restoreImageURL: restoreImageURL,
+      auxiliaryStoragePath: "MacPlatform/AuxiliaryStorage",
+      hardwareModelPath: "MacPlatform/HardwareModel",
+      machineIdentifierPath: "MacPlatform/MachineIdentifier"
+    )
+    let importer = RecoveryRecordingRestoreImageImporter()
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [prepared]),
+      restoreImageImporter: importer
+    )
+
+    await model.loadIfNeeded()
+
+    #expect(await importer.recoveredReferences == [restoreImageURL])
+  }
+
+  @Test
+  func refreshRetriesARecoveryThatFailedDuringFirstLoad() async {
+    let installer = RetryableRecoveryInstaller(failuresBeforeSuccess: 2)
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: []),
+      virtualMachineInstaller: installer
+    )
+
+    await model.loadIfNeeded()
+    #expect(model.errorMessage?.contains("Virtual machine recovery") == true)
+    #expect(installer.recoveryAttempts == 2)
+
+    await model.refresh()
+
+    #expect(installer.recoveryAttempts == 3)
+    #expect(model.errorMessage == nil)
+  }
+
+  @Test
   func successfulMutationRefreshesInventory() async {
     let inventory = ContainerInventory(
       system: ContainerSystemInfo(
@@ -900,5 +987,68 @@ private actor BlockingVirtualMachineLibrary: VirtualMachineLibraryProtocol {
     resources: VirtualMachineResources
   ) async throws -> VirtualMachineManifest {
     try VirtualMachineManifest(name: name, guest: guest, resources: resources)
+  }
+}
+
+private actor PostPersistenceReadFailingVirtualMachineLibrary: VirtualMachineLibraryProtocol {
+  let prepared: VirtualMachineManifest
+  private(set) var listCount = 0
+
+  init(prepared: VirtualMachineManifest) {
+    self.prepared = prepared
+  }
+
+  func list() async throws -> [VirtualMachineManifest] {
+    listCount += 1
+    throw AppModelTestError.runtimeUnavailable
+  }
+
+  func createDraft(
+    name: String,
+    guest: VirtualMachineGuest,
+    resources: VirtualMachineResources
+  ) async throws -> VirtualMachineManifest {
+    try VirtualMachineManifest(name: name, guest: guest, resources: resources)
+  }
+
+  func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest {
+    prepared
+  }
+}
+
+private actor RecoveryRecordingRestoreImageImporter: MacRestoreImageImporting {
+  private(set) var recoveredReferences = Set<URL>()
+
+  func importImage(
+    at sourceURL: URL,
+    progress: @escaping RestoreImageDownloadProgressHandler
+  ) async throws -> RestoreImageImportLease {
+    throw AppModelTestError.runtimeUnavailable
+  }
+
+  func recoverPendingImports(referencedURLs: Set<URL>) async throws {
+    recoveredReferences = referencedURLs
+  }
+}
+
+@MainActor
+private final class RetryableRecoveryInstaller: MacVirtualMachineInstalling {
+  let failuresBeforeSuccess: Int
+  private(set) var recoveryAttempts = 0
+
+  init(failuresBeforeSuccess: Int) {
+    self.failuresBeforeSuccess = failuresBeforeSuccess
+  }
+
+  func install(
+    id: UUID,
+    progress: @escaping MacVirtualMachineInstallationProgressHandler
+  ) async throws {}
+
+  func recoverInterruptedInstallations() async throws {
+    recoveryAttempts += 1
+    if recoveryAttempts <= failuresBeforeSuccess {
+      throw AppModelTestError.runtimeUnavailable
+    }
   }
 }
