@@ -359,6 +359,16 @@ selection and lifecycle commands.
   installation has started and waits for termination; pause and force-stop are
   forbidden during installation because Virtualization.framework defines them
   as unsafe.
+- Installed macOS VMs use an app-scoped runtime coordinator and a short-held
+  library mutation lock to acquire a per-bundle runtime lease. Runtime state is
+  ephemeral and never changes the installation manifest. Every session has a
+  fresh generation; lifecycle commands, destructive stop authorization, and
+  console attachment must match it. Delegate stop/error events are the
+  authoritative terminal signal and release the disk lease exactly once.
+- A graceful stop request leaves the VM in a stopping state with an explicit
+  Force Stop action. Force Stop wraps Apple's destructive stop API, never runs
+  automatically because a caller task was cancelled, and does not claim the VM
+  stopped when the framework reports an error.
 - Build contexts are staged without following links and re-fingerprinted before
   and after the BuildKit solve; exported archives are copied into a private,
   digest-bound host artifact; final tags are revalidated immediately before

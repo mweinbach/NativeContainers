@@ -550,3 +550,34 @@ Apple container 1.0's high-level process client encodes signals as integers,
 while its server decodes signal strings. The focused transport follows the
 server contract and regression-tests the exact field representation rather
 than inheriting that mismatched high-level path.
+
+## ADR-024: Keep macOS VM runtime ephemeral, leased, and generation-pinned
+
+**Status:** Accepted — 2026-06-21
+
+The macOS installation manifest remains durable provisioning truth and does not
+gain running or paused states. An app-scoped `MacVirtualMachineRuntimeService`
+owns ephemeral snapshots and one engine session per VM. `AppServices` injects
+the coordinator, while `AppModel` returns one stable observable runtime model
+per machine so navigation and console closure do not own or stop the VM.
+
+Starting a VM briefly takes the library mutation lock, resolves installed
+artifacts without requiring the cached IPSW, and acquires a per-bundle advisory
+lease. The lease writes an informational launch/PID/generation sidecar, but the
+file lock is authoritative. Installation, discard, and writable runtime access
+cannot overlap for the same bundle; a running VM does not hold the global lock
+or block unrelated machines.
+
+Each session gets a fresh generation. Pause, resume, graceful stop, destructive
+stop, and console lookup must target that generation. Delegate guest-stop and
+error callbacks are authoritative terminal events and finalize ownership once.
+Caller cancellation never implies that Virtualization.framework cancelled an
+accepted operation. A graceful stop leaves the session owned and exposes an
+explicit Force Stop; destructive stop never runs automatically and a failed
+attempt cannot publish a false stopped state. The native console detaches its
+view adaptor when the generation closes so a stale AppKit view cannot retain or
+control a replacement VM.
+
+Save/restore remains a separate transaction: save only from paused, write and
+atomically promote a partial, bind it to a configuration fingerprint, and treat
+the same-host state as non-portable.

@@ -25,11 +25,11 @@ called out rather than papered over.
 | Shared-kernel/project density | Experimental `LinuxPod` | M5 | Opt-in only after upstream stabilization |
 | Kubernetes | k3s in a dedicated Linux machine | M5 | Separate lifecycle and storage plan |
 | macOS restore/install | Focused restore cache, bundle resolver, staged media, durable/cross-process operation leases, configuration factory, and `VZMacOSInstaller` session | M4 | Download/preparation are live; install UI, progress, supported cancellation, retry-safe staged cleanup, interruption recovery, and deterministic tests are complete, while a real install still awaits the Virtualization entitlement and local-IPSW smoke gate |
-| macOS display/input | `VZVirtualMachineView` | M4 | Native AppKit bridge already scaffolded |
-| VM pause/resume/stop/recovery | `VZVirtualMachine` | M4 | Validate state before each action |
+| macOS display/input | Generation-keyed `VZVirtualMachineView` / `VZVirtualMachineViewAdaptor` bridge | M4 | Native console, automatic display reconfiguration, explicit system-key capture, and stale-view detachment are implemented; live use awaits the entitlement gate |
+| VM pause/resume/stop/recovery | App-scoped runtime coordinator + per-VM advisory lease + `VZVirtualMachine` delegate | M4 | Start/pause/resume/graceful stop/destructive stop are state-validated; terminal events release ownership exactly once, caller cancellation never abandons an accepted start, and destructive stop requires the current generation |
 | VM shared folders | VirtioFS | M4 | Guest support and scoped host access |
 | VM audio | Virtio sound | M4 | Microphone privacy configuration needed |
-| Same-host suspend/resume | VZ save/restore | M4 | Saved state is not portable |
+| Same-host suspend/resume | VZ save/restore | M4 | Not yet implemented; saved state must be transactional, configuration-bound, and is not portable |
 | Efficient disk snapshots/clones | DiskImageKit overlays | M5 | macOS 27; shallow layer stacks |
 | Physical USB passthrough | AccessoryAccess + VZ USB | M5 | macOS 27 and user-granted entitlement |
 | Linux GPU/Metal passthrough | None | Unavailable | No public Apple API |

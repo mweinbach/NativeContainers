@@ -92,7 +92,8 @@ struct VirtualMachineInstallationStoreTests {
     let stagingDirectory = staged.diskImageURL.deletingLastPathComponent()
     #expect(FileManager.default.fileExists(atPath: stagingDirectory.path))
 
-    try await fixture.library.recoverInterruptedMacOSInstallations()
+    let recoveryOutcome = try await fixture.library.recoverInterruptedMacOSInstallations()
+    #expect(recoveryOutcome == .recovered)
 
     let existsAfterRecovery = FileManager.default.fileExists(atPath: stagingDirectory.path)
     #expect(existsAfterRecovery == false)
@@ -143,7 +144,8 @@ struct VirtualMachineInstallationStoreTests {
       operationID: operationID,
       begin: true
     )
-    try await fixture.library.recoverInterruptedMacOSInstallations()
+    let recoveryOutcome = try await fixture.library.recoverInterruptedMacOSInstallations()
+    #expect(recoveryOutcome == .recovered)
 
     let recovered = try #require(
       try await fixture.library.list().first { $0.id == manifest.id }

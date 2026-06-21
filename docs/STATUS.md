@@ -6,9 +6,9 @@ Updated: 2026-06-21.
 
 - Xcode project generated and open as scheme `NativeContainers` on `My Mac`.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
-- Build-for-testing succeeds with no warnings.
-- The suite currently contains 359 test declarations. The current full
-  app-hosted Xcode run passed all 349 deterministic tests, with ten destructive
+- Build-for-testing succeeds; refreshed source diagnostics report no issues.
+- The suite currently contains 372 test declarations. The current full
+  app-hosted Xcode run passed all 362 deterministic tests, with ten destructive
   or external-service integrations skipped behind explicit live gates. That run
   includes Linux-machine recovery/XPC/inventory coverage, build-history
   privacy/durability, short-pipe framing, builder mount normalization, and
@@ -17,11 +17,13 @@ Updated: 2026-06-21.
   PTY, and image-reference behavior. The push/pull round trip remains
   hard-gated to a disposable localhost registry and is never run against public
   services.
-- The app launches through Xcode and stops cleanly.
+- The app launches and stops through Xcode. A Preview-owned orphan was terminated
+  with a bounded TERM/KILL cleanup, and no residual app process remained.
 - The SwiftUI overview, split container inspector, Linux-machine list,
   Linux-machine creation form, machine command runner, macOS VM list,
-  restore-image preparation sheet, and macOS installation sheet render
-  successfully in Xcode Preview in light mode.
+  restore-image preparation sheet, macOS installation sheet, and
+  generation-keyed macOS runtime console render successfully in Xcode Preview
+  in light mode.
 - A live Xcode snippet called `AppleContainerService.loadInventory()` against
   the installed XPC services and returned the 1.0.0 server plus live container,
   image, volume, network, and machine counts.
@@ -70,6 +72,22 @@ Updated: 2026-06-21.
   recovery, cross-process ownership, path traversal, symlinks, transactional
   discard, and cache cleanup. A failed startup recovery is retried by Refresh
   instead of remaining latched until restart.
+- Installed macOS VM runtime is split into reusable resolution/configuration,
+  per-bundle ownership, Apple engine, lifecycle coordinator, observable model,
+  and SwiftUI console services. The durable manifest remains provisioning truth;
+  running and paused states are ephemeral. A short global mutation lock acquires
+  a generation-tagged per-VM advisory lease and informational owner sidecar, so
+  another process cannot start or discard the same writable disk while unrelated
+  VM work remains available. Runtime startup does not require the cached IPSW.
+- Start, pause, resume, graceful shutdown, and explicitly confirmed destructive
+  stop are wired through `VZVirtualMachine`. Graceful shutdown remains stopping
+  until the delegate confirms exit and keeps Force Stop visible. Failed force
+  stop retains the session and lease; stale generations cannot stop replacement
+  sessions; duplicate terminal callbacks finalize once; and caller cancellation
+  cannot release an accepted start. The native console uses automatic display
+  reconfiguration, opt-in Mac-shortcut capture, SDK 27's adaptor, and detaches
+  stale views. Deterministic ownership/service/model tests pass, while real VM
+  launch remains entitlement-gated.
 - Container detail inspection uses Apple’s direct API client for configuration,
   disk usage, one-shot CPU/memory/network/block/process statistics, stdout, and
   boot logs. Log reads are bounded to the newest 512 KiB per stream.
@@ -349,8 +367,8 @@ Updated: 2026-06-21.
   explicit immediate KILL path.
 - The History preview renders successfully in Xcode after replacing the macOS
   `List` path that crashed the current SDK’s outline diff with a stable
-  `ScrollView`/`LazyVStack` presentation. The full 281-test Xcode run and a
-  warning-free build-for-testing pass are green.
+  `ScrollView`/`LazyVStack` presentation, and remains covered by the current
+  372-test Xcode run.
 
 ## Known configuration issue
 
@@ -358,10 +376,10 @@ Apple documentation and SDK headers require
 `com.apple.security.virtualization`. Xcode MCP’s entitlement action returned
 “This entitlement does not exist” for that documented key and explicitly
 forbids a manual workaround. The app therefore builds and the container lane is
-live, but constructing a VM is intentionally not claimed as runtime-verified
-until the entitlement can be added through a functioning Xcode capability
-surface. Official Apple sources confirm this is a normal Boolean entitlement;
-no developer-team or provisioning-profile change should be needed.
+live, but installing or starting a VM is intentionally not claimed as
+runtime-verified until the entitlement can be added through a functioning Xcode
+capability surface. Official Apple sources confirm this is a normal Boolean
+entitlement; no developer-team or provisioning-profile change should be needed.
 
 ## Next implementation slice
 
@@ -373,6 +391,7 @@ no developer-team or provisioning-profile change should be needed.
 2. Package a signed and notarized privileged helper if automated host-access
    mutation is still desired after the explicit command handoff is exercised.
 3. Add the entitlement through a functioning Xcode capability surface, then
-   live-verify the implemented macOS installer against a local IPSW before
-   adding VM lifecycle and console session ownership.
+   live-verify the implemented macOS installer, lifecycle service, force-stop
+   recovery, and console against a local IPSW. Add transactional save/restore
+   only after that gate passes.
 4. Spike a pinned Socktainer process and a product-specific Docker context.

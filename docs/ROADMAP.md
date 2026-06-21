@@ -91,8 +91,11 @@ must leave a usable, test-backed product slice.
 - [ ] Live-verify macOS installation after the entitlement is available. The
       service/UI path, progress, supported cancellation, operation leases,
       interruption recovery, and deterministic cleanup tests are implemented.
-- [ ] Start, pause, resume, request stop, force stop, and save/restore.
-- [ ] Native console with automatic display reconfiguration and system-key
+- [x] Start, pause, resume, request stop, and explicit force stop through an
+      app-scoped, generation-safe runtime service. Live verification remains
+      gated by the Virtualization entitlement.
+- [ ] Transactional same-host save/restore with configuration fingerprints.
+- [x] Native console with automatic display reconfiguration and system-key
       capture controls.
 - [ ] Shared directories, clipboard, audio, networking, and USB configuration
       where public APIs support the guest.

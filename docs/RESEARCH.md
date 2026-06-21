@@ -378,10 +378,20 @@ The installed Apple documentation confirms:
   surface is `installer.progress.cancel()` after installation starts; pausing or
   stopping the VM during installation has undefined behavior, so the app never
   escalates installer cancellation to force stop.
+- `VZVirtualMachine.start()`, `pause()`, and `resume()` are asynchronous and
+  must be gated by their matching capability properties. `requestStop()` only
+  asks the guest to shut down; it does not confirm exit. The delegate's guest
+  stop and error callbacks are the terminal signal.
+- `VZVirtualMachine.stop(completionHandler:)` is Apple's destructive power-off
+  path for a running or paused VM. The UI therefore keeps it behind an explicit,
+  generation-pinned Force Stop confirmation and retains ownership after a
+  failed stop attempt.
 - Save/restore support has its own configuration validation and is not assumed
   for every configuration.
 - `VZVirtualMachineView` is the native interactive display. It supports
-  automatic display reconfiguration and optional capture of system keys.
+  automatic display reconfiguration and optional capture of system keys. SDK
+  27's `VZVirtualMachineViewAdaptor` retains its VM, so a console must detach the
+  adaptor when its generation closes.
 - Shared directories use VirtioFS. Linux clipboard integration uses the SPICE
   agent and requires guest support.
 
