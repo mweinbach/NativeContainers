@@ -1,6 +1,6 @@
 import Foundation
 
-struct MacVirtualMachineShutdownPolicy: Equatable, Sendable {
+struct VirtualMachineShutdownPolicy: Equatable, Sendable {
   let gracefulStopTimeout: Duration
   let forceStopCapabilityTimeout: Duration
   let forceStopPollInterval: Duration
@@ -15,7 +15,7 @@ struct MacVirtualMachineShutdownPolicy: Equatable, Sendable {
     self.forceStopPollInterval = forceStopPollInterval
   }
 
-  static let standard = MacVirtualMachineShutdownPolicy(
+  static let standard = VirtualMachineShutdownPolicy(
     gracefulStopTimeout: .seconds(30),
     forceStopCapabilityTimeout: .seconds(5),
     forceStopPollInterval: .milliseconds(100)
@@ -23,14 +23,14 @@ struct MacVirtualMachineShutdownPolicy: Equatable, Sendable {
 }
 
 @MainActor
-protocol MacVirtualMachineShutdownScheduling: Sendable {
+protocol VirtualMachineShutdownScheduling: Sendable {
   func schedule(
     after delay: Duration,
     operation: @escaping @MainActor @Sendable () async -> Void
-  ) -> MacVirtualMachineScheduledShutdown
+  ) -> VirtualMachineScheduledShutdown
 }
 
-final class MacVirtualMachineScheduledShutdown: @unchecked Sendable {
+final class VirtualMachineScheduledShutdown: @unchecked Sendable {
   private let lock = NSLock()
   private var cancellation: (@Sendable () -> Void)?
 
@@ -52,13 +52,11 @@ final class MacVirtualMachineScheduledShutdown: @unchecked Sendable {
   }
 }
 
-struct ContinuousClockMacVirtualMachineShutdownScheduler:
-  MacVirtualMachineShutdownScheduling
-{
+struct ContinuousClockVirtualMachineShutdownScheduler: VirtualMachineShutdownScheduling {
   func schedule(
     after delay: Duration,
     operation: @escaping @MainActor @Sendable () async -> Void
-  ) -> MacVirtualMachineScheduledShutdown {
+  ) -> VirtualMachineScheduledShutdown {
     let task = Task { @MainActor in
       do {
         try await Task.sleep(for: delay)
@@ -68,8 +66,14 @@ struct ContinuousClockMacVirtualMachineShutdownScheduler:
       }
       await operation()
     }
-    return MacVirtualMachineScheduledShutdown {
+    return VirtualMachineScheduledShutdown {
       task.cancel()
     }
   }
 }
+
+typealias MacVirtualMachineShutdownPolicy = VirtualMachineShutdownPolicy
+typealias MacVirtualMachineShutdownScheduling = VirtualMachineShutdownScheduling
+typealias MacVirtualMachineScheduledShutdown = VirtualMachineScheduledShutdown
+typealias ContinuousClockMacVirtualMachineShutdownScheduler =
+  ContinuousClockVirtualMachineShutdownScheduler

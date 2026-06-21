@@ -42,11 +42,6 @@ extension PreparedMacVirtualMachine {
   }
 }
 
-struct MacVirtualMachineRuntimeTarget: Equatable, Hashable, Sendable {
-  let machineID: UUID
-  let generation: UUID
-}
-
 enum MacVirtualMachineSaveRestoreSupport: Equatable, Sendable {
   case unknown
   case supported

@@ -1,27 +1,27 @@
 import Foundation
 
 @MainActor
-final class MacVirtualMachineShutdownFallbackRegistry {
+final class VirtualMachineShutdownFallbackRegistry {
   private struct Entry {
-    let target: MacVirtualMachineRuntimeTarget
+    let target: VirtualMachineRuntimeTarget
     let token: UUID
-    let scheduledShutdown: MacVirtualMachineScheduledShutdown
+    let scheduledShutdown: VirtualMachineScheduledShutdown
   }
 
   private let timeout: Duration
-  private let scheduler: any MacVirtualMachineShutdownScheduling
+  private let scheduler: any VirtualMachineShutdownScheduling
   private var entries: [UUID: Entry] = [:]
 
   init(
     timeout: Duration,
-    scheduler: any MacVirtualMachineShutdownScheduling
+    scheduler: any VirtualMachineShutdownScheduling
   ) {
     self.timeout = timeout
     self.scheduler = scheduler
   }
 
   func schedule(
-    for target: MacVirtualMachineRuntimeTarget,
+    for target: VirtualMachineRuntimeTarget,
     operation: @escaping @MainActor @Sendable (UUID) async -> Void
   ) {
     cancel(machineID: target.machineID)
@@ -37,7 +37,7 @@ final class MacVirtualMachineShutdownFallbackRegistry {
   }
 
   func isScheduled(
-    for target: MacVirtualMachineRuntimeTarget,
+    for target: VirtualMachineRuntimeTarget,
     token: UUID
   ) -> Bool {
     guard let entry = entries[target.machineID] else { return false }
@@ -45,14 +45,14 @@ final class MacVirtualMachineShutdownFallbackRegistry {
   }
 
   func consume(
-    target: MacVirtualMachineRuntimeTarget,
+    target: VirtualMachineRuntimeTarget,
     token: UUID
   ) {
     guard isScheduled(for: target, token: token) else { return }
     entries[target.machineID] = nil
   }
 
-  func cancel(for target: MacVirtualMachineRuntimeTarget) {
+  func cancel(for target: VirtualMachineRuntimeTarget) {
     guard entries[target.machineID]?.target == target else { return }
     cancel(machineID: target.machineID)
   }
@@ -61,3 +61,6 @@ final class MacVirtualMachineShutdownFallbackRegistry {
     entries.removeValue(forKey: machineID)?.scheduledShutdown.cancel()
   }
 }
+
+typealias MacVirtualMachineShutdownFallbackRegistry =
+  VirtualMachineShutdownFallbackRegistry
