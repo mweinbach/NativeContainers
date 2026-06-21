@@ -128,8 +128,9 @@ must leave a usable, test-backed product slice.
       Virtualization.framework: durable EFI/NVRAM and machine identity, copied
       ISO media, stable MAC identity, secure artifact resolution, and a
       validated Virtio GUI/audio/input/NAT/SPICE configuration.
-- [ ] GUI Linux runtime ownership, start/pause/resume/graceful-stop/Force Stop
-      service, native console, installer-media ejection, and creation UI.
+- [x] Generation-pinned GUI Linux runtime ownership, start/pause/resume,
+      graceful stop with a 30-second automatic force-stop watchdog, explicit
+      Force Stop, native console, installer-media ejection, and creation UI.
 
 ## M4 — macOS VMs
 

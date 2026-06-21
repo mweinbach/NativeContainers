@@ -83,12 +83,13 @@ source-pinned and isolated live Compose conformance, reviewed Compose planning,
 container/resource action execution, command execution, postcondition proof,
 owned-resource recovery, VM bundle transactions, cancellable bundle transfer,
 portable package preparation/import/export, platform-identity generation,
-installation, runtime, saved state, shared directories, and cloning are
-independent services. VM networking is likewise split across a manifest-backed
-configuration service, an app-owned vmnet pool, and a focused Virtualization
-device factory; SwiftUI only renders snapshots and invokes actions. A
-dedicated machine-management service owns machine creation and lifecycle rather
-than routing those operations through the container compatibility facade.
+installation, runtime, saved state, shared directories, cloning, Linux VM
+creation, installer ejection, and native console presentation are independent
+services. VM networking is likewise split across a manifest-backed configuration
+service, an app-owned vmnet pool, and a focused Virtualization device factory;
+SwiftUI only renders snapshots and invokes actions. A dedicated
+machine-management service owns machine creation and lifecycle rather than
+routing those operations through the container compatibility facade.
 
 ## Build
 

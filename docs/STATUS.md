@@ -938,24 +938,56 @@ Updated: 2026-06-21.
 - Thirteen focused Linux tests pass, covering legacy manifest decoding,
   transaction commit/rollback, missing artifacts, guest separation, safe ISO
   copy, path traversal, clipboard topology, and the validated Apple
-  configuration. The runtime/console/UI lane is intentionally still hidden.
+  configuration.
 - The full Xcode plan passes all 847 outcomes: 826 deterministic tests passed,
   21 explicitly gated live tests skipped, and no outcome failed or remained
   unrun. A normal build and app launch also passed; launch emitted only the
   known macOS 27 beta SetStore donation-service noise, and the app was stopped.
 
+## GUI Linux VM runtime checkpoint
+
+- Linux VM creation is one application transaction: draft creation and platform
+  preparation are composed behind `LinuxVirtualMachineCreationService`, with
+  draft rollback and composite error preservation on failure.
+- A Linux-specific runtime coordinator owns generation-pinned bundle leases,
+  engine sessions, observable state, and exactly-once terminal cleanup. It
+  supports start, pause, resume, graceful stop, explicit Force Stop, and Force
+  Stop queued behind an in-flight framework transition.
+- Graceful stop arms a 30-second watchdog. A guest that does not exit is
+  automatically force-stopped after a bounded framework capability wait, while
+  the explicit Force Stop control remains available immediately for manual
+  recovery.
+- Installer ISO media is attached through XHCI USB mass storage. The runtime can
+  hot-eject it, persist installation completion only after detach succeeds, and
+  retry persistence without detaching twice.
+- The workspace now dispatches macOS and Linux VMs to separate row,
+  configuration, and runtime views while sharing the console bridge and resource
+  catalog. The Linux creation form copies a selected ISO through the
+  transactional service; the runtime view embeds the native Virtualization
+  console and exposes lifecycle and ejection controls.
+- Ten focused creation, ownership, lifecycle, watchdog, ejection, configuration,
+  app-model, and navigation regressions pass. Both mixed-guest workspace and
+  Linux-creation previews render successfully in Xcode.
+- The full Xcode plan passes all 864 outcomes: 843 deterministic tests passed,
+  21 explicitly gated live tests skipped, and no outcome failed or remained
+  unrun. A normal build and signed app launch also passed; launch emitted only
+  the known macOS 27 beta SetStore donation-service noise, and the app was
+  stopped cleanly.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
-verified. Installing, booting, saving/restoring, and clone-booting macOS are not
-claimed as live-verified until a local IPSW and disposable installed guest are
-available for that destructive integration pass.
+verified. Installing and rebooting a reviewed Linux distribution through the
+new GUI workflow still need a disposable ISO smoke pass. Installing, booting,
+saving/restoring, and clone-booting macOS are not claimed as live-verified until
+a local IPSW and disposable installed guest are available for that destructive
+integration pass.
 
 ## Next implementation slice
 
-1. Add the generation-safe GUI Linux runtime owner, lifecycle service,
-   graceful-stop watchdog plus explicit Force Stop, native console, installer
-   ejection, and creation workflow on top of the validated bundle foundation.
+1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
+   eject its ISO, reboot from disk, and exercise both graceful and watchdog
+   force-stop paths.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.

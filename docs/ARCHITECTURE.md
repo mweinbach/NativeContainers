@@ -522,10 +522,33 @@ promoted artifacts while leaving the draft manifest intact.
 regular-file boundary used by both macOS and Linux bundle resolvers.
 `AppleLinuxVirtualMachineConfigurationFactory` consumes only a resolved Linux
 bundle and validates an EFI configuration with a writable Virtio disk,
-read-only USB installer media, persistent NAT MAC address, Virtio graphics,
-host audio output, USB input, entropy, memory ballooning, and optional SPICE
-clipboard. Runtime ownership and UI remain outside this foundation rather than
-exposing a draft path that cannot yet boot through the app.
+read-only USB installer media on an XHCI controller, persistent NAT MAC address,
+Virtio graphics, host audio output, USB input, entropy, memory ballooning, and
+optional SPICE clipboard.
+
+`LinuxVirtualMachineCreationService` composes draft creation and platform
+preparation as one application transaction. A preparation failure rolls back
+the draft; a rollback failure preserves both errors. `AppModel` publishes the
+returned manifest directly and retains one stable runtime model per VM, so a
+view transition never owns a machine session.
+
+`LinuxVirtualMachineRuntimeService` owns one generation-pinned runtime lease and
+engine session per Linux VM. Start, pause, resume, graceful stop, destructive
+stop, installer ejection, console lookup, and terminal delegate events all
+target that generation. A graceful stop arms a 30-second watchdog; if the guest
+does not exit, the service waits only a bounded interval for the framework's
+destructive-stop capability and then force-stops that same session. Force Stop
+is also an explicit UI action and can queue safely while start, pause, resume,
+or ejection is completing. Delegate stop/error events are authoritative, and
+exactly-once finalization prevents a stale callback from releasing a replacement
+session.
+
+Installer media is a USB mass-storage device so the running engine can detach
+it through the XHCI controller after installation. Only a successful detach is
+persisted as installation completion, and a persistence retry never detaches the
+same device twice. The shared `VirtualMachineConsole` abstraction presents the
+generation's `VZVirtualMachineViewAdaptor`; guest-specific SwiftUI row,
+configuration, and runtime views remain separate behind small guest dispatchers.
 
 Downloaded macOS IPSWs are intentionally outside the bundle boundary so
 multiple VMs can reuse one multi-gigabyte installer. New downloads and local

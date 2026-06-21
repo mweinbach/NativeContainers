@@ -1365,3 +1365,31 @@ objects are recreated when the process relaunches, so shared and host-only
 runtime configurations explicitly disable suspend/save-restore. Same-host clones
 preserve their selected mode, while portable package preparation clears the
 process-local choice back to automatic NAT.
+
+## ADR-049: Own Linux VM shutdown recovery inside the runtime service
+
+**Status:** Accepted — 2026-06-21
+
+General-purpose Linux VMs use a Linux-specific application service rather than
+adding guest branches to the macOS runtime coordinator. The service owns one
+generation-pinned bundle lease and engine session per VM; the app model owns a
+stable observable facade; SwiftUI receives snapshots and invokes typed actions.
+Start, pause, resume, stop, ejection, console access, and terminal delegate
+events are valid only for the active generation.
+
+A graceful stop request arms a 30-second watchdog. Guest exit remains the
+preferred outcome, but expiry automatically requests destructive stop against
+that same generation. The service bounds its wait for Virtualization.framework
+to report `canStop`, fails visibly if destructive stop never becomes available,
+and never publishes a false stopped state. The user can also choose Force Stop
+immediately; requests made during start, pause, resume, or installer ejection
+queue behind the in-flight callback without releasing ownership. Delegate
+guest-stop and error callbacks are authoritative terminal events, and duplicate
+callbacks finalize a generation once.
+
+Linux installer media uses XHCI USB mass storage rather than a permanently
+attached block device. Successful hot detach precedes manifest completion, and
+a persistence failure remains retryable without issuing a second detach. This
+keeps VM ownership, framework callbacks, shutdown escalation, and installation
+state out of the SwiftUI layer while preserving both automatic recovery and an
+explicit kill path.
