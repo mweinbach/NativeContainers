@@ -25,6 +25,7 @@ Foundation work is underway. See:
 - [Architecture](docs/ARCHITECTURE.md)
 - [Distribution](docs/DISTRIBUTION.md)
 - [User-data migration and rollback](docs/DATA_MIGRATION.md)
+- [Accessibility quality gate](docs/ACCESSIBILITY_QA.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Feature matrix](docs/FEATURE_MATRIX.md)
 - [Research notes](docs/RESEARCH.md)

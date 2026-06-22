@@ -13,28 +13,38 @@ struct LinuxVirtualMachineRow: View {
 
   var body: some View {
     HStack(spacing: 14) {
-      Image(systemName: "display")
-        .font(.title2)
-        .foregroundStyle(.mint)
-        .frame(width: 30)
+      Button(action: onSelect) {
+        HStack(spacing: 14) {
+          Image(systemName: "display")
+            .font(.title2)
+            .foregroundStyle(.mint)
+            .frame(width: 30)
 
-      VStack(alignment: .leading, spacing: 4) {
-        Text(machine.name)
-          .font(.headline)
-        Text(statusLabel)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        VirtualMachineResourceSummary(resources: machine.resources)
-        if let errorMessage = runtime.errorMessage {
-          Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-            .font(.caption)
-            .foregroundStyle(.orange)
-            .lineLimit(2)
-            .help(errorMessage)
+          VStack(alignment: .leading, spacing: 4) {
+            Text(machine.name)
+              .font(.headline)
+            Text(statusLabel)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            VirtualMachineResourceSummary(resources: machine.resources)
+            if let errorMessage = runtime.errorMessage {
+              Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .lineLimit(2)
+                .help(errorMessage)
+            }
+          }
+
+          Spacer()
         }
+        .contentShape(Rectangle())
       }
+      .buttonStyle(.plain)
+      .accessibilityInputLabels([Text(machine.name)])
+      .accessibilityHint("Selects this virtual machine")
+      .accessibilityValue(isSelected ? "Selected" : "Not selected")
 
-      Spacer()
       HStack(spacing: 8) {
         primaryAction
         Menu {
@@ -59,9 +69,6 @@ struct LinuxVirtualMachineRow: View {
       isSelected ? Color.accentColor.opacity(0.14) : Color.clear,
       in: RoundedRectangle(cornerRadius: 9)
     )
-    .contentShape(Rectangle())
-    .onTapGesture(perform: onSelect)
-    .accessibilityValue(isSelected ? "Selected" : "Not selected")
     .task { runtime.observe() }
     .confirmationDialog(
       "Finish installing \(machine.name)?",

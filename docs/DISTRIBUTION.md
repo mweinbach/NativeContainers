@@ -22,18 +22,27 @@ separate product.
 
 ## Create and validate a local archive
 
-1. Validate that the durable-store inventory and schema contract still match
+1. Validate the source accessibility contract and release evidence matrix:
+
+   ```sh
+   scripts/validate-accessibility-contract.sh
+   ```
+
+   This source check does not close the live assistive-technology gate in
+   [`ACCESSIBILITY_QA.md`](ACCESSIBILITY_QA.md).
+
+2. Validate that the durable-store inventory and schema contract still match
    source:
 
    ```sh
    scripts/validate-data-migration-contract.sh
    ```
 
-2. Select the shared `NativeContainers` scheme and `Any Mac (arm64)`.
-3. Choose **Product > Archive**. If Xcode offers to add Intel to the custom
+3. Select the shared `NativeContainers` scheme and `Any Mac (arm64)`.
+4. Choose **Product > Archive**. If Xcode offers to add Intel to the custom
    architecture list, choose **Build** to keep the Apple-silicon product
    contract.
-4. Validate the resulting archive:
+5. Validate the resulting archive:
 
    ```sh
    scripts/validate-distribution-artifact.sh \

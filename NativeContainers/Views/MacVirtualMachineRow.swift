@@ -20,34 +20,44 @@ struct MacVirtualMachineRow: View {
 
   var body: some View {
     HStack(spacing: 14) {
-      Image(systemName: machine.guest == .macOS ? "macwindow" : "display")
-        .font(.title2)
-        .foregroundStyle(.indigo)
-        .frame(width: 30)
+      Button(action: onSelect) {
+        HStack(spacing: 14) {
+          Image(systemName: machine.guest == .macOS ? "macwindow" : "display")
+            .font(.title2)
+            .foregroundStyle(.indigo)
+            .frame(width: 30)
 
-      VStack(alignment: .leading, spacing: 4) {
-        Text(machine.name)
-          .font(.headline)
-        if let installationFailureMessage {
-          Text(installationFailureMessage)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        } else {
-          Text(installStateLabel)
-            .font(.caption)
-            .foregroundStyle(.secondary)
+          VStack(alignment: .leading, spacing: 4) {
+            Text(machine.name)
+              .font(.headline)
+            if let installationFailureMessage {
+              Text(installationFailureMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+              Text(installStateLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            VirtualMachineResourceSummary(resources: machine.resources)
+            if let runtimeDiagnostic {
+              Label(runtimeDiagnostic, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .lineLimit(2)
+                .help(runtimeDiagnostic)
+            }
+          }
+
+          Spacer()
         }
-        VirtualMachineResourceSummary(resources: machine.resources)
-        if let runtimeDiagnostic {
-          Label(runtimeDiagnostic, systemImage: "exclamationmark.triangle.fill")
-            .font(.caption)
-            .foregroundStyle(.orange)
-            .lineLimit(2)
-            .help(runtimeDiagnostic)
-        }
+        .contentShape(Rectangle())
       }
+      .buttonStyle(.plain)
+      .accessibilityInputLabels([Text(machine.name)])
+      .accessibilityHint("Selects this virtual machine")
+      .accessibilityValue(isSelected ? "Selected" : "Not selected")
 
-      Spacer()
       HStack(spacing: 8) {
         action
         if machine.installState != .installing {
@@ -126,9 +136,6 @@ struct MacVirtualMachineRow: View {
       isSelected ? Color.accentColor.opacity(0.14) : Color.clear,
       in: RoundedRectangle(cornerRadius: 9)
     )
-    .contentShape(Rectangle())
-    .onTapGesture(perform: onSelect)
-    .accessibilityValue(isSelected ? "Selected" : "Not selected")
     .task { await runtime.observe() }
     .confirmationDialog(
       "Start \(machine.name) without its saved state?",

@@ -1159,6 +1159,28 @@ Updated: 2026-06-22.
   macOS 27 key, so NativeContainers keeps the existing fail-closed USB service
   and no manual entitlement-file workaround was made.
 
+## Accessibility source-contract checkpoint
+
+- GUI Linux and macOS VM list summaries now select through plain semantic
+  buttons instead of row-wide tap gestures. Each selection button publishes the
+  visible VM name as an input label, a selection hint, and the selected/not
+  selected value; runtime and destructive actions remain independent sibling
+  controls.
+- The management-view audit found no remaining raw tap activation. Existing
+  icon-only actions retain standard `Button` or `Menu` titles, or an explicit
+  localized accessibility label; enumerated shared-folder rows continue to use
+  stable domain IDs rather than offsets.
+- `docs/ACCESSIBILITY_QA.md` defines the source rules, a workflow-wide live
+  VoiceOver, Full Keyboard Access, Voice Control, visual-settings, and
+  localization matrix, and the required exact-build evidence record.
+  `scripts/validate-accessibility-contract.sh` passes and guards semantic
+  selection, visible-name input labels, selection values, directional layout,
+  localization settings, and release-document drift.
+- This closes only the source-level gate. Reviewed non-English translations and
+  live assistive-technology testing remain open. Exact-head Xcode build and test
+  evidence also remains pending because the Xcode MCP transport is closed; no
+  shell build or test was substituted.
+
 ## macOS 27 menu-bar scene stability checkpoint
 
 - An untouched Xcode launch on macOS 27 held the main thread at 99-100% CPU.

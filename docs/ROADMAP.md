@@ -275,8 +275,12 @@ must leave a usable, test-backed product slice.
         real Deployment, Service, and disposable pod, verify the app-owned
         inventory path, survive a stop/start, then delete the exact machine,
         namespace, and temporary credentials.
-- [ ] Reviewed non-English translations and full VoiceOver/Full Keyboard
-      Access QA across every management workflow.
+- [x] Source-level accessibility contract with semantic management controls,
+      independent row-selection and runtime actions, visible-name input labels,
+      selection values, localization-safe alignment, and a static drift gate.
+- [ ] Reviewed non-English translations and live VoiceOver/Full Keyboard Access,
+      Voice Control, visual-settings, and focus-order QA across every management
+      workflow using the release-candidate evidence matrix.
 - [ ] Distribution, updater, migration, and crash diagnostics.
   - [x] Arm64-only versioned archive with hardened runtime on the app and
         embedded build worker, constrained entitlements, exact layout checks,

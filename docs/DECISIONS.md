@@ -2202,3 +2202,28 @@ current schema constants, storage roots, preference keys, Keychain boundary,
 roadmap, and distribution instructions. A future schema-changing release remains
 blocked until its migration, crash recovery, rollback fixtures, and exact-commit
 Xcode test evidence exist.
+
+## ADR-077: Separate semantic source enforcement from live accessibility evidence
+
+**Status:** Accepted — 2026-06-22
+
+NativeContainers management actions use standard SwiftUI controls. A selectable
+resource summary is a plain semantic button, while lifecycle, menu, and
+destructive actions remain sibling controls. The selection button publishes its
+selected state and, where a dynamic name could otherwise be ambiguous, the
+visible resource name as an accessibility input label. Raw tap gestures are not
+accepted as an activation mechanism in management views. Icon-only controls
+retain a semantic title or an explicit localized accessibility label, and layout
+uses leading/trailing rather than fixed left/right alignment.
+
+A repository source validator preserves those structural decisions, String
+Catalog settings, the accessibility matrix, and the split roadmap state. It is
+deliberately not an accessibility conformance test. Source inspection cannot
+establish the realized accessibility tree, focus order, announcement timing,
+keyboard behavior, translation quality, or interaction with a signed product.
+
+Public release therefore requires exact-release-candidate evidence for every
+management workflow using VoiceOver and Full Keyboard Access, plus Voice
+Control, visual accessibility settings, pseudolocalization, and reviewed
+shipping translations. Until that matrix is complete, only the source contract
+is closed; end-to-end accessibility and non-English localization remain open.
