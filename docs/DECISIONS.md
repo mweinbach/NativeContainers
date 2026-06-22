@@ -2169,3 +2169,36 @@ into a layer is prohibited. Remote caches are limited to endpoints the builder
 can already access, live import/export remains gated on an operator-owned
 disposable registry, and build-time SSH forwarding remains open until Apple
 publishes a supported session contract.
+
+## ADR-076: Version user data by authority and retain per-store rollback
+
+**Status:** Accepted — 2026-06-22
+
+NativeContainers product data begins at schema 1. The marketing version does
+not double as a data version, and installing a new binary does not authorize a
+filesystem-wide rewrite. Durable authorities are classified before a release:
+VM bundles, restore images, folder bookmarks, and presets are authoritative;
+history, descriptors, diagnostics, and operation journals are resumable or
+inspectable; build staging, compatibility binaries, and caches are replaceable;
+Apple runtime state, Keychain credentials, system permission state, exported
+files, and user-selected folders are external. An app migration may revalidate
+an external authority but never mutates it as an upgrade side effect.
+
+Every future schema step must preflight the exact source, quiesce through the
+store's normal mutation lock, seal only the files it can change into a private
+rollback generation, transform in staging, validate through the production
+reader, and atomically commit after identity revalidation. A durable journal
+distinguishes pre-commit cleanup from post-commit restoration after hard exit.
+Committed multi-store steps roll back in reverse order; ambiguous identity drift
+fails closed. Rollback generations survive at least one successful new-build
+launch and are retired later through bounded identity-checked cleanup.
+
+An older binary may open only schemas its reader explicitly supports. If a new
+format is not backward-readable, the release runbook restores the retained
+generation before reinstalling the old binary; a downgrade is not itself a data
+recovery mechanism. Release 0.1.0 establishes the inventory and performs no
+whole-app migration. The release gate runs a static drift validator against the
+current schema constants, storage roots, preference keys, Keychain boundary,
+roadmap, and distribution instructions. A future schema-changing release remains
+blocked until its migration, crash recovery, rollback fixtures, and exact-commit
+Xcode test evidence exist.

@@ -24,6 +24,7 @@ Foundation work is underway. See:
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Distribution](docs/DISTRIBUTION.md)
+- [User-data migration and rollback](docs/DATA_MIGRATION.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Feature matrix](docs/FEATURE_MATRIX.md)
 - [Research notes](docs/RESEARCH.md)

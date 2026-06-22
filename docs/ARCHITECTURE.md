@@ -1283,6 +1283,13 @@ build dependency with `SKIP_INSTALL=YES`; it is never emitted as a second
 installable archive product. Both executables enable hardened runtime and share
 one signing team.
 
+Product data is versioned independently from the app binary. The release gate
+uses `docs/DATA_MIGRATION.md` and its drift validator to classify durable stores
+as authoritative, resumable, replaceable, or external. A future schema change
+must ship its locked staging transaction, hard-exit recovery, retained rollback
+generation, downgrade evidence, and exact-commit tests before archive or
+notarization; version 0.1.0 establishes schema 1 without a whole-app migration.
+
 Capabilities stay at the narrowest executable boundary. The app carries only
 microphone input and virtualization. The worker carries no app capability.
 `scripts/validate-distribution-artifact.sh` verifies architecture, version,

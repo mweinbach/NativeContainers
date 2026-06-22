@@ -284,7 +284,10 @@ must leave a usable, test-backed product slice.
   - [ ] Developer ID Application signing, notarization submission, accepted
         ticket stapling, and strict Gatekeeper validation.
   - [ ] Signed updater with rollback and version-policy tests.
-  - [ ] User-data migration and rollback strategy.
+  - [x] Versioned user-data ownership, migration, and rollback contract with an
+        authoritative/resumable/replaceable/external store inventory, atomic
+        per-store upgrade phases, retained rollback generations, downgrade
+        rules, release evidence, and a source-to-contract drift validator.
   - [x] Privacy-reviewed local MetricKit capture for crash, hang, CPU,
         disk-write, and daily metric payloads, with bounded private retention,
         explicit JSON export/deletion, hosted-process suppression, and matching

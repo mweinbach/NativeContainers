@@ -22,11 +22,18 @@ separate product.
 
 ## Create and validate a local archive
 
-1. Select the shared `NativeContainers` scheme and `Any Mac (arm64)`.
-2. Choose **Product > Archive**. If Xcode offers to add Intel to the custom
+1. Validate that the durable-store inventory and schema contract still match
+   source:
+
+   ```sh
+   scripts/validate-data-migration-contract.sh
+   ```
+
+2. Select the shared `NativeContainers` scheme and `Any Mac (arm64)`.
+3. Choose **Product > Archive**. If Xcode offers to add Intel to the custom
    architecture list, choose **Build** to keep the Apple-silicon product
    contract.
-3. Validate the resulting archive:
+4. Validate the resulting archive:
 
    ```sh
    scripts/validate-distribution-artifact.sh \
@@ -37,6 +44,15 @@ The validator rejects a missing or duplicated worker, non-arm64 code, invalid
 versions or signatures, a missing hardened-runtime flag, mismatched signing
 teams, missing app capabilities, or any stale broad capability on either
 executable. Archive mode also rejects missing or mismatched release symbols.
+
+## User-data compatibility
+
+The product-wide migration and rollback rules are in
+[`DATA_MIGRATION.md`](DATA_MIGRATION.md). Version 0.1.0 establishes product data
+schema 1 and performs no whole-app migration. Any release that changes a durable
+schema must ship the ordered migration, hard-exit recovery, retained rollback
+generation, downgrade evidence, and updated contract on the exact release
+commit. A marketing-version change alone never authorizes data mutation.
 
 ## Developer ID and notarization
 

@@ -1322,6 +1322,16 @@ Updated: 2026-06-22.
   is Apple Development. The signing keychain currently exposes no Developer ID
   Application identity, so public signing, notarization, and stapling are not
   claimed. The repeatable operator flow is in `docs/DISTRIBUTION.md`.
+- Product data schema 1 now has a source-backed migration and rollback contract.
+  It separates authoritative VM/restore/bookmark/preset data from resumable
+  journals/history, disposable caches and compatibility assets, and external
+  Apple runtime, Keychain, system-permission, and user-selected authorities.
+  Future schema changes must use locked per-store staging, sealed rollback
+  generations, production-reader validation, atomic commit, hard-exit recovery,
+  reverse-order rollback, and downgrade evidence. Release 0.1.0 performs no
+  whole-app migration. `scripts/validate-data-migration-contract.sh` binds the
+  documented inventory to current schema constants, storage roots, preference
+  keys, and release instructions.
 
 ## Field-diagnostics checkpoint
 
