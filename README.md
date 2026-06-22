@@ -49,10 +49,11 @@ generation-safe runtime/console controls, per-VM opt-in host audio input that
 resets on clone/export, host audio output, same-host suspend,
 persistent macOS and GUI Linux VirtioFS shares, per-VM automatic
 NAT/shared/host-only networking,
-and stopped-only VM cloning with fresh platform
-identity and cancellable APFS/sparse transfer. Portable VM package export/import
-supports identity-preserving restore or an explicit fresh-identity copy, with
-cancellable transaction cleanup and no destination replacement. Installed macOS
+and stopped-only macOS and GUI Linux VM cloning with fresh guest-specific
+platform identity and cancellable APFS/sparse transfer. Portable VM package
+export/import supports both guests, identity-preserving restore, or an explicit
+fresh-identity copy, with cancellable transaction cleanup and no destination
+replacement. Installed macOS
 VMs can now convert a stopped RAW disk to ASIF through a journaled, out-of-place transaction;
 the runtime reads logical capacity through DiskImageKit instead of mistaking the
 sparse container's host file length for guest capacity. TERM-to-KILL cancellation

@@ -98,7 +98,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     cloning source: VirtualMachineManifest,
     id: UUID = UUID(),
     name: String,
-    createdAt: Date = Date()
+    createdAt: Date = Date(),
+    linuxMACAddress: String? = nil
   ) throws {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedName.isEmpty else {
@@ -123,7 +124,18 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installationFailure = nil
     audioConfiguration = nil
     networkConfiguration = source.networkConfiguration
-    linuxConfiguration = source.linuxConfiguration
+    if source.guest == .linux {
+      guard var configuration = source.linuxConfiguration else {
+        throw LinuxVirtualMachineError.missingManifestValue("linuxConfiguration")
+      }
+      guard let linuxMACAddress else {
+        throw LinuxVirtualMachineError.missingManifestValue("linuxMACAddress")
+      }
+      configuration.macAddress = linuxMACAddress
+      linuxConfiguration = configuration
+    } else {
+      linuxConfiguration = source.linuxConfiguration
+    }
     macOSGuestOperatingSystem = source.macOSGuestOperatingSystem
     macOSFirstBootState = source.macOSFirstBootState
     macOSDiskSnapshotConfiguration = source.macOSDiskSnapshotConfiguration

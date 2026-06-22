@@ -7,6 +7,8 @@ struct LinuxVirtualMachineRow: View {
   let onSelect: () -> Void
   let open: () -> Void
   let confirmForceStop: () -> Void
+  let clone: () -> Void
+  let export: () -> Void
   let discard: () -> Void
 
   @State private var isConfirmingInstallationCompletion = false
@@ -49,6 +51,14 @@ struct LinuxVirtualMachineRow: View {
         primaryAction
         Menu {
           runtimeActions
+          if machine.installState == .stopped,
+            runtime.snapshot.target == nil,
+            runtime.snapshot.state == .stopped
+          {
+            Divider()
+            Button("Clone VM…", systemImage: "square.on.square", action: clone)
+            Button("Export VM…", systemImage: "square.and.arrow.up", action: export)
+          }
           if runtime.snapshot.target == nil,
             runtime.snapshot.state != .ownedElsewhere
           {

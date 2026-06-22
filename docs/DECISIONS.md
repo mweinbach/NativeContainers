@@ -2256,3 +2256,30 @@ UID token or remote-process identity, so the two UID reads cannot make the call
 atomic and cancellation cannot claim rollback or confirmed remote termination.
 Replacement detected before or after the call fails closed; the remaining
 upstream race is documented instead of hidden.
+
+## ADR-079: Extend VM identity transactions across macOS and Linux guests
+
+**Status:** Accepted — 2026-06-22
+
+GUI Linux virtual machines use the same stopped-only clone/export/import
+transaction graph as macOS rather than a second filesystem implementation. The
+source runtime lease is selected by guest, while copyfile transfer, source
+snapshot revalidation, portability scrubbing, cancellation cleanup, atomic
+publication, and hard-exit partial recovery remain guest-neutral.
+
+The identity policy is guest-specific. macOS preserves or regenerates its
+opaque `VZMacMachineIdentifier`. Linux preserves or regenerates the opaque
+`VZGenericMachineIdentifier` stored in its platform directory and also treats
+the manifest MAC as network identity. A Linux clone or copy import receives a
+new locally administered MAC before copying. Because Apple's random-MAC API
+does not guarantee uniqueness, planning rejects library collisions and commit
+checks the normalized MAC again alongside the generic machine identifier.
+Preserve import rejects a collision in either value.
+
+Linux staged-bundle validation requires a writable disk and EFI variable store,
+a valid generic identifier and MAC, no attached installation medium, no macOS
+platform or snapshot state, and no host bookmark sidecar in portable mode.
+Same-host clone retains shared-folder capability; portable export removes it.
+The native Linux row exposes Clone and Export only while the installed guest is
+stopped and unowned, and the existing import sheet offers identity-preserving
+restore or fresh-identity copy without learning platform internals.

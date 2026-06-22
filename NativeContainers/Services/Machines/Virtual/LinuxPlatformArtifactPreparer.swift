@@ -59,6 +59,39 @@ protocol LinuxPlatformIdentityCreating: Sendable {
   ) throws -> LinuxPlatformPreparationResult
 }
 
+protocol LinuxVirtualMachineIdentityValidating: Sendable {
+  func isValidIdentifierData(_ data: Data) -> Bool
+  func isValidMACAddress(_ address: String) -> Bool
+}
+
+protocol LinuxVirtualMachineIdentityGenerating:
+  LinuxVirtualMachineIdentityValidating
+{
+  func makeIdentifierData() -> Data
+  func makeMACAddress() -> String
+}
+
+struct AppleLinuxVirtualMachineIdentityGenerator:
+  LinuxVirtualMachineIdentityGenerating
+{
+  func makeIdentifierData() -> Data {
+    VZGenericMachineIdentifier().dataRepresentation
+  }
+
+  func makeMACAddress() -> String {
+    VZMACAddress.randomLocallyAdministered().string
+  }
+
+  func isValidIdentifierData(_ data: Data) -> Bool {
+    VZGenericMachineIdentifier(dataRepresentation: data) != nil
+  }
+
+  func isValidMACAddress(_ address: String) -> Bool {
+    guard let macAddress = VZMACAddress(string: address) else { return false }
+    return macAddress.isLocallyAdministeredAddress && macAddress.isUnicastAddress
+  }
+}
+
 struct LinuxPlatformArtifactPreparer: LinuxPlatformArtifactPreparing {
   private let installationMediaCopier: any LinuxInstallationMediaCopying
   private let identityService: any LinuxPlatformIdentityCreating
@@ -175,11 +208,19 @@ struct FileLinuxInstallationMediaCopier: LinuxInstallationMediaCopying {
 }
 
 struct AppleLinuxPlatformIdentityService: LinuxPlatformIdentityCreating {
+  private let generator: any LinuxVirtualMachineIdentityGenerating
+
+  init(
+    generator: any LinuxVirtualMachineIdentityGenerating =
+      AppleLinuxVirtualMachineIdentityGenerator()
+  ) {
+    self.generator = generator
+  }
+
   func create(
     at destination: LinuxPlatformArtifactURLs
   ) throws -> LinuxPlatformPreparationResult {
-    let machineIdentifier = VZGenericMachineIdentifier()
-    try machineIdentifier.dataRepresentation.write(
+    try generator.makeIdentifierData().write(
       to: destination.machineIdentifier,
       options: [.atomic]
     )
@@ -197,7 +238,7 @@ struct AppleLinuxPlatformIdentityService: LinuxPlatformIdentityCreating {
     )
 
     return LinuxPlatformPreparationResult(
-      macAddress: VZMACAddress.randomLocallyAdministered().string
+      macAddress: generator.makeMACAddress()
     )
   }
 }

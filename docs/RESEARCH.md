@@ -731,6 +731,27 @@ at kickoff, so the foundation does not depend on it.
   are removed. The disk, auxiliary storage, hardware model, manifest UUID, and
   `VZMacMachineIdentifier` remain the restore identity.
 
+## GUI Linux VM clone and package findings
+
+- Apple exposes `VZGenericMachineIdentifier.init()` as the unique generic-VM
+  identifier constructor and its opaque `dataRepresentation` as the persistence
+  boundary. GUI Linux restore packages therefore retain that data, while
+  same-host clones and copy imports replace and round-trip-validate it.
+- Apple describes `VZMACAddress.randomLocallyAdministered()` as producing a
+  valid random locally administered unicast address, but explicitly does not
+  guarantee uniqueness. NativeContainers consequently checks each generated
+  address against the stopped library before copying and checks both the
+  generic machine identifier and normalized MAC again at commit.
+- Linux EFI/NVRAM and the writable disk remain guest state and are copied.
+  Installer media must already be ejected from a stopped installed bundle.
+  Portable preparation removes `SharedDirectories.json`; a same-host clone
+  retains that bookmark capability under the same runtime lease rules as macOS.
+- The public API references are
+  [`VZGenericMachineIdentifier.init()`](https://developer.apple.com/documentation/virtualization/vzgenericmachineidentifier/init%28%29),
+  [`dataRepresentation`](https://developer.apple.com/documentation/virtualization/vzgenericmachineidentifier/datarepresentation),
+  and
+  [`VZMACAddress.randomLocallyAdministered()`](https://developer.apple.com/documentation/virtualization/vzmacaddress/randomlocallyadministered%28%29).
+
 ## Storage-accounting findings
 
 - The user Caches directory is reclaimable storage rather than a durable

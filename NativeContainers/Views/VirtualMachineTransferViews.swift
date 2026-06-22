@@ -40,12 +40,22 @@ struct ExportVirtualMachineView: View {
       .font(.callout)
       .foregroundStyle(.secondary)
 
-      Label(
-        "Shared-folder bookmarks and the cached restore-image location stay on this Mac.",
-        systemImage: "folder.badge.minus"
-      )
-      .font(.callout)
-      .foregroundStyle(.secondary)
+      switch machine.guest {
+      case .macOS:
+        Label(
+          "Shared-folder bookmarks and the cached restore-image location stay on this Mac.",
+          systemImage: "folder.badge.minus"
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+      case .linux:
+        Label(
+          "Shared-folder bookmarks stay on this Mac.",
+          systemImage: "folder.badge.minus"
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+      }
 
       if let errorMessage {
         Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -187,7 +197,7 @@ struct ImportVirtualMachineView: View {
           )
         } else {
           Label(
-            "The imported copy receives a fresh VM identifier and Apple platform identity.",
+            "The imported copy receives fresh VM and platform identities.",
             systemImage: "square.on.square"
           )
         }

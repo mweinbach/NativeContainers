@@ -12,14 +12,21 @@ extension VirtualMachineManifest {
     return manifest
   }
 
-  func imported(using mode: VirtualMachineImportMode) throws -> VirtualMachineManifest {
+  func imported(
+    using mode: VirtualMachineImportMode,
+    linuxMACAddress: String? = nil
+  ) throws -> VirtualMachineManifest {
     let portable = portableRepresentation()
     switch mode {
     case .preserveIdentity:
       return portable
     case .clone(let name):
-      return try VirtualMachineManifest(cloning: portable, name: name)
-        .portableRepresentation()
+      return try VirtualMachineManifest(
+        cloning: portable,
+        name: name,
+        linuxMACAddress: linuxMACAddress
+      )
+      .portableRepresentation()
     }
   }
 }
@@ -68,6 +75,8 @@ enum VirtualMachineBundleError: LocalizedError, Equatable, Sendable {
   case sourceChanged
   case invalidMachineIdentifier
   case duplicateMachineIdentifier
+  case invalidMACAddress
+  case duplicateMACAddress
 
   var errorDescription: String? {
     switch self {
@@ -79,6 +88,10 @@ enum VirtualMachineBundleError: LocalizedError, Equatable, Sendable {
       "The virtual machine package contains an invalid platform identity."
     case .duplicateMachineIdentifier:
       "The generated virtual machine platform identity duplicates an existing identity."
+    case .invalidMACAddress:
+      "The virtual machine package contains an invalid network identity."
+    case .duplicateMACAddress:
+      "The generated virtual machine network identity duplicates an existing identity."
     }
   }
 }

@@ -64,4 +64,37 @@ struct LinuxVirtualMachineModelsTests {
     #expect(decoded.installState == .readyToInstall)
     #expect(decoded.linuxConfiguration == configuration)
   }
+
+  @Test
+  func linuxCloneRequiresAndPersistsFreshNetworkIdentity() throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 16 * VirtualMachineResources.bytesPerGiB
+    )
+    var source = try VirtualMachineManifest(
+      name: "Linux Source",
+      guest: .linux,
+      installState: .stopped,
+      resources: resources
+    )
+    source.linuxConfiguration = LinuxVirtualMachineConfiguration(
+      efiVariableStorePath: "LinuxPlatform/NVRAM",
+      machineIdentifierPath: "LinuxPlatform/MachineIdentifier",
+      installationMediaPath: nil,
+      macAddress: "02:00:00:00:00:01"
+    )
+
+    #expect(throws: LinuxVirtualMachineError.self) {
+      _ = try VirtualMachineManifest(cloning: source, name: "Unsafe Copy")
+    }
+
+    let clone = try VirtualMachineManifest(
+      cloning: source,
+      name: "Safe Copy",
+      linuxMACAddress: "02:00:00:00:00:02"
+    )
+    #expect(clone.linuxConfiguration?.macAddress == "02:00:00:00:00:02")
+    #expect(clone.linuxConfiguration?.installationMediaPath == nil)
+  }
 }

@@ -157,6 +157,54 @@ struct VirtualMachineCloneServiceTests {
   }
 
   @Test
+  func clonesStoppedLinuxBundleWithFreshPlatformAndNetworkIdentity() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let library = VirtualMachineLibrary(rootURL: root)
+    let source = try await makeStoppedLinuxMachine(
+      library: library,
+      root: root,
+      name: "Source Linux"
+    )
+    let sourceBundle = bundleURL(root: root, id: source.id)
+    let sourceConfiguration = try #require(source.linuxConfiguration)
+    let sourceIdentifier = try Data(
+      contentsOf: sourceBundle.appending(path: sourceConfiguration.machineIdentifierPath)
+    )
+
+    let clone = try await VirtualMachineCloneService(store: library)
+      .cloneVirtualMachine(id: source.id, name: "Source Linux Copy")
+
+    let cloneBundle = bundleURL(root: root, id: clone.id)
+    let cloneConfiguration = try #require(clone.linuxConfiguration)
+    let cloneIdentifier = try Data(
+      contentsOf: cloneBundle.appending(path: cloneConfiguration.machineIdentifierPath)
+    )
+    let identityGenerator = AppleLinuxVirtualMachineIdentityGenerator()
+    #expect(clone.id != source.id)
+    #expect(clone.name == "Source Linux Copy")
+    #expect(clone.guest == .linux)
+    #expect(clone.installState == .stopped)
+    #expect(cloneConfiguration.installationMediaPath == nil)
+    #expect(cloneConfiguration.sharesClipboard == sourceConfiguration.sharesClipboard)
+    #expect(cloneIdentifier != sourceIdentifier)
+    #expect(identityGenerator.isValidIdentifierData(cloneIdentifier))
+    #expect(
+      cloneConfiguration.macAddress.caseInsensitiveCompare(sourceConfiguration.macAddress)
+        != .orderedSame
+    )
+    #expect(identityGenerator.isValidMACAddress(cloneConfiguration.macAddress))
+    #expect(
+      try Data(
+        contentsOf: cloneBundle.appending(path: cloneConfiguration.efiVariableStorePath)
+      ) == Data("efi-state".utf8)
+    )
+    #expect(Set(try await library.list().map(\.id)) == Set([source.id, clone.id]))
+    try expectNoCloneStagingBundles(in: root)
+  }
+
+  @Test
   func copyFailureAbortsTransactionAndReleasesLibraryLocks() async throws {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -231,6 +279,28 @@ struct VirtualMachineCloneServiceTests {
 
     await #expect(throws: MacVirtualMachineRuntimeError.ownedElsewhere(source.id)) {
       _ = try await service.cloneVirtualMachine(id: source.id, name: "Unsafe Copy")
+    }
+    #expect(try await library.list() == [source])
+    try expectNoCloneStagingBundles(in: root)
+  }
+
+  @Test
+  func refusesToCloneLinuxMachineOwnedByARuntimeSession() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let library = VirtualMachineLibrary(rootURL: root)
+    let source = try await makeStoppedLinuxMachine(
+      library: library,
+      root: root,
+      name: "Running Linux"
+    )
+    let runtimeLease = try await library.acquireLinuxRuntime(id: source.id)
+    defer { runtimeLease.release() }
+
+    await #expect(throws: LinuxVirtualMachineRuntimeError.ownedElsewhere(source.id)) {
+      _ = try await VirtualMachineCloneService(store: library)
+        .cloneVirtualMachine(id: source.id, name: "Unsafe Linux Copy")
     }
     #expect(try await library.list() == [source])
     try expectNoCloneStagingBundles(in: root)
@@ -373,6 +443,44 @@ struct VirtualMachineCloneServiceTests {
         isMicrophoneEnabled: true
       )
     }
+    try write(stopped, to: bundle)
+    return stopped
+  }
+
+  private func makeStoppedLinuxMachine(
+    library: VirtualMachineLibrary,
+    root: URL,
+    name: String
+  ) async throws -> VirtualMachineManifest {
+    let draft = try await library.createDraft(
+      name: name,
+      guest: .linux,
+      resources: try testResources()
+    )
+    let bundle = bundleURL(root: root, id: draft.id)
+    let artifactDirectory = bundle.appending(
+      path: LinuxPlatformArtifactURLs.directoryName,
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: artifactDirectory,
+      withIntermediateDirectories: false
+    )
+    let artifacts = LinuxPlatformArtifactURLs(directory: artifactDirectory)
+    try Data("efi-state".utf8).write(to: artifacts.efiVariableStore)
+    let identityGenerator = AppleLinuxVirtualMachineIdentityGenerator()
+    try identityGenerator.makeIdentifierData().write(to: artifacts.machineIdentifier)
+
+    var stopped = draft
+    stopped.installState = .stopped
+    stopped.updatedAt = Date()
+    stopped.linuxConfiguration = LinuxVirtualMachineConfiguration(
+      efiVariableStorePath: LinuxPlatformArtifactURLs.efiVariableStoreManifestPath,
+      machineIdentifierPath: LinuxPlatformArtifactURLs.machineIdentifierManifestPath,
+      installationMediaPath: nil,
+      macAddress: identityGenerator.makeMACAddress(),
+      sharesClipboard: true
+    )
     try write(stopped, to: bundle)
     return stopped
   }

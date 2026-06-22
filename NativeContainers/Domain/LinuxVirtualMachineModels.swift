@@ -4,7 +4,7 @@ struct LinuxVirtualMachineConfiguration: Codable, Equatable, Sendable {
   let efiVariableStorePath: String
   let machineIdentifierPath: String
   var installationMediaPath: String?
-  let macAddress: String
+  var macAddress: String
   var sharesClipboard: Bool
 
   init(

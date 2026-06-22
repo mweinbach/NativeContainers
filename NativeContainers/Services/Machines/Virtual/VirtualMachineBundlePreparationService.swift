@@ -38,6 +38,8 @@ struct VirtualMachineBundlePreparationService:
   private let inspector: any VirtualMachineBundleInspecting
   private let sanitizer: any VirtualMachineBundleSanitizing
   private let machineIdentifierGenerator: any MacVirtualMachineIdentifierGenerating
+  private let linuxIdentityGenerator: any LinuxVirtualMachineIdentityGenerating
+  private let artifactResolver: VirtualMachineBundleArtifactResolver
   private let fileManager: FileManager
 
   init(
@@ -46,12 +48,16 @@ struct VirtualMachineBundlePreparationService:
     sanitizer: any VirtualMachineBundleSanitizing = FileVirtualMachineBundleSanitizer(),
     machineIdentifierGenerator: any MacVirtualMachineIdentifierGenerating =
       AppleMacVirtualMachineIdentifierGenerator(),
+    linuxIdentityGenerator: any LinuxVirtualMachineIdentityGenerating =
+      AppleLinuxVirtualMachineIdentityGenerator(),
     fileManager: FileManager = .default
   ) {
     self.transfer = transfer
     self.inspector = inspector
     self.sanitizer = sanitizer
     self.machineIdentifierGenerator = machineIdentifierGenerator
+    self.linuxIdentityGenerator = linuxIdentityGenerator
+    self.artifactResolver = VirtualMachineBundleArtifactResolver(fileManager: fileManager)
     self.fileManager = fileManager
   }
 
@@ -59,6 +65,11 @@ struct VirtualMachineBundlePreparationService:
     try Task.checkCancellation()
     let sourceSnapshot = try inspector.snapshot(of: request.sourceBundleURL)
     try requireNoDiskImageReplacementArtifacts(in: sourceSnapshot)
+    try validateGuestManifestState(request)
+    try requireNoGuestIncompatibleArtifacts(
+      in: sourceSnapshot,
+      guest: request.sourceManifest.guest
+    )
     try await transfer.copyBundle(
       from: request.sourceBundleURL,
       to: request.destinationBundleURL
@@ -100,6 +111,13 @@ struct VirtualMachineBundlePreparationService:
   private func applyIdentityPolicy(
     _ request: VirtualMachineBundlePreparationRequest
   ) throws {
+    guard request.sourceManifest.guest == request.destinationManifest.guest else {
+      throw VirtualMachineBundleError.invalidBundle(
+        "the source and destination guest types do not match"
+      )
+    }
+    try validateNetworkIdentityPolicy(request)
+
     let sourceIdentifierURL = try machineIdentifierURL(
       manifest: request.sourceManifest,
       bundleURL: request.sourceBundleURL,
@@ -116,14 +134,14 @@ struct VirtualMachineBundlePreparationService:
     case .preserve:
       let destinationIdentifier = try Data(contentsOf: destinationIdentifierURL)
       guard destinationIdentifier == sourceIdentifier,
-        machineIdentifierGenerator.isValidIdentifierData(destinationIdentifier)
+        isValidIdentifierData(destinationIdentifier, guest: request.destinationManifest.guest)
       else {
         throw VirtualMachineBundleError.invalidMachineIdentifier
       }
     case .regenerate:
-      let identifier = try machineIdentifierGenerator.makeIdentifierData()
+      let identifier = try makeIdentifierData(guest: request.destinationManifest.guest)
       guard identifier != sourceIdentifier,
-        machineIdentifierGenerator.isValidIdentifierData(identifier)
+        isValidIdentifierData(identifier, guest: request.destinationManifest.guest)
       else {
         throw VirtualMachineBundleError.duplicateMachineIdentifier
       }
@@ -134,10 +152,99 @@ struct VirtualMachineBundlePreparationService:
       )
       let persisted = try Data(contentsOf: destinationIdentifierURL)
       guard persisted == identifier,
-        machineIdentifierGenerator.isValidIdentifierData(persisted)
+        isValidIdentifierData(persisted, guest: request.destinationManifest.guest)
       else {
         throw VirtualMachineBundleError.invalidMachineIdentifier
       }
+    }
+  }
+
+  private func validateGuestManifestState(
+    _ request: VirtualMachineBundlePreparationRequest
+  ) throws {
+    guard request.sourceManifest.guest == .linux else { return }
+    for manifest in [request.sourceManifest, request.destinationManifest] {
+      guard let configuration = manifest.linuxConfiguration,
+        configuration.installationMediaPath == nil,
+        manifest.auxiliaryStoragePath == nil,
+        manifest.hardwareModelPath == nil,
+        manifest.machineIdentifierPath == nil,
+        manifest.restoreImageURL == nil,
+        manifest.audioConfiguration == nil,
+        manifest.networkConfiguration == nil,
+        manifest.macOSGuestOperatingSystem == nil,
+        manifest.macOSFirstBootState == nil,
+        !manifest.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots
+      else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "the Linux manifest contains incomplete or guest-incompatible state"
+        )
+      }
+    }
+  }
+
+  private func requireNoGuestIncompatibleArtifacts(
+    in snapshot: VirtualMachineBundleSnapshot,
+    guest: VirtualMachineGuest
+  ) throws {
+    guard guest == .linux else { return }
+    let snapshotDirectory = MacVirtualMachineDiskSnapshotLayer.directoryName
+    guard
+      !snapshot.entries.contains(where: {
+        $0.relativePath == snapshotDirectory
+          || $0.relativePath.hasPrefix("\(snapshotDirectory)/")
+      })
+    else {
+      throw VirtualMachineBundleError.invalidBundle(
+        "macOS disk snapshot data is present in the Linux bundle"
+      )
+    }
+  }
+
+  private func validateNetworkIdentityPolicy(
+    _ request: VirtualMachineBundlePreparationRequest
+  ) throws {
+    guard request.sourceManifest.guest == .linux else { return }
+    guard let source = request.sourceManifest.linuxConfiguration,
+      let destination = request.destinationManifest.linuxConfiguration,
+      linuxIdentityGenerator.isValidMACAddress(source.macAddress),
+      linuxIdentityGenerator.isValidMACAddress(destination.macAddress)
+    else {
+      throw VirtualMachineBundleError.invalidMACAddress
+    }
+
+    switch request.identityPolicy {
+    case .preserve:
+      guard destination.macAddress.caseInsensitiveCompare(source.macAddress) == .orderedSame
+      else {
+        throw VirtualMachineBundleError.invalidMACAddress
+      }
+    case .regenerate:
+      guard destination.macAddress.caseInsensitiveCompare(source.macAddress) != .orderedSame
+      else {
+        throw VirtualMachineBundleError.duplicateMACAddress
+      }
+    }
+  }
+
+  private func makeIdentifierData(guest: VirtualMachineGuest) throws -> Data {
+    switch guest {
+    case .macOS:
+      try machineIdentifierGenerator.makeIdentifierData()
+    case .linux:
+      linuxIdentityGenerator.makeIdentifierData()
+    }
+  }
+
+  private func isValidIdentifierData(
+    _ data: Data,
+    guest: VirtualMachineGuest
+  ) -> Bool {
+    switch guest {
+    case .macOS:
+      machineIdentifierGenerator.isValidIdentifierData(data)
+    case .linux:
+      linuxIdentityGenerator.isValidIdentifierData(data)
     }
   }
 
@@ -146,16 +253,20 @@ struct VirtualMachineBundlePreparationService:
     bundleURL: URL,
     writable: Bool
   ) throws -> URL {
-    guard let path = manifest.machineIdentifierPath else {
+    let path =
+      switch manifest.guest {
+      case .macOS:
+        manifest.machineIdentifierPath
+      case .linux:
+        manifest.linuxConfiguration?.machineIdentifierPath
+      }
+    guard let path else {
       throw VirtualMachineBundleError.invalidBundle(
         "the manifest has no machine identifier path"
       )
     }
     do {
-      return try MacVirtualMachineBundleResolver(
-        rootURL: bundleURL.deletingLastPathComponent(),
-        fileManager: fileManager
-      ).resolveArtifact(
+      return try artifactResolver.resolve(
         path,
         named: "machineIdentifierPath",
         in: bundleURL,

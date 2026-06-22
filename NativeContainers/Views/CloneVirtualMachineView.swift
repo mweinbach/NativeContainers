@@ -22,10 +22,16 @@ struct CloneVirtualMachineView: View {
       HStack(spacing: 14) {
         Image(systemName: "square.on.square")
           .font(.largeTitle)
-          .foregroundStyle(.indigo)
+          .foregroundStyle(machine.guest == .macOS ? Color.indigo : Color.mint)
         VStack(alignment: .leading, spacing: 3) {
-          Text("Clone macOS VM")
-            .font(.title2.bold())
+          switch machine.guest {
+          case .macOS:
+            Text("Clone macOS VM")
+              .font(.title2.bold())
+          case .linux:
+            Text("Clone Linux VM")
+              .font(.title2.bold())
+          }
           Text("Create a separate, bootable copy of \(machine.name)")
             .foregroundStyle(.secondary)
         }
@@ -44,10 +50,18 @@ struct CloneVirtualMachineView: View {
           "The clone starts from a cold boot; suspended session data is not copied.",
           systemImage: "snowflake"
         )
-        Label(
-          "Virtualization may require iCloud reauthentication for cloned hardware.",
-          systemImage: "person.crop.circle.badge.exclamationmark"
-        )
+        switch machine.guest {
+        case .macOS:
+          Label(
+            "Virtualization may require iCloud reauthentication for cloned hardware.",
+            systemImage: "person.crop.circle.badge.exclamationmark"
+          )
+        case .linux:
+          Label(
+            "The clone receives fresh platform and network identities.",
+            systemImage: "network"
+          )
+        }
       }
       .font(.caption)
       .foregroundStyle(.secondary)
@@ -119,7 +133,7 @@ struct CloneVirtualMachineView: View {
   }
 }
 
-#Preview("Clone macOS VM") {
+#Preview("Clone VM") {
   let model = AppModel.previewVirtualMachines
   if let machine = model.virtualMachines.first {
     CloneVirtualMachineView(machine: machine, model: model)

@@ -208,6 +208,38 @@ struct VirtualMachineTransferServiceTests {
   }
 
   @Test
+  func linuxExportRejectsAttachedInstallationMedia() async throws {
+    let fixture = try VirtualMachineTransferFixture()
+    defer { fixture.remove() }
+    var source = try await fixture.makeStoppedLinuxMachine(
+      library: fixture.sourceLibrary,
+      libraryRoot: fixture.sourceLibraryRoot,
+      name: "Invalid Portable Linux"
+    )
+    let sourceBundle = fixture.bundleURL(
+      root: fixture.sourceLibraryRoot,
+      id: source.id
+    )
+    let mediaPath = LinuxPlatformArtifactURLs.installationMediaManifestPath
+    try Data("installer".utf8).write(
+      to: sourceBundle.appending(path: mediaPath)
+    )
+    var configuration = try #require(source.linuxConfiguration)
+    configuration.installationMediaPath = mediaPath
+    source.linuxConfiguration = configuration
+    try fixture.write(source, to: sourceBundle)
+    let destination = fixture.root.appending(path: "Rejected Linux.nativevm")
+
+    await #expect(throws: VirtualMachineBundleError.self) {
+      _ = try await fixture.service(library: fixture.sourceLibrary)
+        .exportVirtualMachine(id: source.id, to: destination)
+    }
+
+    #expect(!FileManager.default.fileExists(atPath: destination.path))
+    try fixture.expectNoExportPartials()
+  }
+
+  @Test
   func preserveImportRoundTripsManifestAndPlatformIdentity() async throws {
     let fixture = try VirtualMachineTransferFixture()
     defer { fixture.remove() }
@@ -286,6 +318,172 @@ struct VirtualMachineTransferServiceTests {
       AppleMacVirtualMachineIdentifierGenerator()
         .isValidIdentifierData(importedIdentifier)
     )
+    try fixture.expectNoImportPartials()
+  }
+
+  @Test
+  func linuxExportAndPreserveImportRoundTripPlatformAndNetworkIdentity() async throws {
+    let fixture = try VirtualMachineTransferFixture()
+    defer { fixture.remove() }
+    let source = try await fixture.makeStoppedLinuxMachine(
+      library: fixture.sourceLibrary,
+      libraryRoot: fixture.sourceLibraryRoot,
+      name: "Portable Linux",
+      includeHostLocalState: true
+    )
+    let sourceBundle = fixture.bundleURL(root: fixture.sourceLibraryRoot, id: source.id)
+    let sourceConfiguration = try #require(source.linuxConfiguration)
+    let sourceIdentifier = try fixture.linuxMachineIdentifier(
+      in: sourceBundle,
+      manifest: source
+    )
+    let package = fixture.root.appending(
+      path: "Portable Linux.nativevm",
+      directoryHint: .isDirectory
+    )
+
+    _ = try await fixture.service(library: fixture.sourceLibrary)
+      .exportVirtualMachine(id: source.id, to: package)
+    let packaged = try fixture.readManifest(in: package)
+
+    #expect(packaged == source.portableRepresentation())
+    #expect(packaged.guest == .linux)
+    #expect(packaged.linuxConfiguration?.macAddress == sourceConfiguration.macAddress)
+    #expect(
+      try fixture.linuxMachineIdentifier(in: package, manifest: packaged)
+        == sourceIdentifier
+    )
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: package.appending(
+          path: FileLinuxVirtualMachineSharedDirectoryConfigurationStore.filename
+        ).path
+      )
+    )
+
+    let imported = try await fixture.service(library: fixture.importLibrary)
+      .importVirtualMachine(from: package, mode: .preserveIdentity)
+    let importedBundle = fixture.bundleURL(
+      root: fixture.importLibraryRoot,
+      id: imported.id
+    )
+    #expect(imported == packaged)
+    #expect(
+      try fixture.linuxMachineIdentifier(in: importedBundle, manifest: imported)
+        == sourceIdentifier
+    )
+    #expect(imported.linuxConfiguration?.macAddress == sourceConfiguration.macAddress)
+    try fixture.expectNoImportPartials()
+  }
+
+  @Test
+  func linuxCloneImportCreatesFreshPlatformAndNetworkIdentity() async throws {
+    let fixture = try VirtualMachineTransferFixture()
+    defer { fixture.remove() }
+    let source = try await fixture.makeStoppedLinuxMachine(
+      library: fixture.sourceLibrary,
+      libraryRoot: fixture.sourceLibraryRoot,
+      name: "Linux Identity Source"
+    )
+    let sourceConfiguration = try #require(source.linuxConfiguration)
+    let package = fixture.root.appending(
+      path: "Linux Identity Source.nativevm",
+      directoryHint: .isDirectory
+    )
+    _ = try await fixture.service(library: fixture.sourceLibrary)
+      .exportVirtualMachine(id: source.id, to: package)
+    let packageIdentifier = try fixture.linuxMachineIdentifier(
+      in: package,
+      manifest: source
+    )
+
+    let imported = try await fixture.service(library: fixture.importLibrary)
+      .importVirtualMachine(from: package, mode: .clone(name: "Linux Identity Copy"))
+
+    let importedConfiguration = try #require(imported.linuxConfiguration)
+    let importedBundle = fixture.bundleURL(
+      root: fixture.importLibraryRoot,
+      id: imported.id
+    )
+    let importedIdentifier = try fixture.linuxMachineIdentifier(
+      in: importedBundle,
+      manifest: imported
+    )
+    let identityGenerator = AppleLinuxVirtualMachineIdentityGenerator()
+    #expect(imported.id != source.id)
+    #expect(imported.name == "Linux Identity Copy")
+    #expect(importedIdentifier != packageIdentifier)
+    #expect(identityGenerator.isValidIdentifierData(importedIdentifier))
+    #expect(
+      importedConfiguration.macAddress.caseInsensitiveCompare(
+        sourceConfiguration.macAddress
+      ) != .orderedSame
+    )
+    #expect(identityGenerator.isValidMACAddress(importedConfiguration.macAddress))
+    try fixture.expectNoImportPartials()
+  }
+
+  @Test
+  func linuxPreserveImportRejectsExistingNetworkIdentity() async throws {
+    let fixture = try VirtualMachineTransferFixture()
+    defer { fixture.remove() }
+    let identityGenerator = AppleLinuxVirtualMachineIdentityGenerator()
+    let sharedMACAddress = identityGenerator.makeMACAddress()
+    let source = try await fixture.makeStoppedLinuxMachine(
+      library: fixture.sourceLibrary,
+      libraryRoot: fixture.sourceLibraryRoot,
+      name: "External Linux",
+      macAddress: sharedMACAddress
+    )
+    let existing = try await fixture.makeStoppedLinuxMachine(
+      library: fixture.importLibrary,
+      libraryRoot: fixture.importLibraryRoot,
+      name: "Existing Linux",
+      macAddress: sharedMACAddress
+    )
+    #expect(existing.id != source.id)
+    let package = fixture.root.appending(path: "External Linux.nativevm")
+    _ = try await fixture.service(library: fixture.sourceLibrary)
+      .exportVirtualMachine(id: source.id, to: package)
+
+    await #expect(throws: VirtualMachineTransferError.platformIdentityCollision) {
+      _ = try await fixture.service(library: fixture.importLibrary)
+        .importVirtualMachine(from: package, mode: .preserveIdentity)
+    }
+
+    #expect(try await fixture.importLibrary.list() == [existing])
+    try fixture.expectNoImportPartials()
+  }
+
+  @Test
+  func linuxPreserveImportRejectsExistingGenericMachineIdentity() async throws {
+    let fixture = try VirtualMachineTransferFixture()
+    defer { fixture.remove() }
+    let sharedIdentifier = AppleLinuxVirtualMachineIdentityGenerator()
+      .makeIdentifierData()
+    let source = try await fixture.makeStoppedLinuxMachine(
+      library: fixture.sourceLibrary,
+      libraryRoot: fixture.sourceLibraryRoot,
+      name: "External Generic Identity",
+      machineIdentifier: sharedIdentifier
+    )
+    let existing = try await fixture.makeStoppedLinuxMachine(
+      library: fixture.importLibrary,
+      libraryRoot: fixture.importLibraryRoot,
+      name: "Existing Generic Identity",
+      machineIdentifier: sharedIdentifier
+    )
+    #expect(existing.id != source.id)
+    let package = fixture.root.appending(path: "External Generic Identity.nativevm")
+    _ = try await fixture.service(library: fixture.sourceLibrary)
+      .exportVirtualMachine(id: source.id, to: package)
+
+    await #expect(throws: VirtualMachineTransferError.platformIdentityCollision) {
+      _ = try await fixture.service(library: fixture.importLibrary)
+        .importVirtualMachine(from: package, mode: .preserveIdentity)
+    }
+
+    #expect(try await fixture.importLibrary.list() == [existing])
     try fixture.expectNoImportPartials()
   }
 
@@ -622,11 +820,74 @@ private struct VirtualMachineTransferFixture {
     return stopped
   }
 
+  func makeStoppedLinuxMachine(
+    library: VirtualMachineLibrary,
+    libraryRoot: URL,
+    name: String,
+    machineIdentifier: Data? = nil,
+    macAddress: String? = nil,
+    includeHostLocalState: Bool = false
+  ) async throws -> VirtualMachineManifest {
+    let draft = try await library.createDraft(
+      name: name,
+      guest: .linux,
+      resources: try VirtualMachineResources(
+        cpuCount: 4,
+        memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+        diskBytes: 8 * VirtualMachineResources.bytesPerGiB
+      )
+    )
+    let bundle = bundleURL(root: libraryRoot, id: draft.id)
+    let artifactDirectory = bundle.appending(
+      path: LinuxPlatformArtifactURLs.directoryName,
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: artifactDirectory,
+      withIntermediateDirectories: false
+    )
+    let artifacts = LinuxPlatformArtifactURLs(directory: artifactDirectory)
+    try Data("efi-state".utf8).write(to: artifacts.efiVariableStore)
+    let identityGenerator = AppleLinuxVirtualMachineIdentityGenerator()
+    try (machineIdentifier ?? identityGenerator.makeIdentifierData()).write(
+      to: artifacts.machineIdentifier
+    )
+
+    var stopped = draft
+    stopped.installState = .stopped
+    stopped.updatedAt = Date()
+    stopped.linuxConfiguration = LinuxVirtualMachineConfiguration(
+      efiVariableStorePath: LinuxPlatformArtifactURLs.efiVariableStoreManifestPath,
+      machineIdentifierPath: LinuxPlatformArtifactURLs.machineIdentifierManifestPath,
+      installationMediaPath: nil,
+      macAddress: macAddress ?? identityGenerator.makeMACAddress(),
+      sharesClipboard: true
+    )
+    try write(stopped, to: bundle)
+
+    if includeHostLocalState {
+      try Data("bookmarks".utf8).write(
+        to: bundle.appending(
+          path: FileLinuxVirtualMachineSharedDirectoryConfigurationStore.filename
+        )
+      )
+    }
+    return stopped
+  }
+
   func machineIdentifier(
     in bundleURL: URL,
     manifest: VirtualMachineManifest
   ) throws -> Data {
     let path = try #require(manifest.machineIdentifierPath)
+    return try Data(contentsOf: bundleURL.appending(path: path))
+  }
+
+  func linuxMachineIdentifier(
+    in bundleURL: URL,
+    manifest: VirtualMachineManifest
+  ) throws -> Data {
+    let path = try #require(manifest.linuxConfiguration?.machineIdentifierPath)
     return try Data(contentsOf: bundleURL.appending(path: path))
   }
 

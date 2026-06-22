@@ -273,6 +273,8 @@ private struct GuestVirtualMachineRow: View {
         onSelect: onSelect,
         open: open,
         confirmForceStop: confirmForceStop,
+        clone: clone,
+        export: export,
         discard: discard
       )
     }

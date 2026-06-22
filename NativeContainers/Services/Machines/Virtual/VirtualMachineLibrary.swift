@@ -132,6 +132,7 @@ actor VirtualMachineLibrary:
   private let linuxPlatformArtifactPreparer: any LinuxPlatformArtifactPreparing
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
   private let linuxVirtualMachineBundleResolver: any LinuxVirtualMachineBundleResolving
+  private let linuxVirtualMachineIdentityGenerator: any LinuxVirtualMachineIdentityGenerating
   private let sharedDirectoryStore: any VirtualMachineSharedDirectoryConfigurationStoring
   private let sharedDirectoryNameValidator: any VirtualMachineSharedDirectoryNameValidating
   private var operationLockLease: AdvisoryFileLockLease?
@@ -149,6 +150,8 @@ actor VirtualMachineLibrary:
       LinuxPlatformArtifactPreparer(),
     macMachineIdentifierValidator: any MacVirtualMachineIdentifierValidating =
       AppleMacVirtualMachineIdentifierGenerator(),
+    linuxIdentityGenerator: any LinuxVirtualMachineIdentityGenerating =
+      AppleLinuxVirtualMachineIdentityGenerator(),
     sharedDirectoryStore: any VirtualMachineSharedDirectoryConfigurationStoring =
       FileVirtualMachineSharedDirectoryConfigurationStore(),
     sharedDirectoryNameValidator: any VirtualMachineSharedDirectoryNameValidating =
@@ -179,6 +182,7 @@ actor VirtualMachineLibrary:
     self.linuxPlatformArtifactPreparer = linuxPlatformArtifactPreparer
     self.macVirtualMachineBundleResolver = bundleResolver
     self.linuxVirtualMachineBundleResolver = linuxBundleResolver
+    self.linuxVirtualMachineIdentityGenerator = linuxIdentityGenerator
     self.sharedDirectoryStore = sharedDirectoryStore
     self.sharedDirectoryNameValidator = sharedDirectoryNameValidator
     self.bundleValidator = VirtualMachineBundleValidator(
@@ -186,6 +190,7 @@ actor VirtualMachineLibrary:
       fileManager: fileManager,
       resolver: bundleResolver,
       machineIdentifierValidator: macMachineIdentifierValidator,
+      linuxIdentityValidator: linuxIdentityGenerator,
       sharedDirectoryStore: sharedDirectoryStore,
       sharedDirectoryNameValidator: sharedDirectoryNameValidator
     )
@@ -815,7 +820,7 @@ actor VirtualMachineLibrary:
       }
     }
 
-    let source = try installationManifest(id: id)
+    let source = try bundleStore.manifest(id: id)
     guard source.installState == .stopped else {
       throw VirtualMachineCloneError.invalidSourceState(source.installState)
     }
@@ -826,12 +831,23 @@ actor VirtualMachineLibrary:
         at: sourceBundleURL.appending(path: Self.runtimeLockFilename)
       )
     else {
-      throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
+      switch source.guest {
+      case .macOS:
+        throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
+      case .linux:
+        throw LinuxVirtualMachineRuntimeError.ownedElsewhere(id)
+      }
     }
     runtimeLock = acquiredRuntimeLock
-    _ = try macVirtualMachineBundleResolver.resolveRuntime(source)
+    try resolveTransferRuntime(source)
 
-    let clone = try VirtualMachineManifest(cloning: source, name: name)
+    let linuxMACAddress =
+      source.guest == .linux ? try makeUniqueLinuxMACAddress() : nil
+    let clone = try VirtualMachineManifest(
+      cloning: source,
+      name: name,
+      linuxMACAddress: linuxMACAddress
+    )
     let finalBundleURL = bundleStore.bundleURL(for: clone.id)
     guard !fileManager.fileExists(atPath: finalBundleURL.path) else {
       throw VirtualMachineModelError.duplicateIdentifier(clone.id)
@@ -891,7 +907,7 @@ actor VirtualMachineLibrary:
     try acquireOperationAccess(token: accessToken)
     defer { releaseOperationAccess(token: accessToken) }
 
-    let manifest = try installationManifest(id: id)
+    let manifest = try bundleStore.manifest(id: id)
     guard manifest.installState == .stopped else {
       throw VirtualMachineTransferError.invalidSourceState(manifest.installState)
     }
@@ -902,11 +918,16 @@ actor VirtualMachineLibrary:
         at: bundleURL.appending(path: Self.runtimeLockFilename)
       )
     else {
-      throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
+      switch manifest.guest {
+      case .macOS:
+        throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
+      case .linux:
+        throw LinuxVirtualMachineRuntimeError.ownedElsewhere(id)
+      }
     }
 
     do {
-      _ = try macVirtualMachineBundleResolver.resolveRuntime(manifest)
+      try resolveTransferRuntime(manifest)
       return VirtualMachineExportSourceLease(
         manifest: manifest,
         bundleURL: bundleURL
@@ -955,16 +976,20 @@ actor VirtualMachineLibrary:
     } catch {
       throw VirtualMachineTransferError.invalidPackage(error.localizedDescription)
     }
-    guard source.guest == .macOS else {
-      throw VirtualMachineTransferError.invalidPackage(
-        "only macOS virtual machine packages are supported"
-      )
-    }
     guard source.installState == .stopped else {
       throw VirtualMachineTransferError.invalidSourceState(source.installState)
     }
 
-    let imported = try source.imported(using: mode)
+    let linuxMACAddress: String?
+    if source.guest == .linux, case .clone = mode {
+      linuxMACAddress = try makeUniqueLinuxMACAddress()
+    } else {
+      linuxMACAddress = nil
+    }
+    let imported = try source.imported(
+      using: mode,
+      linuxMACAddress: linuxMACAddress
+    )
     let finalBundleURL = bundleStore.bundleURL(for: imported.id)
     guard !fileManager.fileExists(atPath: finalBundleURL.path) else {
       throw VirtualMachineTransferError.identityCollision(imported.id)
@@ -1471,6 +1496,37 @@ actor VirtualMachineLibrary:
       throw VirtualMachineModelError.requiresLinuxGuest(id)
     }
     return manifest
+  }
+
+  private func resolveTransferRuntime(_ manifest: VirtualMachineManifest) throws {
+    switch manifest.guest {
+    case .macOS:
+      _ = try macVirtualMachineBundleResolver.resolveRuntime(manifest)
+    case .linux:
+      _ = try linuxVirtualMachineBundleResolver.resolve(manifest)
+    }
+  }
+
+  private func makeUniqueLinuxMACAddress() throws -> String {
+    let existingAddresses = Set(
+      try bundleStore.list().compactMap {
+        $0.linuxConfiguration?.macAddress.lowercased()
+      }
+    )
+    var generatedValidAddress = false
+    for _ in 0..<16 {
+      let candidate = linuxVirtualMachineIdentityGenerator.makeMACAddress()
+      guard linuxVirtualMachineIdentityGenerator.isValidMACAddress(candidate) else {
+        continue
+      }
+      generatedValidAddress = true
+      guard !existingAddresses.contains(candidate.lowercased()) else { continue }
+      return candidate
+    }
+    if generatedValidAddress {
+      throw VirtualMachineBundleError.duplicateMACAddress
+    }
+    throw VirtualMachineBundleError.invalidMACAddress
   }
 
   private func activeClone(

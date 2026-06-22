@@ -1171,22 +1171,25 @@ than sharing presentation state across an implied multi-window group.
   Darwin `copyfile` for recursive clone-on-write with sparse-copy fallback,
   cross-mount refusal, no-follow semantics, and a cancellation callback on each
   fallback write. It then strips runtime locks, owner records, installation
-  partials, every saved-state transaction, and the source microphone opt-in,
-  then atomically replaces the staged
-  `VZMacMachineIdentifier` through a focused generator. Commit independently
-  validates required artifacts, shared-directory state, transient absence, and
-  a valid identifier distinct from the source before one final rename publishes
-  the clone. Cancellation returns `COPYFILE_QUIT`, keeps the review sheet in a
-  cancelling state until transaction cleanup completes, and always aborts the
-  partial. Startup recovery removes hidden clone partials left by a hard exit.
+  partials, every saved-state transaction, and host-local configuration. The
+  guest-specific identity adapter atomically replaces either the staged
+  `VZMacMachineIdentifier` or `VZGenericMachineIdentifier`; Linux clone
+  planning also selects a new valid, non-colliding MAC before copying. Commit
+  independently validates required guest artifacts, shared-directory state,
+  transient absence, platform-identifier uniqueness, and Linux MAC uniqueness
+  before one final rename publishes the clone. Cancellation returns
+  `COPYFILE_QUIT`, keeps the review sheet in a cancelling state until
+  transaction cleanup completes, and always aborts the partial. Startup
+  recovery removes hidden clone partials left by a hard exit.
 - Clone, export, and import share one policy-driven bundle-preparation service
   instead of maintaining three filesystem implementations. A focused inspector
   rejects symbolic links, hard links, mount-crossing copies, and special files;
   the sanitizer removes runtime/install/save transactions; the identity policy
-  either preserves a round-trip-valid `VZMacMachineIdentifier` or replaces it
-  through the generator; and a portability policy removes the cached restore
-  URL, host-local shared-folder bookmark capabilities, microphone opt-in, and
-  process-local vmnet mode.
+  either preserves a round-trip-valid guest-specific VZ machine identifier or
+  replaces it through the matching generator. Linux preservation additionally
+  requires the same valid MAC, while regeneration requires a distinct one. A
+  portability policy removes the cached restore URL, host-local shared-folder
+  bookmark capabilities, microphone opt-in, and process-local vmnet mode.
 - Portable export briefly takes the library mutation lock only to resolve and
   pin a stopped source, then retains the per-VM runtime lease while a
   security-scoped destination-parent lease spans the cancellable copy. It stages
@@ -1195,12 +1198,13 @@ than sharing presentation state across an implied multi-window group.
   SwiftUI sheet cannot be dismissed while cancellation is waiting for copyfile
   and partial cleanup.
 - Portable import holds a library-owned begin/commit/abort transaction while it
-  copies into a hidden `.Import-*.partial` package. Restore mode preserves both
-  the manifest UUID and Apple platform identity and rejects either collision;
-  copy mode generates both identities anew. Commit revalidates every
-  manifest-relative artifact, portable-state absence, and platform-identity
-  uniqueness immediately before the UUID-named bundle is atomically published.
-  Launch recovery removes import partials left by a hard exit.
+  copies into a hidden `.Import-*.partial` package. Restore mode preserves the
+  manifest UUID and guest platform identity, plus Linux network identity, and
+  rejects any collision. Copy mode generates those identities anew. Commit
+  revalidates every manifest-relative guest artifact, portable-state absence,
+  platform-identity uniqueness, and Linux MAC uniqueness immediately before the
+  UUID-named bundle is atomically published. Launch recovery removes import
+  partials left by a hard exit.
 - Storage accounting is an independent read-only service graph. The Apple lane
   sends the pinned `systemDiskUsage` XPC request through the app's bounded,
   cancellation-closing request client and validates every count and byte

@@ -147,6 +147,11 @@ must leave a usable, test-backed product slice.
 - [x] Persistent GUI Linux VirtioFS shared folders through security-scoped
       bookmarks, stopped-only lease-backed editing, one stable
       `nativecontainers` mount tag, and exact in-guest mount guidance.
+- [x] Stopped-only GUI Linux same-host clone and portable `.nativevm`
+      export/import through the shared VM transaction stack, with fresh
+      `VZGenericMachineIdentifier` plus MAC identity for copies, collision
+      rejection, host-bookmark stripping for portable packages, and native
+      row/review actions.
 
 ## M4 — macOS VMs
 
@@ -206,10 +211,10 @@ must leave a usable, test-backed product slice.
       scrubbing, atomic publication, cancellation cleanup, hard-exit recovery,
       and a native review sheet.
 - [x] Portable `.nativevm` export/import with a shared bundle-preparation
-      service, identity-preserving restore, explicit import-as-copy identity
-      regeneration, stopped/runtime leases, host-state scrubbing, collision
-      rejection, write-level cancellation, atomic publication, and partial
-      recovery.
+      service for macOS and GUI Linux guests, identity-preserving restore,
+      explicit import-as-copy identity regeneration, stopped/runtime leases,
+      host-state scrubbing, collision rejection, write-level cancellation,
+      atomic publication, and partial recovery.
 - [x] Safe disk-space reclamation.
   - [x] Reviewed Apple-runtime container, image, and volume reclamation with
         exact identities, bounded clients, non-force stopped-container delete,

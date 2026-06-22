@@ -1508,12 +1508,38 @@ Updated: 2026-06-22.
   launch and all four Kubernetes canvas renders therefore remain unclaimed for
   this exact head rather than being inferred from the successful tests.
 
+## GUI Linux VM clone and transfer checkpoint
+
+- Stopped GUI Linux guests now use the production VM clone and `.nativevm`
+  transfer transactions instead of stopping at runtime/share parity. The
+  library selects the Linux runtime lease, the shared preparer copies through
+  cancellable clone/sparse transfer, and the Linux row exposes Clone and Export
+  only when no runtime owns the installed guest.
+- Preserve export/import keeps the manifest UUID, opaque
+  `VZGenericMachineIdentifier`, EFI/NVRAM, disk, clipboard choice, and stable
+  MAC. Portable packages remove security-scoped shared-folder bookmarks and
+  reject installer media or macOS-only platform residue.
+- Same-host clone and copy import generate a fresh generic machine identifier
+  and locally administered MAC. The preparer requires a valid, distinct source
+  pair; commit checks identifier and normalized-MAC collisions against the
+  current library before atomic publication. Apple's random MAC API does not
+  promise uniqueness, so planning retries bounded candidates rather than
+  assuming randomness is a conditional token.
+- Focused model/service coverage now exercises Linux same-host cloning,
+  identity-preserving portable round trip, copy-import identity rotation,
+  shared-bookmark stripping, and network-identity collision rejection. Swift
+  format lint plus the accessibility and data-migration source contracts pass;
+  exact-head Xcode build/test execution remains pending because
+  `XcodeListWindows` still reports `Transport closed`, and no shell build/test
+  substituted for MCP.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
 verified. Installing and rebooting a reviewed Linux distribution through the
-new GUI workflow, then mounting and exercising a shared folder, still need a
-disposable ISO smoke pass. Installing, booting,
+new GUI workflow, then cloning it, exporting/restoring a portable copy, and
+mounting and exercising a shared folder still need a disposable ISO smoke pass.
+Installing, booting,
 saving/restoring, and clone-booting macOS are not claimed as live-verified until
 a local IPSW and disposable installed guest are available for that destructive
 integration pass.
@@ -1522,7 +1548,8 @@ integration pass.
 
 1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
-   and exercise both graceful and watchdog force-stop paths.
+   clone and portable-round-trip it, and exercise both graceful and watchdog
+   force-stop paths.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.
