@@ -19,7 +19,7 @@ final class AppleMacVirtualMachineUSBAccessory: MacVirtualMachineUSBAccessory {
 @MainActor
 final class AppleMacVirtualMachineUSBAccessoryDiscovery: NSObject,
   MacVirtualMachineUSBAccessoryDiscovering,
-  @preconcurrency AAUSBAccessoryListener
+  AAUSBAccessoryListener
 {
   var eventHandler: MacVirtualMachineUSBAccessoryEventHandler?
 
