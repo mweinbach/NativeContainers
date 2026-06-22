@@ -60,6 +60,52 @@ extension ImageBuildCachePolicy {
   }
 }
 
+extension ImageBuildRemoteCacheAccess {
+  var title: LocalizedStringResource {
+    switch self {
+    case .importOnly:
+      "Import Only"
+    case .importAndExport:
+      "Import and Export"
+    }
+  }
+
+  var explanation: LocalizedStringResource {
+    switch self {
+    case .importOnly:
+      "Read matching layers from the reviewed registry cache without changing it."
+    case .importAndExport:
+      "Read the reviewed registry cache, then replace its cache manifest after a successful solve."
+    }
+  }
+}
+
+extension ImageBuildRemoteCacheExportMode {
+  var title: LocalizedStringResource {
+    switch self {
+    case .minimum:
+      "Final Image Layers"
+    case .maximum:
+      "All Build Stages"
+    }
+  }
+
+  var explanation: LocalizedStringResource {
+    switch self {
+    case .minimum:
+      "Export only layers used by the final image."
+    case .maximum:
+      "Export intermediate-stage layers too. Review Dockerfile contents before publishing this broader cache."
+    }
+  }
+}
+
+struct ImageBuildRemoteCacheSelection: Equatable, Sendable {
+  let reference: String
+  let access: ImageBuildRemoteCacheAccess
+  let exportMode: ImageBuildRemoteCacheExportMode
+}
+
 struct ImageBuildOutputSelection: Equatable, Sendable {
   let kind: ImageBuildOutputKind
   let destinationURL: URL?
@@ -122,6 +168,7 @@ struct ImageBuildRequest: Equatable, Sendable {
   let labels: [String]
   let targetStage: String
   let cachePolicy: ImageBuildCachePolicy
+  let remoteCache: ImageBuildRemoteCacheSelection?
   let pullLatest: Bool
   let builderCPUCount: Int?
   let builderMemoryMiB: Int?
@@ -137,6 +184,7 @@ struct ImageBuildRequest: Equatable, Sendable {
     labels: [String],
     targetStage: String,
     cachePolicy: ImageBuildCachePolicy = .builderInternal,
+    remoteCache: ImageBuildRemoteCacheSelection? = nil,
     pullLatest: Bool,
     builderCPUCount: Int?,
     builderMemoryMiB: Int?,
@@ -151,6 +199,7 @@ struct ImageBuildRequest: Equatable, Sendable {
     self.labels = labels
     self.targetStage = targetStage
     self.cachePolicy = cachePolicy
+    self.remoteCache = remoteCache
     self.pullLatest = pullLatest
     self.builderCPUCount = builderCPUCount
     self.builderMemoryMiB = builderMemoryMiB
@@ -177,11 +226,60 @@ struct ImageBuildPlan: Equatable, Sendable, Identifiable {
   let labels: [String]
   let targetStage: String
   let cachePolicy: ImageBuildCachePolicy
+  let remoteCache: ContainerBuildRemoteCacheProfile?
   let pullLatest: Bool
   let builderCPUCount: Int?
   let builderMemoryMiB: Int?
   let output: ImageBuildOutputPlan
   let generatedAt: Date
+
+  init(
+    id: UUID,
+    sourceContextDirectory: URL,
+    stagedContextDirectory: URL,
+    stagedDockerfile: URL,
+    dockerfileSHA256: String,
+    stagedDockerignore: URL?,
+    dockerignoreSHA256: String?,
+    contextFingerprint: String,
+    secretReviewID: UUID?,
+    secrets: [ImageBuildSecretReview],
+    tags: [ContainerBuildTagExpectation],
+    platforms: [ContainerBuildPlatform],
+    buildArguments: [String],
+    labels: [String],
+    targetStage: String,
+    cachePolicy: ImageBuildCachePolicy,
+    remoteCache: ContainerBuildRemoteCacheProfile? = nil,
+    pullLatest: Bool,
+    builderCPUCount: Int?,
+    builderMemoryMiB: Int?,
+    output: ImageBuildOutputPlan,
+    generatedAt: Date
+  ) {
+    self.id = id
+    self.sourceContextDirectory = sourceContextDirectory
+    self.stagedContextDirectory = stagedContextDirectory
+    self.stagedDockerfile = stagedDockerfile
+    self.dockerfileSHA256 = dockerfileSHA256
+    self.stagedDockerignore = stagedDockerignore
+    self.dockerignoreSHA256 = dockerignoreSHA256
+    self.contextFingerprint = contextFingerprint
+    self.secretReviewID = secretReviewID
+    self.secrets = secrets
+    self.tags = tags
+    self.platforms = platforms
+    self.buildArguments = buildArguments
+    self.labels = labels
+    self.targetStage = targetStage
+    self.cachePolicy = cachePolicy
+    self.remoteCache = remoteCache
+    self.pullLatest = pullLatest
+    self.builderCPUCount = builderCPUCount
+    self.builderMemoryMiB = builderMemoryMiB
+    self.output = output
+    self.generatedAt = generatedAt
+  }
 
   var replacesExistingTags: Bool {
     tags.contains(where: \.replacesExistingReference)
@@ -337,6 +435,9 @@ enum ImageBuildError: LocalizedError, Equatable, Sendable {
   case invalidKeyValue(String)
   case invalidBuilderCPUCount
   case invalidBuilderMemory
+  case remoteCacheRequiresCaching
+  case invalidRemoteCacheReference(String)
+  case remoteCacheMatchesOutput(String)
   case tagReplacementRequiresConfirmation([String])
   case infrastructureTag(String)
   case stalePlan(String)
@@ -373,6 +474,12 @@ enum ImageBuildError: LocalizedError, Equatable, Sendable {
       "Builder CPU count must be between 1 and 32."
     case .invalidBuilderMemory:
       "Builder memory must be between 512 MiB and 128 GiB."
+    case .remoteCacheRequiresCaching:
+      "A registry cache cannot be used when build caching is disabled."
+    case .invalidRemoteCacheReference(let reference):
+      "“\(reference)” is not a valid registry cache image. Use a lowercase registry hostname and repository with an optional tag; digest references are not supported."
+    case .remoteCacheMatchesOutput(let reference):
+      "Registry cache “\(reference)” must be separate from every output image reference."
     case .tagReplacementRequiresConfirmation(let tags):
       "Confirm replacing the existing local tags: \(tags.joined(separator: ", "))."
     case .infrastructureTag(let tag):

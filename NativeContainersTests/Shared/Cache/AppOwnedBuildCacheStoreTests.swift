@@ -43,7 +43,7 @@ struct AppOwnedBuildCacheStoreTests {
       #expect(try JSONDecoder().decode(ContainerBuildWorkerRequest.self, from: encoded) == request)
     }
 
-    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 5)
+    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 6)
     let receipt = ContainerBuildWorkerCacheReceipt(
       mode: .appOwnedLocalV1,
       handoffToken: UUID(uuidString: "BBBBBBBB-CCCC-DDDD-EEEE-FFFFFFFFFFFF")!,

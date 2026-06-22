@@ -25,7 +25,7 @@ struct ContainerBuildWorkerFrameCodecTests {
   }
 
   @Test
-  func protocolVersionFiveRoundTripsTypedOutputsWithoutHostDestinations() throws {
+  func protocolVersionSixRoundTripsTypedOutputsAndRemoteCacheWithoutHostDestinations() throws {
     let buildID = UUID()
     let build = ContainerBuildWorkerBuildRequest(
       buildID: buildID,
@@ -42,6 +42,11 @@ struct ContainerBuildWorkerFrameCodecTests {
       labels: [],
       targetStage: "",
       cachePolicy: .appOwnedLocalV1,
+      remoteCache: ContainerBuildRemoteCacheProfile(
+        reference: "registry.example/nativecontainers/cache:reviewed",
+        access: .importAndExport,
+        exportMode: .maximum
+      ),
       pullLatest: true,
       secretIDs: [],
       allowsTagReplacement: false
@@ -57,9 +62,19 @@ struct ContainerBuildWorkerFrameCodecTests {
     )
     let buildJSON = try #require(requestJSON["build"] as? [String: Any])
 
-    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 5)
+    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 6)
     #expect(decodedRequest == request)
     #expect(buildJSON["outputKind"] as? String == "rootFilesystemDirectory")
+    let remoteCacheJSON = try #require(buildJSON["remoteCache"] as? [String: Any])
+    #expect(
+      remoteCacheJSON["reference"] as? String
+        == "registry.example/nativecontainers/cache:reviewed"
+    )
+    #expect(remoteCacheJSON["access"] as? String == "importAndExport")
+    #expect(remoteCacheJSON["exportMode"] as? String == "max")
+    #expect(!String(decoding: encodedRequest, as: UTF8.self).contains("type=registry"))
+    #expect(buildJSON["cacheIn"] == nil)
+    #expect(buildJSON["cacheOut"] == nil)
     #expect(buildJSON["destination"] == nil)
     #expect(buildJSON["destinationPath"] == nil)
 

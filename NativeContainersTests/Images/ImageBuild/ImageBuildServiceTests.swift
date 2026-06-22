@@ -100,6 +100,102 @@ struct ImageBuildServiceTests {
   }
 
   @Test
+  func remoteCacheReviewCanonicalizesAndKeepsOnlyTypedOptions() throws {
+    let profile = try ImageBuildRemoteCacheReview.prepare(
+      ImageBuildRemoteCacheSelection(
+        reference: " registry.example/nativecontainers/cache ",
+        access: .importAndExport,
+        exportMode: .maximum
+      ),
+      outputReferences: ["registry.example/nativecontainers/app:latest"]
+    )
+
+    #expect(
+      profile
+        == ContainerBuildRemoteCacheProfile(
+          reference: "registry.example/nativecontainers/cache:latest",
+          access: .importAndExport,
+          exportMode: .maximum
+        )
+    )
+  }
+
+  @Test
+  func remoteCacheReviewRejectsDigestShorthandAndOutputCollisions() {
+    let digest = "sha256:\(String(repeating: "a", count: 64))"
+    #expect(
+      throws: ImageBuildError.invalidRemoteCacheReference(
+        "registry.example/nativecontainers/cache@\(digest)"
+      )
+    ) {
+      _ = try ImageBuildRemoteCacheReview.prepare(
+        ImageBuildRemoteCacheSelection(
+          reference: "registry.example/nativecontainers/cache@\(digest)",
+          access: .importOnly,
+          exportMode: .minimum
+        ),
+        outputReferences: []
+      )
+    }
+    #expect(
+      throws: ImageBuildError.invalidRemoteCacheReference("nativecontainers/cache:latest")
+    ) {
+      _ = try ImageBuildRemoteCacheReview.prepare(
+        ImageBuildRemoteCacheSelection(
+          reference: "nativecontainers/cache:latest",
+          access: .importOnly,
+          exportMode: .minimum
+        ),
+        outputReferences: []
+      )
+    }
+    #expect(
+      throws: ImageBuildError.invalidRemoteCacheReference(
+        "registry.example:99999/nativecontainers/cache:latest"
+      )
+    ) {
+      _ = try ImageBuildRemoteCacheReview.prepare(
+        ImageBuildRemoteCacheSelection(
+          reference: "registry.example:99999/nativecontainers/cache:latest",
+          access: .importOnly,
+          exportMode: .minimum
+        ),
+        outputReferences: []
+      )
+    }
+    #expect(
+      throws: ImageBuildError.remoteCacheMatchesOutput(
+        "registry.example/nativecontainers/app:latest"
+      )
+    ) {
+      _ = try ImageBuildRemoteCacheReview.prepare(
+        ImageBuildRemoteCacheSelection(
+          reference: "registry.example/nativecontainers/app:latest",
+          access: .importAndExport,
+          exportMode: .minimum
+        ),
+        outputReferences: ["registry.example/nativecontainers/app:latest"]
+      )
+    }
+  }
+
+  @Test
+  func requestValidatorRejectsRemoteCacheWhenCachingIsDisabled() {
+    let request = makeImageBuildRequest(
+      cachePolicy: .disabled,
+      remoteCache: ImageBuildRemoteCacheSelection(
+        reference: "registry.example/nativecontainers/cache:latest",
+        access: .importOnly,
+        exportMode: .minimum
+      )
+    )
+
+    #expect(throws: ImageBuildError.remoteCacheRequiresCaching) {
+      try ImageBuildRequestValidator().validate(request)
+    }
+  }
+
+  @Test
   func prepareBuildPinsCanonicalTagsAndTheStagedReviewBoundary() async throws {
     let staged = makeStagedBuildContext()
     let contextStager = TestBuildContextStager(staged: staged)
@@ -206,7 +302,15 @@ struct ImageBuildServiceTests {
 
   @Test
   func successfulBuildRunsReviewedPipelineAndCleansStaging() async throws {
-    let plan = makeImageBuildPlan(existingDigest: "sha256:reviewed")
+    let remoteCache = ContainerBuildRemoteCacheProfile(
+      reference: "registry.example/nativecontainers/cache:reviewed",
+      access: .importAndExport,
+      exportMode: .maximum
+    )
+    let plan = makeImageBuildPlan(
+      existingDigest: "sha256:reviewed",
+      remoteCache: remoteCache
+    )
     let artifact = makeWorkerResult(for: plan)
     let log = ImageBuildOperationLog()
     let contextStager = TestBuildContextStager(
@@ -278,6 +382,7 @@ struct ImageBuildServiceTests {
     #expect(requests[1].build?.contextFingerprint == plan.contextFingerprint)
     #expect(requests[1].build?.tags == plan.tags)
     #expect(requests[1].build?.platforms == plan.platforms)
+    #expect(requests[1].build?.remoteCache == remoteCache)
 
     #expect(
       await log.values == [
@@ -354,6 +459,16 @@ struct ImageBuildServiceTests {
       preparedPlan: outputPlan,
       completion: completion
     )
+    let remoteCacheSelection = ImageBuildRemoteCacheSelection(
+      reference: "registry.example/nativecontainers/cache",
+      access: .importOnly,
+      exportMode: .minimum
+    )
+    let expectedRemoteCache = ContainerBuildRemoteCacheProfile(
+      reference: "registry.example/nativecontainers/cache:latest",
+      access: .importOnly,
+      exportMode: .minimum
+    )
     let service = AppleContainerBuildService(
       contextStager: contextStager,
       worker: worker,
@@ -364,7 +479,10 @@ struct ImageBuildServiceTests {
       buildExecutionCoordinator: RuntimeMutationCoordinator()
     )
     let selectionProgress = ImageBuildProgressRecorder()
-    let request = makeImageBuildRequest(output: selection)
+    let request = makeImageBuildRequest(
+      remoteCache: remoteCacheSelection,
+      output: selection
+    )
 
     let plan = try await service.prepareBuild(request) { update in
       await selectionProgress.record(update)
@@ -378,6 +496,7 @@ struct ImageBuildServiceTests {
         )
       ])
     #expect(await outputManager.preparedSelections == [selection])
+    #expect(plan.remoteCache == expectedRemoteCache)
 
     let result = try await service.build(plan, authorization: .none) { update in
       await selectionProgress.record(update)
@@ -390,6 +509,7 @@ struct ImageBuildServiceTests {
     #expect(requests.count == 2)
     #expect(requests[1].build?.outputKind == .ociArchive)
     #expect(requests[1].build?.tags == plan.tags)
+    #expect(requests[1].build?.remoteCache == expectedRemoteCache)
     #expect(await imageStore.tagStateRequests.isEmpty)
     #expect(await imageStore.loadedArchives.isEmpty)
     #expect(await imageStore.verifiedPlatforms.isEmpty)
@@ -1326,6 +1446,7 @@ private func makeImageBuildRequest(
   labels: [String] = [],
   targetStage: String = "",
   cachePolicy: ImageBuildCachePolicy = .builderInternal,
+  remoteCache: ImageBuildRemoteCacheSelection? = nil,
   pullLatest: Bool = true,
   builderCPUCount: Int? = nil,
   builderMemoryMiB: Int? = nil,
@@ -1341,6 +1462,7 @@ private func makeImageBuildRequest(
     labels: labels,
     targetStage: targetStage,
     cachePolicy: cachePolicy,
+    remoteCache: remoteCache,
     pullLatest: pullLatest,
     builderCPUCount: builderCPUCount,
     builderMemoryMiB: builderMemoryMiB,
@@ -1354,6 +1476,7 @@ private func makeImageBuildPlan(
   tags: [ContainerBuildTagExpectation]? = nil,
   secrets: [ImageBuildSecretReview] = [],
   cachePolicy: ImageBuildCachePolicy = .builderInternal,
+  remoteCache: ContainerBuildRemoteCacheProfile? = nil,
   output: ImageBuildOutputPlan = .imageStore
 ) -> ImageBuildPlan {
   let stagedRoot = URL(
@@ -1389,6 +1512,7 @@ private func makeImageBuildPlan(
     labels: ["org.example.owner=nativecontainers"],
     targetStage: "runtime",
     cachePolicy: cachePolicy,
+    remoteCache: remoteCache,
     pullLatest: true,
     builderCPUCount: 4,
     builderMemoryMiB: 4_096,

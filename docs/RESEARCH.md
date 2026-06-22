@@ -338,7 +338,7 @@ release and isolating it behind an adapter are both deliberate.
   shim writes OCI and tar
   exports to `<appRoot>/builder/<buildID>/out.tar` and local exports to
   `<appRoot>/builder/<buildID>/local`. The app therefore keeps reviewed user
-  destinations entirely on the host side of worker protocol v5.
+  destinations entirely on the host side of worker protocol v6.
 - Image-store and OCI-image-archive outputs both use `type=oci`. The former
   carries a unique internal staging tag and is imported, snapshot-verified, and
   retagged; the latter carries exactly one reviewed image reference and is
@@ -368,14 +368,14 @@ release and isolating it behind an adapter are both deliberate.
   atomically renames, and reports post-commit fsync failure as retained partial
   completion. Live probes verified publication and cleanup for OCI, tar, and
   local-folder destinations.
-- Docker/registry exporters, SSH forwarding, and reviewed remote-cache profiles
-  remain later parity work. Raw BuildKit cache strings are intentionally not a
-  product surface.
+- Docker/registry output exporters remain later parity work. Raw BuildKit cache
+  strings are intentionally not a product surface.
 - The public build configuration accepts raw BuildKit CSV strings for cache
   import/export, but Apple’s CLI hides both flags, the builder source still
   marks cache-to/from as TODO, and upstream has no cache contract tests. Local
-  cache paths resolve inside the builder VM. Protocol v5 now exposes one typed,
-  fixed app-owned local profile rather than raw strings or remote credentials.
+  cache paths resolve inside the builder VM. Protocol v6 exposes one typed,
+  fixed app-owned local profile and one optional typed registry profile rather
+  than raw strings, user cache paths, or remote credentials.
   The worker lowers it to Docker's documented
   [local-cache `src`/`dest` syntax](https://docs.docker.com/build/cache/backends/local/),
   exports and validates a fresh OCI-layout staging generation, atomically moves
@@ -391,10 +391,23 @@ release and isolating it behind an adapter are both deliberate.
   seconds, then reset the namespace and removed both 4,004,864-byte outputs.
   Repeated probes did not produce stable archive byte equality, so cache proof
   rests on validated generations and lifecycle events rather than byte equality.
-  The surviving internal
-  BuildKit cache confounds hit
-  attribution; deleting the builder solely to prove independent local reuse was
-  deliberately not performed.
+  The surviving internal BuildKit cache confounds hit attribution; deleting the
+  builder solely to prove independent local reuse was deliberately not
+  performed. The registry profile follows Docker's documented
+  [`type=registry,ref=...`](https://docs.docker.com/build/cache/backends/registry/)
+  import/export contract and bounds export to `mode=min` or `mode=max`. Review
+  requires an explicit canonical registry image, rejects digest and output
+  collisions, and makes export plus max-mode intermediate-layer exposure
+  visible. Registry execution is not yet live-claimed: Apple's pinned client
+  exposes neither a cache-auth session nor upstream cache contract coverage, so
+  the endpoint must already be accessible to the builder.
+- Apple's pinned [`Builder.BuildConfig`](https://github.com/apple/container/blob/1.0.0/Sources/ContainerBuild/Builder.swift)
+  has no SSH field or BuildKit session-attachable provider. Passing
+  `SSH_AUTH_SOCK` into the builder container does not implement Dockerfile
+  `RUN --mount=type=ssh`, while copying a key or treating the socket as an
+  ordinary build secret would violate the no-key-material-in-layers boundary.
+  Build-time SSH forwarding therefore remains unavailable independently of the
+  existing container and Linux-machine agent forwarding.
 - Apple’s public builder and shim protocols expose build/info operations but no
   build-history, disk-usage, or prune endpoint. NativeContainers therefore owns
   its small product history: schema-versioned private files record typed

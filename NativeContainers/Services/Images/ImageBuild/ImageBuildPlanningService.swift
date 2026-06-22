@@ -1,3 +1,4 @@
+import ContainerizationOCI
 import Foundation
 
 protocol ImageBuildRequestValidating: Sendable {
@@ -6,6 +7,15 @@ protocol ImageBuildRequestValidating: Sendable {
 
 struct ImageBuildRequestValidator: ImageBuildRequestValidating {
   func validate(_ request: ImageBuildRequest) throws {
+    if request.cachePolicy == .disabled, request.remoteCache != nil {
+      throw ImageBuildError.remoteCacheRequiresCaching
+    }
+    if let remoteCache = request.remoteCache {
+      _ = try ImageBuildRemoteCacheReview.prepare(
+        remoteCache,
+        outputReferences: []
+      )
+    }
     if !request.secrets.isEmpty {
       _ = try ImageBuildSecretPolicy.validate(
         request.secrets,
@@ -86,6 +96,12 @@ struct AppleImageBuildPlanningService: ImageBuildPlanning {
       let preparedOutput = try await outputManager.prepare(request.output)
       outputPlan = preparedOutput
       let tags = try await reviewedTags(for: request)
+      let remoteCache = try request.remoteCache.map {
+        try ImageBuildRemoteCacheReview.prepare(
+          $0,
+          outputReferences: tags.map(\.reference)
+        )
+      }
 
       let secretPreparation: ImageBuildSecretPreparation
       if let secretReviewID {
@@ -149,6 +165,7 @@ struct AppleImageBuildPlanningService: ImageBuildPlanning {
         labels: request.labels,
         targetStage: request.targetStage,
         cachePolicy: request.cachePolicy,
+        remoteCache: remoteCache,
         pullLatest: request.pullLatest,
         builderCPUCount: request.builderCPUCount,
         builderMemoryMiB: request.builderMemoryMiB,
@@ -201,5 +218,64 @@ struct AppleImageBuildPlanningService: ImageBuildPlanning {
       return .dockerfileSibling
     }
     return .conventional
+  }
+}
+
+enum ImageBuildRemoteCacheReview {
+  static func prepare(
+    _ selection: ImageBuildRemoteCacheSelection,
+    outputReferences: [String]
+  ) throws -> ContainerBuildRemoteCacheProfile {
+    let requested = selection.reference.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !requested.isEmpty else {
+      throw ImageBuildError.invalidRemoteCacheReference(selection.reference)
+    }
+
+    let parsed: Reference
+    do {
+      parsed = try Reference.parse(requested)
+    } catch {
+      throw ImageBuildError.invalidRemoteCacheReference(selection.reference)
+    }
+    guard
+      let domain = parsed.domain,
+      !domain.isEmpty,
+      domain == domain.lowercased(),
+      hasValidPort(domain),
+      parsed.digest == nil
+    else {
+      throw ImageBuildError.invalidRemoteCacheReference(selection.reference)
+    }
+    parsed.normalize()
+    let canonical = parsed.description
+    guard
+      parsed.tag != nil,
+      !outputReferences.contains(canonical)
+    else {
+      if outputReferences.contains(canonical) {
+        throw ImageBuildError.remoteCacheMatchesOutput(canonical)
+      }
+      throw ImageBuildError.invalidRemoteCacheReference(selection.reference)
+    }
+
+    return ContainerBuildRemoteCacheProfile(
+      reference: canonical,
+      access: selection.access,
+      exportMode: selection.exportMode
+    )
+  }
+
+  private static func hasValidPort(_ domain: String) -> Bool {
+    let hasExplicitPort =
+      domain.hasPrefix("[")
+      ? domain.contains("]:")
+      : domain.contains(":")
+    guard hasExplicitPort else { return true }
+    guard
+      let components = URLComponents(string: "https://\(domain)"),
+      components.host != nil,
+      let port = components.port
+    else { return false }
+    return (1...65_535).contains(port)
   }
 }

@@ -6,7 +6,7 @@ enum ContainerBuildWorkerOperation: String, Codable, Equatable, Sendable {
 }
 
 struct ContainerBuildWorkerRequest: Codable, Equatable, Sendable {
-  static let currentProtocolVersion = 5
+  static let currentProtocolVersion = 6
 
   let protocolVersion: Int
   let operation: ContainerBuildWorkerOperation
@@ -53,6 +53,26 @@ enum ImageBuildCachePolicy: String, Codable, CaseIterable, Equatable, Hashable, 
   case appOwnedLocalV1
 }
 
+enum ImageBuildRemoteCacheAccess: String, Codable, CaseIterable, Equatable, Hashable, Sendable {
+  case importOnly
+  case importAndExport
+
+  var exportsCache: Bool { self == .importAndExport }
+}
+
+enum ImageBuildRemoteCacheExportMode: String, Codable, CaseIterable, Equatable, Hashable,
+  Sendable
+{
+  case minimum = "min"
+  case maximum = "max"
+}
+
+struct ContainerBuildRemoteCacheProfile: Codable, Equatable, Sendable {
+  let reference: String
+  let access: ImageBuildRemoteCacheAccess
+  let exportMode: ImageBuildRemoteCacheExportMode
+}
+
 struct ContainerBuildExporterConfiguration: Equatable, Sendable {
   let type: String
   let additionalFields: [String: String]
@@ -93,6 +113,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
   let labels: [String]
   let targetStage: String
   let cachePolicy: ImageBuildCachePolicy
+  let remoteCache: ContainerBuildRemoteCacheProfile?
   let pullLatest: Bool
   let secretIDs: [String]
   let allowsTagReplacement: Bool
@@ -112,6 +133,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
     labels: [String],
     targetStage: String,
     cachePolicy: ImageBuildCachePolicy = .builderInternal,
+    remoteCache: ContainerBuildRemoteCacheProfile? = nil,
     pullLatest: Bool,
     secretIDs: [String],
     allowsTagReplacement: Bool
@@ -130,6 +152,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
     self.labels = labels
     self.targetStage = targetStage
     self.cachePolicy = cachePolicy
+    self.remoteCache = remoteCache
     self.pullLatest = pullLatest
     self.secretIDs = secretIDs
     self.allowsTagReplacement = allowsTagReplacement

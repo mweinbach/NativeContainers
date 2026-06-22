@@ -190,6 +190,7 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
       labels: plan.labels,
       targetStage: plan.targetStage,
       cachePolicy: plan.cachePolicy,
+      remoteCache: plan.remoteCache,
       pullLatest: plan.pullLatest,
       secretIDs: secretPayload.ids,
       allowsTagReplacement: authorization.allowsTagReplacement

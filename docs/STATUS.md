@@ -457,7 +457,8 @@ Updated: 2026-06-22.
 - The Builds destination reviews a private local context, typed output,
   destination (when applicable), canonical image reference, exact target
   platforms, builder resources, build arguments, labels, target stage, cache
-  policy, and pull policy before execution.
+  policy, optional canonical registry-cache profile, and pull policy before
+  execution.
 - The native build entry point is now a small facade over independently
   injectable planning, execution, and lifecycle services. Request validation
   can run without runtime collaborators; execution retains the single-flight
@@ -470,13 +471,25 @@ Updated: 2026-06-22.
   modes, and bind metadata plus content in a SHA-256 fingerprint checked before
   and after solve. Canceled staging and queued builds remove partial private
   contexts promptly.
-- Worker protocol v5 carries typed output/cache kinds and typed artifact metadata,
+- Worker protocol v6 carries typed output/cache kinds, an optional typed remote
+  registry-cache profile, and typed artifact metadata,
   but never a user destination. Image-store and OCI-archive builds use Apple's
   OCI exporter, root-filesystem archives use `tar`, and root-filesystem folders
   use `local` with `platform-split=false`; root-filesystem outputs are
   deliberately single-platform. The pinned tar exporter retains its
   `linux_arm64` platform directory, while the local exporter publishes the
   selected platform directly at the destination root.
+- Registry cache review requires a lowercase explicit registry plus repository,
+  canonicalizes the tag, rejects digests and output/cache collisions, and
+  exposes only import-only or import-and-export with min/max export scope. The
+  confirmation calls out remote publication and intermediate-layer exposure.
+  Protocol and history retain no raw cache options or credentials, and history
+  also omits the privacy-sensitive cache reference. Apple 1.0's public builder
+  has no cache-auth or SSH-session provider, so remote execution remains limited
+  to endpoints the builder can already access and build-time SSH forwarding
+  remains gated. Deterministic review, rejection, protocol round-trip, and
+  execution-forwarding tests are implemented; live registry execution awaits an
+  operator-owned disposable endpoint.
 - File exports are copied out of the guest-visible builder directory into a
   descriptor-validated mode-0400 host artifact with a bound byte count and
   SHA-256. Local-directory exports are independently copied into an app-private
@@ -548,7 +561,7 @@ Updated: 2026-06-22.
   Xcode probe against Apple 1.0.0 produced two 4,004,864-byte OCI outputs and
   observed distinct worker-staged and app-committed events for both
   9-entry/4,018,176-byte cache generations, and reduced the unique four-second
-  final unique four-second probe from about 5.20 seconds to 0.20 seconds before
+  final four-second probe from about 5.20 seconds to 0.20 seconds before
   resetting the app cache and removing its outputs. Repeated probes did not
   produce stable archive byte equality, so no archive-determinism claim is made.
   Apple's surviving internal cache means the
@@ -559,7 +572,7 @@ Updated: 2026-06-22.
   files outside the build context by open descriptor and full identity; plans
   retain only ID, privacy-sensitive path, and byte count. Context staging rejects
   every pinned device/inode, closing hard-link races. After the builder is ready,
-  the vault revalidates and consumes each descriptor once, then protocol v5
+  the vault revalidates and consumes each descriptor once, then protocol v6
   streams bounded binary and empty values beside—never inside—the Codable control
   request. App-side leases are released when that pipe write commits. Secret
   builds force Apple’s quiet mode, drain and discard worker stderr, sanitize

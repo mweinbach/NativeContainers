@@ -425,6 +425,20 @@ but cannot delete a live prepared handoff; explicit discard/reset owns immediate
 cleanup and recovery reclaims handoffs older than 24 hours. Cache status/reset remains a separate `AppOwnedBuildCacheManaging`
 service from Apple builder lifecycle.
 
+An optional remote registry-cache profile stays inside the same immutable build
+review. The app accepts only an explicit lowercase registry domain plus OCI
+repository and optional tag, canonicalizes a missing tag to `latest`, rejects digest
+references and any cache/output-reference collision, and freezes one closed
+access mode plus min/max export scope. Protocol v6 carries those typed values,
+not a raw BuildKit option or credential. Only the worker lowers the profile to
+`type=registry,ref=...` cache import/export fields. Import is always requested;
+export is opt-in, never ignores errors, and the confirmation names external
+publication plus the wider intermediate-layer exposure of max mode. Apple 1.0's
+client has no cache-auth session, so NativeContainers does not extract Keychain
+credentials into the build request; the endpoint must already be accessible to
+the builder. The cache reference is privacy-sensitive in the review UI and is
+not retained in build history.
+
 Build secrets cross a separate `ImageBuildSecretManaging` boundary. The review
 request contains file selections, but the immutable plan contains only a
 canonical ID, privacy-sensitive path, and byte count. The service rejects invalid or
@@ -456,8 +470,8 @@ crash-temp scavenging. History persists only the context display name,
 fingerprints and hashes, tags, platforms, option keys and flags, secret count,
 timestamps, typed status, digest or retained partial-import references/digests,
 typed output kind, and typed failure category. Output destinations, full paths,
-argument and label values, secret IDs and paths, logs, and error text never
-cross this persistence boundary.
+argument and label values, remote-cache references, secret IDs and paths, logs,
+and error text never cross this persistence boundary.
 
 Canonical Dockerfile and ignore paths are checked as strict descendants by
 path component, not textual prefix. This accepts directory URLs normalized with
@@ -492,7 +506,7 @@ reconciliation runs in a fresh uncancelled task. Deletion additionally requires
 both inventory and the exact builder bundle path to be absent; the service never
 manually removes an orphaned bundle or the separate builder-export directory.
 
-Worker protocol v5 reserves stdout for capped length-prefixed control frames
+Worker protocol v6 reserves stdout for capped length-prefixed control frames
 and adds typed output/cache requests and artifact receipts without host destinations.
 Its exact-length stdin decoder reads one metadata-only JSON request followed by
 a bounded binary secret envelope and final commit marker, then leaves stdin open
@@ -523,6 +537,14 @@ lease scavenges abandoned staging. A committed generation remains valid if a
 later image-store or destination publication step fails.
 Inspection/reset use the same lock and never mutate Apple's builder container or
 unrelated `<appRoot>/builder` exports.
+
+Build-time SSH mounts remain unavailable. Forwarding `SSH_AUTH_SOCK` into the
+builder container is not equivalent to BuildKit's SSH session attachable, and
+the pinned public `Builder.BuildConfig` exposes neither an SSH field nor a
+session provider. NativeContainers therefore does not reinterpret the socket as
+a build secret or copy private-key material into a layer. This is separate from
+the implemented SSH-agent forwarding for ordinary containers and Linux
+machines.
 
 Both sides use POSIX pipe reads for short framed traffic. Foundation’s counted
 pipe read can wait for the entire requested buffer or until EOF; the input lease

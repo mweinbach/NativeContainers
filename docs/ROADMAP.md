@@ -64,12 +64,22 @@ must leave a usable, test-backed product slice.
 - [x] Typed image-store, OCI archive, root-filesystem tar, and root-filesystem
       folder outputs live-verified behind reviewed destination and publication
       services.
-- [x] Typed fixed app-owned local cache profile with protocol-v5 isolation,
+- [x] Typed fixed app-owned local cache profile with protocol-v6 isolation,
       cancellation-aware cross-process leases, full-tree-fingerprint-bound
       prepared handoff, bounded stale recovery, atomic promotion, namespace-only reset, and a
       successful two-build live export/import compatibility probe. Cross-builder hit attribution would
       require a destructive builder reset and remains intentionally unclaimed.
-- [ ] SSH forwarding and reviewed remote cache profiles.
+- [x] One optional reviewed remote registry-cache profile per build, with a
+      canonical explicit registry reference, typed import-only/import-and-export
+      access, bounded min/max export scope, output-reference separation, and no
+      raw cache options or credential payloads crossing the app boundary.
+- [ ] Live-verify remote cache import/export against an operator-owned disposable
+      registry. Apple 1.0 exposes raw cache fields without an upstream contract
+      test or cache-auth session, so the product currently limits the profile to
+      endpoints the builder can already access.
+- [ ] Build-time SSH forwarding after Apple's public builder client exposes a
+      BuildKit SSH session/attachable contract. Container and Linux-machine SSH
+      agent forwarding are already implemented independently.
 - [x] Version-pinned Socktainer service with SHA-256 and Developer ID validation,
       HTTP-level readiness, exact-PID TERM-to-KILL/Force Stop recovery, stale
       socket cleanup, and a product-specific Docker context that never becomes

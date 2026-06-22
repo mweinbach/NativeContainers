@@ -845,7 +845,7 @@ the bounded fallback.
 
 **Status:** Accepted — 2026-06-21
 
-Build requests and protocol-v5 control frames carry one closed cache mode:
+Build requests and protocol-v6 control frames carry one closed local cache mode:
 disabled, Apple builder-internal, or the versioned NativeContainers local
 profile. The app and UI never accept raw BuildKit cache CSV or a host/guest
 path. Only a worker-private adapter lowers the reviewed local profile to
@@ -2137,3 +2137,35 @@ median/P95 CPU, peak final memory, host/runtime/image provenance, command, and
 settling/sampling configuration. Cleanup remains outside timing and must stop,
 delete, and prove absence of every operation-owned fixture even after failure or
 cancellation.
+
+## ADR-075: Keep remote build caches typed and keep SSH gated on a session API
+
+**Status:** Accepted — 2026-06-22
+
+NativeContainers exposes one optional remote registry-cache profile in each
+immutable image-build review. It is not a free-form `cache-from`/`cache-to`
+surface. The review accepts an explicit lowercase registry domain and OCI
+repository, canonicalizes an omitted tag to `latest`, rejects digest references,
+and requires the cache image to differ from every reviewed output image. The
+closed access choices are import-only and import-and-export; export is further
+bounded to BuildKit's `min` or `max` mode. The confirmation identifies the
+remote mutation and warns that max mode publishes intermediate-stage layers.
+Cache-export errors are never ignored.
+
+Protocol v6 carries only the canonical reference and those two enums. The
+worker revalidates that shape, then and only then lowers it to BuildKit registry
+cache strings. Raw CSV, arbitrary attributes, local paths, and credentials are
+not accepted. The privacy-sensitive reference appears in the immediate review
+but is omitted from persistent build history. A fixed local cache and a remote
+profile may be combined because BuildKit supports multiple import/export
+locations; no-cache and a remote profile are mutually exclusive.
+
+The pinned Apple 1.0 `Builder.BuildConfig` provides raw cache arrays but no
+registry-auth session and no SSH field or BuildKit session-attachable provider.
+NativeContainers therefore neither moves Keychain credentials into the worker
+request nor pretends that the builder container's `SSH_AUTH_SOCK` implements
+Dockerfile SSH mounts. Treating keys as ordinary build secrets or copying them
+into a layer is prohibited. Remote caches are limited to endpoints the builder
+can already access, live import/export remains gated on an operator-owned
+disposable registry, and build-time SSH forwarding remains open until Apple
+publishes a supported session contract.

@@ -15,6 +15,10 @@ struct ImageBuildCreationView: View {
   @State private var secretDrafts: [ImageBuildSecretDraft] = []
   @State private var targetStage = ""
   @State private var cachePolicy = ImageBuildCachePolicy.builderInternal
+  @State private var usesRemoteCache = false
+  @State private var remoteCacheReference = ""
+  @State private var remoteCacheAccess = ImageBuildRemoteCacheAccess.importOnly
+  @State private var remoteCacheExportMode = ImageBuildRemoteCacheExportMode.minimum
   @State private var pullLatest = true
   @State private var usesCustomBuilderResources = false
   @State private var builderCPUCount = 2
@@ -229,6 +233,40 @@ struct ImageBuildCreationView: View {
       Text(cachePolicy.explanation)
         .font(.caption)
         .foregroundStyle(.secondary)
+      DisclosureGroup("Registry cache") {
+        Toggle("Use a reviewed registry cache", isOn: $usesRemoteCache)
+        if usesRemoteCache {
+          TextField(
+            "Registry/repository:tag",
+            text: $remoteCacheReference,
+            prompt: Text("registry.example/team/app:build-cache")
+          )
+          .textContentType(.URL)
+          Picker("Access", selection: $remoteCacheAccess) {
+            ForEach(ImageBuildRemoteCacheAccess.allCases, id: \.self) { access in
+              Text(access.title).tag(access)
+            }
+          }
+          Text(remoteCacheAccess.explanation)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          if remoteCacheAccess.exportsCache {
+            Picker("Export", selection: $remoteCacheExportMode) {
+              ForEach(ImageBuildRemoteCacheExportMode.allCases, id: \.self) { mode in
+                Text(mode.title).tag(mode)
+              }
+            }
+            Text(remoteCacheExportMode.explanation)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          Text(
+            "The pinned Apple builder does not expose a cache-auth session. NativeContainers sends no credentials or raw cache options; use only a registry endpoint the builder can already access."
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        }
+      }
       DisclosureGroup("Arguments, labels, and builder resources") {
         LabeledContent("Build arguments") {
           TextEditor(text: $buildArguments)
@@ -272,6 +310,22 @@ struct ImageBuildCreationView: View {
       }
       LabeledContent("Cache") {
         Text(plan.cachePolicy.title)
+      }
+      if let remoteCache = plan.remoteCache {
+        LabeledContent("Registry cache") {
+          Text(remoteCache.reference)
+            .font(.caption.monospaced())
+            .textSelection(.enabled)
+            .privacySensitive()
+        }
+        LabeledContent("Registry access") {
+          Text(remoteCache.access.title)
+        }
+        if remoteCache.access.exportsCache {
+          LabeledContent("Registry export") {
+            Text(remoteCache.exportMode.title)
+          }
+        }
       }
       if let destinationURL = plan.output.destinationURL {
         LabeledContent("Destination") {
@@ -427,6 +481,9 @@ struct ImageBuildCreationView: View {
     return contextDirectory != nil
       && hasReference
       && hasDestination
+      && (!usesRemoteCache
+        || (cachePolicy != .disabled
+          && !remoteCacheReference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
       && secretDrafts.allSatisfy {
         !$0.secretID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           && $0.sourceURL != nil
@@ -458,10 +515,20 @@ struct ImageBuildCreationView: View {
       labels: splitLines(labels),
       targetStage: targetStage.trimmingCharacters(in: .whitespacesAndNewlines),
       cachePolicy: cachePolicy,
+      remoteCache: makeRemoteCacheSelection(),
       pullLatest: pullLatest,
       builderCPUCount: usesCustomBuilderResources ? builderCPUCount : nil,
       builderMemoryMiB: usesCustomBuilderResources ? builderMemoryMiB : nil,
       output: makeOutputSelection()
+    )
+  }
+
+  private func makeRemoteCacheSelection() -> ImageBuildRemoteCacheSelection? {
+    guard usesRemoteCache else { return nil }
+    return ImageBuildRemoteCacheSelection(
+      reference: remoteCacheReference,
+      access: remoteCacheAccess,
+      exportMode: remoteCacheExportMode
     )
   }
 
@@ -562,6 +629,18 @@ struct ImageBuildCreationView: View {
       warnings.append(
         "The private NativeContainers cache will be replaced atomically only after the reviewed output is isolated; a committed cache generation remains independent of later output publication."
       )
+    }
+    if let remoteCache = plan.remoteCache {
+      warnings.append("Import cache layers from \(remoteCache.reference).")
+      if remoteCache.access.exportsCache {
+        let scope =
+          remoteCache.exportMode == .maximum
+          ? "all build stages, including intermediate layers"
+          : "the final image layers"
+        warnings.append(
+          "After the solve, replace the reviewed registry cache with \(scope). This publishes build-derived content outside this Mac."
+        )
+      }
     }
     if allowsStopRunningBuilder {
       warnings.append("A differently configured running shared builder may be stopped.")

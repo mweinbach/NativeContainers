@@ -174,7 +174,8 @@ struct ContainerBuildWorkerRunner {
     let cacheConfiguration = WorkerCacheConfiguration(
       policy: request.cachePolicy,
       buildID: request.buildID,
-      hasImportableCache: cacheLease?.hasImportableCache == true
+      hasImportableCache: cacheLease?.hasImportableCache == true,
+      remoteCache: request.remoteCache
     )
     let configuration = Builder.BuildConfig(
       buildID: request.buildID.uuidString.lowercased(),
@@ -467,7 +468,69 @@ struct ContainerBuildWorkerRunner {
         )
       }
     }
+    try validateRemoteCache(request)
     return (context, dockerfile, dockerignore)
+  }
+
+  private func validateRemoteCache(
+    _ request: ContainerBuildWorkerBuildRequest
+  ) throws {
+    guard let profile = request.remoteCache else { return }
+    guard request.cachePolicy != .disabled else {
+      throw ContainerBuildWorkerError.make(
+        code: "remote-cache-disabled",
+        message: "A registry cache cannot be used when build caching is disabled.",
+        buildID: request.buildID
+      )
+    }
+
+    let parsed: Reference
+    do {
+      parsed = try Reference.parse(profile.reference)
+    } catch {
+      throw ContainerBuildWorkerError.make(
+        code: "remote-cache-reference",
+        message: "The reviewed registry cache reference is invalid.",
+        buildID: request.buildID
+      )
+    }
+    parsed.normalize()
+    guard
+      let domain = parsed.domain,
+      !domain.isEmpty,
+      domain == domain.lowercased(),
+      hasValidRemoteCachePort(domain),
+      parsed.tag != nil,
+      parsed.digest == nil,
+      parsed.description == profile.reference
+    else {
+      throw ContainerBuildWorkerError.make(
+        code: "remote-cache-reference",
+        message: "The reviewed registry cache reference is not canonical.",
+        buildID: request.buildID
+      )
+    }
+    guard !request.tags.contains(where: { $0.reference == profile.reference }) else {
+      throw ContainerBuildWorkerError.make(
+        code: "remote-cache-output-conflict",
+        message: "The registry cache must be separate from every output image reference.",
+        buildID: request.buildID
+      )
+    }
+  }
+
+  private func hasValidRemoteCachePort(_ domain: String) -> Bool {
+    let hasExplicitPort =
+      domain.hasPrefix("[")
+      ? domain.contains("]:")
+      : domain.contains(":")
+    guard hasExplicitPort else { return true }
+    guard
+      let components = URLComponents(string: "https://\(domain)"),
+      components.host != nil,
+      let port = components.port
+    else { return false }
+    return (1...65_535).contains(port)
   }
 
   private func revalidateTagExpectations(
@@ -539,22 +602,35 @@ private struct WorkerCacheConfiguration {
   init(
     policy: ImageBuildCachePolicy,
     buildID: UUID,
-    hasImportableCache: Bool
+    hasImportableCache: Bool,
+    remoteCache: ContainerBuildRemoteCacheProfile?
   ) {
+    var cacheIn: [String] = []
+    var cacheOut: [String] = []
     switch policy {
     case .disabled, .builderInternal:
-      cacheIn = []
-      cacheOut = []
+      break
     case .appOwnedLocalV1:
       let namespace =
         "\(Self.guestExportRoot)/\(AppOwnedBuildCacheStore.namespaceDirectoryName)"
-      cacheIn =
-        hasImportableCache
-        ? ["type=local,src=\(namespace)/\(AppOwnedBuildCacheStore.currentDirectoryName)"]
-        : []
-      cacheOut = [
+      if hasImportableCache {
+        cacheIn.append(
+          "type=local,src=\(namespace)/\(AppOwnedBuildCacheStore.currentDirectoryName)"
+        )
+      }
+      cacheOut.append(
         "type=local,dest=\(namespace)/\(AppOwnedBuildCacheStore.stagingDirectoryName)/\(buildID.uuidString.lowercased()),mode=max"
-      ]
+      )
     }
+    if let remoteCache {
+      cacheIn.append("type=registry,ref=\(remoteCache.reference)")
+      if remoteCache.access.exportsCache {
+        cacheOut.append(
+          "type=registry,ref=\(remoteCache.reference),mode=\(remoteCache.exportMode.rawValue)"
+        )
+      }
+    }
+    self.cacheIn = cacheIn
+    self.cacheOut = cacheOut
   }
 }
