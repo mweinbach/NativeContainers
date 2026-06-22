@@ -1844,27 +1844,41 @@ Updated: 2026-06-22.
   `c2afd538d66fdd77377d03f1ed2ac76a34f1c116baecc9a8170d68f833121f57`.
 - `bootsReviewedInstallerAndCleansIsolatedBundle()` adds a reusable destructive
   gate requiring `NATIVECONTAINERS_LIVE_LINUX_VM=1`, an explicit local ISO path,
-  and its reviewed digest. It creates a mode-0700 temporary library, copies the
-  ISO through the production media service, prepares persistent EFI/NVRAM,
-  generic-machine, MAC, and 64-GiB sparse-disk artifacts, then starts the exact
-  production `AppleLinuxVirtualMachineRuntimeEngine` configuration.
+  and its reviewed digest. An optional bounded
+  `NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS` value presents the exact
+  production `VirtualMachineConsoleView` and publishes its visible native
+  window number for operator capture. The gate creates a mode-0700 temporary
+  library, copies the ISO through the production media service, prepares
+  persistent EFI/NVRAM, generic-machine, MAC, and 64-GiB sparse-disk artifacts,
+  then starts the exact production `AppleLinuxVirtualMachineRuntimeEngine`
+  configuration.
 - The live Xcode run passed 1/1 for VM ID
   `6a2eef4f-56b3-472a-8c05-725711af255b`. It confirmed the runtime and underlying
   `VZVirtualMachine` stayed running for ten seconds with installation media and
   a native console object, then confirmed pause, resume, 8-to-4-to-8-GiB
   balloon requests, exact force stop, manifest deletion, and complete isolated
   library cleanup. The temporary `/private/tmp` ISO clone was also removed.
+- A follow-up Xcode MCP visual run passed 1/1 for VM ID
+  `c3db69d1-c675-478a-8bd8-4ef59a5773f1`. It held native window 14856 for 120
+  seconds and a direct window capture showed the production console rendering
+  Ubuntu's orange boot mark, wordmark, and activity spinner. The same run then
+  passed pause/resume, balloon, force-stop, manifest-deletion, and empty-library
+  postconditions; its ready marker, VM library, app process, and temporary ISO
+  clone were absent afterward.
 - A first attempt against the Downloads path stalled before creating a VM
   bundle; the identical clone's successful run is consistent with an app-host
   privacy boundary. After Xcode MCP's Stop action also timed out, only the exact
   idle app-host PIDs were terminated. The successful retry used the hash-pinned
-  APFS clone in `/private/tmp`. Subsequent build-for-testing, the normal gated
-  skip, and the 4.217-second app build pass with an empty warning log. No VM
-  bundle, temporary library, app process, or build worker remains.
-- This checkpoint proves real firmware/installer-backed VZ start and native
-  runtime control. It does not infer a rendered Ubuntu frame, completed
-  graphical installation, guest input/audio behavior, or boot from the virtual
-  disk. Those remain explicit live work.
+  APFS clone in `/private/tmp`. After the visual run, build-for-testing passed
+  in 8.982 seconds, the normal gated focused test skipped 1/1, all 1,143 full
+  suite outcomes completed with 1,112 passes and 31 expected live-gate skips,
+  and the 3.444-second app build had an empty warning log. No VM bundle,
+  temporary library, app process, or build worker remains.
+- This checkpoint proves real firmware/installer-backed VZ start, a rendered
+  Ubuntu boot frame in the production native console, and native runtime
+  control. It does not infer a completed graphical installation, guest
+  input/audio behavior, or boot from the virtual disk. Those remain explicit
+  live work.
 
 ## Remaining live verification gap
 

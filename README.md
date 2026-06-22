@@ -162,7 +162,12 @@ bundle. Set `NATIVECONTAINERS_LIVE_LINUX_VM=1`,
 `NATIVECONTAINERS_LIVE_LINUX_VM_ISO_SHA256` to its reviewed digest. The smoke
 hashes the source, boots the production Virtio configuration, verifies the
 running console object, pause/resume, memory-balloon requests, force stop, and
-exact cleanup. It does not claim that the graphical installer completed.
+exact cleanup. Optionally set
+`NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS` to an integer from 1 through
+240 to present the exact production `VirtualMachineConsoleView` in a native
+window before the lifecycle checks; the reviewed Ubuntu 26.04 run rendered its
+boot splash there. This does not claim that the graphical installer completed
+or that guest input and audio work.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when

@@ -624,6 +624,12 @@ The installed Apple documentation confirms:
   automatic display reconfiguration and optional capture of system keys. SDK
   27's `VZVirtualMachineViewAdaptor` retains its VM, so a console must detach the
   adaptor when its generation closes.
+- The opt-in Linux VM smoke can present the exact production
+  `VirtualMachineConsoleView` in a bounded native test window and emit its
+  window number only after the view is visible. A hash-pinned official Ubuntu
+  26.04 ARM64 ISO rendered the branded boot splash and activity spinner in that
+  window. This is direct guest-frame evidence beyond merely obtaining a console
+  object; it is not evidence that installation, input, or audio completed.
 - `VZVirtioFileSystemDeviceConfiguration`, `VZMultipleDirectoryShare`, and
   `VZSharedDirectory` expose native host directories through VirtioFS. A Linux
   guest kernel must include `CONFIG_VIRTIO_FS`.

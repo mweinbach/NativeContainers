@@ -148,9 +148,10 @@ must leave a usable, test-backed product slice.
 - [x] Generation-pinned GUI Linux runtime ownership, start/pause/resume,
       graceful stop with a 30-second automatic force-stop watchdog, explicit
       Force Stop, native console, installer-media ejection, and creation UI.
-- [x] Hash-pinned live boot/control smoke with Ubuntu 26.04 ARM64 through the
-      production VZ configuration: running console object, pause/resume,
-      memory-balloon requests, force stop, and isolated-bundle cleanup.
+- [x] Hash-pinned live boot/control and visual-console smoke with Ubuntu 26.04
+      ARM64 through the production VZ configuration: a real rendered Ubuntu
+      boot splash in the production native window, pause/resume, memory-balloon
+      requests, force stop, and isolated-bundle cleanup.
 - [x] One typed, system-restorable GUI Linux console window per VM, with
       repeated-open deduplication, current-manifest revalidation, and inert
       restoration that never starts the guest.
