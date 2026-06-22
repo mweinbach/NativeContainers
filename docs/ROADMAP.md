@@ -265,6 +265,11 @@ must leave a usable, test-backed product slice.
 - [x] Low-Power-Mode and serious/critical-thermal-aware CPU defaults for newly
       opened container, persistent-machine, and GUI-VM creation flows, sampled
       through an injectable Foundation adapter without changing existing work.
+- [x] Generation-pinned runtime memory targets for macOS and GUI Linux VMs
+      through Apple's Virtio balloon device, with host/guest floors, MiB
+      validation, full/75%/50%/minimum native controls, cold-boot reset to the
+      configured allocation, and explicit cooperative—not measured—reclamation
+      semantics. Disposable guest verification remains in the live VM pass.
 - [ ] Idle suspension after an authoritative guest-activity signal is available;
       app, window, or console inactivity alone is not treated as guest idleness.
 - [x] On-demand Apple runtime and macOS VM library storage accounting with

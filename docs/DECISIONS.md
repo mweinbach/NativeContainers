@@ -2431,3 +2431,32 @@ so restoring a checkpoint captured before growth cannot shrink the virtual
 device. NativeContainers intentionally does not resize a guest partition or
 filesystem and offers no shrink action; the native UI states that follow-up
 explicitly.
+
+## ADR-085: Treat VM memory ballooning as cooperative generation-scoped runtime state
+
+**Status:** Accepted — 2026-06-22
+
+Both macOS and GUI Linux configurations already include exactly one
+`VZVirtioTraditionalMemoryBalloonDeviceConfiguration`. NativeContainers now
+adapts the corresponding runtime device through one guest-neutral controller
+and snapshot, but leaves mutation in each guest runtime service. A request must
+name the exact live generation, no lifecycle transition may be in flight, and
+the service accepts it only while the VM is running, matching Apple's documented
+contract. Stale generations, paused guests, missing or ambiguous devices,
+unaligned targets, and values outside the validated floor and configured
+ceiling fail closed.
+
+The floor is guest-aware. Linux retains at least the greater of Apple's host
+minimum and 1 GiB. A prepared macOS guest retains its restore image's persisted
+minimum supported memory; an older bundle without that evidence conservatively
+uses its current configured allocation and therefore offers no unsafe reduction.
+The native menu derives stable full, 75%, 50%, and minimum presets, omitting any
+percentage below the floor. Lower targets produce an explicit cooperative
+notice rather than a reclaimed-memory claim.
+
+The requested target is not added to the manifest or app preferences. Apple's
+device initializes a cold session at the configured memory size, so a fresh
+boot restores full allocation. After saved-state restore, snapshots read the
+current device target instead of inventing a separate app value. Automatic
+memory-pressure control remains out of scope until an authoritative feedback
+signal can distinguish a request from pages the guest actually returned.

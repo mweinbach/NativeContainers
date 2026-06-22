@@ -1050,6 +1050,35 @@ Primary sources:
   directory inspection again found no disposable machine, kubeconfig, or
   descriptor residue.
 
+## Virtualization runtime memory target contract
+
+Xcode DocumentationSearch against the installed Virtualization documentation
+confirmed the public runtime contract used by the app:
+
+- A configuration adds exactly one
+  `VZVirtioTraditionalMemoryBalloonDeviceConfiguration`; the resulting
+  `VZVirtioTraditionalMemoryBalloonDevice` is read from
+  `VZVirtualMachine.memoryBalloonDevices`.
+- `targetVirtualMachineMemorySize` is a mutable `UInt64` target while the VM is
+  running. Its initial value is the configured `memorySize`, it cannot exceed
+  that configured ceiling, and values use 1 MiB units. Virtualization rounds an
+  unaligned value down and a below-platform-minimum value up; NativeContainers
+  validates both rules before assignment instead of depending on implicit
+  rounding.
+- Lowering the target asks the guest to return pages voluntarily. The guest may
+  comply fully, partially, or not at all, and the VM has no view of guest memory
+  use. The property therefore proves the requested target, not the amount of
+  memory actually returned to the host.
+- Raising the target asks Virtualization to reserve more pages again. The app
+  always offers the configured allocation as an explicit restore-to-full
+  target and begins each cold session there.
+
+These semantics rule out a truthful "bytes reclaimed" display and unattended
+host-pressure automation based only on the target property. The implemented UI
+uses target language, shows a cooperative-reclamation notice whenever the
+requested target is below full, and keeps mutation inside the exact runtime
+generation.
+
 ## Public-API boundaries
 
 - No public Linux GPU/Metal passthrough.

@@ -1684,6 +1684,38 @@ Updated: 2026-06-22.
   failures. Strict Swift formatting, the accessibility contract, the repaired
   data-migration contract, and diff whitespace checks pass.
 
+## Cross-guest runtime memory target checkpoint
+
+- Xcode DocumentationSearch confirmed the installed Virtualization contract:
+  one configured Virtio balloon becomes a runtime device, its mutable target is
+  available while the VM runs, targets are MiB-aligned and capped by configured
+  memory, and a lower target only asks the guest to return pages. The target
+  does not measure guest compliance or host bytes reclaimed.
+- macOS and GUI Linux engine sessions now expose that device through one
+  focused adapter. Guest runtime services require the exact current generation,
+  no concurrent lifecycle transition, and a running state before mutation.
+  Snapshots and native full/75%/50%/minimum controls carry only the requested
+  target; a visible notice states that reclamation is cooperative.
+- Linux keeps at least the greater of Apple's host floor and 1 GiB. macOS uses
+  its persisted restore-image minimum; an older bundle with no minimum evidence
+  conservatively remains at its configured allocation. Percentage presets below
+  the floor are omitted. No reduced target is persisted in the manifest, and a
+  cold session returns to the full configured allocation.
+- Build-for-testing and the normal `NativeContainers` / `My Mac` build pass;
+  the normal build completes in 4.457 seconds with no warning entries. The
+  complete plan reports 1,112 outcomes: 1,083 passed, zero failed or unrun, and
+  29 explicitly gated live/destructive checks skipped. The focused memory-policy
+  plus complete macOS/Linux runtime-service selection passes 46/46. Xcode
+  launched PID 2560 and stopped that exact process; its only error logs were
+  the two existing Core Spotlight `SetStoreUpdateService` donation failures.
+  The standalone control preview compiled, but its canvas host hit the existing
+  30-second `NativeContainers.app` launch timeout, so no rendered-image claim
+  is inferred.
+- A disposable installed Linux guest and a disposable macOS guest still need
+  live under-load target-lower/restore-to-full observation. That pass must
+  report requested targets separately from host memory measurements and must
+  not infer full reclamation from a successful property assignment.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
@@ -1702,13 +1734,15 @@ disposable installed guest are available for that destructive integration pass.
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
    change CPU/memory, grow the virtual disk, expand the guest partition and file
    system, and verify the next boot; suspend and restore the installed session,
-   verify shared and host-only vmnet connectivity, clone and
+   request a lower memory target under guest load, restore the full target,
+   record host observations without treating the request as guaranteed
+   reclamation, verify shared and host-only vmnet connectivity, clone and
    portable-round-trip it, and exercise both graceful and watchdog force-stop
    paths.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, CPU/memory reconfiguration, disk growth plus APFS
-   container expansion, same-host save/restore, and fresh-identity clone boot
-   against a local IPSW.
+   container expansion, cooperative lower/full runtime memory targets,
+   same-host save/restore, and fresh-identity clone boot against a local IPSW.
 3. Live-verify a second reviewed Up that grows a real pinned Socktainer project
    from a contiguous replica prefix, including stable metadata and exact Apple
    attachment observations. Keep recreation blocked until the pinned bridge

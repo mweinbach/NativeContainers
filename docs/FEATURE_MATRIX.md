@@ -57,7 +57,7 @@ called out rather than papered over.
 | Physical USB passthrough | AccessoryAccess discovery + generation-pinned VZ XHCI controller service + app-scoped observable model | M5 | The macOS 27 implementation is complete through deterministic service/model tests and native ready/unavailable previews. Discovery is explicit, attachments are host-local and never persisted, stale generations unwind late capture, physical disconnect is reconciled, and attached devices block suspend. Live activation remains gated because the signed target does not yet carry `com.apple.developer.accessory-access.usb`; composition checks the signed process and fails closed. |
 | Linux GPU/Metal passthrough | None | Unavailable | No public Apple API |
 | Intel macOS guests on Apple silicon | None | Unavailable | Unsupported architecture |
-| Full guest-memory reclamation | Virtio balloon | Partial | Cooperative, not guaranteed |
+| Runtime guest-memory targeting and reclamation | Generation-pinned `VZVirtioTraditionalMemoryBalloonDevice` controller | Partial | Native full/75%/50%/guest-minimum controls are live for running macOS and GUI Linux sessions, bounded by host and guest floors and reset to full on cold boot. The target is a cooperative request; Virtualization exposes no proof that the guest returned every requested page, so guaranteed or measured full reclamation is not claimed. |
 
 ## Performance gates
 

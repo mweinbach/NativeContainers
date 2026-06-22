@@ -48,7 +48,8 @@ persistent build history, and macOS restore-image preparation, installation,
 generation-safe runtime/console controls, per-VM opt-in host audio input that
 resets on clone/export, host audio output, same-host suspend for macOS and GUI Linux,
 persistent macOS and GUI Linux VirtioFS shares, stopped-only renaming and
-host-bounded CPU/memory editing, per-VM automatic
+host-bounded CPU/memory editing, generation-pinned cooperative runtime memory
+targets for both GUI guest families, per-VM automatic
 NAT/shared/host-only networking for both guest families, and stopped-only
 macOS and GUI Linux VM cloning with fresh guest-specific
 platform identity and cancellable APFS/sparse transfer. Portable VM package
@@ -118,6 +119,8 @@ installation, runtime, saved state, shared directories, cloning, Linux VM
 creation, installer ejection, and native console presentation are independent
 services. VM networking is likewise split across a manifest-backed configuration
 service, an app-owned vmnet pool, and a focused Virtualization device factory;
+runtime memory targets flow through a separate generation-pinned Virtio balloon
+controller and are reported as cooperative requests rather than reclaimed bytes;
 physical USB uses a separate AccessoryAccess discovery adapter,
 generation-pinned runtime controller service, and entitlement-aware composition
 gate. SwiftUI only renders snapshots and invokes actions. A dedicated

@@ -743,6 +743,26 @@ while start, pause, resume, save, restore, or ejection is completing. Delegate
 stop/error events are authoritative, and exactly-once finalization prevents a
 stale callback from releasing a replacement session.
 
+Each macOS and GUI Linux engine session also owns one focused
+`AppleVirtualMachineMemoryBalloonController` over the configured
+`VZVirtioTraditionalMemoryBalloonDevice`. The guest-specific runtime services
+are the only mutation boundary: they require the exact current generation, an
+idle lifecycle state machine, and a running guest before changing the target.
+The shared snapshot validates MiB alignment and the configured-memory ceiling.
+Linux uses the greater of Apple's host floor and 1 GiB; macOS uses the persisted
+restore-image minimum, while older bundles conservatively keep their current
+allocation as the floor. SwiftUI receives only preset targets and the current
+requested target. It never receives the VZ device and never labels the request
+as measured host reclamation.
+
+The target is runtime state rather than manifest configuration. A cold engine
+session begins at the configured allocation, matching Virtualization's device
+contract; the app does not silently persist a reduced target across cold boots.
+A restored VZ session is represented by the device's current target after
+restore. Because the guest may decline or only partially satisfy a lower
+target, there is no inferred reclaimed-byte counter and no automatic
+host-pressure policy without authoritative feedback.
+
 Linux and macOS saved state share one actor-isolated transaction core. It holds
 a borrow on the exact guest runtime lease, fully synchronizes a hidden partial,
 atomically publishes `SavedState`, consumes restore through a tombstone, and
