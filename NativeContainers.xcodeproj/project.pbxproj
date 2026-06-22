@@ -428,6 +428,7 @@
 		1F9D2CC62FE810B30076F5B9 /* RestoreImageStoreRecoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CC52FE810B30076F5B9 /* RestoreImageStoreRecoveryService.swift */; };
 		1F9D2CC82FE8110F0076F5B9 /* RestoreImageStoreMigrationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CC72FE8110F0076F5B9 /* RestoreImageStoreMigrationServiceTests.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
+		1FB6BA7C2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA7B2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift */; };
 		1FEC46CD2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */; };
 		1FEC46CF2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */; };
 		1FEC46D12FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */; };
@@ -1024,6 +1025,7 @@
 		1F9D2CC32FE810B30076F5B9 /* RestoreImageStoreMigrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageStoreMigrationService.swift; sourceTree = "<group>"; };
 		1F9D2CC52FE810B30076F5B9 /* RestoreImageStoreRecoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageStoreRecoveryService.swift; sourceTree = "<group>"; };
 		1F9D2CC72FE8110F0076F5B9 /* RestoreImageStoreMigrationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageStoreMigrationServiceTests.swift; sourceTree = "<group>"; };
+		1FB6BA7B2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAppleKubernetesSmokeTests.swift; sourceTree = "<group>"; };
 		1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageModels.swift; sourceTree = "<group>"; };
 		1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageService.swift; sourceTree = "<group>"; };
 		1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageInspectorTests.swift; sourceTree = "<group>"; };
@@ -1367,6 +1369,7 @@
 			children = (
 				1F64B95C2FE8D56900598A65 /* KubernetesClusterDescriptorStoreTests.swift */,
 				1F64B95E2FE8D58E00598A65 /* KubernetesClusterServiceTests.swift */,
+				1FB6BA7B2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift */,
 			);
 			path = Kubernetes;
 			sourceTree = "<group>";
@@ -2460,6 +2463,7 @@
 				1F5E63A92FE8616300A430FF /* ContainerToolsModelTests.swift in Sources */,
 				1FEC46D12FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift in Sources */,
 				1F5E64532FE89AE400A430FF /* MacVirtualMachineDiskSnapshotModelsTests.swift in Sources */,
+				1FB6BA7C2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift in Sources */,
 				1F9D2ACF2FE754CA0076F5B9 /* InfrastructureManagementTests.swift in Sources */,
 				A84C9E71E18B6F05297928CC /* MacRestoreImagePreparationModelTests.swift in Sources */,
 				1F9D2C492FE7E8670076F5B9 /* ComposeProjectWorkspaceModelTests.swift in Sources */,
@@ -2956,6 +2960,7 @@
 				INFOPLIST_FILE = NativeContainers/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NativeContainers;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NativeContainers connects to services running in your local containers and Kubernetes clusters.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NativeContainers uses the Mac microphone only when you explicitly connect it to a macOS virtual machine.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -3145,6 +3150,7 @@
 				INFOPLIST_FILE = NativeContainers/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NativeContainers;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "NativeContainers connects to services running in your local containers and Kubernetes clusters.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NativeContainers uses the Mac microphone only when you explicitly connect it to a macOS virtual machine.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (

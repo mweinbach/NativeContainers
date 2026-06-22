@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-06-21.
+Updated: 2026-06-22.
 
 ## Verified
 
@@ -1251,18 +1251,32 @@ Updated: 2026-06-21.
   runs K3s as the guest's native service with secret encryption, and keeps
   kubeconfig mode 0600. The host descriptor is owner-only, backup-excluded,
   and contains no token, key, certificate, or kubeconfig.
+- The live Apple machine uses `vminitd` rather than OpenRC as PID 1. Provisioning
+  therefore installs the native OpenRC unit without auto-starting it, prepares
+  the delegated cgroup-v2 hierarchy explicitly, and starts K3s through that
+  unit. Readiness now requires the API, a Ready node, flannel state, the default
+  service-account controller, and a mode-0600 kubeconfig. Exact creation dates
+  retain their full binary precision across descriptor persistence, so a
+  freshly reloaded descriptor does not falsely classify its machine as stale.
 - A dedicated SwiftUI workspace exposes setup with reviewed CPU and memory
   floors, progress, status, Start, graceful Stop, explicit Force Stop, Delete,
   stale-record recovery, and user-initiated kubeconfig export. Workspace
   routing and Navigate Command-0 use one stable app-scoped observable model.
-- Xcode build-for-testing succeeds with zero warnings. The final full plan
-  passes all 965 outcomes: 944 deterministic tests passed, 21 explicit live
-  gates skipped, and no outcome failed or remained unrun. A signed Xcode
-  launch found and fixed one invalid SF Symbol; an AppKit regression now
-  resolves every sidebar symbol, and the relaunch log contains only the
-  existing macOS 27 beta SetStore/CoreSpotlight error. Both Kubernetes canvas
-  previews remain unclaimed because Xcode's Preview action returned
-  “The data couldn’t be read because it is missing.”
+- An opt-in Xcode smoke passed the complete destructive lane on Apple container
+  1.0.0: it created a unique two-core/2-GiB Alpine machine, installed the pinned
+  K3s release, exported a host-usable kubeconfig, created a namespace, ran a
+  real Alpine pod to Ready and verified its logs, deleted the namespace,
+  stopped and restarted the cluster, rechecked the API, and deleted the exact
+  machine. Independent CLI inventory found only Apple's pre-existing stopped
+  builder afterward, and no temporary kubeconfig directory remained.
+- Xcode build-for-testing succeeds with zero warnings. The final default plan
+  passes all 966 outcomes: 944 deterministic tests passed, 22 explicit live
+  gates skipped, and no outcome failed or remained unrun. The normal app
+  launched in 4.237 seconds as PID 31997 and Xcode stopped that exact process;
+  its only console errors were the existing macOS 27 beta
+  SetStore/CoreSpotlight failures. Both Kubernetes canvas previews remain
+  unclaimed because the Preview host twice timed out while launching the app
+  after 30 seconds.
 
 ## Remaining live verification gap
 
@@ -1272,26 +1286,20 @@ new GUI workflow, then mounting and exercising a shared folder, still need a
 disposable ISO smoke pass. Installing, booting,
 saving/restoring, and clone-booting macOS are not claimed as live-verified until
 a local IPSW and disposable installed guest are available for that destructive
-integration pass. The K3s service, lifecycle, and UI are deterministic-test
-verified, but a disposable Apple machine still needs to complete the pinned
-installer, expose the API, run one workload, export a usable kubeconfig, and be
-deleted before the Kubernetes lane is claimed as live-verified.
+integration pass.
 
 ## Next implementation slice
 
-1. Provision the gated Alpine K3s machine, verify API reachability and a
-   disposable workload through the exported kubeconfig, then delete the exact
-   machine and every cluster artifact.
-2. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
+1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
    and exercise both graceful and watchdog force-stop paths.
-3. Live-verify the implemented macOS installer, lifecycle service, force-stop
+2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.
-4. Live-verify a second reviewed Up that grows a real pinned Socktainer project
+3. Live-verify a second reviewed Up that grows a real pinned Socktainer project
    from a contiguous replica prefix, including stable metadata and exact Apple
    attachment observations. Keep recreation blocked until the pinned bridge
    implements rename and network attachment routes.
-5. Provision a Developer ID Application identity, run Xcode's Developer ID
+4. Provision a Developer ID Application identity, run Xcode's Developer ID
    distribution and notarization flow, then pass the strict stapled-product
    validator before calling the app publicly distributable.

@@ -39,7 +39,7 @@ actor KubernetesClusterDescriptorStore: KubernetesClusterDescriptorStoring {
         throw KubernetesClusterError.descriptorUnsafe
       }
       let decoder = JSONDecoder()
-      decoder.dateDecodingStrategy = .iso8601
+      decoder.dateDecodingStrategy = .deferredToDate
       let descriptor = try decoder.decode(KubernetesClusterDescriptor.self, from: data)
       try Self.validate(descriptor)
       return descriptor
@@ -55,7 +55,7 @@ actor KubernetesClusterDescriptorStore: KubernetesClusterDescriptorStoring {
     try ensurePrivateRoot(createIfMissing: true)
 
     let encoder = JSONEncoder()
-    encoder.dateEncodingStrategy = .iso8601
+    encoder.dateEncodingStrategy = .deferredToDate
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     let data: Data
     do {

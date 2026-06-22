@@ -217,6 +217,7 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     let descriptor = try await requireDescriptor()
     _ = try await requireExactMachine(descriptor)
     try await machineLifecycle.startMachine(descriptor.machine)
+    try await startK3s(descriptor.machine)
     try await waitForReadiness(descriptor.machine)
 
     let observation = try await observe(descriptor.machine)
@@ -364,6 +365,7 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
       timeoutSeconds: 900
     )
     try validate(bootstrap, operation: String(localized: "K3s installation"))
+    try await startK3s(descriptor.machine)
 
     await progress(
       KubernetesClusterProgress(
@@ -393,12 +395,71 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     )
   }
 
+  private func startK3s(_ target: LinuxMachineIdentity) async throws {
+    let command = """
+      set -eu
+      if [ -x /sbin/openrc-run ]; then
+        test -x /etc/init.d/k3s
+        mkdir -p /run/openrc
+        touch /run/openrc/softlevel
+        rc-update del k3s default >/dev/null 2>&1 || true
+        rc-update del cgroups default >/dev/null 2>&1 || true
+        if /etc/init.d/k3s status >/dev/null 2>&1; then
+          /etc/init.d/k3s stop
+        fi
+        cgroups_ready=1
+        for controller in cpu cpuset hugetlb memory pids; do
+          grep -qw "$controller" /sys/fs/cgroup/cgroup.subtree_control ||
+            cgroups_ready=0
+        done
+        if [ "$cgroups_ready" -ne 1 ]; then
+          system_cgroup=/sys/fs/cgroup/nativecontainers-system
+          mkdir -p "$system_cgroup"
+          for pid in $(cat /sys/fs/cgroup/cgroup.procs); do
+            echo "$pid" >"$system_cgroup/cgroup.procs" 2>/dev/null || true
+          done
+          remaining=$(cat /sys/fs/cgroup/cgroup.procs)
+          [ -z "$remaining" ]
+          for controller in $(cat /sys/fs/cgroup/cgroup.controllers); do
+            echo "+$controller" >/sys/fs/cgroup/cgroup.subtree_control
+          done
+        fi
+        for controller in cpu cpuset hugetlb memory pids; do
+          grep -qw "$controller" /sys/fs/cgroup/cgroup.subtree_control || {
+            echo "The cgroup $controller controller is unavailable." >&2
+            exit 43
+          }
+        done
+        /etc/init.d/k3s start
+      elif command -v systemctl >/dev/null 2>&1; then
+        test -f /etc/systemd/system/k3s.service
+        systemctl start k3s
+      else
+        echo 'K3s installed without a supported service supervisor.' >&2
+        exit 42
+      fi
+      """
+    let result = try await rootCommands.executeRootCommand(
+      command,
+      in: target,
+      timeoutSeconds: 60
+    )
+    try validate(result, operation: String(localized: "Starting K3s"))
+  }
+
   private func waitForReadiness(_ target: LinuxMachineIdentity) async throws {
     let command = """
       attempt=0
       while [ "$attempt" -lt 30 ]; do
         if output=$(/usr/local/bin/k3s kubectl get --raw=/readyz 2>/dev/null) &&
-          [ "$output" = "ok" ]; then
+          [ "$output" = "ok" ] &&
+          test -s /run/flannel/subnet.env &&
+          /usr/local/bin/k3s kubectl get serviceaccount default \
+            --namespace default --output=name >/dev/null 2>&1 &&
+          /usr/local/bin/k3s kubectl get nodes --no-headers 2>/dev/null |
+          grep -Eq '^[^[:space:]]+[[:space:]]+Ready([[:space:]]|$)' &&
+          test -r /etc/rancher/k3s/k3s.yaml &&
+          [ "$(stat -c '%a' /etc/rancher/k3s/k3s.yaml)" = "600" ]; then
           exit 0
         fi
         attempt=$((attempt + 1))
@@ -422,9 +483,9 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
       printf '%s\n' '\(Self.versionMarker)'
       /usr/local/bin/k3s --version | head -n 1
       printf '%s\n' '\(Self.nodesMarker)'
-      /usr/local/bin/k3s kubectl get nodes -o 'jsonpath={range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+      /usr/local/bin/k3s kubectl get nodes -o 'jsonpath={range .items[*]}{.metadata.name}{"\\t"}{.status.conditions[?(@.type=="Ready")].status}{"\\n"}{end}'
       printf '%s\n' '\(Self.podsMarker)'
-      /usr/local/bin/k3s kubectl get pods --all-namespaces -o 'jsonpath={range .items[*]}{.status.phase}{"\n"}{end}'
+      /usr/local/bin/k3s kubectl get pods --all-namespaces -o 'jsonpath={range .items[*]}{.status.phase}{"\\n"}{end}'
       """
     let result = try await rootCommands.executeRootCommand(
       command,
@@ -505,8 +566,6 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
       set -eu
       if command -v apk >/dev/null 2>&1; then
         apk add --no-cache ca-certificates curl openrc iptables ip6tables
-        rc-update add cgroups default >/dev/null 2>&1 || true
-        rc-service cgroups start >/dev/null 2>&1 || true
       elif command -v apt-get >/dev/null 2>&1; then
         export DEBIAN_FRONTEND=noninteractive
         apt-get update
@@ -523,10 +582,24 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
       actual_digest=$(sha256sum "$script" | awk '{print $1}')
       test "$actual_digest" = \(expectedDigest)
       chmod 0700 "$script"
-      INSTALL_K3S_VERSION=\(version) INSTALL_K3S_EXEC=\(installArguments) "$script"
+      export INSTALL_K3S_SKIP_ENABLE=true
+      export INSTALL_K3S_VERSION=\(version)
+      export INSTALL_K3S_EXEC=\(installArguments)
+      "$script"
       test -x /usr/local/bin/k3s
-      test -r /etc/rancher/k3s/k3s.yaml
-      test "$(stat -c '%a' /etc/rancher/k3s/k3s.yaml)" = "600"
+      if [ -x /sbin/openrc-run ]; then
+        test -x /etc/init.d/k3s
+        sed -i 's/^[[:space:]]*want cgroups$/    # NativeContainers prepares cgroup v2 before K3s./' /etc/init.d/k3s
+        ! grep -Eq '^[[:space:]]*want cgroups$' /etc/init.d/k3s
+        rc-update del k3s default >/dev/null 2>&1 || true
+        rc-update del cgroups default >/dev/null 2>&1 || true
+      elif command -v systemctl >/dev/null 2>&1; then
+        test -f /etc/systemd/system/k3s.service
+        systemctl enable k3s >/dev/null
+      else
+        echo 'K3s installed without a supported service supervisor.' >&2
+        exit 42
+      fi
       printf '%s\n' \(nodeName) >/dev/null
       """
   }

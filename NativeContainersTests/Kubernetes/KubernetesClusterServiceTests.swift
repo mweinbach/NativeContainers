@@ -103,7 +103,45 @@ struct KubernetesClusterServiceTests {
     #expect(bootstrap.command.contains(KubernetesDistribution.current.version))
     #expect(bootstrap.command.contains("--secrets-encryption"))
     #expect(bootstrap.command.contains("--write-kubeconfig-mode=600"))
+    #expect(bootstrap.command.contains("INSTALL_K3S_SKIP_ENABLE=true"))
+    #expect(bootstrap.command.contains("NativeContainers prepares cgroup v2"))
+    #expect(bootstrap.command.contains("rc-update del k3s default"))
+    #expect(bootstrap.command.contains("systemctl enable k3s"))
     #expect(bootstrap.timeoutSeconds == 900)
+
+    let activation = try #require(
+      await commands.commands.first(where: {
+        $0.command.contains("touch /run/openrc/softlevel")
+      })
+    )
+    #expect(activation.command.contains("nativecontainers-system"))
+    #expect(activation.command.contains("cgroup.procs"))
+    #expect(activation.command.contains("cgroup.subtree_control"))
+    #expect(activation.command.contains("/etc/init.d/k3s status"))
+    #expect(activation.command.contains("/etc/init.d/k3s stop"))
+    #expect(activation.command.contains("/etc/init.d/k3s start"))
+    #expect(activation.command.contains("systemctl start k3s"))
+    #expect(activation.timeoutSeconds == 60)
+
+    let readiness = try #require(
+      await commands.commands.first(where: {
+        $0.command.contains("get --raw=/readyz")
+      })
+    )
+    #expect(readiness.command.contains("/etc/rancher/k3s/k3s.yaml"))
+    #expect(readiness.command.contains("/run/flannel/subnet.env"))
+    #expect(readiness.command.contains("get serviceaccount default"))
+    #expect(readiness.command.contains("get nodes --no-headers"))
+    #expect(readiness.command.contains("+Ready"))
+    #expect(readiness.command.contains("stat -c '%a'"))
+
+    let observation = try #require(
+      await commands.commands.first(where: {
+        $0.command.contains("__NATIVECONTAINERS_K3S_VERSION__")
+      })
+    )
+    #expect(observation.command.contains(#"{"\t"}"#))
+    #expect(observation.command.contains(#"{"\n"}"#))
 
     let phases = await progress.updates.map(\.phase)
     #expect(phases.contains(.creatingMachine))
@@ -122,6 +160,11 @@ struct KubernetesClusterServiceTests {
     #expect(stopped.state == .stopped)
     let started = try await service.start()
     #expect(started.state == .ready)
+    #expect(
+      await commands.commands.filter {
+        $0.command.contains("touch /run/openrc/softlevel")
+      }.count == 2
+    )
     let forced = try await service.forceStop()
     #expect(forced.state == .stopped)
     #expect(await runtime.forceStopCount == 1)
@@ -549,6 +592,9 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
         bootstrapFailures -= 1
         return result(exitCode: 1, standardError: "bootstrap failed")
       }
+      return result()
+    }
+    if command.contains("touch /run/openrc/softlevel") {
       return result()
     }
     if command.contains("get --raw=/readyz") {

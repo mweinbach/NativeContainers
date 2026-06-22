@@ -1708,6 +1708,14 @@ kubeconfig. The generic privileged command capability is not exposed through
 SwiftUI. The private host descriptor stores provenance and the complete Apple
 machine identity but no kubeconfig, certificate, client key, or token.
 
+The Apple machine boot model is part of this decision. Alpine runs under
+Apple's `vminitd`, so NativeContainers owns a bounded cgroup-v2 preparation and
+OpenRC-unit activation step instead of pretending a full OpenRC boot occurred.
+The descriptor stores creation dates without ISO-8601 precision loss because a
+rounded timestamp would defeat exact-identity recovery. A cluster is not Ready
+until flannel and service-account reconciliation have joined the API and node
+checks.
+
 Interrupted provisioning is recoverable rather than silently recreated. Retry
 addresses only the stored identity; a same-name replacement fails closed.
 Start, graceful Stop, explicit Force Stop, and Delete reuse the existing machine

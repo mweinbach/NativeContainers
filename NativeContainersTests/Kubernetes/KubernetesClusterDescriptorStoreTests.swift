@@ -7,7 +7,7 @@ import Testing
 @Suite(.serialized)
 struct KubernetesClusterDescriptorStoreTests {
   @Test
-  func storesLoadsAndRemovesOnePrivateDescriptor() async throws {
+  func storesLoadsAndRemovesOnePrivateDescriptorWithoutLosingIdentityPrecision() async throws {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
 
@@ -15,7 +15,12 @@ struct KubernetesClusterDescriptorStoreTests {
     let descriptor = makeDescriptor()
     try await store.save(descriptor)
 
-    #expect(try await store.load() == descriptor)
+    let loaded = try await store.load()
+    #expect(loaded == descriptor)
+    #expect(
+      loaded?.machine.createdAt?.timeIntervalSinceReferenceDate.bitPattern
+        == descriptor.machine.createdAt?.timeIntervalSinceReferenceDate.bitPattern
+    )
 
     var rootMetadata = stat()
     #expect(Darwin.lstat(root.nativeContainersPOSIXPath, &rootMetadata) == 0)
@@ -126,17 +131,19 @@ struct KubernetesClusterDescriptorStoreTests {
   }
 
   private func makeDescriptor() -> KubernetesClusterDescriptor {
-    KubernetesClusterDescriptor(
+    let observedMachineCreationInterval = Double(bitPattern: 4_740_025_905_049_789_417)
+
+    return KubernetesClusterDescriptor(
       operationID: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
       machine: LinuxMachineIdentity(
         id: "nativecontainers-kubernetes",
         imageReference: "docker.io/library/alpine:3.22",
         platform: "linux/arm64",
-        createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+        createdAt: Date(timeIntervalSinceReferenceDate: observedMachineCreationInterval)
       ),
       distribution: .current,
       phase: .ready,
-      createdAt: Date(timeIntervalSince1970: 1_700_000_100)
+      createdAt: Date(timeIntervalSince1970: 1_782_099_100.123_456_7)
     )
   }
 

@@ -801,6 +801,29 @@ Primary sources:
   the running guest, requires the expected certificate fields and one loopback
   server, substitutes the machine's current validated IP in memory, and then
   delegates destination ownership to the macOS file exporter.
+- A 2026-06-22 live pass established an Apple-machine-specific service detail:
+  the guest boots under Apple's `vminitd`, not OpenRC or systemd as PID 1. The
+  K3s installer can write a valid OpenRC unit, but its ordinary cgroups
+  dependency cannot prepare the unified hierarchy in that boot model. The app
+  now asks the installer not to auto-enable K3s, moves boot processes into a
+  system leaf, enables the available cgroup-v2 controllers at the root, and
+  starts the generated OpenRC unit explicitly. It repeats that bounded setup
+  after each Apple machine start.
+- API `/readyz` and a Ready node can precede flannel initialization and service
+  account reconciliation. Product readiness additionally waits for
+  `/run/flannel/subnet.env`, the default service account, and the protected
+  kubeconfig. The disposable workload test separately waits for the default
+  service account in its newly created namespace before scheduling.
+- Apple's machine creation timestamp carries sub-second precision that ISO-8601
+  JSON encoding discarded. Because the complete timestamp is part of the
+  fail-closed identity, the descriptor now uses Foundation's native Date
+  representation and has a bit-pattern round-trip test. The live reload then
+  matched the current Apple identity exactly.
+- The final opt-in Xcode smoke installed `v1.36.1+k3s1` on Alpine 3.22, reached
+  the exported API from host `kubectl`, ran a real Alpine pod to Ready and read
+  its logs, survived an application-owned stop/start, and deleted the exact
+  machine. Follow-up Apple CLI inventory and temporary-directory inspection
+  found no cluster or credential residue.
 
 ## Public-API boundaries
 

@@ -242,8 +242,9 @@ must leave a usable, test-backed product slice.
       with exact machine identity, pinned installer and release verification,
       secret encryption, crash-resumable setup, native lifecycle/status UI, and
       explicit ephemeral kubeconfig export.
-  - [ ] Live-provision the gated Alpine machine, verify API reachability and a
-        disposable workload, then delete every cluster artifact.
+  - [x] Live-provision the gated Alpine machine, verify API reachability and a
+        real disposable pod through exported kubeconfig, survive a stop/start,
+        then delete the exact machine, namespace, and temporary credentials.
 - [ ] Reviewed non-English translations and full VoiceOver/Full Keyboard
       Access QA across every management workflow.
 - [ ] Distribution, updater, migration, and crash diagnostics.

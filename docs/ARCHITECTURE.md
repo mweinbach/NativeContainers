@@ -149,16 +149,25 @@ does not expose a generic privileged shell. The service installs only bounded
 apk/apt prerequisites, downloads the installer from the exact K3s release tag,
 compares it with an embedded SHA-256 before execution, pins
 `INSTALL_K3S_VERSION`, and relies on the official installer's release checksum
-verification for the binary. K3s runs as the guest's native OpenRC or systemd
-service with secret encryption and a mode-0600 kubeconfig.
+verification for the binary. On Alpine, Apple's machine boots under `vminitd`
+rather than OpenRC as PID 1, so the app prevents installer auto-enable, prepares
+the unified cgroup hierarchy through one service-owned root command, and starts
+the generated OpenRC unit explicitly. The same bounded activation runs after a
+machine restart; systemd images use their generated unit. K3s enables secret
+encryption and writes a mode-0600 kubeconfig. Readiness requires the API, a
+Ready node, flannel state, default service-account reconciliation, and the
+protected kubeconfig rather than treating the first `/readyz` response as the
+whole cluster being usable.
 
 A backup-excluded mode-0700 host store retains only the schema, operation ID,
 exact Apple machine identity, approved distribution provenance, phase, and
-creation time. It contains no cluster token, client key, certificate, or
-kubeconfig. An interrupted install remains explicitly retryable against the
-same identity. A replacement with the same name is surfaced as stale and never
-addressed. Delete gracefully stops and removes only the exact machine; Force
-Stop uses the existing identity-pinned authorization path.
+creation time. It preserves the Date's binary precision because that timestamp
+participates in identity comparison. It contains no cluster token, client key,
+certificate, or kubeconfig. An interrupted install remains explicitly
+retryable against the same identity. A replacement with the same name is
+surfaced as stale and never addressed. Delete gracefully stops and removes only
+the exact machine; Force Stop uses the existing identity-pinned authorization
+path.
 
 Status reads bounded version, node, and pod summaries from `k3s kubectl`.
 Kubeconfig is read only after an explicit export action, validated and bounded
