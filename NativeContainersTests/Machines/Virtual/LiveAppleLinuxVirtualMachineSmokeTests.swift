@@ -1,11 +1,18 @@
 import AppKit
 import CryptoKit
+import Darwin
 import Foundation
 import SwiftUI
 import Testing
 @preconcurrency import Virtualization
 
 @testable import NativeContainers
+
+private let liveLinuxVirtualMachineRunRequestURL =
+  FileManager.default.temporaryDirectory.appending(
+    path: "nativecontainers-live-linux-vm-run-request.json",
+    directoryHint: .notDirectory
+  )
 
 @Suite("Live Apple Linux virtual machine", .serialized)
 @MainActor
@@ -17,37 +24,36 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     inputProbeActivationDelaySeconds + inputProbeObservationSeconds
   private static let inputCommandMaximumBytes = 4 * 1_024
   private static let inputTextMaximumCharacters = 256
+  private static let runRequestMaximumBytes = 8 * 1_024
 
   @Test(
     .enabled(
       if: ProcessInfo.processInfo.environment[
         "NATIVECONTAINERS_LIVE_LINUX_VM"
-      ] == "1",
-      "Set NATIVECONTAINERS_LIVE_LINUX_VM=1 with a reviewed local ISO path and SHA-256."
+      ] == "1"
+        || FileManager.default.fileExists(
+          atPath: liveLinuxVirtualMachineRunRequestURL.nativeContainersPOSIXPath
+        ),
+      "Set NATIVECONTAINERS_LIVE_LINUX_VM=1 or create the owner-only one-shot run request."
     )
   )
   func bootsReviewedInstallerAndCleansIsolatedBundle() async throws {
     let environment = ProcessInfo.processInfo.environment
-    let visualHoldSeconds = try Self.visualHoldSeconds(environment)
-    let probesGuestInput =
-      environment["NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_PROBE"] == "1"
+    let configuration = try Self.runConfiguration(environment)
+    let visualHoldSeconds = configuration.visualHoldSeconds
+    let probesGuestInput = configuration.probesGuestInput
     if probesGuestInput && visualHoldSeconds < Self.inputProbeDurationSeconds {
       throw LiveLinuxVirtualMachineSmokeError.inputProbeRequiresVisualHold(
         minimumSeconds: Self.inputProbeDurationSeconds
       )
     }
-    guard
-      let isoPath = environment["NATIVECONTAINERS_LIVE_LINUX_VM_ISO"],
-      !isoPath.isEmpty
-    else {
-      throw LiveLinuxVirtualMachineSmokeError.missingEnvironment(
-        "NATIVECONTAINERS_LIVE_LINUX_VM_ISO"
-      )
+    if configuration.requiresInstallationMediaEjection && !probesGuestInput {
+      throw LiveLinuxVirtualMachineSmokeError.mediaEjectionRequiresInputChannel
     }
+    let isoPath = configuration.isoPath
+    let expectedSHA256 = configuration.isoSHA256.lowercased()
     guard
-      let expectedSHA256 =
-        environment["NATIVECONTAINERS_LIVE_LINUX_VM_ISO_SHA256"]?
-        .lowercased(),
+      !isoPath.isEmpty,
       expectedSHA256.count == 64,
       expectedSHA256.allSatisfy({ $0.isHexDigit })
     else {
@@ -118,11 +124,24 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       let console = try #require(runtime.console(for: target))
       #expect(console.virtualMachine.state == .running)
 
+      var installationMediaWasEjected = false
       if visualHoldSeconds > 0 {
         try await presentVisualConsole(
           console,
           seconds: visualHoldSeconds,
-          probesGuestInput: probesGuestInput
+          probesGuestInput: probesGuestInput,
+          onEjectInstallationMedia: {
+            let manifest = try await runtime.ejectInstallationMedia(
+              target: target
+            )
+            guard manifest.installState == .stopped,
+              manifest.linuxConfiguration?.installationMediaPath == nil,
+              !runtime.snapshot(for: machine.id).hasInstallationMedia
+            else {
+              throw LiveLinuxVirtualMachineSmokeError.mediaEjectionDidNotPersist
+            }
+            installationMediaWasEjected = true
+          }
         )
       } else {
         try await Task.sleep(for: .seconds(10))
@@ -130,6 +149,12 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       snapshot = runtime.snapshot(for: machine.id)
       #expect(snapshot.state == .running)
       #expect(console.virtualMachine.state == .running)
+      #expect(snapshot.hasInstallationMedia == !installationMediaWasEjected)
+      if configuration.requiresInstallationMediaEjection,
+        !installationMediaWasEjected
+      {
+        throw LiveLinuxVirtualMachineSmokeError.requiredMediaEjectionMissing
+      }
 
       try await runtime.pause(target: target)
       #expect(runtime.snapshot(for: machine.id).state == .paused)
@@ -157,8 +182,10 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       #expect(try await library.list().isEmpty)
 
       try FileManager.default.removeItem(at: libraryRoot)
+      let installationMediaResult =
+        installationMediaWasEjected ? "ejected" : "attached"
       print(
-        "\(Self.outputMarker)id=\(machine.id.uuidString.lowercased()) iso_sha256=\(actualSHA256) running=confirmed pause_resume=confirmed balloon=confirmed cleanup=complete"
+        "\(Self.outputMarker)id=\(machine.id.uuidString.lowercased()) iso_sha256=\(actualSHA256) installation_media=\(installationMediaResult) running=confirmed pause_resume=confirmed balloon=confirmed cleanup=complete"
       )
     } catch {
       if let machineID {
@@ -170,6 +197,92 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       try? FileManager.default.removeItem(at: libraryRoot)
       throw error
     }
+  }
+
+  @Test("Live input protocol accepts installation-media ejection")
+  func inputProtocolAcceptsInstallationMediaEjection() throws {
+    let command = try Self.parseInputCommand(
+      Data("install-finished\teject-media\t-\n".utf8)
+    )
+    #expect(command.id == "install-finished")
+    #expect(command.summary == "eject-media")
+  }
+
+  @Test("Owner-only live run request is consumed once")
+  func ownerOnlyRunRequestIsConsumedOnce() throws {
+    let rootURL = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-live-request-test-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false
+    )
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o700],
+      ofItemAtPath: rootURL.nativeContainersPOSIXPath
+    )
+    let requestURL = rootURL.appending(
+      path: "request.json",
+      directoryHint: .notDirectory
+    )
+    let request = LiveLinuxVirtualMachineRunRequest(
+      isoPath: "/private/tmp/reviewed.iso",
+      isoSHA256: String(repeating: "a", count: 64),
+      visualHoldSeconds: 1_800,
+      probesGuestInput: true,
+      requiresInstallationMediaEjection: true
+    )
+    try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: requestURL.nativeContainersPOSIXPath
+    )
+
+    let configuration = try Self.loadRunRequest(at: requestURL)
+
+    #expect(configuration.isoPath == request.isoPath)
+    #expect(configuration.isoSHA256 == request.isoSHA256)
+    #expect(configuration.visualHoldSeconds == 1_800)
+    #expect(configuration.probesGuestInput)
+    #expect(configuration.requiresInstallationMediaEjection)
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: requestURL.nativeContainersPOSIXPath
+      )
+    )
+  }
+
+  @Test("Unsafe live run request is rejected without deletion")
+  func unsafeRunRequestIsRejectedWithoutDeletion() throws {
+    let rootURL = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-live-request-test-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false
+    )
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let requestURL = rootURL.appending(
+      path: "request.json",
+      directoryHint: .notDirectory
+    )
+    try Data("{}".utf8).write(to: requestURL, options: .atomic)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o644],
+      ofItemAtPath: requestURL.nativeContainersPOSIXPath
+    )
+
+    #expect(throws: LiveLinuxVirtualMachineSmokeError.self) {
+      try Self.loadRunRequest(at: requestURL)
+    }
+    #expect(
+      FileManager.default.fileExists(
+        atPath: requestURL.nativeContainersPOSIXPath
+      )
+    )
   }
 
   private func sha256(of url: URL) throws -> String {
@@ -188,6 +301,42 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     return hasher.finalize().map { String(format: "%02x", $0) }.joined()
   }
 
+  private static func runConfiguration(
+    _ environment: [String: String]
+  ) throws -> LiveLinuxVirtualMachineRunConfiguration {
+    if environment["NATIVECONTAINERS_LIVE_LINUX_VM"] != "1" {
+      return try loadRunRequest(at: liveLinuxVirtualMachineRunRequestURL)
+    }
+    guard
+      let isoPath = environment["NATIVECONTAINERS_LIVE_LINUX_VM_ISO"],
+      !isoPath.isEmpty
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.missingEnvironment(
+        "NATIVECONTAINERS_LIVE_LINUX_VM_ISO"
+      )
+    }
+    guard
+      let isoSHA256 = environment[
+        "NATIVECONTAINERS_LIVE_LINUX_VM_ISO_SHA256"
+      ]
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.missingEnvironment(
+        "NATIVECONTAINERS_LIVE_LINUX_VM_ISO_SHA256"
+      )
+    }
+    return LiveLinuxVirtualMachineRunConfiguration(
+      isoPath: isoPath,
+      isoSHA256: isoSHA256,
+      visualHoldSeconds: try visualHoldSeconds(environment),
+      probesGuestInput: environment[
+        "NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_PROBE"
+      ] == "1",
+      requiresInstallationMediaEjection: environment[
+        "NATIVECONTAINERS_LIVE_LINUX_VM_REQUIRE_MEDIA_EJECTION"
+      ] == "1"
+    )
+  }
+
   private static func visualHoldSeconds(
     _ environment: [String: String]
   ) throws -> Int {
@@ -202,10 +351,53 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     return seconds
   }
 
+  private static func loadRunRequest(
+    at url: URL
+  ) throws -> LiveLinuxVirtualMachineRunConfiguration {
+    var metadata = stat()
+    guard
+      url.nativeContainersPOSIXPath.withCString({
+        Darwin.lstat($0, &metadata)
+      }) == 0,
+      metadata.st_mode & S_IFMT == S_IFREG,
+      metadata.st_uid == getuid(),
+      metadata.st_nlink == 1,
+      metadata.st_mode & 0o077 == 0
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidRunRequestFile
+    }
+    defer { try? FileManager.default.removeItem(at: url) }
+    guard metadata.st_size > 0,
+      metadata.st_size <= Self.runRequestMaximumBytes
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidRunRequestSize(
+        Int(metadata.st_size)
+      )
+    }
+    let request = try JSONDecoder().decode(
+      LiveLinuxVirtualMachineRunRequest.self,
+      from: Data(contentsOf: url)
+    )
+    guard (0...1_800).contains(request.visualHoldSeconds) else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidVisualHold(
+        String(request.visualHoldSeconds)
+      )
+    }
+    return LiveLinuxVirtualMachineRunConfiguration(
+      isoPath: request.isoPath,
+      isoSHA256: request.isoSHA256,
+      visualHoldSeconds: request.visualHoldSeconds,
+      probesGuestInput: request.probesGuestInput,
+      requiresInstallationMediaEjection:
+        request.requiresInstallationMediaEjection
+    )
+  }
+
   private func presentVisualConsole(
     _ console: LinuxVirtualMachineConsole,
     seconds: Int,
-    probesGuestInput: Bool
+    probesGuestInput: Bool,
+    onEjectInstallationMedia: @escaping () async throws -> Void
   ) async throws {
     let content = NSHostingView(
       rootView: VirtualMachineConsoleView(
@@ -270,7 +462,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
           channel: inputChannel,
           content: content,
           window: window,
-          readyURL: readyURL
+          readyURL: readyURL,
+          onEjectInstallationMedia: onEjectInstallationMedia
         )
       } else {
         try await Task.sleep(for: .seconds(remainingSeconds))
@@ -332,7 +525,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     channel: LiveLinuxVirtualMachineInputChannel,
     content: NSView,
     window: NSWindow,
-    readyURL: URL
+    readyURL: URL,
+    onEjectInstallationMedia: @escaping () async throws -> Void
   ) async throws {
     content.layoutSubtreeIfNeeded()
     guard
@@ -382,7 +576,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         try await Self.executeGuestInputCommand(
           command,
           in: virtualMachineView,
-          window: window
+          window: window,
+          onEjectInstallationMedia: onEjectInstallationMedia
         )
         try Self.writeVisualReadyMarker(
           at: readyURL,
@@ -481,6 +676,13 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand("text")
       }
       action = .text(text)
+    case "eject-media":
+      guard fields.count == 3, fields[2] == "-" else {
+        throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand(
+          "eject-media"
+        )
+      }
+      action = .ejectInstallationMedia
     case "finish":
       guard fields.count == 3, fields[2] == "-" else {
         throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand("finish")
@@ -498,7 +700,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
   private static func executeGuestInputCommand(
     _ command: LiveLinuxVirtualMachineInputCommand,
     in view: VZVirtualMachineView,
-    window: NSWindow
+    window: NSWindow,
+    onEjectInstallationMedia: @escaping () async throws -> Void
   ) async throws {
     switch command.action {
     case .key(let key):
@@ -510,6 +713,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         try sendGuestCharacter(character, to: view, in: window)
         try await Task.sleep(for: .milliseconds(20))
       }
+    case .ejectInstallationMedia:
+      try await onEjectInstallationMedia()
     case .finish:
       break
     }
@@ -689,6 +894,22 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
   }
 }
 
+private struct LiveLinuxVirtualMachineRunRequest: Codable {
+  let isoPath: String
+  let isoSHA256: String
+  let visualHoldSeconds: Int
+  let probesGuestInput: Bool
+  let requiresInstallationMediaEjection: Bool
+}
+
+private struct LiveLinuxVirtualMachineRunConfiguration {
+  let isoPath: String
+  let isoSHA256: String
+  let visualHoldSeconds: Int
+  let probesGuestInput: Bool
+  let requiresInstallationMediaEjection: Bool
+}
+
 private struct LiveLinuxVirtualMachineInputChannel {
   let rootURL: URL
 
@@ -702,6 +923,7 @@ private struct LiveLinuxVirtualMachineInputCommand {
     case key(LiveLinuxVirtualMachineInputKey)
     case click(x: Double, y: Double)
     case text(String)
+    case ejectInstallationMedia
     case finish
   }
 
@@ -713,6 +935,7 @@ private struct LiveLinuxVirtualMachineInputCommand {
     case .key(let key): "key:\(key.description)"
     case .click(let x, let y): "click:\(Int(x)),\(Int(y))"
     case .text(let value): "text:\(value.count)-characters"
+    case .ejectInstallationMedia: "eject-media"
     case .finish: "finish"
     }
   }
@@ -858,6 +1081,11 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
   case couldNotCreateMouseEvent
   case inputCommandTooLarge(Int)
   case invalidInputCommand(String)
+  case invalidRunRequestFile
+  case invalidRunRequestSize(Int)
+  case mediaEjectionRequiresInputChannel
+  case mediaEjectionDidNotPersist
+  case requiredMediaEjectionMissing
   case unsupportedInputCharacter(Character)
   case inputClickOutsideDisplay(
     x: Double,
@@ -890,6 +1118,16 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
       "The live guest-input command is too large (\(byteCount) bytes)."
     case .invalidInputCommand(let reason):
       "The live guest-input command is invalid (\(reason))."
+    case .invalidRunRequestFile:
+      "The one-shot live run request must be a single-link regular file owned by this user with no group or other access."
+    case .invalidRunRequestSize(let byteCount):
+      "The one-shot live run request has an invalid size (\(byteCount) bytes)."
+    case .mediaEjectionRequiresInputChannel:
+      "Required installation-media ejection needs the live guest-input command channel."
+    case .mediaEjectionDidNotPersist:
+      "The production runtime detached the installer, but the completed-installation manifest did not persist."
+    case .requiredMediaEjectionMissing:
+      "The live run required installation-media ejection, but no eject-media command completed."
     case .unsupportedInputCharacter(let character):
       "The live guest-input command cannot type \(String(reflecting: character))."
     case .inputClickOutsideDisplay(let x, let y, let width, let height):
