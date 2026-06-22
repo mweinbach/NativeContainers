@@ -18,6 +18,15 @@ enum KubernetesWorkloadKind: String, CaseIterable, Codable, Equatable, Sendable 
       "Job"
     }
   }
+
+  var supportsScaling: Bool {
+    switch self {
+    case .deployment, .statefulSet:
+      true
+    case .daemonSet, .job:
+      false
+    }
+  }
 }
 
 struct KubernetesWorkloadRecord: Identifiable, Equatable, Sendable {
@@ -56,6 +65,55 @@ struct KubernetesWorkloadRecord: Identifiable, Equatable, Sendable {
     self.availableCount = max(0, availableCount)
     self.failedCount = max(0, failedCount)
   }
+}
+
+struct KubernetesWorkloadScaleRequest: Equatable, Sendable {
+  static let maximumReplicaCount = 1_000
+
+  let workloadUID: String
+  let resourceVersion: String
+  let namespace: String
+  let name: String
+  let kind: KubernetesWorkloadKind
+  let currentReplicas: Int
+  let targetReplicas: Int
+
+  init(
+    workload: KubernetesWorkloadRecord,
+    targetReplicas: Int
+  ) throws {
+    guard workload.kind.supportsScaling else {
+      throw KubernetesClusterError.workloadNotScalable
+    }
+    guard
+      KubernetesResourceReferenceValidator.isUID(workload.uid),
+      KubernetesResourceReferenceValidator.isResourceVersion(
+        workload.resourceVersion
+      ),
+      KubernetesResourceReferenceValidator.isNamespace(workload.namespace),
+      KubernetesResourceReferenceValidator.isResourceName(workload.name),
+      (0...Self.maximumReplicaCount).contains(workload.desiredCount),
+      (0...Self.maximumReplicaCount).contains(targetReplicas),
+      targetReplicas != workload.desiredCount
+    else {
+      throw KubernetesClusterError.invalidWorkloadScaleRequest
+    }
+
+    workloadUID = workload.uid
+    resourceVersion = workload.resourceVersion
+    namespace = workload.namespace
+    name = workload.name
+    kind = workload.kind
+    currentReplicas = workload.desiredCount
+    self.targetReplicas = targetReplicas
+  }
+}
+
+struct KubernetesWorkloadScaleResult: Equatable, Sendable {
+  let request: KubernetesWorkloadScaleRequest
+  let resourceVersion: String
+  let observedReplicas: Int
+  let capturedAt: Date
 }
 
 enum KubernetesPodPhase: String, CaseIterable, Codable, Equatable, Sendable {
@@ -189,6 +247,12 @@ enum KubernetesResourceReferenceValidator {
 
   static func isUID(_ value: String) -> Bool {
     UUID(uuidString: value) != nil
+  }
+
+  static func isResourceVersion(_ value: String) -> Bool {
+    let bytes = Array(value.utf8)
+    guard !bytes.isEmpty, bytes.count <= 128 else { return false }
+    return bytes.allSatisfy { (33...126).contains($0) }
   }
 
   private static func isDNSLabel(_ value: String) -> Bool {

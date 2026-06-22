@@ -1817,3 +1817,28 @@ replacement detected during discovery, final preflight, or the immediate
 post-launch check and documents the remaining upstream race. A general
 arbitrary-command/non-interactive exec UI remains a separate reviewed
 capability.
+
+## ADR-065: Scale workloads only with server-enforced review preconditions
+
+**Status:** Accepted — 2026-06-22
+
+NativeContainers permits scaling only for Deployments and StatefulSets selected
+from its bounded inventory. A review freezes the workload UID, resourceVersion,
+namespace, name, kind, current replica count, and requested target. DaemonSets
+derive scheduling from nodes and Jobs have completion semantics, so neither is
+misrepresented as an ordinary replica slider.
+
+Execution revalidates the Ready descriptor and exact running Apple machine,
+then reads the named workload inside the guest. UID, resourceVersion, and current
+replicas must still match. The fixed K3s command sends both
+`--resource-version` and `--current-replicas` to `kubectl scale`, making those
+preconditions authoritative at the API update rather than only advisory host
+checks. A post-read must retain the UID, advance resourceVersion, and report the
+target replica count before success is returned. Stale reviews fail closed and
+the browser reloads authoritative inventory.
+
+This decision does not authorize generic patching, rollout restart, or delete.
+Kubernetes documents that `kubectl delete` performs no resource-version check;
+a name-only deletion could erase a same-name replacement. Those mutations stay
+blocked until each has a conditional identity and user-reviewed cascade/grace
+contract.

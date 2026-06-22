@@ -254,7 +254,7 @@ must leave a usable, test-backed product slice.
   - [ ] Reviewed workload mutation.
     - [x] Project bounded workload UID/resourceVersion and use UID as stable row
           identity without admitting environment, annotation, or secret data.
-    - [ ] Scale Deployments/StatefulSets only with exact UID, resource-version,
+    - [x] Scale Deployments/StatefulSets only with exact UID, resource-version,
           and current-replica preconditions plus authoritative reconciliation.
     - [ ] Keep restart and delete blocked until their identity, cascade, and
           grace contracts can fail closed against same-name replacement.

@@ -67,6 +67,7 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
   static let maximumPodLogBytes = 512 * 1_024
   static let maximumPodLogLines = 2_000
   static let podLogIdentityMarker = "__NATIVECONTAINERS_K3S_POD_LOG_UID__"
+  static let workloadScaleMarker = "__NATIVECONTAINERS_K3S_WORKLOAD_SCALE__"
   private static let versionMarker = "__NATIVECONTAINERS_K3S_VERSION__"
   private static let nodesMarker = "__NATIVECONTAINERS_K3S_NODES__"
   private static let podsMarker = "__NATIVECONTAINERS_K3S_PODS__"
@@ -199,6 +200,40 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
       capturedAt: now(),
       isTruncated: isTruncated
     )
+  }
+
+  func scaleWorkload(
+    _ request: KubernetesWorkloadScaleRequest
+  ) async throws -> KubernetesWorkloadScaleResult {
+    let command = try Self.workloadScaleCommand(request)
+    let descriptor = try await requireReadyRunningDescriptor()
+    let result = try await rootCommands.executeRootCommand(
+      command,
+      in: descriptor.machine,
+      timeoutSeconds: 45
+    )
+    guard !result.outputWasTruncated else {
+      throw KubernetesClusterError.guestOutputTooLarge
+    }
+    switch result.exitCode {
+    case 0:
+      return try Self.validatedWorkloadScaleResult(
+        result.standardOutput,
+        request: request,
+        capturedAt: now()
+      )
+    case 66:
+      throw KubernetesClusterError.workloadIdentityChanged(request.name)
+    case 67:
+      throw KubernetesClusterError.workloadReplicaCountChanged(request.name)
+    case 68:
+      throw KubernetesClusterError.workloadScaleNotApplied(request.name)
+    default:
+      throw KubernetesClusterError.guestCommandFailed(
+        operation: String(localized: "Scaling Kubernetes workload"),
+        detail: Self.sanitizedFailureDetail(result)
+      )
+    }
   }
 
   func provision(
@@ -625,6 +660,104 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
       fi
       printf '\n\(podLogIdentityMarker)%s\n' "$pod_uid"
       """
+  }
+
+  private static func workloadScaleCommand(
+    _ request: KubernetesWorkloadScaleRequest
+  ) throws -> String {
+    let kind: String
+    switch request.kind {
+    case .deployment:
+      kind = "deployment"
+    case .statefulSet:
+      kind = "statefulset"
+    case .daemonSet, .job:
+      throw KubernetesClusterError.workloadNotScalable
+    }
+    guard
+      KubernetesResourceReferenceValidator.isUID(request.workloadUID),
+      KubernetesResourceReferenceValidator.isResourceVersion(
+        request.resourceVersion
+      ),
+      KubernetesResourceReferenceValidator.isNamespace(request.namespace),
+      KubernetesResourceReferenceValidator.isResourceName(request.name),
+      (0...KubernetesWorkloadScaleRequest.maximumReplicaCount).contains(
+        request.currentReplicas
+      ),
+      (0...KubernetesWorkloadScaleRequest.maximumReplicaCount).contains(
+        request.targetReplicas
+      ),
+      request.targetReplicas != request.currentReplicas
+    else {
+      throw KubernetesClusterError.invalidWorkloadScaleRequest
+    }
+
+    return """
+      set -eu
+      kind=\(shellQuote(kind))
+      namespace=\(shellQuote(request.namespace))
+      name=\(shellQuote(request.name))
+      expected_uid=\(shellQuote(request.workloadUID))
+      expected_resource_version=\(shellQuote(request.resourceVersion))
+      current_replicas=\(request.currentReplicas)
+      target_replicas=\(request.targetReplicas)
+
+      object=$(/usr/local/bin/k3s kubectl get "$kind" "$name" --namespace="$namespace" --output=json --request-timeout=5s)
+      uid=$(printf '%s' "$object" | jq --raw-output '.metadata.uid // empty')
+      resource_version=$(printf '%s' "$object" | jq --raw-output '.metadata.resourceVersion // empty')
+      replicas=$(printf '%s' "$object" | jq --raw-output '.spec.replicas // 0')
+      if [ "$uid" != "$expected_uid" ] || [ "$resource_version" != "$expected_resource_version" ]; then
+        exit 66
+      fi
+      if [ "$replicas" != "$current_replicas" ]; then
+        exit 67
+      fi
+
+      /usr/local/bin/k3s kubectl scale "$kind/$name" --namespace="$namespace" --current-replicas="$current_replicas" --resource-version="$resource_version" --replicas="$target_replicas" --request-timeout=15s >/dev/null
+
+      object=$(/usr/local/bin/k3s kubectl get "$kind" "$name" --namespace="$namespace" --output=json --request-timeout=5s)
+      uid=$(printf '%s' "$object" | jq --raw-output '.metadata.uid // empty')
+      resource_version=$(printf '%s' "$object" | jq --raw-output '.metadata.resourceVersion // empty')
+      replicas=$(printf '%s' "$object" | jq --raw-output '.spec.replicas // 0')
+      if [ "$uid" != "$expected_uid" ]; then
+        exit 66
+      fi
+      if [ "$resource_version" = "$expected_resource_version" ] || [ "$replicas" != "$target_replicas" ]; then
+        exit 68
+      fi
+      printf '%s%s\t%s\t%s\n' '\(workloadScaleMarker)' "$uid" "$resource_version" "$replicas"
+      """
+  }
+
+  private static func validatedWorkloadScaleResult(
+    _ output: String,
+    request: KubernetesWorkloadScaleRequest,
+    capturedAt: Date
+  ) throws -> KubernetesWorkloadScaleResult {
+    let line = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard line.hasPrefix(workloadScaleMarker) else {
+      throw KubernetesClusterError.invalidWorkloadScaleResult
+    }
+    let fields = line.dropFirst(workloadScaleMarker.count).split(
+      separator: "\t",
+      omittingEmptySubsequences: false
+    )
+    guard
+      fields.count == 3,
+      fields[0] == Substring(request.workloadUID),
+      KubernetesResourceReferenceValidator.isResourceVersion(String(fields[1])),
+      fields[1] != Substring(request.resourceVersion),
+      let replicas = Int(fields[2]),
+      replicas == request.targetReplicas
+    else {
+      throw KubernetesClusterError.invalidWorkloadScaleResult
+    }
+    return KubernetesWorkloadScaleResult(
+      request: request,
+      resourceVersion: String(fields[1]),
+      observedReplicas: replicas,
+      capturedAt: capturedAt
+    )
   }
 
   private static func validatedPodLogOutput(

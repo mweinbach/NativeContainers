@@ -683,6 +683,17 @@ private struct PreviewKubernetesClusterService: KubernetesClusterManaging {
     )
   }
 
+  func scaleWorkload(
+    _ request: KubernetesWorkloadScaleRequest
+  ) async throws -> KubernetesWorkloadScaleResult {
+    KubernetesWorkloadScaleResult(
+      request: request,
+      resourceVersion: "preview-\(request.targetReplicas)",
+      observedReplicas: request.targetReplicas,
+      capturedAt: Date()
+    )
+  }
+
   func provision(
     _ request: KubernetesClusterProvisionRequest,
     progress: @escaping KubernetesClusterProgressHandler

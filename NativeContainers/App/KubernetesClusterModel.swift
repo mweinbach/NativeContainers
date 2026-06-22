@@ -183,6 +183,47 @@ final class KubernetesClusterModel {
     KubernetesPodLogsModel(service: service, pod: pod)
   }
 
+  func scaleWorkload(
+    _ workload: KubernetesWorkloadRecord,
+    to targetReplicas: Int
+  ) async -> Bool {
+    guard !isBusy else { return false }
+    isWorking = true
+    resourceErrorMessage = nil
+    defer { isWorking = false }
+
+    let result: KubernetesWorkloadScaleResult
+    do {
+      result = try await service.scaleWorkload(
+        try KubernetesWorkloadScaleRequest(
+          workload: workload,
+          targetReplicas: targetReplicas
+        )
+      )
+    } catch is CancellationError {
+      resourceErrorMessage = String(localized: "Scaling the workload was cancelled.")
+      return false
+    } catch {
+      let mutationError = error.localizedDescription
+      if let refreshed = try? await service.loadResourceInventory() {
+        resourceInventory = refreshed
+      }
+      resourceErrorMessage = mutationError
+      return false
+    }
+
+    do {
+      resourceInventory = try await service.loadResourceInventory()
+    } catch {
+      resourceInventory = nil
+      resourceErrorMessage = String(
+        localized:
+          "Scale to \(result.observedReplicas) replicas was confirmed, but resources could not be refreshed: \(error.localizedDescription)"
+      )
+    }
+    return true
+  }
+
   private func performMutation(
     _ operation:
       @escaping @MainActor @Sendable (

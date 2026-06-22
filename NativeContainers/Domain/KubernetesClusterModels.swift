@@ -248,6 +248,9 @@ protocol KubernetesClusterManaging: Sendable {
   func loadPodLogs(
     _ request: KubernetesPodLogRequest
   ) async throws -> KubernetesPodLogSnapshot
+  func scaleWorkload(
+    _ request: KubernetesWorkloadScaleRequest
+  ) async throws -> KubernetesWorkloadScaleResult
   func provision(
     _ request: KubernetesClusterProvisionRequest,
     progress: @escaping KubernetesClusterProgressHandler
@@ -275,6 +278,12 @@ struct UnavailableKubernetesClusterService: KubernetesClusterManaging {
   func loadPodLogs(
     _ request: KubernetesPodLogRequest
   ) async throws -> KubernetesPodLogSnapshot {
+    throw KubernetesClusterError.unavailable
+  }
+
+  func scaleWorkload(
+    _ request: KubernetesWorkloadScaleRequest
+  ) async throws -> KubernetesWorkloadScaleResult {
     throw KubernetesClusterError.unavailable
   }
 
@@ -334,6 +343,12 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
   case invalidResourceInventory
   case invalidKubernetesResourceReference
   case invalidPodLogSnapshot
+  case invalidWorkloadScaleRequest
+  case workloadNotScalable
+  case workloadIdentityChanged(String)
+  case workloadReplicaCountChanged(String)
+  case workloadScaleNotApplied(String)
+  case invalidWorkloadScaleResult
   case invalidPodShellDiscovery
   case podShellUnavailable
   case podIdentityChanged(String)
@@ -384,6 +399,18 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
       String(localized: "The Kubernetes resource reference is invalid.")
     case .invalidPodLogSnapshot:
       String(localized: "K3s returned an invalid Pod log snapshot.")
+    case .invalidWorkloadScaleRequest:
+      String(localized: "The Kubernetes workload scale request is invalid.")
+    case .workloadNotScalable:
+      String(localized: "Only Deployments and StatefulSets can be scaled.")
+    case .workloadIdentityChanged(let name):
+      String(localized: "Workload “\(name)” changed after it was reviewed.")
+    case .workloadReplicaCountChanged(let name):
+      String(localized: "Workload “\(name)” has a different replica count now.")
+    case .workloadScaleNotApplied(let name):
+      String(localized: "K3s did not confirm the requested scale for “\(name)”.")
+    case .invalidWorkloadScaleResult:
+      String(localized: "K3s returned an invalid workload scale result.")
     case .invalidPodShellDiscovery:
       String(localized: "K3s returned an invalid Pod shell discovery result.")
     case .podShellUnavailable:

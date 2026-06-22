@@ -192,9 +192,19 @@ The service validates the UID, namespace, Pod name, and container name; checks
 that the current Pod UID still matches; and then asks `kubectl logs` for at
 most 512 KiB plus one truncation-detection byte with timestamps. A second UID
 read and service-owned output marker must also match before any log snapshot is
-  accepted, so replacement during the name-addressed read fails closed. Search
-  uses cached prepared text, container switches discard stale asynchronous
-  responses, and export remains user-initiated.
+accepted, so replacement during the name-addressed read fails closed. Search
+uses cached prepared text, container switches discard stale asynchronous
+responses, and export remains user-initiated.
+
+Deployment and StatefulSet rows additionally expose a reviewed scale sheet;
+DaemonSets and Jobs do not. The request freezes UID, resourceVersion, namespace,
+name, kind, and current/target replica counts. The fixed guest command re-reads
+the object, rejects any identity/version/current-count drift, and calls
+`kubectl scale` with both server-enforced resource-version and current-replica
+preconditions. It then re-reads the exact UID, requires a new resourceVersion
+and the target count, and returns one marker-framed result. The model reloads
+the bounded inventory after success and refreshes it after rejected stale
+reviews; scaling never exposes a generic guest command or host kubeconfig.
 
 The log sheet can open a terminal for the selected standard container. Its
 restorable target carries the exact cluster-machine identity, Pod API UID,

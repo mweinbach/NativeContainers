@@ -335,6 +335,115 @@ struct KubernetesClusterServiceTests {
   }
 
   @Test
+  func scalesOnlyTheReviewedWorkloadVersionAndConfirmsTheResult() async throws {
+    let machine = makeMachine()
+    let runtime = KubernetesMachineRuntimeDouble(machine: machine)
+    let commands = KubernetesRootCommandDouble()
+    let descriptor = KubernetesClusterDescriptor(
+      operationID: UUID(),
+      machine: LinuxMachineIdentity(machine: machine),
+      distribution: .current,
+      phase: .ready,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_100)
+    )
+    let service = makeService(
+      runtime: runtime,
+      commands: commands,
+      store: InMemoryKubernetesDescriptorStore(descriptor: descriptor)
+    )
+    let workload = try #require(readyResourceInventory().workloads.first)
+    let request = try KubernetesWorkloadScaleRequest(
+      workload: workload,
+      targetReplicas: 3
+    )
+
+    let result = try await service.scaleWorkload(request)
+
+    #expect(result.request == request)
+    #expect(result.resourceVersion == "102")
+    #expect(result.observedReplicas == 3)
+    #expect(result.capturedAt == Date(timeIntervalSince1970: 1_700_000_100))
+    let invocation = try #require(
+      await commands.commands.first(where: { $0.command.contains("kubectl scale") })
+    )
+    #expect(invocation.target == descriptor.machine)
+    #expect(invocation.timeoutSeconds == 45)
+    #expect(invocation.command.contains("expected_uid='\(workload.uid)'"))
+    #expect(invocation.command.contains("expected_resource_version='101'"))
+    #expect(invocation.command.contains("current_replicas=2"))
+    #expect(invocation.command.contains("target_replicas=3"))
+    #expect(invocation.command.contains("--current-replicas=\"$current_replicas\""))
+    #expect(invocation.command.contains("--resource-version=\"$resource_version\""))
+    #expect(invocation.command.contains("--replicas=\"$target_replicas\""))
+    #expect(
+      invocation.command.components(separatedBy: "kubectl get").count - 1
+        == 2
+    )
+
+    await commands.setWorkloadScaleExitCode(66)
+    await #expect(
+      throws: KubernetesClusterError.workloadIdentityChanged(workload.name)
+    ) {
+      _ = try await service.scaleWorkload(request)
+    }
+    await commands.setWorkloadScaleExitCode(67)
+    await #expect(
+      throws: KubernetesClusterError.workloadReplicaCountChanged(workload.name)
+    ) {
+      _ = try await service.scaleWorkload(request)
+    }
+    await commands.setWorkloadScaleExitCode(68)
+    await #expect(
+      throws: KubernetesClusterError.workloadScaleNotApplied(workload.name)
+    ) {
+      _ = try await service.scaleWorkload(request)
+    }
+    await commands.setWorkloadScaleExitCode(0)
+    await commands.setWorkloadScaleOutput(
+      "\(AppleKubernetesClusterService.workloadScaleMarker)bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\t102\t3\n"
+    )
+    await #expect(throws: KubernetesClusterError.invalidWorkloadScaleResult) {
+      _ = try await service.scaleWorkload(request)
+    }
+  }
+
+  @Test
+  func scaleRequestRejectsUnsupportedUnsafeAndNoOpChanges() throws {
+    let workload = try #require(readyResourceInventory().workloads.first)
+
+    #expect(throws: KubernetesClusterError.invalidWorkloadScaleRequest) {
+      _ = try KubernetesWorkloadScaleRequest(
+        workload: workload,
+        targetReplicas: workload.desiredCount
+      )
+    }
+    #expect(throws: KubernetesClusterError.invalidWorkloadScaleRequest) {
+      _ = try KubernetesWorkloadScaleRequest(
+        workload: workload,
+        targetReplicas: KubernetesWorkloadScaleRequest.maximumReplicaCount + 1
+      )
+    }
+
+    let job = KubernetesWorkloadRecord(
+      uid: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      resourceVersion: "202",
+      namespace: "default",
+      name: "migration",
+      kind: .job,
+      desiredCount: 1,
+      readyCount: 0,
+      availableCount: 1,
+      failedCount: 0
+    )
+    #expect(throws: KubernetesClusterError.workloadNotScalable) {
+      _ = try KubernetesWorkloadScaleRequest(
+        workload: job,
+        targetReplicas: 2
+      )
+    }
+  }
+
+  @Test
   func failedBootstrapRetainsExactPendingDescriptorForRetry() async throws {
     let machine = makeMachine()
     let runtime = KubernetesMachineRuntimeDouble(machine: machine)
@@ -480,6 +589,39 @@ struct KubernetesClusterModelTests {
     #expect(!model.isLoadingResources)
     #expect(await service.resourceLoadCount == 1)
     #expect(mutations.count == 0)
+  }
+
+  @Test
+  func scalesReviewedWorkloadAndReloadsAuthoritativeResources() async {
+    let snapshot = readyKubernetesSnapshot()
+    let service = KubernetesModelServiceDouble(snapshot: snapshot)
+    let model = KubernetesClusterModel(
+      service: service,
+      initialSnapshot: snapshot
+    )
+    await model.loadResources()
+    guard let workload = model.resourceInventory?.workloads.first else {
+      Issue.record("The fixture did not load its workload.")
+      return
+    }
+    await service.setResourceInventory(
+      readyResourceInventory(desiredCount: 3, resourceVersion: "102")
+    )
+
+    let scaled = await model.scaleWorkload(
+      workload,
+      to: 3
+    )
+
+    #expect(scaled)
+    #expect(model.resourceInventory?.workloads.first?.desiredCount == 3)
+    #expect(model.resourceInventory?.workloads.first?.resourceVersion == "102")
+    #expect(model.resourceErrorMessage == nil)
+    #expect(await service.resourceLoadCount == 2)
+    let request = await service.scaleRequests.first
+    #expect(request?.resourceVersion == "101")
+    #expect(request?.currentReplicas == 2)
+    #expect(request?.targetReplicas == 3)
   }
 
   @Test
@@ -650,7 +792,9 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
   private(set) var resourceLoadCount = 0
   private var snapshot: KubernetesClusterSnapshot
   private var provisionedSnapshot: KubernetesClusterSnapshot
+  private var resourceInventory = readyResourceInventory()
   private var stopError: KubernetesClusterError?
+  private(set) var scaleRequests: [KubernetesWorkloadScaleRequest] = []
 
   init(snapshot: KubernetesClusterSnapshot) {
     self.snapshot = snapshot
@@ -664,7 +808,7 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
 
   func loadResourceInventory() -> KubernetesResourceInventory {
     resourceLoadCount += 1
-    return readyResourceInventory()
+    return resourceInventory
   }
 
   func loadPodLogs(
@@ -675,6 +819,18 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
       text: "test log output\n",
       capturedAt: Date(timeIntervalSince1970: 1_700_000_100),
       isTruncated: false
+    )
+  }
+
+  func scaleWorkload(
+    _ request: KubernetesWorkloadScaleRequest
+  ) -> KubernetesWorkloadScaleResult {
+    scaleRequests.append(request)
+    return KubernetesWorkloadScaleResult(
+      request: request,
+      resourceVersion: "102",
+      observedReplicas: request.targetReplicas,
+      capturedAt: Date(timeIntervalSince1970: 1_700_000_100)
     )
   }
 
@@ -735,6 +891,10 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
 
   func setStopError(_ error: KubernetesClusterError?) {
     stopError = error
+  }
+
+  func setResourceInventory(_ inventory: KubernetesResourceInventory) {
+    resourceInventory = inventory
   }
 }
 
@@ -867,6 +1027,9 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
   private var kubeconfig: String
   private var podLogOutput: String
   private var podLogUID: String
+  private var workloadScaleExitCode: Int32 = 0
+  private var workloadScaleOutput =
+    "\(AppleKubernetesClusterService.workloadScaleMarker)aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\t102\t3\n"
 
   init(
     bootstrapFailures: Int = 0,
@@ -935,6 +1098,12 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
           podLogOutput + "\n\(AppleKubernetesClusterService.podLogIdentityMarker)\(podLogUID)\n"
       )
     }
+    if command.contains("kubectl scale") {
+      if workloadScaleExitCode != 0 {
+        return result(exitCode: workloadScaleExitCode)
+      }
+      return result(standardOutput: workloadScaleOutput)
+    }
     if command.contains("__NATIVECONTAINERS_K3S_VERSION__") {
       return result(
         standardOutput: """
@@ -965,6 +1134,14 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
 
   func setPodLogUID(_ value: String) {
     podLogUID = value
+  }
+
+  func setWorkloadScaleExitCode(_ value: Int32) {
+    workloadScaleExitCode = value
+  }
+
+  func setWorkloadScaleOutput(_ value: String) {
+    workloadScaleOutput = value
   }
 
   private func result(
@@ -1053,18 +1230,21 @@ private func readyKubernetesSnapshot() -> KubernetesClusterSnapshot {
   )
 }
 
-private func readyResourceInventory() -> KubernetesResourceInventory {
+private func readyResourceInventory(
+  desiredCount: Int = 2,
+  resourceVersion: String = "101"
+) -> KubernetesResourceInventory {
   KubernetesResourceInventory(
     workloads: [
       KubernetesWorkloadRecord(
         uid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        resourceVersion: "101",
+        resourceVersion: resourceVersion,
         namespace: "default",
         name: "api",
         kind: .deployment,
-        desiredCount: 2,
-        readyCount: 2,
-        availableCount: 2,
+        desiredCount: desiredCount,
+        readyCount: desiredCount,
+        availableCount: desiredCount,
         failedCount: 0
       )
     ],

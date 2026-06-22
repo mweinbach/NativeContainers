@@ -51,6 +51,7 @@ struct KubernetesResourceBrowserView: View {
   @Environment(\.dismiss) private var dismiss
   @State private var browser = KubernetesResourceBrowserModel()
   @State private var selectedPod: KubernetesPodRecord?
+  @State private var workloadToScale: KubernetesWorkloadRecord?
 
   var body: some View {
     @Bindable var browser = browser
@@ -75,6 +76,7 @@ struct KubernetesResourceBrowserView: View {
           services: browser.visibleServices,
           hasInventory: model.resourceInventory != nil,
           isLoading: model.isLoadingResources,
+          isBusy: model.isBusy,
           errorMessage: model.resourceErrorMessage,
           hasSearchText: browser.hasSearchQuery,
           onRetry: {
@@ -84,6 +86,9 @@ struct KubernetesResourceBrowserView: View {
           },
           onViewPodLogs: { pod in
             selectedPod = pod
+          },
+          onScaleWorkload: { workload in
+            workloadToScale = workload
           }
         )
       }
@@ -116,6 +121,18 @@ struct KubernetesResourceBrowserView: View {
     .sheet(item: $selectedPod) { pod in
       KubernetesPodLogsView(clusterModel: model, pod: pod)
     }
+    .sheet(
+      item: $workloadToScale,
+      onDismiss: {
+        browser.replaceInventory(model.resourceInventory)
+      },
+      content: { workload in
+        KubernetesWorkloadScaleView(
+          model: model,
+          workload: workload
+        )
+      }
+    )
   }
 
   private func refreshResources() async {
@@ -228,10 +245,12 @@ private struct KubernetesResourceBrowserContent: View {
   let services: [KubernetesServiceRecord]
   let hasInventory: Bool
   let isLoading: Bool
+  let isBusy: Bool
   let errorMessage: String?
   let hasSearchText: Bool
   let onRetry: () -> Void
   let onViewPodLogs: (KubernetesPodRecord) -> Void
+  let onScaleWorkload: (KubernetesWorkloadRecord) -> Void
 
   var body: some View {
     VStack(spacing: 0) {
@@ -251,7 +270,9 @@ private struct KubernetesResourceBrowserContent: View {
         case .workloads:
           KubernetesWorkloadList(
             workloads: workloads,
-            hasSearchText: hasSearchText
+            hasSearchText: hasSearchText,
+            isBusy: isBusy,
+            onScale: onScaleWorkload
           )
         case .pods:
           KubernetesPodList(
@@ -322,6 +343,8 @@ private struct KubernetesResourceUnavailableView: View {
 private struct KubernetesWorkloadList: View {
   let workloads: [KubernetesWorkloadRecord]
   let hasSearchText: Bool
+  let isBusy: Bool
+  let onScale: (KubernetesWorkloadRecord) -> Void
 
   var body: some View {
     if workloads.isEmpty {
@@ -342,7 +365,12 @@ private struct KubernetesWorkloadList: View {
           desiredCount: workload.desiredCount,
           readyCount: workload.readyCount,
           availableCount: workload.availableCount,
-          failedCount: workload.failedCount
+          failedCount: workload.failedCount,
+          canScale: workload.kind.supportsScaling,
+          isBusy: isBusy,
+          onScale: {
+            onScale(workload)
+          }
         )
       }
       .listStyle(.inset)
@@ -358,6 +386,9 @@ private struct KubernetesWorkloadRow: View {
   let readyCount: Int
   let availableCount: Int
   let failedCount: Int
+  let canScale: Bool
+  let isBusy: Bool
+  let onScale: () -> Void
 
   var body: some View {
     HStack(spacing: 12) {
@@ -400,6 +431,12 @@ private struct KubernetesWorkloadRow: View {
             .monospacedDigit()
         }
       }
+
+      if canScale {
+        Button("Scale", systemImage: "arrow.up.arrow.down", action: onScale)
+          .buttonStyle(.borderless)
+          .disabled(isBusy)
+      }
     }
     .padding(.vertical, 4)
   }
@@ -409,6 +446,123 @@ private struct KubernetesWorkloadRow: View {
       "\(readyCount) of \(desiredCount) succeeded"
     } else {
       "\(readyCount) of \(desiredCount) ready"
+    }
+  }
+}
+
+private struct KubernetesWorkloadScaleView: View {
+  @Environment(\.dismiss) private var dismiss
+
+  let model: KubernetesClusterModel
+  let workload: KubernetesWorkloadRecord
+
+  @State private var targetReplicas: Int
+  @State private var isSubmitting = false
+
+  init(
+    model: KubernetesClusterModel,
+    workload: KubernetesWorkloadRecord
+  ) {
+    self.model = model
+    self.workload = workload
+    _targetReplicas = State(initialValue: workload.desiredCount)
+  }
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section("Workload") {
+          LabeledContent("Name", value: workload.name)
+          LabeledContent("Namespace", value: workload.namespace)
+          LabeledContent("Kind") {
+            Text(workload.kind.title)
+          }
+        }
+
+        Section {
+          LabeledContent("Current") {
+            Text(workload.desiredCount, format: .number)
+              .monospacedDigit()
+          }
+          LabeledContent("Target") {
+            Stepper(
+              value: $targetReplicas,
+              in: 0...KubernetesWorkloadScaleRequest.maximumReplicaCount
+            ) {
+              Text(targetReplicas, format: .number)
+                .monospacedDigit()
+            }
+          }
+          if targetReplicas == 0 {
+            Label(
+              "Scaling to zero stops every replica of this workload.",
+              systemImage: "exclamationmark.triangle"
+            )
+            .foregroundStyle(.orange)
+          }
+        } header: {
+          Text("Replica count")
+        } footer: {
+          Text(
+            "The scale commits only if the workload UID, resource version, and current replica count still match this review."
+          )
+        }
+
+        if let errorMessage = model.resourceErrorMessage {
+          Section("Scale failed") {
+            Text(errorMessage)
+              .foregroundStyle(.red)
+              .textSelection(.enabled)
+          }
+        }
+
+        if isSubmitting {
+          Section {
+            ProgressView("Scaling workload…")
+          }
+        }
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Scale Workload")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            dismiss()
+          }
+          .disabled(isSubmitting)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Scale to \(targetReplicas)") {
+            submit()
+          }
+          .disabled(
+            isSubmitting
+              || targetReplicas == workload.desiredCount
+          )
+        }
+      }
+    }
+    .frame(minWidth: 480, minHeight: 390)
+    .interactiveDismissDisabled(isSubmitting)
+  }
+
+  private func submit() {
+    guard
+      !isSubmitting,
+      targetReplicas != workload.desiredCount
+    else {
+      return
+    }
+    isSubmitting = true
+    Task {
+      let succeeded = await model.scaleWorkload(
+        workload,
+        to: targetReplicas
+      )
+      isSubmitting = false
+      if succeeded {
+        dismiss()
+      }
     }
   }
 }

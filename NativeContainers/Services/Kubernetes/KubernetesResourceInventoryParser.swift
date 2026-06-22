@@ -231,7 +231,8 @@ struct KubernetesResourceInventoryParser: Sendable {
     guard
       KubernetesResourceReferenceValidator.isNamespace(namespace),
       KubernetesResourceReferenceValidator.isResourceName(name),
-      KubernetesResourceReferenceValidator.isUID(uid)
+      KubernetesResourceReferenceValidator.isUID(uid),
+      KubernetesResourceReferenceValidator.isResourceVersion(resourceVersion)
     else {
       throw KubernetesClusterError.invalidResourceInventory
     }

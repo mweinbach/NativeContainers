@@ -840,11 +840,13 @@ Primary sources:
   narrows but cannot eliminate replacement between a check and the upstream
   exec; the product does not describe the name-addressed call as atomic.
 - `kubectl scale` exposes server-checked `--current-replicas` and
-  `--resource-version` preconditions. NativeContainers can therefore make a
+  `--resource-version` preconditions. NativeContainers therefore makes a
   reviewed Deployment or StatefulSet scale request conditional on the exact
   UID/resourceVersion and desired count loaded into the browser, rather than
   issuing a blind name-only mutation. The inventory now projects those two
-  non-secret metadata values and treats UID as the stable SwiftUI identity.
+  non-secret metadata values and treats UID as the stable SwiftUI identity. A
+  post-read also requires the same UID, a new resourceVersion, and the target
+  count before the app reports success.
 - `kubectl delete` explicitly performs no resource-version check. Workload or
   Pod deletion is therefore not bundled into the scale slice: a name-only
   delete could erase a replacement created after review. It remains blocked

@@ -1286,6 +1286,14 @@ Updated: 2026-06-22.
   still match before the session is returned, otherwise the PTY is closed. Pod
   presets and arbitrary startup commands are disabled; the remaining upstream
   name-addressed race is documented.
+- Deployment and StatefulSet rows now expose a native scale review sheet;
+  DaemonSets and Jobs remain non-scalable. The request freezes UID,
+  resourceVersion, current replicas, and target replicas. The bounded guest
+  command revalidates all reviewed state, sends Kubernetes' server-enforced
+  resource-version and current-replica preconditions, then requires the same
+  UID, a new version, and the target count. Deterministic service/model coverage
+  and a real two-replica live-smoke extension are present, but this exact head
+  remains unclaimed until the Xcode MCP transport reconnects and runs them.
 - An opt-in Xcode smoke passed the complete destructive lane on Apple container
   1.0.0: it created a unique two-core/2-GiB Alpine machine, installed the pinned
   K3s release, exported a host-usable kubeconfig, created a namespace,

@@ -150,6 +150,39 @@ struct LiveAppleKubernetesSmokeTests {
         }
       )
 
+      let inventoryWorkload = try #require(
+        inventory.workloads.first {
+          $0.namespace == namespace
+            && $0.name == "inventory"
+            && $0.kind == .deployment
+        }
+      )
+      let scaleResult = try await graph.cluster.scaleWorkload(
+        try KubernetesWorkloadScaleRequest(
+          workload: inventoryWorkload,
+          targetReplicas: 2
+        )
+      )
+      #expect(scaleResult.observedReplicas == 2)
+      #expect(scaleResult.resourceVersion != inventoryWorkload.resourceVersion)
+      _ = try await graph.kubectl(
+        kubeconfigURL: kubeconfigURL,
+        arguments: [
+          "--namespace", namespace,
+          "rollout", "status", "deployment/inventory", "--timeout=180s",
+        ],
+        timeout: .seconds(210)
+      )
+      let scaledInventory = try await graph.cluster.loadResourceInventory()
+      #expect(
+        scaledInventory.workloads.contains {
+          $0.uid == inventoryWorkload.uid
+            && $0.resourceVersion != inventoryWorkload.resourceVersion
+            && $0.desiredCount == 2
+            && $0.readyCount == 2
+        }
+      )
+
       let smokePod = try #require(
         inventory.pods.first {
           $0.namespace == namespace && $0.name == "smoke"
