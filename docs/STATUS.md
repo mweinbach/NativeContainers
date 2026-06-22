@@ -13,20 +13,17 @@ Updated: 2026-06-22.
   worker, both strictly signed by team `6UHAW5UAT4` with hardened runtime. The
   archive validator confirms that the app carries only microphone input and
   virtualization while the worker carries no app capability.
-- The current full app-hosted Xcode run contains 1,142 expanded outcomes: all
-  1,112 deterministic outcomes passed, with 30 destructive or external-service
+- The current full app-hosted Xcode run contains 1,143 expanded outcomes: all
+  1,112 deterministic outcomes passed, with 31 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
   tests. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
-  PTY, stopped-filesystem export, image behavior, Compose lifecycle, and
-  disposable local-registry paths; none run against public services by default.
-- The last window-level app verification launched through Xcode as PID 35888.
+  PTY, stopped-filesystem export, GUI Linux VZ boot/control, image behavior,
+  Compose lifecycle, and disposable local-registry paths; none run against
+  public services by default.
+- The latest window-level app verification launched through Xcode as PID 48034.
   LLDB confirmed its visible main window was titled `Overview`, and Xcode
-  stopped that exact process. Its only error-level logs were the two existing
-  Core Spotlight `SetStoreUpdateService` donation failures. The timed-out
-  Preview host's exact
-  residual PID was terminated through Xcode's debugger, the cleanup run was
-  stopped through Xcode, and no app or build-worker process remained.
+  stopped that exact process. No app or build-worker process remained.
 - A native menu-bar control plane shares the app-scoped `AppModel`, inventory,
   lifecycle services, routing, and error state instead of introducing a second
   poller. It reports runtime and machine counts, exposes bounded container
@@ -1838,12 +1835,43 @@ Updated: 2026-06-22.
   the cleanup host. No app or worker process remained. The gated test above,
   not either timed-out app-host attempt, is the live Apple-service evidence.
 
+## Official Ubuntu ARM64 Virtualization smoke checkpoint
+
+- Ubuntu's official 26.04 LTS release supplies a generic ARM64 desktop ISO. The
+  3.9-GB image is retained in the host's `Downloads/NativeContainers-Fixtures`
+  directory, and both an independent host hash plus the gated test matched the
+  published SHA-256
+  `c2afd538d66fdd77377d03f1ed2ac76a34f1c116baecc9a8170d68f833121f57`.
+- `bootsReviewedInstallerAndCleansIsolatedBundle()` adds a reusable destructive
+  gate requiring `NATIVECONTAINERS_LIVE_LINUX_VM=1`, an explicit local ISO path,
+  and its reviewed digest. It creates a mode-0700 temporary library, copies the
+  ISO through the production media service, prepares persistent EFI/NVRAM,
+  generic-machine, MAC, and 64-GiB sparse-disk artifacts, then starts the exact
+  production `AppleLinuxVirtualMachineRuntimeEngine` configuration.
+- The live Xcode run passed 1/1 for VM ID
+  `6a2eef4f-56b3-472a-8c05-725711af255b`. It confirmed the runtime and underlying
+  `VZVirtualMachine` stayed running for ten seconds with installation media and
+  a native console object, then confirmed pause, resume, 8-to-4-to-8-GiB
+  balloon requests, exact force stop, manifest deletion, and complete isolated
+  library cleanup. The temporary `/private/tmp` ISO clone was also removed.
+- A first attempt against the Downloads path stalled before creating a VM
+  bundle; the identical clone's successful run is consistent with an app-host
+  privacy boundary. After Xcode MCP's Stop action also timed out, only the exact
+  idle app-host PIDs were terminated. The successful retry used the hash-pinned
+  APFS clone in `/private/tmp`. Subsequent build-for-testing, the normal gated
+  skip, and the 4.217-second app build pass with an empty warning log. No VM
+  bundle, temporary library, app process, or build worker remains.
+- This checkpoint proves real firmware/installer-backed VZ start and native
+  runtime control. It does not infer a rendered Ubuntu frame, completed
+  graphical installation, guest input/audio behavior, or boot from the virtual
+  disk. Those remain explicit live work.
+
 ## Remaining live verification gap
 
-The entitlement, signing configuration, build, and capability availability are
-verified. Installing and rebooting a reviewed Linux distribution through the
-new GUI workflow, then creating/restoring disk snapshots, suspending/restoring
-it, cloning it,
+The entitlement, signing configuration, build, capability availability, and a
+hash-pinned Ubuntu ARM64 installer boot/control pass are verified. Completing
+the graphical installation and rebooting it through the new GUI workflow, then
+creating/restoring disk snapshots, suspending/restoring it, cloning it,
 exporting/restoring a portable copy, growing its disk and expanding the Linux
 partition/filesystem, and verifying shared/host-only packet flow plus a shared
 folder still need a disposable ISO smoke pass. Installing, booting,
@@ -1853,7 +1881,8 @@ disposable installed guest are available for that destructive integration pass.
 
 ## Next implementation slice
 
-1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
+1. Continue the hash-pinned Ubuntu 26.04 ARM64 fixture through graphical
+   installation and disk boot; verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
    change CPU/memory, grow the virtual disk, expand the guest partition and file
    system, and verify the next boot; create a named disk checkpoint, mutate

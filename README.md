@@ -155,6 +155,15 @@ timeout/KILL recovery, image tag/inspect/delete behavior, and a stopped-rootfs
 marker/digest/replacement round trip, then delete every uniquely created test
 resource and private output.
 
+The general-purpose GUI Linux VM smoke is separately gated because it boots a
+real `VZVirtualMachine` and copies a multi-gigabyte installer into an isolated
+bundle. Set `NATIVECONTAINERS_LIVE_LINUX_VM=1`,
+`NATIVECONTAINERS_LIVE_LINUX_VM_ISO` to a locally readable ARM64 `.iso`, and
+`NATIVECONTAINERS_LIVE_LINUX_VM_ISO_SHA256` to its reviewed digest. The smoke
+hashes the source, boots the production Virtio configuration, verifies the
+running console object, pause/resume, memory-balloon requests, force stop, and
+exact cleanup. It does not claim that the graphical installer completed.
+
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when
 `NATIVECONTAINERS_LOCAL_REGISTRY_REPOSITORY` names a repository on a disposable

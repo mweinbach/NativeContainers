@@ -10,6 +10,26 @@ Last updated: 2026-06-22.
 - `container system status --format json` reports the 1.0.0 API server running.
 - The live container, image, and machine inventories were empty at kickoff.
 
+## GUI Linux VM fixture
+
+- Ubuntu's official 26.04 LTS release publishes a generic 64-bit ARM desktop
+  installer for ARMv8/AArch64. The 3.9-GB
+  [`ubuntu-26.04-desktop-arm64.iso`](https://cdimage.ubuntu.com/releases/26.04/release/ubuntu-26.04-desktop-arm64.iso)
+  was downloaded on 2026-06-22, and its SHA-256
+  `c2afd538d66fdd77377d03f1ed2ac76a34f1c116baecc9a8170d68f833121f57`
+  matches Ubuntu's published
+  [`SHA256SUMS`](https://cdimage.ubuntu.com/releases/26.04/release/SHA256SUMS).
+- The app-hosted run stalled before reading the Downloads fixture, while an
+  identical APFS clone under `/private/tmp` passed. That is consistent with a
+  test-host privacy boundary rather than a product-file-picker failure. The
+  clone was removed after the run; the verified source remains under the host's
+  `Downloads/NativeContainers-Fixtures` directory. The product copies a
+  user-picked security-scoped URL through its descriptor-safe media service.
+- The live boot/control smoke deliberately stops before installation. A running
+  VZ state and console object prove the production configuration starts and can
+  be controlled, but they do not prove that Ubuntu rendered a frame, accepted
+  input, installed to disk, or booted without the ISO.
+
 ## Apple container stack
 
 Primary sources:
