@@ -356,4 +356,10 @@ actor AppleContainerService: ContainerManaging, ContainerShellDiscovering {
     try await toolService.copyFromContainer(id: id, source: source, destination: destination)
   }
 
+  func exportFilesystem(
+    _ request: ContainerFilesystemExportRequest
+  ) async throws -> ContainerFilesystemExportReceipt {
+    try await toolService.exportFilesystem(request)
+  }
+
 }

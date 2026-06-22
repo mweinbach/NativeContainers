@@ -5,13 +5,18 @@ import Foundation
 actor AppleContainerToolService: ContainerTooling {
   private let containerClient: ContainerClient
   private let commandExecutor: any RuntimeCommandExecuting
+  private let filesystemExporter: any ContainerFilesystemExporting
 
   init(
     containerClient: ContainerClient = ContainerClient(),
-    commandExecutor: (any RuntimeCommandExecuting)? = nil
+    commandExecutor: (any RuntimeCommandExecuting)? = nil,
+    filesystemExporter: (any ContainerFilesystemExporting)? = nil
   ) {
     self.containerClient = containerClient
     self.commandExecutor = commandExecutor ?? AppleRuntimeCommandExecutor()
+    self.filesystemExporter =
+      filesystemExporter
+      ?? AppleContainerFilesystemExportService(containerClient: containerClient)
   }
 
   func executeCommand(
@@ -70,5 +75,11 @@ actor AppleContainerToolService: ContainerTooling {
       destination: destination.path(percentEncoded: false),
       createParents: true
     )
+  }
+
+  func exportFilesystem(
+    _ request: ContainerFilesystemExportRequest
+  ) async throws -> ContainerFilesystemExportReceipt {
+    try await filesystemExporter.exportFilesystem(request)
   }
 }

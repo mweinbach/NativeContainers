@@ -123,6 +123,12 @@ protocol ContainerFileTransferring: Sendable {
   func copyFromContainer(id: String, source: String, destination: URL) async throws
 }
 
+protocol ContainerFilesystemExporting: Sendable {
+  func exportFilesystem(
+    _ request: ContainerFilesystemExportRequest
+  ) async throws -> ContainerFilesystemExportReceipt
+}
+
 protocol ContainerShellDiscovering: Sendable {
   func discoverShell(in id: String) async throws -> ContainerShell
 }
@@ -135,7 +141,8 @@ struct UnavailableContainerShellService: ContainerShellDiscovering {
 
 protocol ContainerTooling:
   ContainerCommandRunning,
-  ContainerFileTransferring
+  ContainerFileTransferring,
+  ContainerFilesystemExporting
 {}
 
 protocol ContainerTerminalOpening: Sendable {

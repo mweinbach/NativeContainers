@@ -57,4 +57,15 @@ private actor ContainerToolingStub: ContainerTooling, ContainerShellDiscovering 
   func copyIntoContainer(id: String, source: URL, destination: String) {}
 
   func copyFromContainer(id: String, source: String, destination: URL) {}
+
+  func exportFilesystem(
+    _ request: ContainerFilesystemExportRequest
+  ) -> ContainerFilesystemExportReceipt {
+    ContainerFilesystemExportReceipt(
+      target: request.target,
+      destinationURL: request.destinationURL,
+      byteCount: 1,
+      sha256: String(repeating: "0", count: 64)
+    )
+  }
 }

@@ -1482,6 +1482,16 @@ private actor MockContainerService: ContainerManaging, MachineManaging {
   func copyFromContainer(id: String, source: String, destination: URL) async throws {
     copiedFromContainer.append((id, source, destination))
   }
+  func exportFilesystem(
+    _ request: ContainerFilesystemExportRequest
+  ) async throws -> ContainerFilesystemExportReceipt {
+    ContainerFilesystemExportReceipt(
+      target: request.target,
+      destinationURL: request.destinationURL,
+      byteCount: 1,
+      sha256: String(repeating: "0", count: 64)
+    )
+  }
   func createMachine(
     request: LinuxMachineCreationRequest,
     progress: @escaping ContainerProgressHandler

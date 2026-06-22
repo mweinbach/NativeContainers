@@ -610,6 +610,16 @@ private actor PreviewContainerService:
   }
   func copyIntoContainer(id: String, source: URL, destination: String) async throws {}
   func copyFromContainer(id: String, source: String, destination: URL) async throws {}
+  func exportFilesystem(
+    _ request: ContainerFilesystemExportRequest
+  ) async throws -> ContainerFilesystemExportReceipt {
+    ContainerFilesystemExportReceipt(
+      target: request.target,
+      destinationURL: request.destinationURL,
+      byteCount: 1_024,
+      sha256: String(repeating: "a", count: 64)
+    )
+  }
   func createMachine(
     request: LinuxMachineCreationRequest,
     progress: @escaping ContainerProgressHandler
