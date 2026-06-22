@@ -1724,3 +1724,32 @@ is bounded and structurally validated, and has its loopback server rewritten in
 memory to the machine's current dedicated IP. Multi-node HA, external storage,
 and a live destructive install remain later product slices rather than claims
 of this single-node foundation.
+
+## ADR-062: Project Kubernetes inventory inside the guest
+
+**Status:** Accepted — 2026-06-22
+
+The native Kubernetes browser is read-only and never obtains its own
+kubeconfig. `AppleKubernetesClusterService` first reloads the private descriptor,
+requires its Ready phase, matches the complete stored Apple machine identity,
+and requires that exact machine to be running. It then executes one fixed root
+command through the existing bounded Apple process transport; no user text is
+interpolated into that command.
+
+Ordinary Pod JSON can contain literal environment values and operational
+annotations that the browser neither needs nor should receive. The guest
+therefore carries `jq` as a provisioning prerequisite and projects K3s output
+before it crosses into the host process. The projection admits only workload
+kind/name/namespace and replica counts, pod identity/phase/container counts/node,
+and service identity/type/address/ports. It does not emit Pod environment,
+annotations, Secret objects, kubeconfig, tokens, or certificate material.
+
+The host treats the projected document as untrusted. Exact section markers are
+required once, JSON is decoded into narrow private shapes, each of workloads,
+pods, and services is capped at 500 records, nested service ports are capped,
+text and numeric bounds are checked, and duplicate natural identities fail the
+entire refresh. Transport truncation also fails closed. The observable model
+keeps inventory errors separate from cluster lifecycle errors and clears stale
+inventory whenever lifecycle or machine identity changes. Workload mutation,
+logs, and exec remain later reviewed capabilities rather than being smuggled
+into this read-only foundation.

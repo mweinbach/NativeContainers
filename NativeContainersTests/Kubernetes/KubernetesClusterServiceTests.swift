@@ -107,6 +107,8 @@ struct KubernetesClusterServiceTests {
     #expect(bootstrap.command.contains("NativeContainers prepares cgroup v2"))
     #expect(bootstrap.command.contains("rc-update del k3s default"))
     #expect(bootstrap.command.contains("systemctl enable k3s"))
+    #expect(bootstrap.command.contains("iptables ip6tables jq"))
+    #expect(bootstrap.command.contains("iptables jq"))
     #expect(bootstrap.timeoutSeconds == 900)
 
     let activation = try #require(
@@ -172,6 +174,54 @@ struct KubernetesClusterServiceTests {
     try await service.delete()
     #expect(await store.descriptor == nil)
     #expect(await runtime.currentMachine == nil)
+  }
+
+  @Test
+  func loadsBoundedResourcesFromTheExactRunningMachine() async throws {
+    let machine = makeMachine()
+    let runtime = KubernetesMachineRuntimeDouble(machine: machine)
+    let commands = KubernetesRootCommandDouble()
+    let descriptor = KubernetesClusterDescriptor(
+      operationID: UUID(),
+      machine: LinuxMachineIdentity(machine: machine),
+      distribution: .current,
+      phase: .ready,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_100)
+    )
+    let store = InMemoryKubernetesDescriptorStore(descriptor: descriptor)
+    let service = makeService(runtime: runtime, commands: commands, store: store)
+
+    let inventory = try await service.loadResourceInventory()
+
+    #expect(inventory == readyResourceInventory())
+    let invocation = try #require(
+      await commands.commands.first(where: {
+        $0.command.contains(KubernetesResourceInventoryParser.workloadsMarker)
+      })
+    )
+    #expect(invocation.target == descriptor.machine)
+    #expect(invocation.timeoutSeconds == 90)
+    #expect(invocation.command.contains("deployments.apps"))
+    #expect(invocation.command.contains("services --all-namespaces"))
+    #expect(invocation.command.contains("jq --compact-output"))
+    #expect(invocation.command.contains("(.spec.containers // [])"))
+    #expect(!invocation.command.contains(".spec.env"))
+    #expect(!invocation.command.contains(".metadata.annotations"))
+    #expect(!invocation.command.contains("secret"))
+
+    await runtime.setMachine(
+      makeMachine(createdAt: Date(timeIntervalSince1970: 1_700_000_500))
+    )
+    await #expect(
+      throws: KubernetesClusterError.machineIdentityChanged(descriptor.machine.id)
+    ) {
+      _ = try await service.loadResourceInventory()
+    }
+    #expect(
+      await commands.commands.filter {
+        $0.command.contains(KubernetesResourceInventoryParser.workloadsMarker)
+      }.count == 1
+    )
   }
 
   @Test
@@ -302,6 +352,27 @@ struct KubernetesClusterModelTests {
   }
 
   @Test
+  func loadsReadOnlyResourcesWithoutPublishingAClusterMutation() async {
+    let snapshot = readyKubernetesSnapshot()
+    let service = KubernetesModelServiceDouble(snapshot: snapshot)
+    let mutations = KubernetesMutationCounter()
+    let model = KubernetesClusterModel(
+      service: service,
+      initialSnapshot: snapshot
+    ) {
+      mutations.count += 1
+    }
+
+    await model.loadResources()
+
+    #expect(model.resourceInventory == readyResourceInventory())
+    #expect(model.resourceErrorMessage == nil)
+    #expect(!model.isLoadingResources)
+    #expect(await service.resourceLoadCount == 1)
+    #expect(mutations.count == 0)
+  }
+
+  @Test
   func failedMutationKeepsTheErrorAndReloadsAuthoritativeState() async {
     let snapshot = readyKubernetesSnapshot()
     let service = KubernetesModelServiceDouble(snapshot: snapshot)
@@ -344,6 +415,7 @@ private actor InMemoryKubernetesDescriptorStore:
 
 private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
   private(set) var loadCount = 0
+  private(set) var resourceLoadCount = 0
   private var snapshot: KubernetesClusterSnapshot
   private var provisionedSnapshot: KubernetesClusterSnapshot
   private var stopError: KubernetesClusterError?
@@ -356,6 +428,11 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
   func load() -> KubernetesClusterSnapshot {
     loadCount += 1
     return snapshot
+  }
+
+  func loadResourceInventory() -> KubernetesResourceInventory {
+    resourceLoadCount += 1
+    return readyResourceInventory()
   }
 
   func provision(
@@ -600,6 +677,9 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
     if command.contains("get --raw=/readyz") {
       return result(standardOutput: "ok\n")
     }
+    if command.contains(KubernetesResourceInventoryParser.workloadsMarker) {
+      return result(standardOutput: testKubernetesResourceInventoryOutput())
+    }
     if command.contains("__NATIVECONTAINERS_K3S_VERSION__") {
       return result(
         standardOutput: """
@@ -708,6 +788,107 @@ private func readyKubernetesSnapshot() -> KubernetesClusterSnapshot {
     podCount: 2,
     runningPodCount: 2
   )
+}
+
+private func readyResourceInventory() -> KubernetesResourceInventory {
+  KubernetesResourceInventory(
+    workloads: [
+      KubernetesWorkloadRecord(
+        namespace: "default",
+        name: "api",
+        kind: .deployment,
+        desiredCount: 2,
+        readyCount: 2,
+        availableCount: 2,
+        failedCount: 0
+      )
+    ],
+    pods: [
+      KubernetesPodRecord(
+        namespace: "default",
+        name: "api-abc",
+        phase: .running,
+        readyContainerCount: 1,
+        containerCount: 1,
+        restartCount: 0,
+        nodeName: "nativecontainers-kubernetes"
+      )
+    ],
+    services: [
+      KubernetesServiceRecord(
+        namespace: "default",
+        name: "api",
+        type: "ClusterIP",
+        clusterIP: "10.43.20.10",
+        ports: [
+          KubernetesServicePortRecord(
+            name: "http",
+            protocolName: "TCP",
+            port: 80,
+            targetPort: "8080",
+            nodePort: nil
+          )
+        ]
+      )
+    ],
+    capturedAt: Date(timeIntervalSince1970: 1_700_000_100)
+  )
+}
+
+private func testKubernetesResourceInventoryOutput() -> String {
+  """
+  \(KubernetesResourceInventoryParser.workloadsMarker)
+  {
+    "items": [
+      {
+        "kind": "Deployment",
+        "metadata": {"namespace": "default", "name": "api"},
+        "spec": {"replicas": 2},
+        "status": {
+          "replicas": 2,
+          "readyReplicas": 2,
+          "availableReplicas": 2
+        }
+      }
+    ]
+  }
+  \(KubernetesResourceInventoryParser.podsMarker)
+  {
+    "items": [
+      {
+        "metadata": {"namespace": "default", "name": "api-abc"},
+        "spec": {
+          "nodeName": "nativecontainers-kubernetes",
+          "containers": [{"name": "api"}]
+        },
+        "status": {
+          "phase": "Running",
+          "containerStatuses": [{"ready": true, "restartCount": 0}]
+        }
+      }
+    ]
+  }
+  \(KubernetesResourceInventoryParser.servicesMarker)
+  {
+    "items": [
+      {
+        "metadata": {"namespace": "default", "name": "api"},
+        "spec": {
+          "type": "ClusterIP",
+          "clusterIP": "10.43.20.10",
+          "ports": [
+            {
+              "name": "http",
+              "protocol": "TCP",
+              "port": 80,
+              "targetPort": 8080
+            }
+          ]
+        }
+      }
+    ]
+  }
+  """
 }
 
 private func stableIdentity() -> LinuxMachineIdentity {

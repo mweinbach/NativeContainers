@@ -1262,21 +1262,31 @@ Updated: 2026-06-22.
   floors, progress, status, Start, graceful Stop, explicit Force Stop, Delete,
   stale-record recovery, and user-initiated kubeconfig export. Workspace
   routing and Navigate Command-0 use one stable app-scoped observable model.
+- Ready and degraded clusters now expose a native, searchable, read-only
+  workload, pod, and service browser. Every refresh revalidates the stored
+  Apple machine identity and running state before addressing the current
+  backing container. K3s JSON is reduced inside the guest with `jq` to only
+  names, namespaces, replica/status counts, node names, service addresses, and
+  ports; pod environment, annotations, and secret payloads never cross into
+  the host model. Each resource family is capped at 500 records, stable IDs are
+  duplicate-checked, and truncated or malformed output fails closed.
 - An opt-in Xcode smoke passed the complete destructive lane on Apple container
   1.0.0: it created a unique two-core/2-GiB Alpine machine, installed the pinned
-  K3s release, exported a host-usable kubeconfig, created a namespace, ran a
-  real Alpine pod to Ready and verified its logs, deleted the namespace,
-  stopped and restarted the cluster, rechecked the API, and deleted the exact
-  machine. Independent CLI inventory found only Apple's pre-existing stopped
-  builder afterward, and no temporary kubeconfig directory remained.
+  K3s release, exported a host-usable kubeconfig, created a namespace,
+  Deployment, Service, and standalone Alpine pod, waited for real readiness,
+  verified pod logs, loaded those resources through the app service, deleted
+  the namespace, stopped and restarted the cluster, rechecked the API, and
+  deleted the exact machine. The lane passed in 133.753 seconds. Independent
+  CLI inventory found no remaining Apple machines afterward, and no temporary
+  kubeconfig directory remained.
 - Xcode build-for-testing succeeds with zero warnings. The final default plan
-  passes all 966 outcomes: 944 deterministic tests passed, 22 explicit live
+  passes all 972 outcomes: 950 deterministic tests passed, 22 explicit live
   gates skipped, and no outcome failed or remained unrun. The normal app
-  launched in 4.237 seconds as PID 31997 and Xcode stopped that exact process;
+  launched in 3.852 seconds as PID 60426 and Xcode stopped that exact process;
   its only console errors were the existing macOS 27 beta
-  SetStore/CoreSpotlight failures. Both Kubernetes canvas previews remain
-  unclaimed because the Preview host twice timed out while launching the app
-  after 30 seconds.
+  SetStore/CoreSpotlight failures. All three Kubernetes canvas previews remain
+  unclaimed because the Preview host timed out while launching the app after
+  30 seconds.
 
 ## Remaining live verification gap
 

@@ -170,10 +170,23 @@ the exact machine; Force Stop uses the existing identity-pinned authorization
 path.
 
 Status reads bounded version, node, and pod summaries from `k3s kubectl`.
-Kubeconfig is read only after an explicit export action, validated and bounded
-in memory, rewritten from guest loopback to the current dedicated machine IP,
-and handed to the system file exporter. NativeContainers never persists the
-secret document on the host.
+Resource inventory is a separate explicit read path available only for a Ready
+descriptor whose exact current Apple machine is running. A fixed guest command
+uses `jq` to project Deployment, StatefulSet, DaemonSet, Job, Pod, and Service
+JSON down to identity, counts, phases, nodes, addresses, and ports before the
+payload crosses Apple's process transport. The host parser caps each resource
+family at 500, rejects duplicate natural identities and malformed values, and
+sorts stable records for SwiftUI. Pod environment, annotations, and Kubernetes
+secret payloads are not represented in the projected document or domain model.
+
+`KubernetesClusterModel` owns the separately cancellable inventory state and
+clears it across lifecycle or identity changes. The browser is read-only,
+searches cached prepared arrays rather than filtering in `body`, and uses
+stable namespace/kind/name identities for native lists. Kubeconfig is read only
+after an explicit export action, validated and bounded in memory, rewritten
+from guest loopback to the current dedicated machine IP, and handed to the
+system file exporter. NativeContainers never persists the secret document on
+the host.
 
 Container creation attachments cross a separate `ContainerAttachmentManaging`
 facet. The SwiftUI draft freezes complete volume and network configuration

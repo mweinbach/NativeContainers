@@ -5,11 +5,14 @@ import Observation
 @Observable
 final class KubernetesClusterModel {
   private(set) var snapshot = KubernetesClusterSnapshot.absent
+  private(set) var resourceInventory: KubernetesResourceInventory?
   private(set) var progress: KubernetesClusterProgress?
   private(set) var isLoading = false
+  private(set) var isLoadingResources = false
   private(set) var isWorking = false
   private(set) var isExporting = false
   private(set) var errorMessage: String?
+  private(set) var resourceErrorMessage: String?
 
   @ObservationIgnored
   private let service: any KubernetesClusterManaging
@@ -28,7 +31,7 @@ final class KubernetesClusterModel {
   }
 
   var isBusy: Bool {
-    isLoading || isWorking || isExporting
+    isLoading || isLoadingResources || isWorking || isExporting
   }
 
   func refresh() async {
@@ -38,8 +41,29 @@ final class KubernetesClusterModel {
     await reload()
   }
 
+  func loadResources() async {
+    guard
+      !isBusy,
+      snapshot.state == .ready || snapshot.state == .degraded
+    else {
+      return
+    }
+    isLoadingResources = true
+    resourceErrorMessage = nil
+    defer { isLoadingResources = false }
+
+    do {
+      resourceInventory = try await service.loadResourceInventory()
+    } catch is CancellationError {
+      return
+    } catch {
+      resourceErrorMessage = error.localizedDescription
+    }
+  }
+
   func provision(_ request: KubernetesClusterProvisionRequest) async -> Bool {
     guard !isBusy else { return false }
+    clearResourceInventory()
     isWorking = true
     progress = nil
     errorMessage = nil
@@ -88,6 +112,7 @@ final class KubernetesClusterModel {
 
   func delete() async -> Bool {
     guard !isBusy else { return false }
+    clearResourceInventory()
     isWorking = true
     progress = nil
     errorMessage = nil
@@ -109,6 +134,7 @@ final class KubernetesClusterModel {
 
   func forget() async -> Bool {
     guard !isBusy else { return false }
+    clearResourceInventory()
     isWorking = true
     progress = nil
     errorMessage = nil
@@ -160,6 +186,7 @@ final class KubernetesClusterModel {
       ) async throws -> KubernetesClusterSnapshot
   ) async -> Bool {
     guard !isBusy else { return false }
+    clearResourceInventory()
     isWorking = true
     progress = nil
     errorMessage = nil
@@ -185,7 +212,14 @@ final class KubernetesClusterModel {
 
   private func reload(preserveError: Bool = false) async {
     do {
-      snapshot = try await service.load()
+      let previousMachine = snapshot.descriptor?.machine
+      let loadedSnapshot = try await service.load()
+      snapshot = loadedSnapshot
+      if previousMachine != loadedSnapshot.descriptor?.machine
+        || (loadedSnapshot.state != .ready && loadedSnapshot.state != .degraded)
+      {
+        clearResourceInventory()
+      }
       if !preserveError {
         errorMessage = nil
       }
@@ -196,6 +230,11 @@ final class KubernetesClusterModel {
         errorMessage = error.localizedDescription
       }
     }
+  }
+
+  private func clearResourceInventory() {
+    resourceInventory = nil
+    resourceErrorMessage = nil
   }
 
   private func receive(_ update: KubernetesClusterProgress) {

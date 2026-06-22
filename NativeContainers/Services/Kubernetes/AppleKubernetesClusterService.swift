@@ -150,6 +150,31 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     }
   }
 
+  func loadResourceInventory() async throws -> KubernetesResourceInventory {
+    let descriptor = try await requireDescriptor()
+    guard descriptor.phase == .ready else {
+      throw KubernetesClusterError.setupNotRetryable
+    }
+    let machine = try await requireExactMachine(descriptor)
+    guard machine.state.isRunning else {
+      throw KubernetesClusterError.machineNotRunning(machine.id)
+    }
+
+    let result = try await rootCommands.executeRootCommand(
+      KubernetesResourceInventoryParser.inventoryCommand,
+      in: descriptor.machine,
+      timeoutSeconds: 90
+    )
+    try validate(
+      result,
+      operation: String(localized: "Reading Kubernetes resources")
+    )
+    return try KubernetesResourceInventoryParser().parse(
+      result.standardOutput,
+      capturedAt: now()
+    )
+  }
+
   func provision(
     _ request: KubernetesClusterProvisionRequest,
     progress: @escaping KubernetesClusterProgressHandler
@@ -565,11 +590,11 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     return """
       set -eu
       if command -v apk >/dev/null 2>&1; then
-        apk add --no-cache ca-certificates curl openrc iptables ip6tables
+        apk add --no-cache ca-certificates curl openrc iptables ip6tables jq
       elif command -v apt-get >/dev/null 2>&1; then
         export DEBIAN_FRONTEND=noninteractive
         apt-get update
-        apt-get install -y --no-install-recommends ca-certificates curl iptables
+        apt-get install -y --no-install-recommends ca-certificates curl iptables jq
         rm -rf /var/lib/apt/lists/*
       else
         echo 'The machine image needs apk or apt-get for K3s prerequisites.' >&2

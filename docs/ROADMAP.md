@@ -242,9 +242,13 @@ must leave a usable, test-backed product slice.
       with exact machine identity, pinned installer and release verification,
       secret encryption, crash-resumable setup, native lifecycle/status UI, and
       explicit ephemeral kubeconfig export.
+  - [x] Bounded, read-only workloads/pods/services inventory with guest-side
+        field projection, duplicate-safe stable identity, native search, and no
+        kubeconfig export or Kubernetes secret material in the browser model.
   - [x] Live-provision the gated Alpine machine, verify API reachability and a
-        real disposable pod through exported kubeconfig, survive a stop/start,
-        then delete the exact machine, namespace, and temporary credentials.
+        real Deployment, Service, and disposable pod, verify the app-owned
+        inventory path, survive a stop/start, then delete the exact machine,
+        namespace, and temporary credentials.
 - [ ] Reviewed non-English translations and full VoiceOver/Full Keyboard
       Access QA across every management workflow.
 - [ ] Distribution, updater, migration, and crash diagnostics.

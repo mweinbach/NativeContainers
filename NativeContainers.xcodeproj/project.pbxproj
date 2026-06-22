@@ -429,6 +429,10 @@
 		1F9D2CC82FE8110F0076F5B9 /* RestoreImageStoreMigrationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2CC72FE8110F0076F5B9 /* RestoreImageStoreMigrationServiceTests.swift */; };
 		1FB2CB774F526EFD27D3BEE5 /* ContainerBuilderSafetyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 280CDA7156DBDA2D35A668AE /* ContainerBuilderSafetyPolicyTests.swift */; };
 		1FB6BA7C2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA7B2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift */; };
+		1FB6BA7E2FE96C8A00099F15 /* KubernetesResourceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA7D2FE96C8A00099F15 /* KubernetesResourceModels.swift */; };
+		1FB6BA802FE96CA900099F15 /* KubernetesResourceInventoryParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA7F2FE96CA900099F15 /* KubernetesResourceInventoryParser.swift */; };
+		1FB6BA822FE96CE600099F15 /* KubernetesResourceBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA812FE96CE600099F15 /* KubernetesResourceBrowserView.swift */; };
+		1FB6BA842FE96D0800099F15 /* KubernetesResourceInventoryParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA832FE96D0800099F15 /* KubernetesResourceInventoryParserTests.swift */; };
 		1FEC46CD2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */; };
 		1FEC46CF2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */; };
 		1FEC46D12FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */; };
@@ -1026,6 +1030,10 @@
 		1F9D2CC52FE810B30076F5B9 /* RestoreImageStoreRecoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageStoreRecoveryService.swift; sourceTree = "<group>"; };
 		1F9D2CC72FE8110F0076F5B9 /* RestoreImageStoreMigrationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreImageStoreMigrationServiceTests.swift; sourceTree = "<group>"; };
 		1FB6BA7B2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAppleKubernetesSmokeTests.swift; sourceTree = "<group>"; };
+		1FB6BA7D2FE96C8A00099F15 /* KubernetesResourceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesResourceModels.swift; sourceTree = "<group>"; };
+		1FB6BA7F2FE96CA900099F15 /* KubernetesResourceInventoryParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesResourceInventoryParser.swift; sourceTree = "<group>"; };
+		1FB6BA812FE96CE600099F15 /* KubernetesResourceBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesResourceBrowserView.swift; sourceTree = "<group>"; };
+		1FB6BA832FE96D0800099F15 /* KubernetesResourceInventoryParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesResourceInventoryParserTests.swift; sourceTree = "<group>"; };
 		1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageModels.swift; sourceTree = "<group>"; };
 		1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageService.swift; sourceTree = "<group>"; };
 		1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageInspectorTests.swift; sourceTree = "<group>"; };
@@ -1281,6 +1289,7 @@
 				1F99F1B82FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift */,
 				1F99F1C62FE8CDBE00DF0752 /* FieldDiagnosticSettingsSection.swift */,
 				1F64B9622FE8D65800598A65 /* KubernetesView.swift */,
+				1FB6BA812FE96CE600099F15 /* KubernetesResourceBrowserView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1343,6 +1352,7 @@
 				1F99F1B02FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift */,
 				1F99F1BE2FE8CD5F00DF0752 /* FieldDiagnosticModels.swift */,
 				1F64B9562FE8D4ED00598A65 /* KubernetesClusterModels.swift */,
+				1FB6BA7D2FE96C8A00099F15 /* KubernetesResourceModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1370,6 +1380,7 @@
 				1F64B95C2FE8D56900598A65 /* KubernetesClusterDescriptorStoreTests.swift */,
 				1F64B95E2FE8D58E00598A65 /* KubernetesClusterServiceTests.swift */,
 				1FB6BA7B2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift */,
+				1FB6BA832FE96D0800099F15 /* KubernetesResourceInventoryParserTests.swift */,
 			);
 			path = Kubernetes;
 			sourceTree = "<group>";
@@ -1379,6 +1390,7 @@
 			children = (
 				1F64B9582FE8D4FE00598A65 /* KubernetesClusterDescriptorStore.swift */,
 				1F64B95A2FE8D53000598A65 /* AppleKubernetesClusterService.swift */,
+				1FB6BA7F2FE96CA900099F15 /* KubernetesResourceInventoryParser.swift */,
 			);
 			path = Kubernetes;
 			sourceTree = "<group>";
@@ -2402,6 +2414,7 @@
 				1F9D2B5C2FE792CF0076F5B9 /* LinuxMachineManagementTests.swift in Sources */,
 				1F9D2B622FE796030076F5B9 /* AppleLinuxMachineInventoryServiceTests.swift in Sources */,
 				1F9D2C312FE7E6DA0076F5B9 /* HostProcessServiceTests.swift in Sources */,
+				1FB6BA842FE96D0800099F15 /* KubernetesResourceInventoryParserTests.swift in Sources */,
 				1F5E63CD2FE8765C00A430FF /* ContainerHostDirectoryServiceTests.swift in Sources */,
 				1F99F1C92FE8CE2E00DF0752 /* FieldDiagnosticStoreTests.swift in Sources */,
 				1F9D2B0F2FE769CE0076F5B9 /* ApplePublishedSocketWorkspaceTests.swift in Sources */,
@@ -2642,6 +2655,7 @@
 				1F9D2CBE2FE80A7C0076F5B9 /* RestoreImageAcquisitionService.swift in Sources */,
 				1FEC47622FE84A8A00DC60B2 /* MenuBarQuickControlsView.swift in Sources */,
 				1F5E63972FE85C7700A430FF /* AppNotificationModels.swift in Sources */,
+				1FB6BA822FE96CE600099F15 /* KubernetesResourceBrowserView.swift in Sources */,
 				1F5E63F12FE881E400A430FF /* AppleMacVirtualMachineNetworkDeviceFactory.swift in Sources */,
 				1F5E63D72FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift in Sources */,
 				1F9D2BBC2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift in Sources */,
@@ -2801,6 +2815,7 @@
 				BEF88012C7F13A21B4B2C57E /* RestoreImageDownloadService.swift in Sources */,
 				1F9D2B8C2FE7A15F0076F5B9 /* MacRestoreImagePreparationView.swift in Sources */,
 				1F99F1C52FE8CDAC00DF0752 /* FieldDiagnosticModel.swift in Sources */,
+				1FB6BA802FE96CA900099F15 /* KubernetesResourceInventoryParser.swift in Sources */,
 				1F5E63A32FE860BF00A430FF /* ContainerShellModels.swift in Sources */,
 				1F5E644F2FE8988A00A430FF /* MacGuestProvisioningView.swift in Sources */,
 				1F9D2B482FE78A460076F5B9 /* ImageBuildOutputService.swift in Sources */,
@@ -2877,6 +2892,7 @@
 				1F9D2C802FE7FCD60076F5B9 /* StorageUsageModels.swift in Sources */,
 				1FEC47562FE849FA00DC60B2 /* LaunchAtLoginModels.swift in Sources */,
 				4DBEA60A3A33B0528C68106A /* VirtualMachineModels.swift in Sources */,
+				1FB6BA7E2FE96C8A00099F15 /* KubernetesResourceModels.swift in Sources */,
 				1F5E646D2FE8A11B00A430FF /* AppleMacVirtualMachineUSBController.swift in Sources */,
 				1F5E63CB2FE875CD00A430FF /* ContainerHostDirectoriesSection.swift in Sources */,
 				1F9D2AFB2FE765F10076F5B9 /* AppleContainerProgressRelay.swift in Sources */,

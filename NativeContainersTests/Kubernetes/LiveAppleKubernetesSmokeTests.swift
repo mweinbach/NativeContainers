@@ -78,6 +78,32 @@ struct LiveAppleKubernetesSmokeTests {
         kubeconfigURL: kubeconfigURL,
         arguments: [
           "--namespace", namespace,
+          "create", "deployment", "inventory",
+          "--image=docker.io/library/alpine:3.22",
+          "--", "/bin/sh", "-c", "sleep 300",
+        ]
+      )
+      _ = try await graph.kubectl(
+        kubeconfigURL: kubeconfigURL,
+        arguments: [
+          "--namespace", namespace,
+          "wait", "--for=condition=Available",
+          "deployment/inventory", "--timeout=240s",
+        ],
+        timeout: .seconds(270)
+      )
+      _ = try await graph.kubectl(
+        kubeconfigURL: kubeconfigURL,
+        arguments: [
+          "--namespace", namespace,
+          "expose", "deployment", "inventory",
+          "--port=8080", "--target-port=8080",
+        ]
+      )
+      _ = try await graph.kubectl(
+        kubeconfigURL: kubeconfigURL,
+        arguments: [
+          "--namespace", namespace,
           "run", "smoke",
           "--image=docker.io/library/alpine:3.22",
           "--restart=Never",
@@ -99,6 +125,30 @@ struct LiveAppleKubernetesSmokeTests {
         arguments: ["--namespace", namespace, "logs", "smoke"]
       )
       #expect(logs.contains("nativecontainers-k3s-live"))
+
+      let inventory = try await graph.cluster.loadResourceInventory()
+      #expect(
+        inventory.workloads.contains {
+          $0.namespace == namespace
+            && $0.name == "inventory"
+            && $0.kind == .deployment
+            && $0.readyCount == 1
+        }
+      )
+      #expect(
+        inventory.pods.contains {
+          $0.namespace == namespace
+            && $0.name == "smoke"
+            && $0.phase == .running
+        }
+      )
+      #expect(
+        inventory.services.contains {
+          $0.namespace == namespace
+            && $0.name == "inventory"
+            && $0.ports.contains { $0.port == 8_080 }
+        }
+      )
 
       _ = try await graph.kubectl(
         kubeconfigURL: kubeconfigURL,

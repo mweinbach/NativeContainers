@@ -5,6 +5,7 @@ struct KubernetesView: View {
   let model: KubernetesClusterModel
 
   @State private var presentsProvisioning = false
+  @State private var presentsResourceBrowser = false
   @State private var confirmsDeletion = false
   @State private var confirmsForceStop = false
   @State private var confirmsForget = false
@@ -43,6 +44,17 @@ struct KubernetesView: View {
           podCount: model.snapshot.podCount
         )
 
+        if model.snapshot.state == .ready || model.snapshot.state == .degraded {
+          KubernetesResourcesSection(
+            workloadCount: model.resourceInventory?.workloads.count,
+            podCount: model.resourceInventory?.pods.count,
+            serviceCount: model.resourceInventory?.services.count,
+            capturedAt: model.resourceInventory?.capturedAt,
+            isBusy: model.isBusy,
+            onBrowse: { presentsResourceBrowser = true }
+          )
+        }
+
         KubernetesClusterActionsSection(
           state: model.snapshot.state,
           machineState: model.snapshot.machine?.state,
@@ -80,6 +92,9 @@ struct KubernetesView: View {
     }
     .sheet(isPresented: $presentsProvisioning) {
       KubernetesProvisioningView(model: model)
+    }
+    .sheet(isPresented: $presentsResourceBrowser) {
+      KubernetesResourceBrowserView(model: model)
     }
     .alert(
       "Delete Kubernetes Cluster?",
@@ -636,11 +651,25 @@ extension RuntimeState {
   .frame(width: 760, height: 720)
 }
 
+#Preview("Kubernetes Resource Browser") {
+  KubernetesResourceBrowserView(
+    model: KubernetesClusterModel(
+      service: PreviewKubernetesClusterService(snapshot: .previewReady),
+      initialSnapshot: .previewReady
+    )
+  )
+  .frame(width: 900, height: 640)
+}
+
 private struct PreviewKubernetesClusterService: KubernetesClusterManaging {
   let snapshot: KubernetesClusterSnapshot
 
   func load() async throws -> KubernetesClusterSnapshot {
     snapshot
+  }
+
+  func loadResourceInventory() async throws -> KubernetesResourceInventory {
+    .preview
   }
 
   func provision(
@@ -678,6 +707,102 @@ private struct PreviewKubernetesClusterService: KubernetesClusterManaging {
       data: Data("apiVersion: v1\n".utf8)
     )
   }
+}
+
+extension KubernetesResourceInventory {
+  fileprivate static let preview = Self(
+    workloads: [
+      KubernetesWorkloadRecord(
+        namespace: "default",
+        name: "api",
+        kind: .deployment,
+        desiredCount: 3,
+        readyCount: 3,
+        availableCount: 3,
+        failedCount: 0
+      ),
+      KubernetesWorkloadRecord(
+        namespace: "data",
+        name: "postgres",
+        kind: .statefulSet,
+        desiredCount: 1,
+        readyCount: 1,
+        availableCount: 1,
+        failedCount: 0
+      ),
+      KubernetesWorkloadRecord(
+        namespace: "default",
+        name: "database-migration",
+        kind: .job,
+        desiredCount: 1,
+        readyCount: 1,
+        availableCount: 0,
+        failedCount: 0
+      ),
+    ],
+    pods: [
+      KubernetesPodRecord(
+        namespace: "default",
+        name: "api-7f8d9b6c4d-x2mqp",
+        phase: .running,
+        readyContainerCount: 1,
+        containerCount: 1,
+        restartCount: 0,
+        nodeName: "nativecontainers-kubernetes"
+      ),
+      KubernetesPodRecord(
+        namespace: "data",
+        name: "postgres-0",
+        phase: .running,
+        readyContainerCount: 1,
+        containerCount: 1,
+        restartCount: 1,
+        nodeName: "nativecontainers-kubernetes"
+      ),
+      KubernetesPodRecord(
+        namespace: "kube-system",
+        name: "metrics-server-6f4c6675d5-hm8tz",
+        phase: .running,
+        readyContainerCount: 1,
+        containerCount: 1,
+        restartCount: 0,
+        nodeName: "nativecontainers-kubernetes"
+      ),
+    ],
+    services: [
+      KubernetesServiceRecord(
+        namespace: "default",
+        name: "api",
+        type: "ClusterIP",
+        clusterIP: "10.43.84.12",
+        ports: [
+          KubernetesServicePortRecord(
+            name: "http",
+            protocolName: "TCP",
+            port: 80,
+            targetPort: "8080",
+            nodePort: nil
+          )
+        ]
+      ),
+      KubernetesServiceRecord(
+        namespace: "kube-system",
+        name: "kube-dns",
+        type: "ClusterIP",
+        clusterIP: "10.43.0.10",
+        ports: [
+          KubernetesServicePortRecord(
+            name: "dns",
+            protocolName: "UDP",
+            port: 53,
+            targetPort: "53",
+            nodePort: nil
+          )
+        ]
+      ),
+    ],
+    capturedAt: Date()
+  )
 }
 
 extension KubernetesClusterSnapshot {

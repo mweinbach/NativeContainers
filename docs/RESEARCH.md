@@ -771,6 +771,7 @@ Primary sources:
 Primary sources:
 
 - [Apple container machine](https://github.com/apple/container/blob/main/docs/container-machine.md)
+- [Apple TN3179: Understanding local network privacy](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)
 - [K3s quick start](https://docs.k3s.io/quick-start)
 - [K3s requirements](https://docs.k3s.io/installation/requirements)
 - [K3s installer source](https://github.com/k3s-io/k3s/blob/master/install.sh)
@@ -801,6 +802,20 @@ Primary sources:
   the running guest, requires the expected certificate fields and one loopback
   server, substitutes the machine's current validated IP in memory, and then
   delegates destination ownership to the macOS file exporter.
+- Host `kubectl` reaches the Apple machine through its local-network address.
+  TN3179 documents that outgoing TCP to the local network requires user
+  permission on modern macOS, so NativeContainers carries a local-network
+  usage description and the live smoke treats consent as a host prerequisite
+  rather than Kubernetes readiness.
+- Full pod JSON can contain literal environment values and operational
+  annotations even when no Kubernetes Secret object is requested. The browser
+  therefore does not forward ordinary `kubectl -o json` payloads to the host.
+  Provisioning installs `jq`, and the fixed inventory command projects only the
+  resource identity and display/status fields inside the guest before Apple's
+  bounded process transport captures output. Host decoding ignores all other
+  schema fields, caps workloads, pods, and services independently at 500, and
+  rejects duplicate stable IDs, missing markers, invalid ports, malformed JSON,
+  and transport truncation.
 - A 2026-06-22 live pass established an Apple-machine-specific service detail:
   the guest boots under Apple's `vminitd`, not OpenRC or systemd as PID 1. The
   K3s installer can write a valid OpenRC unit, but its ordinary cgroups
@@ -820,10 +835,12 @@ Primary sources:
   representation and has a bit-pattern round-trip test. The live reload then
   matched the current Apple identity exactly.
 - The final opt-in Xcode smoke installed `v1.36.1+k3s1` on Alpine 3.22, reached
-  the exported API from host `kubectl`, ran a real Alpine pod to Ready and read
-  its logs, survived an application-owned stop/start, and deleted the exact
-  machine. Follow-up Apple CLI inventory and temporary-directory inspection
-  found no cluster or credential residue.
+  the exported API from host `kubectl`, created a real Deployment and Service,
+  ran a standalone Alpine pod to Ready and read its logs, then proved the
+  app-owned inventory saw all three resource types. It survived an
+  application-owned stop/start and deleted the exact machine. The lane passed
+  in 133.753 seconds; follow-up Apple CLI inventory and temporary-directory
+  inspection found no cluster or credential residue.
 
 ## Public-API boundaries
 
