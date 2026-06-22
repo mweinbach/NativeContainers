@@ -1964,3 +1964,37 @@ One warmup and three measured fresh containers run for guest root and bind
 storage, after which a marker-framed JSON record carries raw timings,
 median/P95, aggregate throughput, payload size, and host/runtime/image
 provenance.
+
+## ADR-070: Measure a fixed no-cache build through reviewed OCI publication
+
+**Status:** Accepted — 2026-06-22
+
+The real-build performance lane is gated by both
+`NATIVECONTAINERS_LIVE_PERFORMANCE=1` and
+`NATIVECONTAINERS_LIVE_PERFORMANCE_BUILD=1`; it is never part of Settings. Its
+input is a private disposable context with an 8-MiB zero payload and a fixed
+Dockerfile that copies and hashes the payload from an already-local base image
+pinned by exact digest. The request allows one current-platform tag, no
+secrets, build arguments, or target, disables every cache policy, and sets
+`pullLatest` false. This avoids deliberately refreshing a mutable base during
+the benchmark without claiming that arbitrary BuildKit internals are offline.
+
+Each iteration prepares the production build plan and reviewed output lease
+before timing. The clock wraps `AppleContainerBuildService.build`, so it
+includes the embedded worker, Apple BuildKit execution, staged-context
+revalidation and transfer, layer creation, OCI export, reviewed publication,
+and final file validation. The destination is a unique OCI archive rather than
+the Apple image store: the lane measures a real portable image build while
+avoiding persistent tag mutation and ambiguous image-deletion ownership. The
+result must retain the reviewed build ID, platform, destination, 64-character
+lowercase SHA-256 shape, positive byte count, regular-file type, and exact file
+size.
+
+The runner removes the archive after every warmup or sample and treats any
+cleanup error as suite-fatal. The live postcondition also rejects surviving
+staged contexts, app-private artifacts, shared worker exports, output files, or
+an unexpected image-store tag.
+One warmup and three measurements produce marker-framed JSON containing raw
+timings, median/P95, host and Apple runtime versions, exact base provenance,
+payload size, cache policy, and output kind. Builder warmth and host load remain
+session variables, so no universal latency threshold is asserted.

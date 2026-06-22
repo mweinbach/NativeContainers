@@ -955,6 +955,27 @@ aggregate throughput, payload size, host/runtime version, and image provenance
 as marker-framed JSON. Neither lane is present in the non-mutating Settings
 suite.
 
+Real image-build timing is a third explicit live gate. A disposable private
+context contains one digest-pinned local Alpine base, a fixed 8-MiB payload,
+and a Dockerfile that copies and hashes that payload. The reviewed request is
+single-platform, secret-free, target-free, no-cache, and does not request a
+newer base image. It exports one OCI archive to a unique reviewed destination;
+it never imports the benchmark tag into the shared Apple image store.
+
+Context staging, output authorization, and the final pre-measurement plan check
+run before the clock. The measured interval wraps the production build service,
+including staged-context revalidation, embedded-worker and BuildKit execution,
+context transfer, layer creation, OCI export, publication into the reviewed
+destination, and final regular-file size/hash-shape validation. One warmup
+precedes three samples to reduce one-time builder-startup noise; remaining
+builder state and host load stay session provenance rather than a universal
+product promise. Cleanup removes the archive outside the clock and requires the
+output folder, staged contexts, private build artifacts, shared worker-export
+directories, and the benchmark tag in the Apple image store to be absent.
+Marker-framed JSON records raw samples, median/P95, host/runtime version, exact
+base reference/digest, payload size, cache policy, and output kind. This
+mutating lane is also excluded from Settings.
+
 Workspace navigation is a separate focused slice. `WorkspaceRoute` represents
 both top-level destinations and exact resource identities. A pure
 `WorkspaceResourceCatalog` derives searchable entries from the current Apple

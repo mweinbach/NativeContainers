@@ -15,6 +15,7 @@ Last updated: 2026-06-22.
 Primary sources:
 
 - [`apple/container` 1.0.0](https://github.com/apple/container/tree/1.0.0)
+- [`apple/container` 1.0.0 how-to](https://github.com/apple/container/blob/1.0.0/docs/how-to.md)
 - [`apple/container` API docs](https://apple.github.io/container/documentation/)
 - [`apple/containerization` 0.33.3](https://github.com/apple/containerization/tree/0.33.3)
 - [Containerization API docs](https://apple.github.io/containerization/documentation/)
@@ -75,6 +76,13 @@ Verified architecture:
   option-safe fixed target. The benchmark therefore avoids GNU-only progress
   flags, redirects `dd` diagnostics into the bounded command stream, and does
   not mistake the immediate follow-up read for a cache-cold device result.
+- Apple's official how-to documents Dockerfile image builds and explicit
+  architecture selection, while the exact installed 1.0 worker maps the app's
+  reviewed request to `Builder.BuildConfig` with cache, pull, platform, tag,
+  target, and export fields. The real-build benchmark therefore uses the same
+  embedded worker path with `.disabled` cache, `pullLatest == false`, one
+  current platform, and a reviewed OCI export. Context review remains outside
+  the clock; BuildKit execution and output publication remain inside it.
 - The installed 1.0.0 `MachineClient.setConfig(id:bootConfig:)` and matching
   server route persist a replacement `MachineConfig` for the next boot. The
   supported mutable CLI surface is exactly CPU count, memory, and home-mount

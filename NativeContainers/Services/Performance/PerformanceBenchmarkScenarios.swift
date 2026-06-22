@@ -516,6 +516,216 @@ enum ContainerIOPerformanceBenchmarkError: LocalizedError, Equatable, Sendable {
   }
 }
 
+actor ImageBuildPerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
+  nonisolated let kind = PerformanceBenchmarkKind.imageBuild
+
+  private let builder: any ImageBuilding
+  private let request: ImageBuildRequest
+  private let authorization: ImageBuildAuthorization
+  private let outputDestination: URL
+  private let fileManager = FileManager.default
+  private var preparedPlan: ImageBuildPlan?
+  private var buildIDs: [UUID] = []
+  private var stagedContextDirectories: [URL] = []
+  private var outputTags: [String] = []
+
+  init(
+    builder: any ImageBuilding,
+    request: ImageBuildRequest,
+    authorization: ImageBuildAuthorization = ImageBuildAuthorization(
+      allowsTagReplacement: false,
+      allowsRecreateStoppedBuilder: true,
+      allowsStopRunningBuilder: false
+    )
+  ) throws {
+    guard
+      request.cachePolicy == .disabled,
+      !request.pullLatest,
+      request.output.kind == .ociArchive,
+      let outputDestination = request.output.destinationURL,
+      request.platforms == [.current],
+      request.tags.count == 1,
+      request.secrets.isEmpty,
+      request.buildArguments.isEmpty,
+      request.targetStage.isEmpty,
+      !authorization.allowsTagReplacement,
+      !authorization.allowsOutputReplacement
+    else {
+      throw ImageBuildPerformanceBenchmarkError.invalidConfiguration
+    }
+
+    self.builder = builder
+    self.request = request
+    self.authorization = authorization
+    self.outputDestination = outputDestination.standardizedFileURL
+      .resolvingSymlinksInPath()
+  }
+
+  func prepareIteration() async throws {
+    guard preparedPlan == nil else {
+      throw ImageBuildPerformanceBenchmarkError.invalidIterationState
+    }
+    guard !outputExists else {
+      throw ImageBuildPerformanceBenchmarkError.outputAlreadyExists
+    }
+
+    let plan = try await builder.prepareBuild(request) { _ in }
+    preparedPlan = plan
+    buildIDs.append(plan.id)
+    stagedContextDirectories.append(plan.stagedContextDirectory)
+    outputTags.append(contentsOf: plan.tags.map(\.reference))
+    try validate(plan)
+  }
+
+  func prepareMeasurement() async throws {
+    guard let preparedPlan else {
+      throw ImageBuildPerformanceBenchmarkError.invalidIterationState
+    }
+    try validate(preparedPlan)
+    guard !outputExists else {
+      throw ImageBuildPerformanceBenchmarkError.outputAlreadyExists
+    }
+  }
+
+  func perform() async throws -> Int64? {
+    guard let preparedPlan else {
+      throw ImageBuildPerformanceBenchmarkError.invalidIterationState
+    }
+    let result = try await builder.build(
+      preparedPlan,
+      authorization: authorization
+    ) { _ in }
+    guard
+      result.buildID == preparedPlan.id,
+      result.platforms == preparedPlan.platforms,
+      case .ociArchive(let destination, let sha256, let byteCount) = result.output,
+      destination.standardizedFileURL == outputDestination,
+      byteCount > 0,
+      Self.isSHA256(sha256)
+    else {
+      throw ImageBuildPerformanceBenchmarkError.resultChanged
+    }
+
+    let values = try outputDestination.resourceValues(
+      forKeys: [.isRegularFileKey, .fileSizeKey]
+    )
+    guard
+      values.isRegularFile == true,
+      values.fileSize.map { Int64($0) } == byteCount
+    else {
+      throw ImageBuildPerformanceBenchmarkError.invalidOutputArchive
+    }
+    return nil
+  }
+
+  func cleanUpIteration() async throws {
+    guard let preparedPlan else { return }
+    self.preparedPlan = nil
+    await builder.discardBuild(preparedPlan)
+
+    if outputExists {
+      do {
+        try fileManager.removeItem(at: outputDestination)
+      } catch {
+        throw ImageBuildPerformanceBenchmarkError.outputRemovalFailed(
+          error.localizedDescription
+        )
+      }
+      guard !outputExists else {
+        throw ImageBuildPerformanceBenchmarkError.outputRemovalNotConfirmed
+      }
+    }
+    guard
+      !fileManager.fileExists(
+        atPath: preparedPlan.stagedContextDirectory.path(percentEncoded: false)
+      )
+    else {
+      throw ImageBuildPerformanceBenchmarkError.stagedContextRemovalNotConfirmed(
+        preparedPlan.stagedContextDirectory.path(percentEncoded: false)
+      )
+    }
+  }
+
+  func reviewedBuildIDs() -> [UUID] {
+    buildIDs
+  }
+
+  func reviewedStagedContextDirectories() -> [URL] {
+    stagedContextDirectories
+  }
+
+  func reviewedOutputTags() -> [String] {
+    outputTags
+  }
+
+  private var outputExists: Bool {
+    fileManager.fileExists(atPath: outputDestination.path(percentEncoded: false))
+  }
+
+  private func validate(_ plan: ImageBuildPlan) throws {
+    guard
+      plan.sourceContextDirectory == request.contextDirectory.standardizedFileURL,
+      plan.tags.count == 1,
+      plan.tags.first?.reference.isEmpty == false,
+      !plan.replacesExistingTags,
+      plan.platforms == request.platforms,
+      plan.buildArguments == request.buildArguments,
+      plan.labels == request.labels,
+      plan.targetStage == request.targetStage,
+      plan.cachePolicy == .disabled,
+      !plan.pullLatest,
+      plan.secrets.isEmpty,
+      plan.output.kind == .ociArchive,
+      plan.output.destinationURL?.standardizedFileURL == outputDestination,
+      !plan.output.replacesExistingDestination
+    else {
+      throw ImageBuildPerformanceBenchmarkError.planChanged
+    }
+  }
+
+  private static func isSHA256(_ value: String) -> Bool {
+    value.utf8.count == 64
+      && value.utf8.allSatisfy {
+        ($0 >= 0x30 && $0 <= 0x39) || ($0 >= 0x61 && $0 <= 0x66)
+      }
+  }
+}
+
+enum ImageBuildPerformanceBenchmarkError: LocalizedError, Equatable, Sendable {
+  case invalidConfiguration
+  case invalidIterationState
+  case outputAlreadyExists
+  case planChanged
+  case resultChanged
+  case invalidOutputArchive
+  case outputRemovalFailed(String)
+  case outputRemovalNotConfirmed
+  case stagedContextRemovalNotConfirmed(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidConfiguration:
+      "The image-build benchmark requires one current-platform, no-cache OCI export with no secrets or registry refresh."
+    case .invalidIterationState:
+      "The image-build benchmark iteration is not in a valid state."
+    case .outputAlreadyExists:
+      "The reviewed image-build benchmark output already exists."
+    case .planChanged:
+      "The prepared image-build benchmark plan changed after review."
+    case .resultChanged:
+      "The image-build benchmark result did not match its reviewed plan."
+    case .invalidOutputArchive:
+      "The image-build benchmark did not produce the reviewed OCI archive."
+    case .outputRemovalFailed(let message):
+      "The image-build benchmark output could not be removed: \(message)"
+    case .outputRemovalNotConfirmed:
+      "The image-build benchmark output remained after cleanup."
+    case .stagedContextRemovalNotConfirmed(let path):
+      "The image-build benchmark staged context remained after cleanup: \(path)"
+    }
+  }
+}
+
 struct PrivateDiskPerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
   let kind = PerformanceBenchmarkKind.privateDiskIO
 

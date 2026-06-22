@@ -1214,6 +1214,20 @@ Updated: 2026-06-22.
   writable reviewed mount, processed-byte accounting, and residual cleanup;
   the live gate additionally requires no run-prefixed container and no host
   artifact. This exact head also awaits Xcode MCP build/test/live execution.
+- A third opt-in performance gate now runs the production embedded-worker image
+  build path over a disposable fixed context: a digest-pinned local Alpine base,
+  an 8-MiB payload, one COPY, and one in-image SHA-256 operation. Planning and
+  reviewed output authorization precede the clock; the timed interval includes
+  no-cache BuildKit execution, context transfer, layer creation, OCI export,
+  reviewed publication, and final archive validation. The gate never imports
+  its tag into the shared image store and does not request a newer base image.
+  One warmup plus three samples emit raw timing, median/P95, host/runtime and
+  exact base provenance, payload, cache policy, and output kind. Deterministic
+  coverage proves request/plan/result pinning and output removal on success and
+  validation failure; the live postcondition also rejects output, staged
+  context, app-private artifact, shared worker-export, or image-store residue.
+  This exact head awaits Xcode MCP build/test/live execution because the bridge
+  remains unavailable.
 
 ## Distribution-readiness checkpoint
 

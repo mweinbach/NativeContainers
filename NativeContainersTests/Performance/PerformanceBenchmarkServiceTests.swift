@@ -1,3 +1,5 @@
+import ContainerAPIClient
+import Darwin
 import Foundation
 import Testing
 
@@ -445,6 +447,144 @@ struct PerformanceBenchmarkServiceTests {
   }
 
   @Test
+  func imageBuildUsesReviewedNoCachePlanAndRemovesOCIOutput() async throws {
+    let fixture = try ImageBuildPerformanceFixture()
+    defer { fixture.remove() }
+    let runtime = ImageBuildPerformanceRuntimeDouble(
+      outputDestination: fixture.outputDestination
+    )
+    let scenario = try ImageBuildPerformanceBenchmarkScenario(
+      builder: runtime,
+      request: fixture.request()
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [2_000, 7_000])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured image-build result.")
+      return
+    }
+    #expect(result.kind == .imageBuild)
+    #expect(result.samples.map(\.durationNanoseconds) == [5_000])
+    #expect(result.samples.map(\.processedByteCount) == [nil])
+    #expect(await runtime.preparedRequests == [fixture.request()])
+    #expect(await runtime.builtPlanIDs == [runtime.planID])
+    #expect(await runtime.discardedPlanIDs == [runtime.planID])
+    #expect(await scenario.reviewedBuildIDs() == [runtime.planID])
+    #expect(await scenario.reviewedOutputTags() == [fixture.tag])
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: fixture.outputDestination.path(percentEncoded: false)
+      )
+    )
+  }
+
+  @Test
+  func imageBuildRejectsCacheOrRegistryRefresh() throws {
+    let fixture = try ImageBuildPerformanceFixture()
+    defer { fixture.remove() }
+    let runtime = ImageBuildPerformanceRuntimeDouble(
+      outputDestination: fixture.outputDestination
+    )
+
+    #expect(throws: ImageBuildPerformanceBenchmarkError.invalidConfiguration) {
+      _ = try ImageBuildPerformanceBenchmarkScenario(
+        builder: runtime,
+        request: fixture.request(cachePolicy: .builderInternal)
+      )
+    }
+    #expect(throws: ImageBuildPerformanceBenchmarkError.invalidConfiguration) {
+      _ = try ImageBuildPerformanceBenchmarkScenario(
+        builder: runtime,
+        request: fixture.request(pullLatest: true)
+      )
+    }
+  }
+
+  @Test
+  func imageBuildRemovesOutputAfterResultValidationFailure() async throws {
+    let fixture = try ImageBuildPerformanceFixture()
+    defer { fixture.remove() }
+    let runtime = ImageBuildPerformanceRuntimeDouble(
+      outputDestination: fixture.outputDestination,
+      resultSHA256: "invalid"
+    )
+    let scenario = try ImageBuildPerformanceBenchmarkScenario(
+      builder: runtime,
+      request: fixture.request()
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [10])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .failed(let kind, let message) = report.outcomes[0] else {
+      Issue.record("Expected an invalid image-build result to fail.")
+      return
+    }
+    #expect(kind == .imageBuild)
+    #expect(
+      message
+        == ImageBuildPerformanceBenchmarkError.resultChanged.localizedDescription
+    )
+    #expect(await runtime.discardedPlanIDs == [runtime.planID])
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: fixture.outputDestination.path(percentEncoded: false)
+      )
+    )
+  }
+
+  @Test
+  func imageBuildRejectsChangedPreparedPlanAndDiscardsIt() async throws {
+    let fixture = try ImageBuildPerformanceFixture()
+    defer { fixture.remove() }
+    let runtime = ImageBuildPerformanceRuntimeDouble(
+      outputDestination: fixture.outputDestination,
+      planCachePolicy: .builderInternal
+    )
+    let scenario = try ImageBuildPerformanceBenchmarkScenario(
+      builder: runtime,
+      request: fixture.request()
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .failed(let kind, let message) = report.outcomes[0] else {
+      Issue.record("Expected a changed image-build plan to fail.")
+      return
+    }
+    #expect(kind == .imageBuild)
+    #expect(
+      message == ImageBuildPerformanceBenchmarkError.planChanged.localizedDescription
+    )
+    #expect(await runtime.builtPlanIDs.isEmpty)
+    #expect(await runtime.discardedPlanIDs == [runtime.planID])
+  }
+
+  @Test
   func privateDiskScenarioRemovesItsTemporaryArtifact() async throws {
     let directory = FileManager.default.temporaryDirectory
       .appending(path: "NativeContainers-PerformanceTests-\(UUID().uuidString)")
@@ -484,6 +624,8 @@ struct LiveApplePerformanceBenchmarkTests {
     "__NATIVECONTAINERS_COLD_CONTAINER_BENCHMARK__"
   private static let ioOutputMarker =
     "__NATIVECONTAINERS_CONTAINER_IO_BENCHMARK__"
+  private static let buildOutputMarker =
+    "__NATIVECONTAINERS_IMAGE_BUILD_BENCHMARK__"
 
   @Test(
     .enabled(
@@ -704,6 +846,123 @@ struct LiveApplePerformanceBenchmarkTests {
     print("\(Self.ioOutputMarker)\(json)")
   }
 
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_BUILD"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_BUILD=1 with Apple container services running and the selected base image already local."
+    )
+  )
+  func measuresFixedNoCacheImageBuildAndOCIExportWithoutResidue() async throws {
+    let containerService = AppleContainerService()
+    let baseImageReference =
+      ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_IMAGE"
+      ] ?? "docker.io/library/alpine:3.21"
+    let initialInventory = try await containerService.loadInventory()
+    guard
+      let baseImage = initialInventory.images.first(where: {
+        $0.reference == baseImageReference
+      })
+    else {
+      throw LivePerformanceBenchmarkError.missingLocalImage(baseImageReference)
+    }
+
+    let fixture = try LiveImageBuildPerformanceFixture(
+      baseImageReference: baseImage.reference,
+      baseImageDigest: baseImage.digest
+    )
+    defer { fixture.remove() }
+    let scenario = try ImageBuildPerformanceBenchmarkScenario(
+      builder: AppleContainerBuildService(),
+      request: fixture.request
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 1,
+        measuredIterations: 3
+      )
+    )
+
+    let report: PerformanceBenchmarkReport
+    do {
+      report = try await benchmark.run { _ in }
+    } catch {
+      try fixture.requireNoOutputArtifacts()
+      let reviewedTags = await scenario.reviewedOutputTags()
+      try await requireNoResidualBuildImages(
+        references: Set(reviewedTags + [fixture.tag]),
+        service: containerService
+      )
+      let buildIDs = await scenario.reviewedBuildIDs()
+      let stagedContextDirectories =
+        await scenario.reviewedStagedContextDirectories()
+      try await requireNoResidualBuildArtifacts(
+        buildIDs: buildIDs,
+        stagedContextDirectories: stagedContextDirectories
+      )
+      throw error
+    }
+    try fixture.requireNoOutputArtifacts()
+    let reviewedTags = await scenario.reviewedOutputTags()
+    try await requireNoResidualBuildImages(
+      references: Set(reviewedTags + [fixture.tag]),
+      service: containerService
+    )
+    let buildIDs = await scenario.reviewedBuildIDs()
+    let stagedContextDirectories =
+      await scenario.reviewedStagedContextDirectories()
+    try await requireNoResidualBuildArtifacts(
+      buildIDs: buildIDs,
+      stagedContextDirectories: stagedContextDirectories
+    )
+
+    guard
+      let outcome = report.outcomes.first,
+      case .measured(let result) = outcome
+    else {
+      if let outcome = report.outcomes.first,
+        case .failed(let kind, let message) = outcome
+      {
+        throw LivePerformanceBenchmarkError.scenarioFailed(
+          kind: kind.rawValue,
+          message: message
+        )
+      }
+      throw LivePerformanceBenchmarkError.missingScenarioResult(
+        PerformanceBenchmarkKind.imageBuild.rawValue
+      )
+    }
+    #expect(result.kind == .imageBuild)
+    #expect(result.samples.count == 3)
+    #expect(result.samples.allSatisfy { $0.durationNanoseconds > 0 })
+
+    let output = LiveImageBuildBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      appleContainerVersion: initialInventory.system.version,
+      baseImageReference: baseImage.reference,
+      baseImageDigest: baseImage.digest,
+      contextPayloadBytes: fixture.contextPayloadBytes,
+      cachePolicy: ImageBuildCachePolicy.disabled.rawValue,
+      outputKind: ImageBuildOutputKind.ociArchive.rawValue,
+      samplesNanoseconds: result.samples.map(\.durationNanoseconds),
+      medianMilliseconds: result.medianDurationMilliseconds,
+      p95Milliseconds: result.p95DurationMilliseconds
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.buildOutputMarker)\(json)")
+  }
+
   private func requireNoResidualContainers(
     prefix: String,
     service: AppleContainerService
@@ -726,6 +985,57 @@ struct LiveApplePerformanceBenchmarkTests {
       throw LivePerformanceBenchmarkError.residualHostArtifacts(
         artifacts.map(\.lastPathComponent).sorted()
       )
+    }
+  }
+
+  private func requireNoResidualBuildArtifacts(
+    buildIDs: [UUID],
+    stagedContextDirectories: [URL]
+  ) async throws {
+    let health = try await ClientHealthCheck.ping(timeout: .seconds(3))
+    let residualBuildPaths = buildIDs.flatMap { buildID -> [String] in
+      let privateArtifact = PrivateBuildArtifactStore().artifactURL(
+        buildID: buildID
+      )
+      let sharedExport = health.appRoot
+        .appending(path: "builder", directoryHint: .isDirectory)
+        .appending(
+          path: buildID.uuidString.lowercased(),
+          directoryHint: .isDirectory
+        )
+      return [privateArtifact, sharedExport]
+        .filter {
+          FileManager.default.fileExists(
+            atPath: $0.path(percentEncoded: false)
+          )
+        }
+        .map { $0.path(percentEncoded: false) }
+    }
+    let residualStagedPaths =
+      stagedContextDirectories
+      .filter {
+        FileManager.default.fileExists(
+          atPath: $0.path(percentEncoded: false)
+        )
+      }
+      .map { $0.path(percentEncoded: false) }
+    let residualPaths = residualBuildPaths + residualStagedPaths
+    guard residualPaths.isEmpty else {
+      throw LivePerformanceBenchmarkError.residualBuildArtifacts(
+        residualPaths.sorted()
+      )
+    }
+  }
+
+  private func requireNoResidualBuildImages(
+    references: Set<String>,
+    service: AppleContainerService
+  ) async throws {
+    let residual = try await service.loadInventory().images
+      .filter { references.contains($0.reference) }
+      .map { "\($0.reference)@\($0.digest)" }
+    guard residual.isEmpty else {
+      throw LivePerformanceBenchmarkError.residualBuildImages(residual)
     }
   }
 }
@@ -759,11 +1069,28 @@ private struct LiveContainerIOBenchmarkResult: Encodable {
   let throughputMebibytesPerSecond: Double?
 }
 
+private struct LiveImageBuildBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let appleContainerVersion: String
+  let baseImageReference: String
+  let baseImageDigest: String
+  let contextPayloadBytes: Int
+  let cachePolicy: String
+  let outputKind: String
+  let samplesNanoseconds: [UInt64]
+  let medianMilliseconds: Double
+  let p95Milliseconds: Double
+}
+
 private enum LivePerformanceBenchmarkError: LocalizedError {
   case missingLocalImage(String)
   case residualContainers([String])
   case residualHostArtifacts([String])
+  case residualBuildArtifacts([String])
+  case residualBuildImages([String])
   case scenarioFailed(kind: String, message: String)
+  case missingScenarioResult(String)
 
   var errorDescription: String? {
     switch self {
@@ -773,8 +1100,294 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
       "The live performance gate left benchmark containers behind: \(ids.joined(separator: ", "))."
     case .residualHostArtifacts(let names):
       "The bind-mount benchmark left host artifacts behind: \(names.joined(separator: ", "))."
+    case .residualBuildArtifacts(let paths):
+      "The image-build benchmark left private artifacts behind: \(paths.joined(separator: ", "))."
+    case .residualBuildImages(let references):
+      "The OCI-export benchmark unexpectedly changed the image store: \(references.joined(separator: ", "))."
     case .scenarioFailed(let kind, let message):
       "The live \(kind) benchmark failed: \(message)"
+    case .missingScenarioResult(let kind):
+      "The live \(kind) benchmark returned no result."
+    }
+  }
+}
+
+private struct ImageBuildPerformanceFixture {
+  let rootDirectory: URL
+  let contextDirectory: URL
+  let outputDirectory: URL
+  let outputDestination: URL
+  let tag: String
+
+  init() throws {
+    let suffix = UUID().uuidString.lowercased()
+    rootDirectory = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-performance-build-fixture-\(suffix)",
+      directoryHint: .isDirectory
+    )
+    contextDirectory = rootDirectory.appending(
+      path: "Context",
+      directoryHint: .isDirectory
+    )
+    outputDirectory = rootDirectory.appending(
+      path: "Output",
+      directoryHint: .isDirectory
+    )
+    outputDestination = outputDirectory.appending(
+      path: "image.oci.tar",
+      directoryHint: .notDirectory
+    )
+    tag = "nativecontainers.local/performance-fixture:\(suffix)"
+    try FileManager.default.createDirectory(
+      at: contextDirectory,
+      withIntermediateDirectories: true
+    )
+    try FileManager.default.createDirectory(
+      at: outputDirectory,
+      withIntermediateDirectories: false
+    )
+    try Data("FROM scratch\n".utf8).write(
+      to: contextDirectory.appending(path: "Dockerfile")
+    )
+  }
+
+  func request(
+    cachePolicy: ImageBuildCachePolicy = .disabled,
+    pullLatest: Bool = false
+  ) -> ImageBuildRequest {
+    ImageBuildRequest(
+      contextDirectory: contextDirectory,
+      dockerfile: nil,
+      secrets: [],
+      tags: [tag],
+      platforms: [.current],
+      buildArguments: [],
+      labels: ["com.nativecontainers.performance-fixture=true"],
+      targetStage: "",
+      cachePolicy: cachePolicy,
+      pullLatest: pullLatest,
+      builderCPUCount: nil,
+      builderMemoryMiB: nil,
+      output: ImageBuildOutputSelection(
+        kind: .ociArchive,
+        destinationURL: outputDestination
+      )
+    )
+  }
+
+  func remove() {
+    try? FileManager.default.removeItem(at: rootDirectory)
+  }
+}
+
+private actor ImageBuildPerformanceRuntimeDouble: ImageBuilding {
+  nonisolated let planID = UUID()
+
+  private let outputDestination: URL
+  private let resultSHA256: String
+  private let planCachePolicy: ImageBuildCachePolicy?
+  private(set) var preparedRequests: [ImageBuildRequest] = []
+  private(set) var builtPlanIDs: [UUID] = []
+  private(set) var discardedPlanIDs: [UUID] = []
+
+  init(
+    outputDestination: URL,
+    resultSHA256: String = String(repeating: "c", count: 64),
+    planCachePolicy: ImageBuildCachePolicy? = nil
+  ) {
+    self.outputDestination = outputDestination.standardizedFileURL
+      .resolvingSymlinksInPath()
+    self.resultSHA256 = resultSHA256
+    self.planCachePolicy = planCachePolicy
+  }
+
+  func prepareBuild(
+    _ request: ImageBuildRequest,
+    progress: @escaping ImageBuildProgressHandler
+  ) async throws -> ImageBuildPlan {
+    preparedRequests.append(request)
+    let stagedContext = request.contextDirectory.appending(
+      path: ".staged-\(planID.uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    return ImageBuildPlan(
+      id: planID,
+      sourceContextDirectory: request.contextDirectory.standardizedFileURL,
+      stagedContextDirectory: stagedContext,
+      stagedDockerfile: stagedContext.appending(path: "Dockerfile"),
+      dockerfileSHA256: String(repeating: "a", count: 64),
+      stagedDockerignore: nil,
+      dockerignoreSHA256: nil,
+      contextFingerprint: String(repeating: "b", count: 64),
+      secretReviewID: nil,
+      secrets: [],
+      tags: request.tags.map {
+        ContainerBuildTagExpectation(reference: $0, existingDigest: nil)
+      },
+      platforms: request.platforms,
+      buildArguments: request.buildArguments,
+      labels: request.labels,
+      targetStage: request.targetStage,
+      cachePolicy: planCachePolicy ?? request.cachePolicy,
+      pullLatest: request.pullLatest,
+      builderCPUCount: request.builderCPUCount,
+      builderMemoryMiB: request.builderMemoryMiB,
+      output: ImageBuildOutputPlan(
+        reviewID: planID,
+        kind: .ociArchive,
+        destinationURL: outputDestination,
+        existingDestinationIdentity: nil
+      ),
+      generatedAt: Date(timeIntervalSince1970: 1_000)
+    )
+  }
+
+  func build(
+    _ plan: ImageBuildPlan,
+    authorization: ImageBuildAuthorization,
+    progress: @escaping ImageBuildProgressHandler
+  ) async throws -> ImageBuildResult {
+    builtPlanIDs.append(plan.id)
+    let archive = Data("nativecontainers-oci-archive".utf8)
+    try archive.write(to: outputDestination, options: .atomic)
+    return ImageBuildResult(
+      buildID: plan.id,
+      output: .ociArchive(
+        destination: outputDestination,
+        sha256: resultSHA256,
+        byteCount: Int64(archive.count)
+      ),
+      platforms: plan.platforms,
+      durationMilliseconds: 5,
+      logTail: "fixture build complete"
+    )
+  }
+
+  func discardBuild(_ plan: ImageBuildPlan) async {
+    discardedPlanIDs.append(plan.id)
+  }
+}
+
+private struct LiveImageBuildPerformanceFixture {
+  static let payloadByteCount = 8 * 1_048_576
+
+  let rootDirectory: URL
+  let contextDirectory: URL
+  let outputDirectory: URL
+  let outputDestination: URL
+  let contextPayloadBytes: Int
+  let tag: String
+  let request: ImageBuildRequest
+
+  init(baseImageReference: String, baseImageDigest: String) throws {
+    let suffix = UUID().uuidString.lowercased()
+    let rootDirectory = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-build-performance-\(suffix)",
+      directoryHint: .isDirectory
+    )
+    let contextDirectory = rootDirectory.appending(
+      path: "Context",
+      directoryHint: .isDirectory
+    )
+    let outputDirectory = rootDirectory.appending(
+      path: "Output",
+      directoryHint: .isDirectory
+    )
+    let outputDestination = outputDirectory.appending(
+      path: "image.oci.tar",
+      directoryHint: .notDirectory
+    )
+    let tag = "nativecontainers.local/performance-build:\(suffix)"
+
+    do {
+      try FileManager.default.createDirectory(
+        at: contextDirectory,
+        withIntermediateDirectories: true
+      )
+      try FileManager.default.createDirectory(
+        at: outputDirectory,
+        withIntermediateDirectories: false
+      )
+      for directory in [rootDirectory, contextDirectory, outputDirectory] {
+        guard chmod(directory.path(percentEncoded: false), 0o700) == 0 else {
+          throw LiveImageBuildPerformanceFixtureError.privateDirectoryUnavailable(
+            directory.path(percentEncoded: false)
+          )
+        }
+      }
+
+      let pinnedReference =
+        baseImageReference.contains("@")
+        ? baseImageReference
+        : "\(baseImageReference)@\(baseImageDigest)"
+      let dockerfile = """
+        FROM \(pinnedReference)
+        COPY payload.bin /nativecontainers-performance-payload.bin
+        RUN sha256sum /nativecontainers-performance-payload.bin > /nativecontainers-performance-payload.sha256
+        """
+      try Data(dockerfile.utf8).write(
+        to: contextDirectory.appending(path: "Dockerfile"),
+        options: .atomic
+      )
+      try Data(count: Self.payloadByteCount).write(
+        to: contextDirectory.appending(path: "payload.bin"),
+        options: .atomic
+      )
+
+      self.rootDirectory = rootDirectory
+      self.contextDirectory = contextDirectory
+      self.outputDirectory = outputDirectory
+      self.outputDestination = outputDestination
+      contextPayloadBytes = Self.payloadByteCount
+      self.tag = tag
+      request = ImageBuildRequest(
+        contextDirectory: contextDirectory,
+        dockerfile: nil,
+        secrets: [],
+        tags: [tag],
+        platforms: [.current],
+        buildArguments: [],
+        labels: ["com.nativecontainers.performance=true"],
+        targetStage: "",
+        cachePolicy: .disabled,
+        pullLatest: false,
+        builderCPUCount: nil,
+        builderMemoryMiB: nil,
+        output: ImageBuildOutputSelection(
+          kind: .ociArchive,
+          destinationURL: outputDestination
+        )
+      )
+    } catch {
+      try? FileManager.default.removeItem(at: rootDirectory)
+      throw error
+    }
+  }
+
+  func requireNoOutputArtifacts() throws {
+    let artifacts = try FileManager.default.contentsOfDirectory(
+      at: outputDirectory,
+      includingPropertiesForKeys: nil
+    )
+    guard artifacts.isEmpty else {
+      throw LivePerformanceBenchmarkError.residualBuildArtifacts(
+        artifacts.map { $0.path(percentEncoded: false) }.sorted()
+      )
+    }
+  }
+
+  func remove() {
+    try? FileManager.default.removeItem(at: rootDirectory)
+  }
+}
+
+private enum LiveImageBuildPerformanceFixtureError: LocalizedError {
+  case privateDirectoryUnavailable(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .privateDirectoryUnavailable(let path):
+      "Could not make the image-build benchmark directory private: \(path)"
     }
   }
 }

@@ -7,6 +7,7 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
   case coldContainerStartup
   case guestRootFileIO
   case bindMountFileIO
+  case imageBuild
 
   static let settingsSuiteCases: [Self] = [
     .warmInventory,
@@ -30,6 +31,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Guest root filesystem I/O"
     case .bindMountFileIO:
       "VirtioFS bind-mount I/O"
+    case .imageBuild:
+      "No-cache OCI image build"
     }
   }
 
@@ -47,6 +50,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Writes, synchronizes, and reads a fixed file inside a running container’s writable root filesystem."
     case .bindMountFileIO:
       "Writes, synchronizes, and reads a fixed file through a reviewed writable host-folder mount."
+    case .imageBuild:
+      "Builds a fixed local context without cache or registry refresh and exports a reviewed OCI archive."
     }
   }
 }
