@@ -1,5 +1,7 @@
+import AppKit
 import CryptoKit
 import Foundation
+import SwiftUI
 import Testing
 @preconcurrency import Virtualization
 
@@ -20,6 +22,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
   )
   func bootsReviewedInstallerAndCleansIsolatedBundle() async throws {
     let environment = ProcessInfo.processInfo.environment
+    let visualHoldSeconds = try Self.visualHoldSeconds(environment)
     guard
       let isoPath = environment["NATIVECONTAINERS_LIVE_LINUX_VM_ISO"],
       !isoPath.isEmpty
@@ -102,7 +105,14 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       let console = try #require(runtime.console(for: target))
       #expect(console.virtualMachine.state == .running)
 
-      try await Task.sleep(for: .seconds(10))
+      if visualHoldSeconds > 0 {
+        try await presentVisualConsole(
+          console,
+          seconds: visualHoldSeconds
+        )
+      } else {
+        try await Task.sleep(for: .seconds(10))
+      }
       snapshot = runtime.snapshot(for: machine.id)
       #expect(snapshot.state == .running)
       #expect(console.virtualMachine.state == .running)
@@ -163,12 +173,76 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     }
     return hasher.finalize().map { String(format: "%02x", $0) }.joined()
   }
+
+  private static func visualHoldSeconds(
+    _ environment: [String: String]
+  ) throws -> Int {
+    guard
+      let value = environment[
+        "NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS"
+      ]
+    else { return 0 }
+    guard let seconds = Int(value), (1...240).contains(seconds) else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidVisualHold(value)
+    }
+    return seconds
+  }
+
+  private func presentVisualConsole(
+    _ console: LinuxVirtualMachineConsole,
+    seconds: Int
+  ) async throws {
+    let content = NSHostingView(
+      rootView: VirtualMachineConsoleView(
+        console: console,
+        capturesSystemKeys: false,
+        automaticallyReconfiguresDisplay: true
+      )
+    )
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 1_280, height: 800),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false
+    )
+    window.title = "NativeContainers Live Linux Visual"
+    window.isReleasedWhenClosed = false
+    window.contentView = content
+    window.center()
+    window.makeKeyAndOrderFront(nil)
+    window.orderFrontRegardless()
+    NSApplication.shared.activate()
+
+    let readyURL = FileManager.default.temporaryDirectory.appending(
+      path:
+        "nativecontainers-live-linux-vm-visual-ready-\(ProcessInfo.processInfo.processIdentifier).txt",
+      directoryHint: .notDirectory
+    )
+    defer {
+      window.orderOut(nil)
+      window.close()
+      try? FileManager.default.removeItem(at: readyURL)
+    }
+    try Data("window=\(window.windowNumber)\n".utf8).write(
+      to: readyURL,
+      options: .atomic
+    )
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: readyURL.nativeContainersPOSIXPath
+    )
+    print(
+      "NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_READY window=\(window.windowNumber) seconds=\(seconds)"
+    )
+    try await Task.sleep(for: .seconds(seconds))
+  }
 }
 
 private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
   case missingEnvironment(String)
   case invalidISO(URL)
   case digestMismatch(expected: String, actual: String)
+  case invalidVisualHold(String)
 
   var errorDescription: String? {
     switch self {
@@ -178,6 +252,8 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
       "The live Linux virtual-machine fixture must be a local .iso file, not \(url.lastPathComponent)."
     case .digestMismatch(let expected, let actual):
       "The live Linux virtual-machine ISO SHA-256 changed (expected \(expected), found \(actual))."
+    case .invalidVisualHold(let value):
+      "The live visual hold must be between 1 and 240 seconds, not \(value)."
     }
   }
 }
