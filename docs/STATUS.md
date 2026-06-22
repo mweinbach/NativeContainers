@@ -1845,13 +1845,17 @@ Updated: 2026-06-22.
 - `bootsReviewedInstallerAndCleansIsolatedBundle()` adds a reusable destructive
   gate requiring `NATIVECONTAINERS_LIVE_LINUX_VM=1`, an explicit local ISO path,
   and its reviewed digest. An optional bounded
-  `NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS` value presents the exact
-  production `VirtualMachineConsoleView` and publishes its visible native
-  window number for operator capture. The gate creates a mode-0700 temporary
-  library, copies the ISO through the production media service, prepares
-  persistent EFI/NVRAM, generic-machine, MAC, and 64-GiB sparse-disk artifacts,
-  then starts the exact production `AppleLinuxVirtualMachineRuntimeEngine`
-  configuration.
+  `NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS` value from 1 through 1,800
+  presents the exact production `VirtualMachineConsoleView` and publishes its
+  visible native window number for operator capture. With
+  `NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_PROBE=1`, a mode-0700, 4-KiB-bounded,
+  allowlisted command channel sends keyboard, pointer, and short text events to
+  that production view; its mode-0600 marker acknowledges each command and an
+  explicit `finish` continues lifecycle cleanup. The gate creates a mode-0700
+  temporary library, copies the ISO through the production media service,
+  prepares persistent EFI/NVRAM, generic-machine, MAC, and 64-GiB sparse-disk
+  artifacts, then starts the exact production
+  `AppleLinuxVirtualMachineRuntimeEngine` configuration.
 - The live Xcode run passed 1/1 for VM ID
   `6a2eef4f-56b3-472a-8c05-725711af255b`. It confirmed the runtime and underlying
   `VZVirtualMachine` stayed running for ten seconds with installation media and
@@ -1865,6 +1869,33 @@ Updated: 2026-06-22.
   passed pause/resume, balloon, force-stop, manifest-deletion, and empty-library
   postconditions; its ready marker, VM library, app process, and temporary ISO
   clone were absent afterward.
+- A 240-second follow-up reached the full Ubuntu 26.04 GNOME live desktop, and
+  a later direct capture reached the actual `Welcome to Ubuntu` language page.
+  This closes the gap between a firmware splash and a rendered graphical guest
+  session without claiming that installation completed.
+- The command-driven Xcode run passed 1/1 for VM ID
+  `fca19ab1-a719-4665-9013-2bf0ce76c89e` in native window 16808. The in-process
+  probe sent Down, Up, and Return through the real nested
+  `VZVirtualMachineView`, preserving the intended Ubuntu boot. Owner-only
+  commands `c1` and `c2` then clicked the English row and Next control; both
+  were acknowledged, and the post-command capture had left the Welcome page
+  for the installer's transition window. `done` ended the hold, after which the
+  same run confirmed pause/resume, 8-to-4-to-8-GiB balloon requests, force stop,
+  manifest deletion, and complete isolated-library cleanup.
+- Xcode MCP's current test request stops waiting at about 300 seconds, so its
+  automated runs use the explicit `finish` command while direct Xcode
+  observation may use the harness's 1,800-second maximum. One exploratory
+  over-bound run required cleanup after Xcode's Stop action also timed out; only
+  that exact current test host and uniquely named temporary bundle were
+  removed. The unrelated long-lived app process was left untouched, and no
+  current test host, marker, input channel, or live-VM bundle remained.
+- After restoring the opt-in gate, Xcode reported zero diagnostics in the
+  changed test file, build-for-testing passed in 9.195 seconds, and the focused
+  normal-config test skipped 1/1. The complete plan reports 1,143 outcomes:
+  1,112 passed, 31 explicit live/destructive gates skipped, zero failed, and
+  zero unrun. The normal app build passed in 3.672 seconds with empty warning
+  output and no warning-level Issue Navigator entries; strict formatting, both
+  repository contract validators, and diff whitespace checks also pass.
 - A first attempt against the Downloads path stalled before creating a VM
   bundle; the identical clone's successful run is consistent with an app-host
   privacy boundary. After Xcode MCP's Stop action also timed out, only the exact
@@ -1874,17 +1905,18 @@ Updated: 2026-06-22.
   suite outcomes completed with 1,112 passes and 31 expected live-gate skips,
   and the 3.444-second app build had an empty warning log. No VM bundle,
   temporary library, app process, or build worker remains.
-- This checkpoint proves real firmware/installer-backed VZ start, a rendered
-  Ubuntu boot frame in the production native console, and native runtime
-  control. It does not infer a completed graphical installation, guest
-  input/audio behavior, or boot from the virtual disk. Those remain explicit
-  live work.
+- This checkpoint proves real firmware/installer-backed VZ start, rendered
+  GRUB, boot, live-desktop, and installer frames in the production native
+  console, keyboard and pointer delivery through that console, and native
+  runtime control. It does not infer a completed graphical installation, audio
+  behavior, or boot from the virtual disk. Those remain explicit live work.
 
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, capability availability, and a
-hash-pinned Ubuntu ARM64 installer boot/control pass are verified. Completing
-the graphical installation and rebooting it through the new GUI workflow, then
+hash-pinned Ubuntu ARM64 installer boot/control/input pass are verified through
+the Welcome screen. Completing the graphical installation and rebooting it
+through the new GUI workflow, then
 creating/restoring disk snapshots, suspending/restoring it, cloning it,
 exporting/restoring a portable copy, growing its disk and expanding the Linux
 partition/filesystem, and verifying shared/host-only packet flow plus a shared
@@ -1895,8 +1927,8 @@ disposable installed guest are available for that destructive integration pass.
 
 ## Next implementation slice
 
-1. Continue the hash-pinned Ubuntu 26.04 ARM64 fixture through graphical
-   installation and disk boot; verify console/input/audio,
+1. Continue the hash-pinned Ubuntu 26.04 ARM64 fixture from the verified Welcome
+   screen through graphical installation and disk boot; verify audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
    change CPU/memory, grow the virtual disk, expand the guest partition and file
    system, and verify the next boot; create a named disk checkpoint, mutate

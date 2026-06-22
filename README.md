@@ -164,10 +164,28 @@ hashes the source, boots the production Virtio configuration, verifies the
 running console object, pause/resume, memory-balloon requests, force stop, and
 exact cleanup. Optionally set
 `NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS` to an integer from 1 through
-240 to present the exact production `VirtualMachineConsoleView` in a native
-window before the lifecycle checks; the reviewed Ubuntu 26.04 run rendered its
-boot splash there. This does not claim that the graphical installer completed
-or that guest input and audio work.
+1,800 to present the exact production `VirtualMachineConsoleView` in a native
+window before the lifecycle checks. The reviewed Ubuntu 26.04 run rendered
+GRUB, the live GNOME desktop, and the installer's Welcome/language screen there.
+Set `NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_PROBE=1` with a visual hold of at
+least 34 seconds to focus that production `VZVirtualMachineView`, exercise the
+GRUB selection with Down, Up, and Return, and publish an owner-only input
+channel in the visual-ready marker. The channel accepts one tab-delimited,
+at-most-4-KiB command at a time:
+
+```text
+<id>\tkey\t<tab|shift-tab|escape|space|left|right|down|up|return>
+<id>\tclick\t<x>\t<y>
+<id>\ttext\t<base64-encoded UTF-8>
+<id>\tfinish\t-
+```
+
+Click coordinates use the guest display's top-left origin. Write through a
+temporary sibling and rename it to the advertised `command` path; each accepted
+command appears as `stage=command-<id>` in the marker. `finish` ends the visual
+hold early and continues the lifecycle and cleanup assertions. The reviewed
+run used this path to advance the Ubuntu installer. It does not claim that the
+graphical installation completed, audio works, or the guest boots from disk.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when

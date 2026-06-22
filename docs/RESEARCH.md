@@ -25,10 +25,12 @@ Last updated: 2026-06-22.
   clone was removed after the run; the verified source remains under the host's
   `Downloads/NativeContainers-Fixtures` directory. The product copies a
   user-picked security-scoped URL through its descriptor-safe media service.
-- The live boot/control smoke deliberately stops before installation. A running
-  VZ state and console object prove the production configuration starts and can
-  be controlled, but they do not prove that Ubuntu rendered a frame, accepted
-  input, installed to disk, or booted without the ISO.
+- The live smoke deliberately stops before committing an installation to disk.
+  Direct captures from the production console show GRUB, the GNOME live
+  desktop, and Ubuntu's Welcome/language screen. Scripted Down/Up/Return events
+  preserved the intended GRUB boot, and pointer commands advanced the installer
+  from its language page. These runs prove rendered frames and input delivery,
+  but not a completed installation, audio, or a boot without the ISO.
 
 ## Apple container stack
 
@@ -623,13 +625,25 @@ The installed Apple documentation confirms:
 - `VZVirtualMachineView` is the native interactive display. It supports
   automatic display reconfiguration and optional capture of system keys. SDK
   27's `VZVirtualMachineViewAdaptor` retains its VM, so a console must detach the
-  adaptor when its generation closes.
+  adaptor when its generation closes. Apple's installed documentation also
+  describes the view forwarding keyboard and mouse events to a configured VM;
+  AppKit's documented `NSEvent.keyEvent` and `NSEvent.mouseEvent` factories let
+  the opt-in test exercise that same production view without a second console
+  implementation.
 - The opt-in Linux VM smoke can present the exact production
   `VirtualMachineConsoleView` in a bounded native test window and emit its
   window number only after the view is visible. A hash-pinned official Ubuntu
-  26.04 ARM64 ISO rendered the branded boot splash and activity spinner in that
-  window. This is direct guest-frame evidence beyond merely obtaining a console
-  object; it is not evidence that installation, input, or audio completed.
+  26.04 ARM64 ISO rendered GRUB, the branded boot sequence, the GNOME live
+  desktop, and the installer's Welcome/language page in that window. An
+  owner-only mode-0700 command channel accepts bounded, allowlisted key, click,
+  and text events, acknowledges each command in a mode-0600 marker, and supports
+  an explicit `finish` command so lifecycle cleanup still runs. Direct keyboard
+  events selected the intended GRUB entry; two pointer events moved the
+  installer beyond its language page.
+- The current Xcode MCP `RunSomeTests` request stops waiting at about 300
+  seconds. Automated visual runs therefore use `finish` before that boundary.
+  The test accepts a visual hold up to 1,800 seconds for direct observation in
+  Xcode, but that larger harness limit does not extend the MCP request timeout.
 - `VZVirtioFileSystemDeviceConfiguration`, `VZMultipleDirectoryShare`, and
   `VZSharedDirectory` expose native host directories through VirtioFS. A Linux
   guest kernel must include `CONFIG_VIRTIO_FS`.
