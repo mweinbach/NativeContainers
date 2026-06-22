@@ -40,6 +40,58 @@ struct MacVirtualMachineRuntimeServiceTests {
   }
 
   @Test
+  func memoryBalloonTargetsAreGenerationPinnedAndColdStartsResetToFull() async throws {
+    let fixture = try RuntimeServiceFixture()
+    let gibibyte = VirtualMachineResources.bytesPerGiB
+
+    try await fixture.service.start(id: fixture.machineID)
+    var snapshot = fixture.service.snapshot(for: fixture.machineID)
+    let firstTarget = try #require(snapshot.target)
+    #expect(snapshot.memoryBalloon?.targetMemoryBytes == 8 * gibibyte)
+
+    try fixture.service.setMemoryBalloonTarget(
+      4 * gibibyte,
+      for: firstTarget
+    )
+    snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.memoryBalloon?.targetMemoryBytes == 4 * gibibyte)
+    #expect(
+      fixture.engine.sessions[0].memoryBalloon.requestedTargets
+        == [4 * gibibyte]
+    )
+
+    try await fixture.service.pause(target: firstTarget)
+    #expect(
+      throws:
+        MacVirtualMachineRuntimeError.invalidState(
+          fixture.machineID,
+          .paused
+        )
+    ) {
+      try fixture.service.setMemoryBalloonTarget(
+        2 * gibibyte,
+        for: firstTarget
+      )
+    }
+    try await fixture.service.resume(target: firstTarget)
+    try await fixture.service.forceStop(target: firstTarget)
+    try await fixture.service.start(id: fixture.machineID)
+
+    snapshot = fixture.service.snapshot(for: fixture.machineID)
+    let secondTarget = try #require(snapshot.target)
+    #expect(secondTarget != firstTarget)
+    #expect(snapshot.memoryBalloon?.targetMemoryBytes == 8 * gibibyte)
+    #expect(
+      throws: MacVirtualMachineRuntimeError.staleTarget(firstTarget)
+    ) {
+      try fixture.service.setMemoryBalloonTarget(
+        4 * gibibyte,
+        for: firstTarget
+      )
+    }
+  }
+
+  @Test
   func gracefulStopTimeoutAutomaticallyForceStopsHungGuest() async throws {
     let fixture = try RuntimeServiceFixture()
     try await fixture.service.start(id: fixture.machineID)
@@ -1047,6 +1099,13 @@ private final class RuntimeServiceSession: MacVirtualMachineRuntimeEngineSession
   let target: MacVirtualMachineRuntimeTarget
   let console: MacVirtualMachineConsole? = nil
   let saveRestoreSupport: MacVirtualMachineSaveRestoreSupport = .supported
+  let memoryBalloon = TestVirtualMachineMemoryBalloonController(
+    configuredMemoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+    minimumTargetMemoryBytes: VirtualMachineResources.bytesPerGiB
+  )
+  var memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)? {
+    memoryBalloon
+  }
   var usbController: (any MacVirtualMachineUSBControlling)?
   var canForceStop = true
   var eventHandler: MacVirtualMachineRuntimeEventHandler?

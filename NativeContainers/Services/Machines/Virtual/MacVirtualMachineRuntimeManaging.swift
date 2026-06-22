@@ -17,6 +17,7 @@ protocol MacVirtualMachineRuntimeEngineSession: AnyObject {
   var console: MacVirtualMachineConsole? { get }
   var saveRestoreSupport: MacVirtualMachineSaveRestoreSupport { get }
   var usbController: (any MacVirtualMachineUSBControlling)? { get }
+  var memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)? { get }
   var canForceStop: Bool { get }
   var eventHandler: MacVirtualMachineRuntimeEventHandler? { get set }
 
@@ -33,6 +34,7 @@ protocol MacVirtualMachineRuntimeEngineSession: AnyObject {
 
 extension MacVirtualMachineRuntimeEngineSession {
   var usbController: (any MacVirtualMachineUSBControlling)? { nil }
+  var memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)? { nil }
 
   func start(provisioning: MacGuestProvisioningRequest?) async throws {
     guard provisioning == nil else {
@@ -57,6 +59,10 @@ protocol MacVirtualMachineRuntimeManaging: Sendable {
   func pause(target: MacVirtualMachineRuntimeTarget) async throws
   func resume(target: MacVirtualMachineRuntimeTarget) async throws
   func suspend(target: MacVirtualMachineRuntimeTarget) async throws
+  func setMemoryBalloonTarget(
+    _ memoryBytes: UInt64,
+    for target: MacVirtualMachineRuntimeTarget
+  ) throws
   func requestStop(target: MacVirtualMachineRuntimeTarget) throws
   func forceStop(target: MacVirtualMachineRuntimeTarget) async throws
   func discardSavedState(id: UUID) async throws
@@ -68,6 +74,13 @@ extension MacVirtualMachineRuntimeManaging {
       throw MacGuestProvisioningError.firstBootUnavailable
     }
     try await start(id: id)
+  }
+
+  func setMemoryBalloonTarget(
+    _ memoryBytes: UInt64,
+    for target: MacVirtualMachineRuntimeTarget
+  ) throws {
+    throw VirtualMachineMemoryBalloonError.unavailable
   }
 }
 

@@ -37,6 +37,30 @@ struct LinuxVirtualMachineRuntimeServiceTests {
   }
 
   @Test
+  func runningGuestAcceptsValidatedMemoryBalloonTargets() async throws {
+    let fixture = try LinuxRuntimeServiceFixture()
+    let gibibyte = VirtualMachineResources.bytesPerGiB
+
+    try await fixture.service.start(id: fixture.machineID)
+    var snapshot = fixture.service.snapshot(for: fixture.machineID)
+    let target = try #require(snapshot.target)
+    #expect(snapshot.memoryBalloon?.targetMemoryBytes == 4 * gibibyte)
+
+    try fixture.service.setMemoryBalloonTarget(
+      2 * gibibyte,
+      for: target
+    )
+
+    snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.memoryBalloon?.targetMemoryBytes == 2 * gibibyte)
+    #expect(snapshot.memoryBalloon?.isRequestingReclamation == true)
+    #expect(
+      fixture.engine.sessions[0].memoryBalloon.requestedTargets
+        == [2 * gibibyte]
+    )
+  }
+
+  @Test
   func suspendSavesStopsAndNextStartRestoresTheLinuxSession() async throws {
     let fixture = try LinuxRuntimeServiceFixture()
     try await fixture.service.start(id: fixture.machineID)
@@ -442,6 +466,13 @@ private final class LinuxRuntimeServiceSession:
 {
   let target: LinuxVirtualMachineRuntimeTarget
   let console: LinuxVirtualMachineConsole? = nil
+  let memoryBalloon = TestVirtualMachineMemoryBalloonController(
+    configuredMemoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+    minimumTargetMemoryBytes: VirtualMachineResources.bytesPerGiB
+  )
+  var memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)? {
+    memoryBalloon
+  }
   private(set) var saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport =
     .supported
   private(set) var hasInstallationMedia: Bool

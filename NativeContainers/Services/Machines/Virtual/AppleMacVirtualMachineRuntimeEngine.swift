@@ -30,6 +30,14 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
       let virtualMachine = VZVirtualMachine(
         configuration: runtimeConfiguration.configuration
       )
+      let memoryBalloonController =
+        try AppleVirtualMachineMemoryBalloonController(
+          virtualMachine: virtualMachine,
+          configuredMemoryBytes: machine.manifest.resources.memoryBytes,
+          minimumTargetMemoryBytes:
+            machine.manifest.macOSMinimumMemoryBytes
+            ?? machine.manifest.resources.memoryBytes
+        )
       let usbController: (any MacVirtualMachineUSBControlling)?
       if #available(macOS 27.0, *) {
         usbController = try AppleMacVirtualMachineUSBController(
@@ -43,6 +51,7 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
         virtualMachine: virtualMachine,
         saveRestoreSupport: runtimeConfiguration.saveRestoreSupport,
         sharedDirectoryAccess: runtimeConfiguration.sharedDirectoryAccess,
+        memoryBalloonController: memoryBalloonController,
         usbController: usbController
       )
     #else
@@ -60,6 +69,7 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
     let target: MacVirtualMachineRuntimeTarget
     let console: MacVirtualMachineConsole?
     let saveRestoreSupport: MacVirtualMachineSaveRestoreSupport
+    let memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)?
     let usbController: (any MacVirtualMachineUSBControlling)?
     var canForceStop: Bool { virtualMachine.canStop }
     var eventHandler: MacVirtualMachineRuntimeEventHandler?
@@ -72,12 +82,14 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
       virtualMachine: VZVirtualMachine,
       saveRestoreSupport: MacVirtualMachineSaveRestoreSupport,
       sharedDirectoryAccess: MacVirtualMachineSharedDirectoryAccess,
+      memoryBalloonController: any VirtualMachineMemoryBalloonControlling,
       usbController: (any MacVirtualMachineUSBControlling)?
     ) {
       self.target = target
       self.virtualMachine = virtualMachine
       self.saveRestoreSupport = saveRestoreSupport
       self.sharedDirectoryAccess = sharedDirectoryAccess
+      self.memoryBalloonController = memoryBalloonController
       self.usbController = usbController
       self.console = MacVirtualMachineConsole(target: target, virtualMachine: virtualMachine)
       super.init()

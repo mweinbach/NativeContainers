@@ -27,6 +27,7 @@ final class LinuxVirtualMachineRuntimeObservations {
     state: LinuxVirtualMachineRuntimeState,
     savedStateStatus: LinuxVirtualMachineSavedStateStatus? = nil,
     saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport? = nil,
+    memoryBalloon: VirtualMachineMemoryBalloonSnapshot? = nil,
     hasInstallationMedia: Bool? = nil,
     isForceStopQueued: Bool = false,
     isForceStopCompleteAwaitingCleanup: Bool = false,
@@ -43,6 +44,7 @@ final class LinuxVirtualMachineRuntimeObservations {
           savedStateStatus ?? current.savedStateStatus,
         saveRestoreSupport:
           saveRestoreSupport ?? current.saveRestoreSupport,
+        memoryBalloon: memoryBalloon,
         hasInstallationMedia:
           hasInstallationMedia ?? current.hasInstallationMedia,
         isForceStopQueued: isForceStopQueued,

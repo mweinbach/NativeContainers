@@ -23,6 +23,9 @@ struct MacVirtualMachineRuntimeView: View {
         pause: { Task { await model.pause() } },
         resume: { Task { await model.resume() } },
         suspend: { Task { await model.suspend() } },
+        setMemoryBalloonTarget: { memoryBytes in
+          Task { await model.setMemoryBalloonTarget(memoryBytes) }
+        },
         requestStop: { Task { await model.requestStop() } },
         confirmForceStop: { isConfirmingForceStop = true },
         confirmStartFresh: { isConfirmingStartFresh = true },
@@ -41,6 +44,9 @@ struct MacVirtualMachineRuntimeView: View {
       }
 
       MacVirtualMachineSavedStateBanner(snapshot: model.snapshot)
+      VirtualMachineMemoryBalloonNotice(
+        snapshot: model.snapshot.memoryBalloon
+      )
 
       Divider()
       MacVirtualMachineConsoleContent(
@@ -127,6 +133,7 @@ private struct MacVirtualMachineRuntimeHeader: View {
   let pause: () -> Void
   let resume: () -> Void
   let suspend: () -> Void
+  let setMemoryBalloonTarget: (UInt64) -> Void
   let requestStop: () -> Void
   let confirmForceStop: () -> Void
   let confirmStartFresh: () -> Void
@@ -171,8 +178,10 @@ private struct MacVirtualMachineRuntimeHeader: View {
           )
           MacVirtualMachineRuntimeAccessoryControls(
             machineName: machineName,
+            snapshot: snapshot,
             usb: usb,
-            capturesSystemKeys: $capturesSystemKeys
+            capturesSystemKeys: $capturesSystemKeys,
+            setMemoryBalloonTarget: setMemoryBalloonTarget
           )
         }
         VStack(alignment: .trailing, spacing: 8) {
@@ -189,8 +198,10 @@ private struct MacVirtualMachineRuntimeHeader: View {
           )
           MacVirtualMachineRuntimeAccessoryControls(
             machineName: machineName,
+            snapshot: snapshot,
             usb: usb,
-            capturesSystemKeys: $capturesSystemKeys
+            capturesSystemKeys: $capturesSystemKeys,
+            setMemoryBalloonTarget: setMemoryBalloonTarget
           )
         }
       }
@@ -201,11 +212,18 @@ private struct MacVirtualMachineRuntimeHeader: View {
 
 private struct MacVirtualMachineRuntimeAccessoryControls: View {
   let machineName: String
+  let snapshot: MacVirtualMachineRuntimeSnapshot
   let usb: MacVirtualMachineUSBModel
   @Binding var capturesSystemKeys: Bool
+  let setMemoryBalloonTarget: (UInt64) -> Void
 
   var body: some View {
     HStack(spacing: 12) {
+      VirtualMachineMemoryBalloonControl(
+        snapshot: snapshot.memoryBalloon,
+        canChangeTarget: snapshot.canSetMemoryBalloonTarget,
+        requestTarget: setMemoryBalloonTarget
+      )
       MacVirtualMachineShortcutCaptureToggle(
         isEnabled: $capturesSystemKeys
       )

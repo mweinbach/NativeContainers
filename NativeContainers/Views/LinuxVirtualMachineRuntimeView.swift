@@ -20,6 +20,9 @@ struct LinuxVirtualMachineRuntimeView: View {
         pause: { Task { await model.pause() } },
         resume: { Task { await model.resume() } },
         suspend: { Task { await model.suspend() } },
+        setMemoryBalloonTarget: { memoryBytes in
+          Task { await model.setMemoryBalloonTarget(memoryBytes) }
+        },
         requestStop: { Task { await model.requestStop() } },
         confirmInstallationCompletion: {
           isConfirmingInstallationCompletion = true
@@ -31,6 +34,9 @@ struct LinuxVirtualMachineRuntimeView: View {
         }
       )
       LinuxVirtualMachineSavedStateBanner(snapshot: model.snapshot)
+      VirtualMachineMemoryBalloonNotice(
+        snapshot: model.snapshot.memoryBalloon
+      )
       Divider()
       LinuxVirtualMachineConsoleContent(
         model: model,
@@ -107,6 +113,7 @@ private struct LinuxVirtualMachineRuntimeHeader: View {
   let pause: () -> Void
   let resume: () -> Void
   let suspend: () -> Void
+  let setMemoryBalloonTarget: (UInt64) -> Void
   let requestStop: () -> Void
   let confirmInstallationCompletion: () -> Void
   let confirmForceStop: () -> Void
@@ -151,8 +158,10 @@ private struct LinuxVirtualMachineRuntimeHeader: View {
             confirmStartFresh: confirmStartFresh,
             confirmDiscardSavedState: confirmDiscardSavedState
           )
-          LinuxVirtualMachineShortcutCaptureToggle(
-            isEnabled: $capturesSystemKeys
+          LinuxVirtualMachineRuntimeAccessoryControls(
+            snapshot: snapshot,
+            capturesSystemKeys: $capturesSystemKeys,
+            setMemoryBalloonTarget: setMemoryBalloonTarget
           )
         }
         VStack(alignment: .trailing, spacing: 8) {
@@ -168,13 +177,34 @@ private struct LinuxVirtualMachineRuntimeHeader: View {
             confirmStartFresh: confirmStartFresh,
             confirmDiscardSavedState: confirmDiscardSavedState
           )
-          LinuxVirtualMachineShortcutCaptureToggle(
-            isEnabled: $capturesSystemKeys
+          LinuxVirtualMachineRuntimeAccessoryControls(
+            snapshot: snapshot,
+            capturesSystemKeys: $capturesSystemKeys,
+            setMemoryBalloonTarget: setMemoryBalloonTarget
           )
         }
       }
     }
     .padding(14)
+  }
+}
+
+private struct LinuxVirtualMachineRuntimeAccessoryControls: View {
+  let snapshot: LinuxVirtualMachineRuntimeSnapshot
+  @Binding var capturesSystemKeys: Bool
+  let setMemoryBalloonTarget: (UInt64) -> Void
+
+  var body: some View {
+    HStack(spacing: 12) {
+      VirtualMachineMemoryBalloonControl(
+        snapshot: snapshot.memoryBalloon,
+        canChangeTarget: snapshot.canSetMemoryBalloonTarget,
+        requestTarget: setMemoryBalloonTarget
+      )
+      LinuxVirtualMachineShortcutCaptureToggle(
+        isEnabled: $capturesSystemKeys
+      )
+    }
   }
 }
 

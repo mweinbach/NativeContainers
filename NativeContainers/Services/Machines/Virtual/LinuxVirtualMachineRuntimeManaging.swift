@@ -16,6 +16,7 @@ protocol LinuxVirtualMachineRuntimeEngineSession: AnyObject {
   var target: LinuxVirtualMachineRuntimeTarget { get }
   var console: LinuxVirtualMachineConsole? { get }
   var saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport { get }
+  var memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)? { get }
   var hasInstallationMedia: Bool { get }
   var canForceStop: Bool { get }
   var eventHandler: LinuxVirtualMachineRuntimeEventHandler? { get set }
@@ -32,6 +33,8 @@ protocol LinuxVirtualMachineRuntimeEngineSession: AnyObject {
 }
 
 extension LinuxVirtualMachineRuntimeEngineSession {
+  var memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)? { nil }
+
   func close() {}
 }
 
@@ -47,12 +50,25 @@ protocol LinuxVirtualMachineRuntimeManaging: Sendable {
   func pause(target: LinuxVirtualMachineRuntimeTarget) async throws
   func resume(target: LinuxVirtualMachineRuntimeTarget) async throws
   func suspend(target: LinuxVirtualMachineRuntimeTarget) async throws
+  func setMemoryBalloonTarget(
+    _ memoryBytes: UInt64,
+    for target: LinuxVirtualMachineRuntimeTarget
+  ) throws
   func requestStop(target: LinuxVirtualMachineRuntimeTarget) throws
   func forceStop(target: LinuxVirtualMachineRuntimeTarget) async throws
   func discardSavedState(id: UUID) async throws
   func ejectInstallationMedia(
     target: LinuxVirtualMachineRuntimeTarget
   ) async throws -> VirtualMachineManifest
+}
+
+extension LinuxVirtualMachineRuntimeManaging {
+  func setMemoryBalloonTarget(
+    _ memoryBytes: UInt64,
+    for target: LinuxVirtualMachineRuntimeTarget
+  ) throws {
+    throw VirtualMachineMemoryBalloonError.unavailable
+  }
 }
 
 @MainActor

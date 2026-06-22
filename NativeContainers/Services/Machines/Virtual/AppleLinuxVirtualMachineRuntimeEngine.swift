@@ -25,12 +25,18 @@ final class AppleLinuxVirtualMachineRuntimeEngine: LinuxVirtualMachineRuntimeEng
     let virtualMachine = VZVirtualMachine(
       configuration: runtimeConfiguration.configuration
     )
+    let memoryBalloonController = try AppleVirtualMachineMemoryBalloonController(
+      virtualMachine: virtualMachine,
+      configuredMemoryBytes: machine.manifest.resources.memoryBytes,
+      minimumTargetMemoryBytes: VirtualMachineResources.bytesPerGiB
+    )
     return AppleLinuxVirtualMachineRuntimeSession(
       target: target,
       virtualMachine: virtualMachine,
       saveRestoreSupport: runtimeConfiguration.saveRestoreSupport,
       hasInstallationMedia: machine.installationMediaURL != nil,
-      sharedDirectoryAccess: runtimeConfiguration.sharedDirectoryAccess
+      sharedDirectoryAccess: runtimeConfiguration.sharedDirectoryAccess,
+      memoryBalloonController: memoryBalloonController
     )
   }
 }
@@ -43,6 +49,7 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
   let target: LinuxVirtualMachineRuntimeTarget
   let console: LinuxVirtualMachineConsole?
   private(set) var saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport
+  let memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)?
   private(set) var hasInstallationMedia: Bool
   var canForceStop: Bool { virtualMachine.canStop }
   var eventHandler: LinuxVirtualMachineRuntimeEventHandler?
@@ -55,13 +62,15 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
     virtualMachine: VZVirtualMachine,
     saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport,
     hasInstallationMedia: Bool,
-    sharedDirectoryAccess: LinuxVirtualMachineSharedDirectoryAccess
+    sharedDirectoryAccess: LinuxVirtualMachineSharedDirectoryAccess,
+    memoryBalloonController: any VirtualMachineMemoryBalloonControlling
   ) {
     self.target = target
     self.virtualMachine = virtualMachine
     self.saveRestoreSupport = saveRestoreSupport
     self.hasInstallationMedia = hasInstallationMedia
     self.sharedDirectoryAccess = sharedDirectoryAccess
+    self.memoryBalloonController = memoryBalloonController
     console = LinuxVirtualMachineConsole(
       target: target,
       virtualMachine: virtualMachine

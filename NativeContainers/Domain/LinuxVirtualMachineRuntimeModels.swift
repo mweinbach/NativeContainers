@@ -54,6 +54,7 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   let state: LinuxVirtualMachineRuntimeState
   let savedStateStatus: LinuxVirtualMachineSavedStateStatus
   let saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport
+  let memoryBalloon: VirtualMachineMemoryBalloonSnapshot?
   let hasInstallationMedia: Bool
   let isForceStopQueued: Bool
   let isForceStopCompleteAwaitingCleanup: Bool
@@ -66,6 +67,7 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
     state: LinuxVirtualMachineRuntimeState = .stopped,
     savedStateStatus: LinuxVirtualMachineSavedStateStatus = .unknown,
     saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport = .unknown,
+    memoryBalloon: VirtualMachineMemoryBalloonSnapshot? = nil,
     hasInstallationMedia: Bool = false,
     isForceStopQueued: Bool = false,
     isForceStopCompleteAwaitingCleanup: Bool = false,
@@ -77,6 +79,7 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
     self.state = state
     self.savedStateStatus = savedStateStatus
     self.saveRestoreSupport = saveRestoreSupport
+    self.memoryBalloon = memoryBalloon
     self.hasInstallationMedia = hasInstallationMedia
     self.isForceStopQueued = isForceStopQueued
     self.isForceStopCompleteAwaitingCleanup = isForceStopCompleteAwaitingCleanup
@@ -96,6 +99,9 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   }
 
   var canPause: Bool { state == .running }
+  var canSetMemoryBalloonTarget: Bool {
+    state == .running && memoryBalloon?.canRequestAnotherTarget == true
+  }
   var canResume: Bool { state == .paused }
   var canSuspend: Bool {
     guard saveRestoreSupport.isSupported,

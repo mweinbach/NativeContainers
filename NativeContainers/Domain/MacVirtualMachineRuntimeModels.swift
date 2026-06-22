@@ -96,6 +96,7 @@ struct MacVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   let state: MacVirtualMachineRuntimeState
   let savedStateStatus: MacVirtualMachineSavedStateStatus
   let saveRestoreSupport: MacVirtualMachineSaveRestoreSupport
+  let memoryBalloon: VirtualMachineMemoryBalloonSnapshot?
   let isForceStopQueued: Bool
   let isForceStopCompleteAwaitingCleanup: Bool
   let errorMessage: String?
@@ -107,6 +108,7 @@ struct MacVirtualMachineRuntimeSnapshot: Equatable, Sendable {
     state: MacVirtualMachineRuntimeState = .stopped,
     savedStateStatus: MacVirtualMachineSavedStateStatus = .unknown,
     saveRestoreSupport: MacVirtualMachineSaveRestoreSupport = .unknown,
+    memoryBalloon: VirtualMachineMemoryBalloonSnapshot? = nil,
     isForceStopQueued: Bool = false,
     isForceStopCompleteAwaitingCleanup: Bool = false,
     errorMessage: String? = nil
@@ -117,6 +119,7 @@ struct MacVirtualMachineRuntimeSnapshot: Equatable, Sendable {
     self.state = state
     self.savedStateStatus = savedStateStatus
     self.saveRestoreSupport = saveRestoreSupport
+    self.memoryBalloon = memoryBalloon
     self.isForceStopQueued = isForceStopQueued
     self.isForceStopCompleteAwaitingCleanup =
       isForceStopCompleteAwaitingCleanup
@@ -136,6 +139,9 @@ struct MacVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   }
 
   var canPause: Bool { state == .running }
+  var canSetMemoryBalloonTarget: Bool {
+    state == .running && memoryBalloon?.canRequestAnotherTarget == true
+  }
   var canResume: Bool { state == .paused }
   var canSuspend: Bool {
     guard saveRestoreSupport.isSupported,

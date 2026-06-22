@@ -381,6 +381,36 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     }
   }
 
+  func setMemoryBalloonTarget(
+    _ memoryBytes: UInt64,
+    for target: LinuxVirtualMachineRuntimeTarget
+  ) throws {
+    let record = try currentRecord(for: target)
+    let current = snapshot(for: target.machineID)
+    guard current.state == .running else {
+      throw LinuxVirtualMachineRuntimeError.invalidState(
+        target.machineID,
+        current.state
+      )
+    }
+    guard operations[target.machineID] == nil else {
+      throw LinuxVirtualMachineRuntimeError.operationInProgress(
+        target.machineID
+      )
+    }
+    guard let controller = record.session.memoryBalloonController else {
+      throw VirtualMachineMemoryBalloonError.unavailable
+    }
+
+    try controller.requestTargetMemory(memoryBytes)
+    publish(
+      machineID: target.machineID,
+      target: target,
+      state: current.state,
+      hasInstallationMedia: current.hasInstallationMedia
+    )
+  }
+
   func requestStop(target: LinuxVirtualMachineRuntimeTarget) throws {
     let record = try currentRecord(for: target)
     let current = snapshot(for: target.machineID)
@@ -1115,12 +1145,22 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     isForceStopCompleteAwaitingCleanup: Bool = false,
     errorMessage: String? = nil
   ) {
+    let memoryBalloon: VirtualMachineMemoryBalloonSnapshot?
+    if let target,
+      let record = sessions[machineID],
+      record.lease.target == target
+    {
+      memoryBalloon = record.session.memoryBalloonController?.snapshot
+    } else {
+      memoryBalloon = nil
+    }
     observations.publish(
       machineID: machineID,
       target: target,
       state: state,
       savedStateStatus: savedStateStatus,
       saveRestoreSupport: saveRestoreSupport,
+      memoryBalloon: memoryBalloon,
       hasInstallationMedia: hasInstallationMedia,
       isForceStopQueued: isForceStopQueued,
       isForceStopCompleteAwaitingCleanup:

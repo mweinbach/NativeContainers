@@ -93,6 +93,13 @@ final class LinuxVirtualMachineRuntimeModel {
     }
   }
 
+  func setMemoryBalloonTarget(_ memoryBytes: UInt64) async {
+    guard let target = snapshot.target else { return }
+    await perform {
+      try service.setMemoryBalloonTarget(memoryBytes, for: target)
+    }
+  }
+
   func requestStop() async {
     guard let target = snapshot.target else { return }
     await perform {

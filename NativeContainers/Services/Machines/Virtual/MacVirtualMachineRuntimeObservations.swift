@@ -25,6 +25,7 @@ final class MacVirtualMachineRuntimeObservations {
     state: MacVirtualMachineRuntimeState,
     savedStateStatus: MacVirtualMachineSavedStateStatus? = nil,
     saveRestoreSupport: MacVirtualMachineSaveRestoreSupport? = nil,
+    memoryBalloon: VirtualMachineMemoryBalloonSnapshot? = nil,
     isForceStopQueued: Bool = false,
     isForceStopCompleteAwaitingCleanup: Bool = false,
     errorMessage: String? = nil
@@ -38,6 +39,7 @@ final class MacVirtualMachineRuntimeObservations {
         state: state,
         savedStateStatus: savedStateStatus ?? current.savedStateStatus,
         saveRestoreSupport: saveRestoreSupport ?? current.saveRestoreSupport,
+        memoryBalloon: memoryBalloon,
         isForceStopQueued: isForceStopQueued,
         isForceStopCompleteAwaitingCleanup:
           isForceStopCompleteAwaitingCleanup,
