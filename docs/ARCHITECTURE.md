@@ -739,8 +739,14 @@ Force Stop remains reachable while graceful Stop is in flight or inventory is
 already `stopping`; duplicate destructive requests are suppressed per row.
 Opening a resource reuses the main window's `WorkspaceRoute`; failures remain
 on the shared error channel. A persistent `AppStorage` preference controls only
-menu-bar insertion. Launch-at-login policy is separate: an injectable focused
-service maps `SMAppService.mainApp` into typed disabled, enabled,
+menu-bar insertion. `AppExecutionContext` is the single runtime gate for that
+insertion binding: hosted tests and Previews never insert the persistent scene,
+macOS 26 remains enabled, and macOS 27 or later receives a constant-false
+binding while the App Behavior toggle is hidden. This keeps the scene's control
+plane intact without triggering the verified macOS 27 SwiftUI app-graph
+invalidation loop; support on later releases requires an explicit revalidation
+and policy-version bump. Launch-at-login policy is separate: an injectable
+focused service maps `SMAppService.mainApp` into typed disabled, enabled,
 approval-required, and unavailable states. The app never installs a custom
 launch agent or treats registration as proof of user approval.
 

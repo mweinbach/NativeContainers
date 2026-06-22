@@ -1584,3 +1584,28 @@ or common spoken name may differ from their visible label; runtime resource
 names remain valid Voice Control input. Shipping non-English translations and
 workflow-wide VoiceOver/Full Keyboard Access QA remain separate gates rather
 than being inferred from catalog extraction.
+
+## ADR-057: Gate menu-bar insertion to verified macOS runtimes
+
+**Status:** Accepted — 2026-06-21
+
+The SwiftUI `MenuBarExtra` remains the supported menu-bar implementation and
+continues to reuse the app-scoped control plane defined by ADR-044. On the
+current macOS 27 runtime, inserting that scene continuously invalidates the
+SwiftUI app graph and holds the main thread near 100% CPU. Removing the scene or
+keeping it registered with a constant-false insertion binding both restore a
+normal idle profile; changing its label or command contents does not.
+
+`AppExecutionContext` therefore owns one injectable compatibility boundary in
+addition to its hosted-test and Preview detection. macOS 26 may bind insertion
+to the persisted preference. macOS 27 and later bind insertion to false and hide
+the corresponding App Behavior setting until that runtime has been explicitly
+revalidated. Future releases remain disabled by default so an untested OS does
+not silently reintroduce the launch loop; raising the compatible major version
+is a reviewed code and test change.
+
+The workaround does not add an AppKit status item, another inventory poller, or
+a second lifecycle implementation. Main-window commands and all underlying
+container actions remain available. The scene and shared quick-control view stay
+compiled so support can be restored by changing the narrow policy after Apple
+fixes the framework behavior.

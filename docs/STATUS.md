@@ -22,11 +22,13 @@ Updated: 2026-06-21.
   lifecycle services, routing, and error state instead of introducing a second
   poller. It reports runtime and machine counts, exposes bounded container
   Start/Stop/Restart/Force Stop actions, and deep-links into the unique main
-  window. App Behavior settings persist menu-bar visibility and route launch at
-  login through an injectable `SMAppService.mainApp` adapter with explicit
-  approval, unavailable, and failure reconciliation states. Persistent system
-  scenes are suppressed in hosted tests and Preview agents so those auxiliary
-  processes terminate deterministically without changing production behavior.
+  window. App Behavior settings persist menu-bar visibility on verified
+  runtimes and route launch at login through an injectable
+  `SMAppService.mainApp` adapter with explicit approval, unavailable, and
+  failure reconciliation states. Persistent system scenes are suppressed in
+  hosted tests and Preview agents. The `MenuBarExtra` insertion binding and its
+  setting are also suppressed on macOS 27 and later pending framework
+  revalidation, avoiding the observed SwiftUI app-graph invalidation loop.
 - The app target is automatically Apple Development signed with
   `com.apple.security.virtualization` and the microphone-specific
   `com.apple.security.device.audio-input`; `ENABLE_APP_SANDBOX` remains `NO` as
@@ -1125,15 +1127,35 @@ Updated: 2026-06-21.
   name. Swift source-string extraction and String Catalog preference are enabled
   in Xcode and `project.yml`. The refreshed English catalog contains 1,225
   source keys, up from 363 before full extraction.
-- The focused command-metadata and reviewed-build-lock run passes 2/2.
-  Build-for-testing succeeds, and the RootView Xcode Preview renders without a
-  visual regression. The full plan and runtime menu click-through remain
-  unclaimed for this checkpoint because the Xcode MCP transport closed after a
-  successful app launch.
+- The focused command-metadata and reviewed-build-lock run passes 2/2. Xcode's
+  realized main menu contains the expected View commands, Settings
+  Command-comma behavior, and Navigate entries from Overview Command-1 through
+  Virtual Machines Command-9. The full Xcode plan passes all 937 outcomes: 916
+  deterministic tests passed, 21 explicit live gates skipped, and no outcome
+  failed or remained unrun. The normal build succeeds and the Issue Navigator
+  reports no warnings or errors.
 - The target's USB capability setting reports enabled, but an app-context
   entitlement probe still returns false. Xcode's entitlement action rejects the
   macOS 27 key, so NativeContainers keeps the existing fail-closed USB service
   and no manual entitlement-file workaround was made.
+
+## macOS 27 menu-bar scene stability checkpoint
+
+- An untouched Xcode launch on macOS 27 held the main thread at 99-100% CPU.
+  Debugger samples repeatedly landed in SwiftUI menu-bar/app-graph updates.
+  Removing `MenuBarExtra` dropped idle CPU to roughly 0.6-1.1%; keeping the
+  scene declared but binding `isInserted` to false produced the same stable
+  result.
+- `AppExecutionContext` now owns one injectable operating-system policy in
+  addition to its test and Preview gates. Menu-bar insertion remains available
+  on the verified macOS 26 runtime and is forced off on macOS 27 and later until
+  a fixed framework is revalidated. Settings hides the unavailable visibility
+  toggle instead of persisting an action that cannot safely take effect.
+- Two focused execution-context tests pass, including macOS 26, 27, and future
+  runtime cases. The final Xcode-launched process idled across five samples at
+  0.2-0.4% CPU. Console output contained only the existing macOS 27 beta
+  SetStore/CoreSpotlight donation-service error, and Xcode stopped the exact
+  process.
 
 ## Remaining live verification gap
 
