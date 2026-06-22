@@ -146,13 +146,14 @@ bundles are intentionally not part of this repository’s development workflow;
 see [AGENTS.md](AGENTS.md).
 
 The deterministic suite runs without mutating the local runtime. To run the
-reversible live provisioning, Linux-machine lifecycle, attachment, PTY, and
-image-reference smokes, set `NATIVECONTAINERS_LIVE_TESTS=1` for the test action.
-They create uniquely named
+reversible live provisioning, Linux-machine lifecycle, attachment, PTY,
+image-reference, and stopped-filesystem-export smokes, set
+`NATIVECONTAINERS_LIVE_TESTS=1` for the test action. They create uniquely named
 Alpine resources, verify native lifecycle, reviewed volume/network/Unix-socket
 attachments, container and machine interactive terminals, machine command
-timeout/KILL recovery, and image tag/inspect/delete behavior, and delete every
-uniquely created test resource.
+timeout/KILL recovery, image tag/inspect/delete behavior, and a stopped-rootfs
+marker/digest/replacement round trip, then delete every uniquely created test
+resource and private output.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when

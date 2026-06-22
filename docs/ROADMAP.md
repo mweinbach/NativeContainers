@@ -30,7 +30,8 @@ must leave a usable, test-backed product slice.
 - [x] Bounded non-interactive exec console and file copy in/out.
 - [x] Stopped-container root-filesystem tar export through Apple's public client,
       with exact pre/post identity checks, cancellation-safe private staging,
-      create-new descriptor-pinned publication, and SHA-256 receipts.
+      create-new descriptor-pinned publication, SHA-256 receipts, and a passing
+      opt-in Alpine marker/readback/cleanup smoke against the real Apple service.
 - [x] Interactive PTY terminal with resize, input, and signal forwarding.
 - [x] Image pull with byte/item progress.
 - [x] Reviewed platform/transport/concurrency selection for standalone pulls.
