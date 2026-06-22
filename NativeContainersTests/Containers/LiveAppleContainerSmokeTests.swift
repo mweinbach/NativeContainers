@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 
@@ -34,6 +35,122 @@ struct LiveAppleContainerSmokeTests {
       #expect(!remains)
     } catch {
       try? await service.deleteContainer(id: id)
+      throw error
+    }
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_TESTS"] == "1",
+      "Set NATIVECONTAINERS_LIVE_TESTS=1 with Apple container services running."
+    )
+  )
+  func exportStoppedRootFilesystemAndCleanUp() async throws {
+    let service = AppleContainerService()
+    let suffix = UUID().uuidString.lowercased()
+    let containerID = "nativecontainers-export-\(suffix.prefix(8))"
+    let marker = "nativecontainers-export-ok-\(suffix)"
+    let markerPath = "/nativecontainers-export-marker"
+    let outputRoot = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-export-smoke-\(suffix)",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: outputRoot,
+      withIntermediateDirectories: false
+    )
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o700],
+      ofItemAtPath: outputRoot.nativeContainersPOSIXPath
+    )
+    defer { try? FileManager.default.removeItem(at: outputRoot) }
+
+    let archiveURL = outputRoot.appending(
+      path: "rootfs.tar",
+      directoryHint: .notDirectory
+    )
+    let blockedArchiveURL = outputRoot.appending(
+      path: "existing.tar",
+      directoryHint: .notDirectory
+    )
+    let initialStagingEntries = try filesystemExportStagingEntries()
+    let request = try ContainerCreationRequest(
+      name: containerID,
+      imageReference: "docker.io/library/alpine:3.21",
+      cpuCount: 1,
+      memoryBytes: 256 * ContainerCreationRequest.bytesPerMiB,
+      arguments: [
+        "/bin/sh",
+        "-c",
+        "umask 077; printf '%s\\n' \"$1\" > \(markerPath)",
+        "nativecontainers-export",
+        marker,
+      ],
+      startAfterCreation: true
+    )
+
+    do {
+      try await service.createContainer(request: request) { _ in }
+      let stoppedContainer = try await waitForStoppedContainerRecord(
+        id: containerID,
+        service: service
+      )
+      let exportRequest = try ContainerFilesystemExportRequest(
+        container: stoppedContainer,
+        destinationURL: archiveURL
+      )
+      let receipt = try await service.exportFilesystem(exportRequest)
+
+      #expect(receipt.target == ContainerTerminalTargetIdentity(container: stoppedContainer))
+      #expect(receipt.destinationURL == archiveURL.standardizedFileURL)
+      let archiveData = try Data(contentsOf: archiveURL)
+      #expect(receipt.byteCount == Int64(archiveData.count))
+      #expect(receipt.byteCount > 0)
+      #expect(receipt.sha256 == sha256Hex(archiveData))
+      let archiveAttributes = try FileManager.default.attributesOfItem(
+        atPath: archiveURL.nativeContainersPOSIXPath
+      )
+      #expect((archiveAttributes[.posixPermissions] as? NSNumber)?.uint16Value == 0o600)
+
+      let entries = try await tarEntries(at: archiveURL)
+      let markerEntry = try #require(
+        entries.first { normalizedArchiveMember($0) == String(markerPath.dropFirst()) }
+      )
+      #expect(try await tarContents(at: archiveURL, member: markerEntry) == "\(marker)\n")
+
+      let stagingAfterSuccess = try filesystemExportStagingEntries()
+      #expect(stagingAfterSuccess.isSubset(of: initialStagingEntries))
+      let preservedContents = Data("preserve-existing-destination\n".utf8)
+      try preservedContents.write(to: blockedArchiveURL, options: .withoutOverwriting)
+      let blockedRequest = try ContainerFilesystemExportRequest(
+        container: stoppedContainer,
+        destinationURL: blockedArchiveURL
+      )
+      await #expect(
+        throws: ContainerFilesystemExportError.destinationMustBeNew(
+          blockedArchiveURL.nativeContainersPOSIXPath
+        )
+      ) {
+        try await service.exportFilesystem(blockedRequest)
+      }
+      #expect(try Data(contentsOf: blockedArchiveURL) == preservedContents)
+      #expect(try filesystemExportStagingEntries().isSubset(of: stagingAfterSuccess))
+      let outputEntries = try FileManager.default.contentsOfDirectory(
+        atPath: outputRoot.nativeContainersPOSIXPath
+      )
+      #expect(
+        !outputEntries.contains {
+          $0.hasPrefix(".nativecontainers-") && $0.hasSuffix(".partial")
+        }
+      )
+
+      try await service.deleteContainer(id: containerID)
+      let remains = try await service.loadInventory().containers.contains {
+        $0.id == containerID
+      }
+      #expect(!remains)
+    } catch {
+      await cleanUpRunningContainer(id: containerID, service: service)
       throw error
     }
   }
@@ -397,6 +514,81 @@ struct LiveAppleContainerSmokeTests {
     throw LiveAttachmentSmokeError.timedOut("container \(id) to stop")
   }
 
+  private func waitForStoppedContainerRecord(
+    id: String,
+    service: AppleContainerService,
+    timeout: Duration = .seconds(30)
+  ) async throws -> ContainerRecord {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while clock.now < deadline {
+      if let container = try await service.loadInventory().containers.first(where: {
+        $0.id == id
+      }), container.state == .stopped {
+        return container
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    throw LiveAttachmentSmokeError.timedOut("container \(id) to reach stopped state")
+  }
+
+  private func filesystemExportStagingEntries() throws -> Set<String> {
+    let stagingRoot = AppleContainerFilesystemExportService.defaultStagingRootDirectory()
+    guard FileManager.default.fileExists(atPath: stagingRoot.nativeContainersPOSIXPath) else {
+      return []
+    }
+    return Set(
+      try FileManager.default.contentsOfDirectory(atPath: stagingRoot.nativeContainersPOSIXPath)
+        .filter { $0.hasPrefix(".nativecontainers-export-") }
+    )
+  }
+
+  private func tarEntries(at archiveURL: URL) async throws -> [String] {
+    let result = try await executeTar(["-tf", archiveURL.nativeContainersPOSIXPath])
+    return result.standardOutput.split(separator: "\n").map(String.init)
+  }
+
+  private func tarContents(at archiveURL: URL, member: String) async throws -> String {
+    try await executeTar([
+      "-xOf", archiveURL.nativeContainersPOSIXPath, member,
+    ]).standardOutput
+  }
+
+  private func executeTar(_ arguments: [String]) async throws -> HostCommandResult {
+    var environment = ProcessInfo.processInfo.environment
+    for key in environment.keys where key.hasPrefix("DYLD_") {
+      environment.removeValue(forKey: key)
+    }
+    let result = try await FoundationHostCommandExecutor().execute(
+      executableURL: URL(filePath: "/usr/bin/tar"),
+      arguments: arguments,
+      environment: environment,
+      timeout: .seconds(20)
+    )
+    guard result.exitCode == 0 else {
+      throw LiveFilesystemExportSmokeError.tarFailed(
+        exitCode: result.exitCode,
+        output: result.standardError
+      )
+    }
+    return result
+  }
+
+  private func normalizedArchiveMember(_ member: String) -> String {
+    var value = member
+    while value.hasPrefix("./") {
+      value.removeFirst(2)
+    }
+    while value.hasPrefix("/") {
+      value.removeFirst()
+    }
+    return value
+  }
+
+  private func sha256Hex(_ data: Data) -> String {
+    SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+  }
+
   private func deleteVolumeIfPresent(
     _ name: String,
     service: AppleContainerService
@@ -494,6 +686,17 @@ private enum LiveTerminalSmokeError: LocalizedError {
     switch self {
     case .timedOut(let stage, let details):
       "Timed out waiting for \(stage.rawValue) terminal output: \(details)"
+    }
+  }
+}
+
+private enum LiveFilesystemExportSmokeError: LocalizedError {
+  case tarFailed(exitCode: Int32, output: String)
+
+  var errorDescription: String? {
+    switch self {
+    case .tarFailed(let exitCode, let output):
+      "tar exited with status \(exitCode): \(output)"
     }
   }
 }
