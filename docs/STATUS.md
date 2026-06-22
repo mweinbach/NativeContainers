@@ -1754,6 +1754,36 @@ Updated: 2026-06-22.
   inferred. Live guest-write and restore behavior still need the disposable
   installed-guest pass.
 
+## Detached VM console window checkpoint
+
+- Apple's installed SwiftUI documentation confirms that a data-presenting
+  `WindowGroup` persists its lightweight `Codable`/`Hashable` value and that
+  `openWindow(id:value:)` brings an existing window for the same value forward.
+  The VM list now uses that path instead of a modal runtime sheet. One request
+  pins the manifest UUID plus immutable guest family, so macOS and GUI Linux
+  each receive one native, system-restorable console window per VM.
+- A restored window resolves the current canonical manifest and reuses the
+  app-scoped runtime and USB models. Rename and inventory changes therefore
+  appear without persisting a stale manifest, while a missing or guest-mismatched
+  VM fails closed into an inert unavailable view. The request contains no live
+  `VZVirtualMachine`, adaptor, console generation, saved-state choice, or
+  auto-start intent; reopening the app cannot boot a guest merely to restore a
+  window.
+- Focused Codable/current-manifest/mismatch routing checks pass 3/3. The complete
+  Xcode plan reports 1,128 outcomes: 1,099 passed, zero failed or unrun, and 29
+  explicitly gated live/destructive checks skipped. Build-for-testing succeeds,
+  and the normal `NativeContainers` / `My Mac` build completes in 3.612 seconds
+  with no warning entries. Every changed Swift file passes strict
+  `swift-format`; the accessibility and data-migration contract validators pass.
+- Xcode launched PID 22783 and stopped that exact process. A debugger-attached
+  launch also confirmed a visible SwiftUI app window titled `Overview`; Xcode
+  stopped PID 24659, and no NativeContainers process remained. Runtime output
+  contained only the two existing Core Spotlight `SetStoreUpdateService`
+  donation failures. The dedicated VM-window preview compiled but hit
+  `PreviewsFoundationHost.TaskTimeoutError`, so no rendered-image claim is
+  inferred. A disposable installed guest is still required to exercise the
+  actual graphical display and input in the detached window.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
