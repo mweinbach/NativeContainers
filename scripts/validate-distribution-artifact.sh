@@ -86,12 +86,72 @@ worker_team=$(print -r -- "$worker_signature" | sed -n 's/^TeamIdentifier=//p')
 note "nested code shares signing team $app_team"
 
 app_authority=$(print -r -- "$app_signature" | sed -n 's/^Authority=//p' | head -n 1)
-entitlements=$(mktemp)
-trap 'rm -f "$entitlements"' EXIT
-codesign -d --entitlements "$entitlements" "$app" 2>/dev/null
+app_entitlements=$(mktemp)
+worker_entitlements=$(mktemp)
+trap 'rm -f "$app_entitlements" "$worker_entitlements"' EXIT
+codesign -d --entitlements - --xml "$app" >"$app_entitlements" 2>/dev/null
+codesign -d --entitlements - --xml "$worker" >"$worker_entitlements" 2>/dev/null
+
+entitlement_exists() {
+  /usr/libexec/PlistBuddy -c "Print :$2" "$1" >/dev/null 2>&1
+}
+
+entitlement_is_true() {
+  [[ "$(/usr/libexec/PlistBuddy -c "Print :$2" "$1" 2>/dev/null || print false)" == "true" ]]
+}
+
+entitlement_is_true "$app_entitlements" com.apple.security.device.audio-input ||
+  fail "app signature is missing the audio-input entitlement"
+entitlement_is_true "$app_entitlements" com.apple.security.virtualization ||
+  fail "app signature is missing the virtualization entitlement"
+
+forbidden_entitlements=(
+  com.apple.security.app-sandbox
+  com.apple.security.assets.movies.read-write
+  com.apple.security.assets.music.read-write
+  com.apple.security.assets.pictures.read-write
+  com.apple.security.automation.apple-events
+  com.apple.security.cs.allow-dyld-environment-variables
+  com.apple.security.cs.allow-jit
+  com.apple.security.cs.allow-unsigned-executable-memory
+  com.apple.security.cs.debugger
+  com.apple.security.cs.disable-executable-page-protection
+  com.apple.security.cs.disable-library-validation
+  com.apple.security.device.bluetooth
+  com.apple.security.device.camera
+  com.apple.security.device.usb
+  com.apple.security.files.downloads.read-write
+  com.apple.security.files.user-selected.read-write
+  com.apple.security.network.client
+  com.apple.security.network.server
+  com.apple.security.personal-information.addressbook
+  com.apple.security.personal-information.calendars
+  com.apple.security.personal-information.location
+  com.apple.security.personal-information.photos-library
+  com.apple.security.print
+)
+
+for entitlement in $forbidden_entitlements; do
+  entitlement_exists "$app_entitlements" "$entitlement" &&
+    fail "app signature contains unexpected entitlement: $entitlement"
+  entitlement_exists "$worker_entitlements" "$entitlement" &&
+    fail "build worker signature contains unexpected entitlement: $entitlement"
+done
+
+for entitlement in com.apple.security.device.audio-input com.apple.security.virtualization; do
+  entitlement_exists "$worker_entitlements" "$entitlement" &&
+    fail "build worker signature contains app-only entitlement: $entitlement"
+done
+note "app and build-worker entitlements are constrained to their required capabilities"
 
 get_task_allow=$(
-  plutil -extract com.apple.security.get-task-allow raw -o - "$entitlements" 2>/dev/null ||
+  /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" \
+    "$app_entitlements" 2>/dev/null ||
+    print false
+)
+worker_get_task_allow=$(
+  /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" \
+    "$worker_entitlements" 2>/dev/null ||
     print false
 )
 
@@ -100,6 +160,8 @@ if $developer_id_required; then
     fail "Developer ID mode requires a Developer ID Application signature; found: $app_authority"
   [[ "$get_task_allow" != "true" ]] ||
     fail "Developer ID artifact contains com.apple.security.get-task-allow"
+  [[ "$worker_get_task_allow" != "true" ]] ||
+    fail "Developer ID build worker contains com.apple.security.get-task-allow"
   spctl --assess --type execute --verbose=4 "$app"
   xcrun stapler validate "$app"
   note "Developer ID, Gatekeeper, and stapled-ticket checks passed"
