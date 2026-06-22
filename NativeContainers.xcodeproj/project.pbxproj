@@ -152,6 +152,12 @@
 		1F5E64902FE8A82E00A430FF /* DemandStartedServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E648F2FE8A82E00A430FF /* DemandStartedServiceTests.swift */; };
 		1F5E64932FE8A97200A430FF /* NativeContainersCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64922FE8A97200A430FF /* NativeContainersCommands.swift */; };
 		1F5E64952FE8A9AF00A430FF /* NativeContainersCommandsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F5E64942FE8A9AF00A430FF /* NativeContainersCommandsTests.swift */; };
+		1F99F1B12FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B02FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift */; };
+		1F99F1B32FE8C48B00DF0752 /* PerformanceBenchmarkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B22FE8C48B00DF0752 /* PerformanceBenchmarkService.swift */; };
+		1F99F1B52FE8C4A800DF0752 /* PerformanceBenchmarkScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B42FE8C4A800DF0752 /* PerformanceBenchmarkScenarios.swift */; };
+		1F99F1B72FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B62FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift */; };
+		1F99F1B92FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B82FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift */; };
+		1F99F1BB2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1BA2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -733,6 +739,12 @@
 		1F5E648F2FE8A82E00A430FF /* DemandStartedServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemandStartedServiceTests.swift; sourceTree = "<group>"; };
 		1F5E64922FE8A97200A430FF /* NativeContainersCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContainersCommands.swift; sourceTree = "<group>"; };
 		1F5E64942FE8A9AF00A430FF /* NativeContainersCommandsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeContainersCommandsTests.swift; sourceTree = "<group>"; };
+		1F99F1B02FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkModels.swift; sourceTree = "<group>"; };
+		1F99F1B22FE8C48B00DF0752 /* PerformanceBenchmarkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkService.swift; sourceTree = "<group>"; };
+		1F99F1B42FE8C4A800DF0752 /* PerformanceBenchmarkScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkScenarios.swift; sourceTree = "<group>"; };
+		1F99F1B62FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkModel.swift; sourceTree = "<group>"; };
+		1F99F1B82FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkSettingsSection.swift; sourceTree = "<group>"; };
+		1F99F1BA2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkServiceTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1236,6 +1248,7 @@
 				1F5E64602FE89D1600A430FF /* MacVirtualMachineDiskSnapshotsSection.swift */,
 				1F5E64762FE8A2AF00A430FF /* MacVirtualMachineUSBControl.swift */,
 				1F5E64842FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift */,
+				1F99F1B82FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1295,6 +1308,7 @@
 				1F5E64502FE89AC800A430FF /* MacVirtualMachineDiskSnapshotModels.swift */,
 				1F5E64642FE8A04800A430FF /* MacVirtualMachineUSBModels.swift */,
 				1F5E647A2FE8A5F900A430FF /* WorkloadResourceDefaults.swift */,
+				1F99F1B02FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1314,6 +1328,23 @@
 				1F5E64922FE8A97200A430FF /* NativeContainersCommands.swift */,
 			);
 			path = Commands;
+			sourceTree = "<group>";
+		};
+		1F99F1AE2FE8C47400DF0752 /* Performance */ = {
+			isa = PBXGroup;
+			children = (
+				1F99F1BA2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift */,
+			);
+			path = Performance;
+			sourceTree = "<group>";
+		};
+		1F99F1AF2FE8C47400DF0752 /* Performance */ = {
+			isa = PBXGroup;
+			children = (
+				1F99F1B22FE8C48B00DF0752 /* PerformanceBenchmarkService.swift */,
+				1F99F1B42FE8C4A800DF0752 /* PerformanceBenchmarkScenarios.swift */,
+			);
+			path = Performance;
 			sourceTree = "<group>";
 		};
 		1FEC47132FE834A200DC60B2 /* Compatibility */ = {
@@ -1961,6 +1992,7 @@
 				1FEC47322FE8354C00DC60B2 /* Shared */,
 				1FEC47372FE8354D00DC60B2 /* Storage */,
 				1FEC47382FE8354D00DC60B2 /* Support */,
+				1F99F1AE2FE8C47400DF0752 /* Performance */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -1976,6 +2008,7 @@
 				1FEC471C2FE834A200DC60B2 /* Machines */,
 				1FEC471F2FE834A200DC60B2 /* Storage */,
 				1FEC47202FE834A200DC60B2 /* Support */,
+				1F99F1AF2FE8C47400DF0752 /* Performance */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -2053,6 +2086,7 @@
 				1F5E64742FE8A26500A430FF /* MacVirtualMachineUSBModel.swift */,
 				1F5E64882FE8A7E700A430FF /* Composition */,
 				1F5E64912FE8A97200A430FF /* Commands */,
+				1F99F1B62FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2259,6 +2293,7 @@
 				1F5E64112FE8877100A430FF /* AppleLinuxVirtualMachineConfigurationFactoryTests.swift in Sources */,
 				1F9D2B722FE79B860076F5B9 /* AppleRuntimeCommandExecutorTests.swift in Sources */,
 				1F9D2B332FE7755D0076F5B9 /* ImageBuildSecretServiceTests.swift in Sources */,
+				1F99F1BB2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift in Sources */,
 				1F9D2CA22FE803130076F5B9 /* StorageReclamationClientTests.swift in Sources */,
 				18E0B550FB9D7772C2D45292 /* ContainerBuildWorkerProcessTests.swift in Sources */,
 				1F5E640F2FE8876500A430FF /* LinuxVirtualMachineLibraryTests.swift in Sources */,
@@ -2423,6 +2458,7 @@
 				1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */,
 				1F9D2C6F2FE7F73C0076F5B9 /* CopyfileVirtualMachineBundleTransfer.swift in Sources */,
 				5FAF17401045B705B8CECC61 /* AppleContainerBuildService.swift in Sources */,
+				1F99F1B12FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift in Sources */,
 				1F5E64732FE8A25900A430FF /* AppleProcessEntitlementChecker.swift in Sources */,
 				1F5E63C12FE8753A00A430FF /* ContainerSSHAgentModels.swift in Sources */,
 				BC4ED80883CAB8BB12C639AE /* AppleContainerConfiguration.swift in Sources */,
@@ -2489,6 +2525,7 @@
 				5EF45D5EC2FC881A0CADCA99 /* ContainerModels.swift in Sources */,
 				1F9D2C692FE7F5AD0076F5B9 /* CloneVirtualMachineView.swift in Sources */,
 				1F5E64052FE886E500A430FF /* LinuxVirtualMachineModels.swift in Sources */,
+				1F99F1B92FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift in Sources */,
 				1FEC46D32FE8233300DC60B2 /* DiskutilVirtualMachineDiskImageConverter.swift in Sources */,
 				1FEC473A2FE8388D00DC60B2 /* VirtualMachineDiskImageReplacementModels.swift in Sources */,
 				1F9D2B582FE7923F0076F5B9 /* LinuxMachineCreationDraft.swift in Sources */,
@@ -2542,6 +2579,7 @@
 				1F9D2AD52FE75CAB0076F5B9 /* AppleContainerCleanupClient.swift in Sources */,
 				73762F62AD06A7F38EA6E1E3 /* ContainerToolsModel.swift in Sources */,
 				1F5E639B2FE85CB100A430FF /* AppNotificationSettingsModel.swift in Sources */,
+				1F99F1B52FE8C4A800DF0752 /* PerformanceBenchmarkScenarios.swift in Sources */,
 				1F5E63DD2FE87C0B00A430FF /* MacVirtualMachineAudioService.swift in Sources */,
 				1F5E646B2FE8A0F600A430FF /* AppleMacVirtualMachineUSBAccessoryDiscovery.swift in Sources */,
 				1F9D2AF32FE764B50076F5B9 /* AppleContainerToolService.swift in Sources */,
@@ -2569,6 +2607,7 @@
 				FB616E4251EC33367A493059 /* ImageBuildStore.swift in Sources */,
 				ECF1156DF559467FE1179786 /* ImageBuilding.swift in Sources */,
 				1F9D2B702FE79B4F0076F5B9 /* AppleRuntimeCommandExecutor.swift in Sources */,
+				1F99F1B72FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift in Sources */,
 				906645B4F404AA12510A4ED2 /* ImageBuildCreationView.swift in Sources */,
 				1F9D2B352FE778910076F5B9 /* ImageBuildSecretVault.swift in Sources */,
 				1F9D2B762FE79C2C0076F5B9 /* AppleLinuxMachineProcessService.swift in Sources */,
@@ -2693,6 +2732,7 @@
 				1F5E63E52FE87FEA00A430FF /* MacVirtualMachineConfigurationEditPolicy.swift in Sources */,
 				1F9D2C162FE7D10A0076F5B9 /* SocktainerComposeFixtureNativeCleanup.swift in Sources */,
 				1FEC46E52FE8265200DC60B2 /* VirtualMachineDiskImageReplacementFileOperations.swift in Sources */,
+				1F99F1B32FE8C48B00DF0752 /* PerformanceBenchmarkService.swift in Sources */,
 				72D23C0E9992E41005DDACDC /* RootView.swift in Sources */,
 				1F5E63F72FE8823C00A430FF /* MacVirtualMachineNetworkSection.swift in Sources */,
 				1F9D2BD22FE7BDF90076F5B9 /* VirtualMachineSharedDirectoryBookmarkService.swift in Sources */,

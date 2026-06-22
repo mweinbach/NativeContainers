@@ -107,6 +107,11 @@ final class AppModel {
   )
 
   @ObservationIgnored
+  private lazy var performanceBenchmarkModel = PerformanceBenchmarkModel(
+    service: services.performanceBenchmarks
+  )
+
+  @ObservationIgnored
   private lazy var composeProjectWorkspaceModel = ComposeProjectWorkspaceModel(
     service: services.composeProjectLifecycle
   ) { [weak self] in
@@ -129,8 +134,7 @@ final class AppModel {
   private var macVirtualMachineNetworkModels: [UUID: MacVirtualMachineNetworkModel] = [:]
 
   @ObservationIgnored
-  private var macVirtualMachineDiskSnapshotModels:
-    [UUID: MacVirtualMachineDiskSnapshotModel] = [:]
+  private var macVirtualMachineDiskSnapshotModels: [UUID: MacVirtualMachineDiskSnapshotModel] = [:]
 
   @ObservationIgnored
   private var macVirtualMachineSharedDirectoryModels:
@@ -706,6 +710,10 @@ final class AppModel {
 
   func makeAppNotificationSettingsModel() -> AppNotificationSettingsModel {
     appNotificationSettingsModel
+  }
+
+  func makePerformanceBenchmarkModel() -> PerformanceBenchmarkModel {
+    performanceBenchmarkModel
   }
 
   func makeDockerCompatibilityModel() -> DockerCompatibilityModel {

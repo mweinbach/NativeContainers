@@ -30,6 +30,10 @@ struct AppModelTests {
       model.makeLaunchAtLoginModel()
         === model.makeLaunchAtLoginModel()
     )
+    #expect(
+      model.makePerformanceBenchmarkModel()
+        === model.makePerformanceBenchmarkModel()
+    )
   }
 
   @Test

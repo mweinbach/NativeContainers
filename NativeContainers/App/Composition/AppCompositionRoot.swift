@@ -27,6 +27,16 @@ enum AppCompositionRoot {
         machineTransport: machineTransport
       )
     )
+    let performanceBenchmarkService = PerformanceBenchmarkService(
+      scenarios: [
+        InventoryPerformanceBenchmarkScenario(inventory: inventoryService),
+        PrivateDiskPerformanceBenchmarkScenario(
+          workspaceDirectoryURL: FileManager.default.temporaryDirectory
+            .appending(path: "NativeContainers-Performance")
+        ),
+        LoopbackNetworkPerformanceBenchmarkScenario(),
+      ]
+    )
     let infrastructureService = AppleInfrastructureService(
       infrastructureClient: infrastructureClient,
       containerReader: containerReader,
@@ -288,6 +298,7 @@ enum AppCompositionRoot {
       inventory: inventoryService,
       launchAtLogin: SMAppServiceLaunchAtLoginService(),
       notifications: UserNotificationService(),
+      performanceBenchmarks: performanceBenchmarkService,
       composeTopology: ComposeTopologyService(),
       storageUsage: storageUsage,
       storageReclamation: storageReclamation,

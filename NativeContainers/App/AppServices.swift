@@ -20,6 +20,7 @@ struct AppServices: Sendable {
   let launchAtLogin: any LaunchAtLoginManaging
   let notifications: any AppNotificationManaging
   let workloadCreationDefaults: any WorkloadCreationDefaultsProviding
+  let performanceBenchmarks: any PerformanceBenchmarking
   let composeTopology: any ComposeTopologyDeriving
   let storageUsage: any StorageUsageLoading
   let storageReclamation: any StorageReclamationManaging
@@ -76,6 +77,8 @@ struct AppServices: Sendable {
     notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     workloadCreationDefaults: any WorkloadCreationDefaultsProviding =
       HostResourceDefaultService(),
+    performanceBenchmarks: any PerformanceBenchmarking =
+      UnavailablePerformanceBenchmarkService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -153,6 +156,7 @@ struct AppServices: Sendable {
     self.launchAtLogin = launchAtLogin
     self.notifications = notifications
     self.workloadCreationDefaults = workloadCreationDefaults
+    self.performanceBenchmarks = performanceBenchmarks
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
@@ -213,6 +217,8 @@ struct AppServices: Sendable {
     notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     workloadCreationDefaults: any WorkloadCreationDefaultsProviding =
       HostResourceDefaultService(),
+    performanceBenchmarks: any PerformanceBenchmarking =
+      UnavailablePerformanceBenchmarkService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -276,6 +282,7 @@ struct AppServices: Sendable {
     self.launchAtLogin = launchAtLogin
     self.notifications = notifications
     self.workloadCreationDefaults = workloadCreationDefaults
+    self.performanceBenchmarks = performanceBenchmarks
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation

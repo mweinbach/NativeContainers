@@ -34,6 +34,10 @@ struct SettingsView: View {
         LabeledContent("Networking", value: "Apple runtime / NAT")
       }
 
+      PerformanceBenchmarkSettingsSection(
+        model: model.makePerformanceBenchmarkModel()
+      )
+
       DockerCompatibilitySettingsSection(appModel: model)
 
       RegistrySettingsSection(appModel: model)
