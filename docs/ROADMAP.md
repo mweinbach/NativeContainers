@@ -241,8 +241,13 @@ must leave a usable, test-backed product slice.
 - [ ] Reviewed non-English translations and full VoiceOver/Full Keyboard
       Access QA across every management workflow.
 - [ ] Signed/notarized packaging, updater, migration, crash diagnostics.
-- [ ] Performance benchmarks for cold start, warm start, I/O, network, build,
-      and idle resource use.
+- [ ] Complete performance benchmark coverage.
+  - [x] User-initiated local baselines for warm Apple inventory, private
+        temporary-file write/read I/O, and Network.framework localhost TCP,
+        with warmups, median/P95 reporting, bounded cancellation, and no
+        container or VM mutation.
+  - [ ] Cold container/VM startup, guest and bind-mount I/O, real image-build,
+        external-network, and idle-resource lanes behind explicit live gates.
 
 ## Public-API constraint log
 

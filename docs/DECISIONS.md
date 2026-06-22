@@ -1609,3 +1609,26 @@ a second lifecycle implementation. Main-window commands and all underlying
 container actions remain available. The scene and shared quick-control view stay
 compiled so support can be restored by changing the narrow policy after Apple
 fixes the framework behavior.
+
+## ADR-058: Keep baseline measurement explicit, modular, and non-mutating
+
+**Status:** Accepted — 2026-06-21
+
+Performance measurement is implemented behind a `PerformanceBenchmarking`
+application contract and independently injectable scenario and clock protocols.
+The runner, not SwiftUI, owns warmups, measured iterations, cancellation,
+failure isolation, and report statistics. Settings receives one stable
+app-scoped observable model and starts work only from an explicit user action;
+launch and ordinary Refresh perform no benchmark work.
+
+The default baseline suite is deliberately host-local and non-mutating: it
+loads Apple inventory through the existing read-only service, exercises a
+private temporary file that is removed on every exit path, and transfers a
+bounded payload through Network.framework on localhost. A timeout races the
+network transfer, every loop checks cancellation, and one scenario failure is
+reported without suppressing later lanes.
+
+Cold container or VM launch, guest or bind-mount I/O, real image builds,
+external-network throughput, and idle-resource sampling are not disguised as
+equivalent local measurements. They remain separate opt-in live gates with
+their own cleanup and environmental provenance requirements.

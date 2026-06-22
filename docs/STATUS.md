@@ -8,7 +8,7 @@ Updated: 2026-06-21.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing and the normal app build succeed; refreshed source
   diagnostics and the Issue Navigator report no warnings or errors.
-- The current full app-hosted Xcode run contains 935 expanded outcomes: all 914
+- The current full app-hosted Xcode run contains 942 expanded outcomes: all 921
   deterministic outcomes passed, with 21 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
   tests. Existing opt-in tests cover Apple runtime
@@ -53,6 +53,8 @@ Updated: 2026-06-21.
   in light appearance, shared vmnet in dark appearance, and the host-only
   saved-state lock/discard path without clipping its mode controls. The physical
   USB popover renders ready and entitlement-unavailable states without clipping.
+  The Performance Baselines settings section also renders its measured and
+  per-lane failure states without clipping.
 - A typed workspace navigator now unifies sidebar state, exact resource
   selection, Overview links, and Command-K search. Its pure catalog derives
   stable entries from live inventory, ranks exact/prefix/word/substring matches,
@@ -1156,6 +1158,26 @@ Updated: 2026-06-21.
   0.2-0.4% CPU. Console output contained only the existing macOS 27 beta
   SetStore/CoreSpotlight donation-service error, and Xcode stopped the exact
   process.
+
+## Local performance-baseline checkpoint
+
+- A new `PerformanceBenchmarking` service graph separates timing policy from
+  Settings and composes three bounded scenarios: read-only warm Apple inventory,
+  private temporary-file write/synchronize/read/remove I/O, and
+  Network.framework localhost TCP. The app-scoped model exposes explicit Run
+  and Cancel controls and preserves the last completed report.
+- The focused suite passes 5/5, covering warmups and median/P95/throughput math,
+  per-scenario failure isolation, cancellation propagation, temporary-artifact
+  cleanup, and a real 1 MiB localhost transfer. Composition and stable-model
+  checks pass 2/2, and the SwiftUI preview renders cleanly.
+- A live Xcode snippet through `AppCompositionRoot.live()` completed every lane:
+  warm inventory measured 1.3 ms median/P95, private disk measured 5.3/5.4 ms
+  at 6013.8 MiB/s, and loopback TCP measured 11.5/12.4 ms at 1353.3 MiB/s.
+  These are host-session baselines, not product promises.
+- The final full Xcode plan passes all 942 outcomes: 921 deterministic tests
+  passed, 21 explicit live gates skipped, and no outcome failed or remained
+  unrun. Build-for-testing succeeds in 15.985 seconds, and both the build log
+  and Issue Navigator contain zero warnings or errors.
 
 ## Remaining live verification gap
 

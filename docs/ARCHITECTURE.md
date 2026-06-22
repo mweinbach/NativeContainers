@@ -763,6 +763,19 @@ presentation is suppressed, while a response loads authoritative inventory and
 reuses `WorkspaceRoute`, falling back to the safe top-level route when an exact
 VM no longer exists.
 
+Performance baselines are another focused service graph rather than timing code
+inside Settings. `PerformanceBenchmarking` is the app-facing contract;
+`PerformanceBenchmarkService` owns warmup/measured iteration policy, a
+monotonic injectable clock, per-scenario failure isolation, cancellation, and
+median/P95/aggregate-throughput reports. Three narrow scenarios call the
+existing read-only Apple inventory service, write/synchronize/read/remove a
+private temporary file, and perform a bounded localhost TCP transfer through
+Network.framework. The app-scoped observable model owns only progress, the last
+completed report, and cancellation. Nothing starts automatically during launch
+or inventory refresh, and cold starts, guest I/O, real builds, external traffic,
+and idle-resource sampling remain separate opt-in lanes because they mutate
+runtime state or depend materially on the host environment.
+
 Workspace navigation is a separate focused slice. `WorkspaceRoute` represents
 both top-level destinations and exact resource identities. A pure
 `WorkspaceResourceCatalog` derives searchable entries from the current Apple
