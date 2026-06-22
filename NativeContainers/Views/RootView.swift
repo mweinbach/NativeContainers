@@ -94,6 +94,8 @@ struct DestinationView: View {
         NetworksView(model: model)
       case .linuxMachines:
         LinuxMachinesView(model: model)
+      case .kubernetes:
+        KubernetesView(model: model.makeKubernetesClusterModel())
       case .macOSVirtualMachines:
         VirtualMachinesView(model: model)
       case .settings:

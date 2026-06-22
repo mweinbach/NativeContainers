@@ -9,6 +9,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
   case volumes
   case networks
   case linuxMachines
+  case kubernetes
   case macOSVirtualMachines
   case settings
 
@@ -24,6 +25,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
     case .volumes: .volumes
     case .networks: .networks
     case .linuxMachines: .linuxMachines
+    case .kubernetes: .kubernetes
     case .macOSVirtualMachines: .macOSVirtualMachines
     case .settings: .settings
     }
@@ -47,6 +49,8 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
       self = .networks
     case .linuxMachines:
       self = .linuxMachines
+    case .kubernetes:
+      self = .kubernetes
     case .macOSVirtualMachines:
       self = .macOSVirtualMachines
     case .settings:
@@ -67,6 +71,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
     case .volumes: "Volumes"
     case .networks: "Networks"
     case .linuxMachines: "Linux Machines"
+    case .kubernetes: "Kubernetes"
     case .macOSVirtualMachines: "Virtual Machines"
     case .settings: "Settings"
     }
@@ -82,6 +87,7 @@ enum SidebarDestination: String, CaseIterable, Hashable, Identifiable {
     case .volumes: "externaldrive"
     case .networks: "network"
     case .linuxMachines: "terminal"
+    case .kubernetes: "circles.hexagongrid"
     case .macOSVirtualMachines: "macwindow"
     case .settings: "gearshape"
     }

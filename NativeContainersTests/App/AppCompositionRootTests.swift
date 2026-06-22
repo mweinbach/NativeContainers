@@ -12,6 +12,7 @@ struct AppCompositionRootTests {
     #expect(services.inventory is AppleRuntimeInventoryService)
     #expect(services.workloadCreationDefaults is HostResourceDefaultService)
     #expect(services.performanceBenchmarks is PerformanceBenchmarkService)
+    #expect(services.kubernetes is AppleKubernetesClusterService)
     #expect(services.composeTopology is ComposeTopologyService)
     #expect(services.storageUsage is StorageUsageService)
     #expect(services.storageReclamation is StorageReclamationService)

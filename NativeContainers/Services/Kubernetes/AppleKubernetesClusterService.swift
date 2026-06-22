@@ -282,6 +282,17 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     try await store.remove()
   }
 
+  func forget() async throws {
+    let descriptor = try await requireDescriptor()
+    let machines = try await machineInventory.loadMachines()
+    if let machine = machines.first(where: { $0.id == descriptor.machine.id }),
+      LinuxMachineIdentity(machine: machine) == descriptor.machine
+    {
+      throw KubernetesClusterError.alreadyConfigured
+    }
+    try await store.remove()
+  }
+
   func exportKubeconfig() async throws -> KubernetesKubeconfigExport {
     let descriptor = try await requireDescriptor()
     guard descriptor.phase == .ready else {

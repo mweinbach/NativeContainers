@@ -15,6 +15,7 @@ enum WorkspaceRoute: Hashable, Sendable {
   case network(String)
   case linuxMachines
   case linuxMachine(String)
+  case kubernetes
   case macOSVirtualMachines
   case macOSVirtualMachine(UUID)
   case settings
@@ -37,6 +38,8 @@ enum WorkspaceRoute: Hashable, Sendable {
       .networks
     case .linuxMachines, .linuxMachine:
       .linuxMachines
+    case .kubernetes:
+      .kubernetes
     case .macOSVirtualMachines, .macOSVirtualMachine:
       .macOSVirtualMachines
     case .settings:
@@ -50,7 +53,7 @@ enum WorkspaceRoute: Hashable, Sendable {
       .macOSVirtualMachine:
       true
     case .overview, .containers, .composeProjects, .images, .builds, .volumes, .networks,
-      .linuxMachines, .macOSVirtualMachines, .settings:
+      .linuxMachines, .kubernetes, .macOSVirtualMachines, .settings:
       false
     }
   }
@@ -85,6 +88,8 @@ enum WorkspaceRoute: Hashable, Sendable {
       "linux-machines"
     case .linuxMachine(let id):
       "linux-machine:\(id)"
+    case .kubernetes:
+      "kubernetes"
     case .macOSVirtualMachines:
       "macos-virtual-machines"
     case .macOSVirtualMachine(let id):

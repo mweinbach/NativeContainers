@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 
 @testable import NativeContainers
@@ -19,14 +20,28 @@ struct NativeContainersCommandsTests {
         .networks,
         .linuxMachines,
         .macOSVirtualMachines,
+        .kubernetes,
       ]
     )
-    #expect(String(commands.map(\.shortcutCharacter)) == "123456789")
+    #expect(String(commands.map(\.shortcutCharacter)) == "1234567890")
     #expect(Set(commands.map(\.shortcutCharacter)).count == commands.count)
     #expect(
       commands.map(\.keyEquivalent.character)
         == commands.map(\.shortcutCharacter)
     )
     #expect(!commands.map(\.destination).contains(.settings))
+  }
+
+  @Test
+  func sidebarDestinationsUseAvailableSystemSymbols() {
+    for destination in SidebarDestination.allCases {
+      #expect(
+        NSImage(
+          systemSymbolName: destination.systemImage,
+          accessibilityDescription: nil
+        ) != nil,
+        "Missing SF Symbol for \(destination.rawValue): \(destination.systemImage)"
+      )
+    }
   }
 }

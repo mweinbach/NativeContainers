@@ -1688,3 +1688,31 @@ daily metric payloads; it does not pretend the SDK's unavailable-on-macOS
 app-launch diagnostic array is present. Release symbolication is paired with
 collection at the packaging boundary: every archive must contain app and
 worker dSYMs matching the signed executable UUIDs.
+
+## ADR-061: Run local Kubernetes in one identity-pinned Apple machine
+
+**Status:** Accepted — 2026-06-21
+
+NativeContainers implements local Kubernetes as K3s in one persistent Apple
+container machine. It does not introduce a Docker VM, a second Linux
+virtualization stack, or a host-level Kubernetes daemon. The dedicated machine
+is created and managed through the same public Apple machine and process XPC
+surfaces as other persistent Linux machines, but it receives no Mac home mount
+and its cluster disk is deleted only through an explicit destructive action.
+
+Provisioning is deliberately narrow. A fixed service-owned command runs as UID
+0 through Apple's process configuration, installs known prerequisites, verifies
+an exact-tag K3s installer against an embedded SHA-256, pins the K3s release,
+enables Kubernetes secret encryption, and requires a mode-0600 guest
+kubeconfig. The generic privileged command capability is not exposed through
+SwiftUI. The private host descriptor stores provenance and the complete Apple
+machine identity but no kubeconfig, certificate, client key, or token.
+
+Interrupted provisioning is recoverable rather than silently recreated. Retry
+addresses only the stored identity; a same-name replacement fails closed.
+Start, graceful Stop, explicit Force Stop, and Delete reuse the existing machine
+lifecycle authority. Kubeconfig leaves the guest only after an explicit export,
+is bounded and structurally validated, and has its loopback server rewritten in
+memory to the machine's current dedicated IP. Multi-node HA, external storage,
+and a live destructive install remain later product slices rather than claims
+of this single-node foundation.

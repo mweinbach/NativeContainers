@@ -117,6 +117,13 @@ final class AppModel {
   )
 
   @ObservationIgnored
+  private lazy var kubernetesClusterModel = KubernetesClusterModel(
+    service: services.kubernetes
+  ) { [weak self] in
+    await self?.refresh()
+  }
+
+  @ObservationIgnored
   private lazy var composeProjectWorkspaceModel = ComposeProjectWorkspaceModel(
     service: services.composeProjectLifecycle
   ) { [weak self] in
@@ -726,6 +733,10 @@ final class AppModel {
     fieldDiagnosticModel
   }
 
+  func makeKubernetesClusterModel() -> KubernetesClusterModel {
+    kubernetesClusterModel
+  }
+
   func makeDockerCompatibilityModel() -> DockerCompatibilityModel {
     dockerCompatibilitySettingsModel
   }
@@ -1019,7 +1030,7 @@ final class AppModel {
     case .macOSVirtualMachine:
       didLoadVirtualMachineLibrary
     case .overview, .containers, .composeProjects, .images, .builds, .volumes, .networks,
-      .linuxMachines, .macOSVirtualMachines, .settings:
+      .linuxMachines, .kubernetes, .macOSVirtualMachines, .settings:
       true
     }
   }

@@ -47,6 +47,7 @@ enum WorkspaceNavigationCommand: CaseIterable, Identifiable {
   case networks
   case linuxMachines
   case virtualMachines
+  case kubernetes
 
   var id: Self { self }
 
@@ -61,6 +62,7 @@ enum WorkspaceNavigationCommand: CaseIterable, Identifiable {
     case .networks: .networks
     case .linuxMachines: .linuxMachines
     case .virtualMachines: .macOSVirtualMachines
+    case .kubernetes: .kubernetes
     }
   }
 
@@ -75,6 +77,7 @@ enum WorkspaceNavigationCommand: CaseIterable, Identifiable {
     case .networks: "7"
     case .linuxMachines: "8"
     case .virtualMachines: "9"
+    case .kubernetes: "0"
     }
   }
 

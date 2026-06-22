@@ -34,6 +34,10 @@ struct AppModelTests {
       model.makePerformanceBenchmarkModel()
         === model.makePerformanceBenchmarkModel()
     )
+    #expect(
+      model.makeKubernetesClusterModel()
+        === model.makeKubernetesClusterModel()
+    )
   }
 
   @Test

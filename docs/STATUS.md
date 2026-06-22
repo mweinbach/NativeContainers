@@ -1239,6 +1239,31 @@ Updated: 2026-06-21.
   rendered-preview claim remains intentionally open despite the successful
   build and normal launch.
 
+## Native Kubernetes control-plane checkpoint
+
+- AppleKubernetesClusterService now composes the existing public Apple
+  machine, lifecycle, inventory, process-target, and bounded-command services
+  into one app-owned K3s control plane. The dedicated persistent machine has
+  no host-home mount, retains an exact creation identity, and fails closed if
+  a same-name machine is missing or replaced.
+- Provisioning pins K3s v1.36.1+k3s1, verifies the exact-tag installer against
+  the embedded SHA-256, leaves the official release checksum check enabled,
+  runs K3s as the guest's native service with secret encryption, and keeps
+  kubeconfig mode 0600. The host descriptor is owner-only, backup-excluded,
+  and contains no token, key, certificate, or kubeconfig.
+- A dedicated SwiftUI workspace exposes setup with reviewed CPU and memory
+  floors, progress, status, Start, graceful Stop, explicit Force Stop, Delete,
+  stale-record recovery, and user-initiated kubeconfig export. Workspace
+  routing and Navigate Command-0 use one stable app-scoped observable model.
+- Xcode build-for-testing succeeds with zero warnings. The final full plan
+  passes all 965 outcomes: 944 deterministic tests passed, 21 explicit live
+  gates skipped, and no outcome failed or remained unrun. A signed Xcode
+  launch found and fixed one invalid SF Symbol; an AppKit regression now
+  resolves every sidebar symbol, and the relaunch log contains only the
+  existing macOS 27 beta SetStore/CoreSpotlight error. Both Kubernetes canvas
+  previews remain unclaimed because Xcode's Preview action returned
+  “The data couldn’t be read because it is missing.”
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
@@ -1247,20 +1272,26 @@ new GUI workflow, then mounting and exercising a shared folder, still need a
 disposable ISO smoke pass. Installing, booting,
 saving/restoring, and clone-booting macOS are not claimed as live-verified until
 a local IPSW and disposable installed guest are available for that destructive
-integration pass.
+integration pass. The K3s service, lifecycle, and UI are deterministic-test
+verified, but a disposable Apple machine still needs to complete the pinned
+installer, expose the API, run one workload, export a usable kubeconfig, and be
+deleted before the Kubernetes lane is claimed as live-verified.
 
 ## Next implementation slice
 
-1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
+1. Provision the gated Alpine K3s machine, verify API reachability and a
+   disposable workload through the exported kubeconfig, then delete the exact
+   machine and every cluster artifact.
+2. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
    and exercise both graceful and watchdog force-stop paths.
-2. Live-verify the implemented macOS installer, lifecycle service, force-stop
+3. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.
-3. Live-verify a second reviewed Up that grows a real pinned Socktainer project
+4. Live-verify a second reviewed Up that grows a real pinned Socktainer project
    from a contiguous replica prefix, including stable metadata and exact Apple
    attachment observations. Keep recreation blocked until the pinned bridge
    implements rename and network attachment routes.
-4. Provision a Developer ID Application identity, run Xcode's Developer ID
+5. Provision a Developer ID Application identity, run Xcode's Developer ID
    distribution and notarization flow, then pass the strict stapled-product
    validator before calling the app publicly distributable.

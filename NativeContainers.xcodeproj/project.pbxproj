@@ -157,6 +157,8 @@
 		1F64B95B2FE8D53000598A65 /* AppleKubernetesClusterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B95A2FE8D53000598A65 /* AppleKubernetesClusterService.swift */; };
 		1F64B95D2FE8D56900598A65 /* KubernetesClusterDescriptorStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B95C2FE8D56900598A65 /* KubernetesClusterDescriptorStoreTests.swift */; };
 		1F64B95F2FE8D58E00598A65 /* KubernetesClusterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B95E2FE8D58E00598A65 /* KubernetesClusterServiceTests.swift */; };
+		1F64B9612FE8D5D900598A65 /* KubernetesClusterModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B9602FE8D5D900598A65 /* KubernetesClusterModel.swift */; };
+		1F64B9632FE8D65800598A65 /* KubernetesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B9622FE8D65800598A65 /* KubernetesView.swift */; };
 		1F99F1B12FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B02FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift */; };
 		1F99F1B32FE8C48B00DF0752 /* PerformanceBenchmarkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B22FE8C48B00DF0752 /* PerformanceBenchmarkService.swift */; };
 		1F99F1B52FE8C4A800DF0752 /* PerformanceBenchmarkScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B42FE8C4A800DF0752 /* PerformanceBenchmarkScenarios.swift */; };
@@ -756,6 +758,8 @@
 		1F64B95A2FE8D53000598A65 /* AppleKubernetesClusterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleKubernetesClusterService.swift; sourceTree = "<group>"; };
 		1F64B95C2FE8D56900598A65 /* KubernetesClusterDescriptorStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesClusterDescriptorStoreTests.swift; sourceTree = "<group>"; };
 		1F64B95E2FE8D58E00598A65 /* KubernetesClusterServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesClusterServiceTests.swift; sourceTree = "<group>"; };
+		1F64B9602FE8D5D900598A65 /* KubernetesClusterModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesClusterModel.swift; sourceTree = "<group>"; };
+		1F64B9622FE8D65800598A65 /* KubernetesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesView.swift; sourceTree = "<group>"; };
 		1F99F1B02FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkModels.swift; sourceTree = "<group>"; };
 		1F99F1B22FE8C48B00DF0752 /* PerformanceBenchmarkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkService.swift; sourceTree = "<group>"; };
 		1F99F1B42FE8C4A800DF0752 /* PerformanceBenchmarkScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkScenarios.swift; sourceTree = "<group>"; };
@@ -1274,6 +1278,7 @@
 				1F5E64842FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift */,
 				1F99F1B82FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift */,
 				1F99F1C62FE8CDBE00DF0752 /* FieldDiagnosticSettingsSection.swift */,
+				1F64B9622FE8D65800598A65 /* KubernetesView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2155,6 +2160,7 @@
 				1F5E64912FE8A97200A430FF /* Commands */,
 				1F99F1B62FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift */,
 				1F99F1C42FE8CDAC00DF0752 /* FieldDiagnosticModel.swift */,
+				1F64B9602FE8D5D900598A65 /* KubernetesClusterModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2658,6 +2664,7 @@
 				1F5E646B2FE8A0F600A430FF /* AppleMacVirtualMachineUSBAccessoryDiscovery.swift in Sources */,
 				1F9D2AF32FE764B50076F5B9 /* AppleContainerToolService.swift in Sources */,
 				1F5E63F92FE8832600A430FF /* AppleMacVirtualMachineVmnetNetworkPool.swift in Sources */,
+				1F64B9632FE8D65800598A65 /* KubernetesView.swift in Sources */,
 				1F9D2B392FE77A9A0076F5B9 /* ImageBuildHistoryStore.swift in Sources */,
 				1F64B9572FE8D4ED00598A65 /* KubernetesClusterModels.swift in Sources */,
 				1F9D2CB22FE8065A0076F5B9 /* VirtualMachineStorageReclamationModel.swift in Sources */,
@@ -2727,6 +2734,7 @@
 				1F9D2C122FE7D0B20076F5B9 /* SocktainerComposeFixtureCleanupPlanner.swift in Sources */,
 				6EFDAA07140EDCC9B4FB8615 /* LinuxMachinesView.swift in Sources */,
 				1F9D2ADF2FE760400076F5B9 /* AppleRuntimeInventoryService.swift in Sources */,
+				1F64B9612FE8D5D900598A65 /* KubernetesClusterModel.swift in Sources */,
 				1FEC47602FE84A8A00DC60B2 /* LaunchAtLoginSettingsSection.swift in Sources */,
 				1FEC47502FE8425400DC60B2 /* ComposeExecutionOverlayService.swift in Sources */,
 				78D8757B9A4FE8F19E8883AF /* MacPlatformArtifactPreparer.swift in Sources */,

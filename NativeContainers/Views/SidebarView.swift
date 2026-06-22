@@ -21,6 +21,10 @@ struct SidebarView: View {
         row(.macOSVirtualMachines)
       }
 
+      Section("Orchestration") {
+        row(.kubernetes)
+      }
+
       Section {
         row(.settings)
       }

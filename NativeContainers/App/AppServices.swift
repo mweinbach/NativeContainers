@@ -22,6 +22,7 @@ struct AppServices: Sendable {
   let workloadCreationDefaults: any WorkloadCreationDefaultsProviding
   let performanceBenchmarks: any PerformanceBenchmarking
   let fieldDiagnostics: any FieldDiagnosticManaging
+  let kubernetes: any KubernetesClusterManaging
   let composeTopology: any ComposeTopologyDeriving
   let storageUsage: any StorageUsageLoading
   let storageReclamation: any StorageReclamationManaging
@@ -82,6 +83,8 @@ struct AppServices: Sendable {
       UnavailablePerformanceBenchmarkService(),
     fieldDiagnostics: any FieldDiagnosticManaging =
       UnavailableFieldDiagnosticService(),
+    kubernetes: any KubernetesClusterManaging =
+      UnavailableKubernetesClusterService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -161,6 +164,7 @@ struct AppServices: Sendable {
     self.workloadCreationDefaults = workloadCreationDefaults
     self.performanceBenchmarks = performanceBenchmarks
     self.fieldDiagnostics = fieldDiagnostics
+    self.kubernetes = kubernetes
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
@@ -225,6 +229,8 @@ struct AppServices: Sendable {
       UnavailablePerformanceBenchmarkService(),
     fieldDiagnostics: any FieldDiagnosticManaging =
       UnavailableFieldDiagnosticService(),
+    kubernetes: any KubernetesClusterManaging =
+      UnavailableKubernetesClusterService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -290,6 +296,7 @@ struct AppServices: Sendable {
     self.workloadCreationDefaults = workloadCreationDefaults
     self.performanceBenchmarks = performanceBenchmarks
     self.fieldDiagnostics = fieldDiagnostics
+    self.kubernetes = kubernetes
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation

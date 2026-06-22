@@ -20,12 +20,13 @@ enum AppCompositionRoot {
       ),
       commandExecutor: commandExecutor
     )
+    let machineInventoryService = AppleLinuxMachineInventoryService(
+      machineTransport: machineTransport
+    )
     let inventoryService = AppleRuntimeInventoryService(
       infrastructureClient: infrastructureClient,
       containerReader: containerReader,
-      machineInventory: AppleLinuxMachineInventoryService(
-        machineTransport: machineTransport
-      )
+      machineInventory: machineInventoryService
     )
     let performanceBenchmarkService = PerformanceBenchmarkService(
       scenarios: [
@@ -88,13 +89,23 @@ enum AppCompositionRoot {
       machineTransport: machineTransport,
       runtimeMutationCoordinator: mutationCoordinator
     )
+    let machineProcessTargetResolver = AppleLinuxMachineProcessTargetResolver(
+      lifecycle: machineService,
+      machineTransport: machineTransport
+    )
     let machineProcessService = AppleLinuxMachineProcessService(
-      targetResolver: AppleLinuxMachineProcessTargetResolver(
-        lifecycle: machineService,
-        machineTransport: machineTransport
-      ),
+      targetResolver: machineProcessTargetResolver,
       commandExecutor: commandExecutor,
       processClient: processClient
+    )
+    let kubernetesService = AppleKubernetesClusterService(
+      machineCreator: machineService,
+      machineLifecycle: machineService,
+      machineInventory: machineInventoryService,
+      rootCommands: AppleKubernetesMachineRootCommandService(
+        targetResolver: machineProcessTargetResolver,
+        commandExecutor: commandExecutor
+      )
     )
     let builderManagementService = AppleContainerBuilderManagementService(
       runtimeMutationCoordinator: mutationCoordinator,
@@ -304,6 +315,7 @@ enum AppCompositionRoot {
       notifications: UserNotificationService(),
       performanceBenchmarks: performanceBenchmarkService,
       fieldDiagnostics: fieldDiagnosticService,
+      kubernetes: kubernetesService,
       composeTopology: ComposeTopologyService(),
       storageUsage: storageUsage,
       storageReclamation: storageReclamation,

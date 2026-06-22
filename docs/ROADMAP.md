@@ -236,8 +236,14 @@ must leave a usable, test-backed product slice.
       DiskImageKit overlay stacks, with transactional manifest commits,
       restore-to-prune semantics, saved-state invalidation, and native controls.
 - [x] Native sidebar/toolbar command groups, Command-1 through Command-9
-      workspace navigation, Voice Control input labels, and automatic
+      plus Command-0 Kubernetes navigation, Voice Control input labels, and automatic
       source-language String Catalog extraction.
+- [x] Single-node K3s control plane in a dedicated persistent Apple machine,
+      with exact machine identity, pinned installer and release verification,
+      secret encryption, crash-resumable setup, native lifecycle/status UI, and
+      explicit ephemeral kubeconfig export.
+  - [ ] Live-provision the gated Alpine machine, verify API reachability and a
+        disposable workload, then delete every cluster artifact.
 - [ ] Reviewed non-English translations and full VoiceOver/Full Keyboard
       Access QA across every management workflow.
 - [ ] Distribution, updater, migration, and crash diagnostics.

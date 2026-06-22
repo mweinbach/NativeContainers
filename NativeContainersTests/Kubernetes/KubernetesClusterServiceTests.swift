@@ -186,6 +186,10 @@ struct KubernetesClusterServiceTests {
     }
     #expect(await runtime.startCount == 0)
     #expect(await commands.commands.isEmpty)
+
+    try await service.forget()
+    #expect(await store.descriptor == nil)
+    #expect(await runtime.currentMachine == replacement)
   }
 
   @Test
@@ -230,6 +234,49 @@ struct KubernetesClusterServiceTests {
   }
 }
 
+@MainActor
+@Suite("Kubernetes cluster model")
+struct KubernetesClusterModelTests {
+  @Test
+  func publishesProgressAndRefreshesTheAppAfterProvisioning() async throws {
+    let snapshot = readyKubernetesSnapshot()
+    let service = KubernetesModelServiceDouble(snapshot: .absent)
+    await service.setProvisionedSnapshot(snapshot)
+    let mutations = KubernetesMutationCounter()
+    let model = KubernetesClusterModel(service: service) {
+      mutations.count += 1
+    }
+
+    let result = await model.provision(
+      try KubernetesClusterProvisionRequest()
+    )
+
+    #expect(result)
+    #expect(model.snapshot == snapshot)
+    #expect(model.progress?.phase == .completed)
+    #expect(model.errorMessage == nil)
+    #expect(mutations.count == 1)
+  }
+
+  @Test
+  func failedMutationKeepsTheErrorAndReloadsAuthoritativeState() async {
+    let snapshot = readyKubernetesSnapshot()
+    let service = KubernetesModelServiceDouble(snapshot: snapshot)
+    await service.setStopError(.readinessTimedOut)
+    let model = KubernetesClusterModel(
+      service: service,
+      initialSnapshot: snapshot
+    )
+
+    let result = await model.stop()
+
+    #expect(!result)
+    #expect(model.snapshot == snapshot)
+    #expect(model.errorMessage == KubernetesClusterError.readinessTimedOut.localizedDescription)
+    #expect(await service.loadCount == 1)
+  }
+}
+
 private actor InMemoryKubernetesDescriptorStore:
   KubernetesClusterDescriptorStoring
 {
@@ -250,6 +297,87 @@ private actor InMemoryKubernetesDescriptorStore:
   func remove() {
     descriptor = nil
   }
+}
+
+private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
+  private(set) var loadCount = 0
+  private var snapshot: KubernetesClusterSnapshot
+  private var provisionedSnapshot: KubernetesClusterSnapshot
+  private var stopError: KubernetesClusterError?
+
+  init(snapshot: KubernetesClusterSnapshot) {
+    self.snapshot = snapshot
+    provisionedSnapshot = snapshot
+  }
+
+  func load() -> KubernetesClusterSnapshot {
+    loadCount += 1
+    return snapshot
+  }
+
+  func provision(
+    _ request: KubernetesClusterProvisionRequest,
+    progress: @escaping KubernetesClusterProgressHandler
+  ) async throws -> KubernetesClusterSnapshot {
+    await progress(
+      KubernetesClusterProgress(
+        phase: .completed,
+        detail: KubernetesDistribution.current.version,
+        fractionCompleted: 1
+      )
+    )
+    snapshot = provisionedSnapshot
+    return snapshot
+  }
+
+  func retryProvisioning(
+    progress: @escaping KubernetesClusterProgressHandler
+  ) -> KubernetesClusterSnapshot {
+    snapshot
+  }
+
+  func start() -> KubernetesClusterSnapshot {
+    snapshot
+  }
+
+  func stop() throws -> KubernetesClusterSnapshot {
+    if let stopError {
+      throw stopError
+    }
+    return snapshot
+  }
+
+  func forceStop() -> KubernetesClusterSnapshot {
+    snapshot
+  }
+
+  func delete() {
+    snapshot = .absent
+  }
+
+  func forget() {
+    snapshot = .absent
+  }
+
+  func exportKubeconfig() -> KubernetesKubeconfigExport {
+    KubernetesKubeconfigExport(
+      fileName: "kubeconfig.yaml",
+      data: Data("apiVersion: v1\n".utf8)
+    )
+  }
+
+  func setProvisionedSnapshot(_ snapshot: KubernetesClusterSnapshot) {
+    provisionedSnapshot = snapshot
+  }
+
+  func setStopError(_ error: KubernetesClusterError?) {
+    stopError = error
+  }
+}
+
+@MainActor
+private final class KubernetesMutationCounter {
+  var count = 0
 }
 
 private actor KubernetesMachineRuntimeDouble:
@@ -513,6 +641,27 @@ private actor CapturingKubernetesCommandExecutor: RuntimeCommandExecuting {
       duration: .zero
     )
   }
+}
+
+private func readyKubernetesSnapshot() -> KubernetesClusterSnapshot {
+  let machine = makeMachine()
+  let descriptor = KubernetesClusterDescriptor(
+    operationID: UUID(),
+    machine: LinuxMachineIdentity(machine: machine),
+    distribution: .current,
+    phase: .ready,
+    createdAt: Date(timeIntervalSince1970: 1_700_000_100)
+  )
+  return KubernetesClusterSnapshot(
+    state: .ready,
+    descriptor: descriptor,
+    machine: machine,
+    k3sVersion: "k3s version v1.36.1+k3s1",
+    nodeCount: 1,
+    readyNodeCount: 1,
+    podCount: 2,
+    runningPodCount: 2
+  )
 }
 
 private func stableIdentity() -> LinuxMachineIdentity {

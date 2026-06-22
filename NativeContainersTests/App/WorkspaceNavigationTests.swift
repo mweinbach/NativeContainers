@@ -18,6 +18,8 @@ struct WorkspaceNavigationTests {
     #expect(WorkspaceRoute.volume("data").baseRoute == .volumes)
     #expect(WorkspaceRoute.network("backend").baseRoute == .networks)
     #expect(WorkspaceRoute.linuxMachine("dev").baseRoute == .linuxMachines)
+    #expect(WorkspaceRoute.kubernetes.baseRoute == .kubernetes)
+    #expect(WorkspaceRoute.kubernetes.stableIdentifier == "kubernetes")
     #expect(
       WorkspaceRoute.macOSVirtualMachine(machineID).baseRoute == .macOSVirtualMachines
     )

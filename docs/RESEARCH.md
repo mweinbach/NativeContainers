@@ -766,6 +766,42 @@ Primary sources:
   MetricKit responsibility. The local artifact gate now compares `dwarfdump`
   UUIDs for both the app and embedded worker against their archived dSYMs.
 
+## Apple machine and K3s findings
+
+Primary sources:
+
+- [Apple container machine](https://github.com/apple/container/blob/main/docs/container-machine.md)
+- [K3s quick start](https://docs.k3s.io/quick-start)
+- [K3s requirements](https://docs.k3s.io/installation/requirements)
+- [K3s installer source](https://github.com/k3s-io/k3s/blob/master/install.sh)
+- [K3s releases](https://github.com/k3s-io/k3s/releases)
+
+- Apple documents container machines as fast, persistent Linux environments
+  that run the image's init system and support long-running system services.
+  Machine commands operate through the current per-boot backing container, so
+  NativeContainers reuses its existing exact-identity resolver rather than
+  addressing a cached container ID.
+- K3s supports arm64, expects at least two cores and 2 GiB for a server, and
+  needs working cgroups. A single server is already a complete cluster with its
+  datastore, control plane, kubelet, and container runtime. The API listens on
+  6443, and the installer writes kubeconfig to
+  `/etc/rancher/k3s/k3s.yaml`.
+- The official installer supports systemd and OpenRC, persists K3s options into
+  the guest service, downloads the requested release, and verifies the binary
+  against the release checksum. NativeContainers additionally pins release
+  `v1.36.1+k3s1` and the exact-tag installer. The installer bytes fetched on
+  2026-06-21 hash to
+  `46177d4c99440b4c0311b67233823a8e8a2fc09693f6c89af1a7161e152fbfad`.
+- K3s documents unique node names and warns that version rollback requires a
+  matching datastore snapshot. The first product slice is therefore a named
+  single-node cluster with no automatic upgrade or downgrade path; version and
+  storage migration remain explicit future work.
+- Kubeconfig embeds client credentials. The app does not copy it into
+  Application Support or logs. Explicit export reads a bounded document from
+  the running guest, requires the expected certificate fields and one loopback
+  server, substitutes the machine's current validated IP in memory, and then
+  delegates destination ownership to the macOS file exporter.
+
 ## Public-API boundaries
 
 - No public Linux GPU/Metal passthrough.

@@ -134,6 +134,38 @@ identity immediately before Apple’s ID-only route, but Apple 1.0 exposes no
 conditional delete token, so a narrow external same-name replacement race
 remains.
 
+### Kubernetes lane
+
+Kubernetes is one application-owned cluster backed by one persistent Apple
+container machine, not a hidden Docker or Virtualization.framework runtime.
+`AppleKubernetesClusterService` composes the existing machine creation,
+lifecycle, inventory, process-target, and bounded process-execution facets. The
+machine receives no host-home mount. Cluster data, containerd state, and local
+volumes remain inside its dedicated persistent disk and share the machine's
+exact identity and lifecycle.
+
+Provisioning executes as UID 0 through Apple's runtime-process XPC route; the UI
+does not expose a generic privileged shell. The service installs only bounded
+apk/apt prerequisites, downloads the installer from the exact K3s release tag,
+compares it with an embedded SHA-256 before execution, pins
+`INSTALL_K3S_VERSION`, and relies on the official installer's release checksum
+verification for the binary. K3s runs as the guest's native OpenRC or systemd
+service with secret encryption and a mode-0600 kubeconfig.
+
+A backup-excluded mode-0700 host store retains only the schema, operation ID,
+exact Apple machine identity, approved distribution provenance, phase, and
+creation time. It contains no cluster token, client key, certificate, or
+kubeconfig. An interrupted install remains explicitly retryable against the
+same identity. A replacement with the same name is surfaced as stale and never
+addressed. Delete gracefully stops and removes only the exact machine; Force
+Stop uses the existing identity-pinned authorization path.
+
+Status reads bounded version, node, and pod summaries from `k3s kubectl`.
+Kubeconfig is read only after an explicit export action, validated and bounded
+in memory, rewritten from guest loopback to the current dedicated machine IP,
+and handed to the system file exporter. NativeContainers never persists the
+secret document on the host.
+
 Container creation attachments cross a separate `ContainerAttachmentManaging`
 facet. The SwiftUI draft freezes complete volume and network configuration
 identities, ordered network selection, normalized guest mount paths, and logical

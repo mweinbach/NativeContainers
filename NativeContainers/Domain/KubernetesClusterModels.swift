@@ -255,6 +255,7 @@ protocol KubernetesClusterManaging: Sendable {
   func stop() async throws -> KubernetesClusterSnapshot
   func forceStop() async throws -> KubernetesClusterSnapshot
   func delete() async throws
+  func forget() async throws
   func exportKubeconfig() async throws -> KubernetesKubeconfigExport
 }
 
@@ -289,6 +290,10 @@ struct UnavailableKubernetesClusterService: KubernetesClusterManaging {
   }
 
   func delete() async throws {
+    throw KubernetesClusterError.unavailable
+  }
+
+  func forget() async throws {
     throw KubernetesClusterError.unavailable
   }
 
