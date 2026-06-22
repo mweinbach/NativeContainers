@@ -208,6 +208,27 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.updatedAt = updatedAt
   }
 
+  @discardableResult
+  mutating func growDisk(
+    to diskBytes: UInt64,
+    updatedAt: Date = Date()
+  ) throws -> Bool {
+    guard diskBytes >= resources.diskBytes else {
+      throw VirtualMachineDiskImageResizeError.growthRequired(
+        current: resources.diskBytes,
+        requested: diskBytes
+      )
+    }
+    guard diskBytes != resources.diskBytes else { return false }
+    resources = try VirtualMachineResources(
+      cpuCount: resources.cpuCount,
+      memoryBytes: resources.memoryBytes,
+      diskBytes: diskBytes
+    )
+    self.updatedAt = updatedAt
+    return true
+  }
+
   mutating func markInstallationAborted(
     kind: VirtualMachineInstallationFailureKind,
     message: String,

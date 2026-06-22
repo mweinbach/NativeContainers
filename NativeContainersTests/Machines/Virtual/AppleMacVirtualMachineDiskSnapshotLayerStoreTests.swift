@@ -17,6 +17,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStoreTests {
       layer,
       baseURL: fixture.baseURL,
       retainedLayerURLs: [],
+      targetLogicalBytes: 4_096,
       in: fixture.bundleURL
     )
 
@@ -33,6 +34,34 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStoreTests {
 
     try fixture.store.removeLayers([layer], in: fixture.bundleURL)
     #expect(!FileManager.default.fileExists(atPath: url.path))
+  }
+
+  @Test
+  func createsAnActiveOverlayAtAnExplicitLargerCapacity() throws {
+    guard #available(macOS 27.0, *) else { return }
+    let fixture = try DiskSnapshotLayerStoreFixture()
+    defer { fixture.remove() }
+    let targetLogicalBytes: UInt64 = 8_192
+
+    let layer = MacVirtualMachineDiskSnapshotLayer()
+    let url = try fixture.store.createLayer(
+      layer,
+      baseURL: fixture.baseURL,
+      retainedLayerURLs: [],
+      targetLogicalBytes: targetLogicalBytes,
+      in: fixture.bundleURL
+    )
+    let base = try DiskImage(
+      opening: .open(url: fixture.baseURL, mode: .readOnly)
+    )
+    let overlay = try DiskImage(
+      opening: .open(url: url, mode: .readOnly)
+    )
+    let stack = try base.appending(overlay)
+
+    #expect(UInt64(exactly: stack.size) == targetLogicalBytes)
+    #expect(stack.layers.last?.layerType == .overlay)
+    #expect(stack.layers.last?.url.standardizedFileURL == url.standardizedFileURL)
   }
 
   @Test

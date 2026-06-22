@@ -4,6 +4,7 @@ import Observation
 enum VirtualMachineDiskImageMaintenanceOperation: Equatable, Sendable {
   case migration
   case rewrite
+  case resize(UInt64)
 
   var progressLabel: LocalizedStringResource {
     switch self {
@@ -11,6 +12,17 @@ enum VirtualMachineDiskImageMaintenanceOperation: Equatable, Sendable {
       "Converting virtual disk"
     case .rewrite:
       "Rewriting virtual disk"
+    case .resize:
+      "Growing virtual disk"
+    }
+  }
+
+  var canCancel: Bool {
+    switch self {
+    case .migration, .rewrite:
+      true
+    case .resize:
+      false
     }
   }
 }
@@ -18,6 +30,7 @@ enum VirtualMachineDiskImageMaintenanceOperation: Equatable, Sendable {
 enum VirtualMachineDiskImageMaintenanceCompletion: Equatable, Sendable {
   case migration(VirtualMachineDiskImageMigrationResult)
   case rewrite(VirtualMachineDiskImageRewriteResult)
+  case resize(VirtualMachineDiskImageResizeResult)
 }
 
 @MainActor
@@ -42,10 +55,19 @@ final class VirtualMachineDiskImageMaintenanceModel {
     operation == .rewrite && !isRefreshing
   }
 
+  var isResizing: Bool {
+    guard case .resize = operation else { return false }
+    return !isRefreshing
+  }
+
   @ObservationIgnored
   private let migration: any VirtualMachineDiskImageMigrating
   @ObservationIgnored
   private let rewrite: any VirtualMachineDiskImageRewriting
+  @ObservationIgnored
+  private let resize: any VirtualMachineDiskImageResizing
+  @ObservationIgnored
+  private let guest: VirtualMachineGuest
   @ObservationIgnored
   private let didMutate: @MainActor @Sendable () async -> Void
   @ObservationIgnored
@@ -55,14 +77,19 @@ final class VirtualMachineDiskImageMaintenanceModel {
 
   init(
     machineID: UUID,
+    guest: VirtualMachineGuest = .macOS,
     migration: any VirtualMachineDiskImageMigrating,
     rewrite: any VirtualMachineDiskImageRewriting,
+    resize: any VirtualMachineDiskImageResizing =
+      UnavailableVirtualMachineDiskImageResizeService(),
     didMutate: @escaping @MainActor @Sendable () async -> Void = {},
     didSettle: @escaping @MainActor @Sendable () async -> Void = {}
   ) {
     self.machineID = machineID
+    self.guest = guest
     self.migration = migration
     self.rewrite = rewrite
+    self.resize = resize
     self.didMutate = didMutate
     self.didSettle = didSettle
   }
@@ -75,8 +102,12 @@ final class VirtualMachineDiskImageMaintenanceModel {
     start(.rewrite)
   }
 
+  func startResize(to targetLogicalBytes: UInt64) {
+    start(.resize(targetLogicalBytes))
+  }
+
   func cancelMaintenance() {
-    guard operation != nil, !isRefreshing else { return }
+    guard operation?.canCancel == true, !isRefreshing else { return }
     maintenanceTask?.cancel()
   }
 
@@ -115,6 +146,14 @@ final class VirtualMachineDiskImageMaintenanceModel {
         let result = try await rewrite.rewriteASIF(machineID: machineID)
         completion = .rewrite(result)
         didCommitMutation = result.didReplace
+      case .resize(let targetLogicalBytes):
+        let result = try await resize.grow(
+          machineID: machineID,
+          guest: guest,
+          to: targetLogicalBytes
+        )
+        completion = .resize(result)
+        didCommitMutation = result.didResize
       }
     } catch is CancellationError {
       failureMessage = nil
@@ -123,6 +162,11 @@ final class VirtualMachineDiskImageMaintenanceModel {
       if case .committedCleanupPending = error {
         didCommitMutation = true
       } else if operation == .migration, case .alreadyASIF = error {
+        didCommitMutation = true
+      }
+    } catch let error as VirtualMachineDiskImageResizeError {
+      failureMessage = error.localizedDescription
+      if case .committedCleanupPending = error {
         didCommitMutation = true
       }
     } catch {

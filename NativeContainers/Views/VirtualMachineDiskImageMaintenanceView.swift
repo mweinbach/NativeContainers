@@ -12,9 +12,12 @@ struct MacVirtualMachineDiskImageMaintenanceView: View {
 
   var body: some View {
     MacVirtualMachineDiskImageSection(
+      machineName: machine.name,
+      currentLogicalBytes: machine.resources.diskBytes,
       format: machine.effectiveDiskImageFormat,
       maintenance: maintenance,
-      maintenanceBlockReason: maintenanceBlockReason,
+      growthBlockReason: growthBlockReason,
+      optimizationBlockReason: optimizationBlockReason,
       requestMigration: { isConfirmingMigration = true },
       requestRewrite: { isConfirmingRewrite = true },
       discardSavedState: discardSavedState
@@ -45,18 +48,15 @@ struct MacVirtualMachineDiskImageMaintenanceView: View {
     }
   }
 
-  private var maintenanceBlockReason: LocalizedStringResource? {
+  private var growthBlockReason: LocalizedStringResource? {
     guard machine.installState == .stopped else {
       return "Finish installing this VM before maintaining its virtual disk."
     }
     guard #available(macOS 27.0, *) else {
-      return "ASIF disk maintenance requires macOS 27 or later."
+      return "Virtual disk growth and ASIF maintenance require macOS 27 or later."
     }
     guard !snapshotOperationIsBusy else {
       return "Wait for the disk snapshot operation to finish."
-    }
-    guard !machine.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots else {
-      return "Virtual disk conversion and rewrite are unavailable while snapshot history exists."
     }
     guard runtime.snapshot.target == nil else {
       return "Shut down this VM before maintaining its virtual disk."
@@ -80,12 +80,23 @@ struct MacVirtualMachineDiskImageMaintenanceView: View {
       return "Discard the saved state before maintaining the virtual disk."
     }
   }
+
+  private var optimizationBlockReason: LocalizedStringResource? {
+    if let growthBlockReason { return growthBlockReason }
+    guard !machine.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots else {
+      return "Virtual disk conversion and rewrite are unavailable while snapshot history exists."
+    }
+    return nil
+  }
 }
 
 struct MacVirtualMachineDiskImageSection: View {
+  let machineName: String
+  let currentLogicalBytes: UInt64
   let format: VirtualMachineDiskImageFormat
   let maintenance: VirtualMachineDiskImageMaintenanceModel
-  let maintenanceBlockReason: LocalizedStringResource?
+  let growthBlockReason: LocalizedStringResource?
+  let optimizationBlockReason: LocalizedStringResource?
   let requestMigration: () -> Void
   let requestRewrite: () -> Void
   let discardSavedState: (() -> Void)?
@@ -121,15 +132,13 @@ struct MacVirtualMachineDiskImageSection: View {
           HStack(spacing: 10) {
             ProgressView()
               .controlSize(.small)
-            Text(
-              operation == .migration
-                ? "Converting the virtual disk…"
-                : "Rewriting the virtual disk…"
-            )
-            .foregroundStyle(.secondary)
+            Text(operation.progressLabel)
+              .foregroundStyle(.secondary)
             Spacer()
-            Button("Cancel") {
-              maintenance.cancelMaintenance()
+            if operation.canCancel {
+              Button("Cancel") {
+                maintenance.cancelMaintenance()
+              }
             }
           }
         } else if let completion = maintenance.completion {
@@ -142,44 +151,46 @@ struct MacVirtualMachineDiskImageSection: View {
               maintenance.clearCompletion()
             }
           }
-        } else if let maintenanceBlockReason {
-          HStack(spacing: 10) {
-            Label(maintenanceBlockReason, systemImage: "lock.fill")
-              .font(.callout)
-              .foregroundStyle(.secondary)
-            Spacer()
-            if let discardSavedState {
-              Button("Discard Saved State…", action: discardSavedState)
-            }
-          }
-          .padding(10)
-          .background(
-            .quaternary.opacity(0.55),
-            in: RoundedRectangle(cornerRadius: 8)
-          )
         } else {
-          switch format {
-          case .raw:
-            HStack {
-              Text(
-                "Conversion is out-of-place and keeps the RAW disk authoritative until the ASIF image is verified."
-              )
-              .font(.callout)
-              .foregroundStyle(.secondary)
-              Spacer()
-              Button("Convert to ASIF…", action: requestMigration)
-                .buttonStyle(.borderedProminent)
-            }
-          case .asif:
-            HStack {
-              Text(
-                "A rewrite creates and verifies a standalone ASIF candidate, then switches only when its measured allocation is smaller."
-              )
-              .font(.callout)
-              .foregroundStyle(.secondary)
-              Spacer()
-              Button("Rewrite ASIF…", action: requestRewrite)
-                .buttonStyle(.borderedProminent)
+          VirtualMachineDiskGrowthControls(
+            machineName: machineName,
+            currentLogicalBytes: currentLogicalBytes,
+            maintenance: maintenance,
+            blockReason: growthBlockReason,
+            discardSavedState: discardSavedState
+          )
+
+          Divider()
+
+          if let optimizationBlockReason {
+            VirtualMachineConfigurationEditLockBanner(
+              message: optimizationBlockReason,
+              discardSavedState: discardSavedState
+            )
+          } else {
+            switch format {
+            case .raw:
+              HStack {
+                Text(
+                  "Conversion is out-of-place and keeps the RAW disk authoritative until the ASIF image is verified."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                Spacer()
+                Button("Convert to ASIF…", action: requestMigration)
+                  .buttonStyle(.borderedProminent)
+              }
+            case .asif:
+              HStack {
+                Text(
+                  "A rewrite creates and verifies a standalone ASIF candidate, then switches only when its measured allocation is smaller."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                Spacer()
+                Button("Rewrite ASIF…", action: requestRewrite)
+                  .buttonStyle(.borderedProminent)
+              }
             }
           }
         }
@@ -224,6 +235,10 @@ private struct MacVirtualMachineDiskImageMaintenanceCompletion: View {
             "Rewrite completed without a smaller allocation, so the current disk was kept."
           )
         }
+      case .resize(let result):
+        Text(
+          "Grew the virtual disk by \(Int64(clamping: result.addedLogicalBytes), format: .byteCount(style: .file)). Expand the guest partition and file system after the next start."
+        )
       }
     } icon: {
       Image(systemName: "checkmark.circle.fill")

@@ -847,6 +847,23 @@ Primary sources:
   resize GPT, partitions, or filesystems, and shrinking can destroy data.
   `diskutil image resize` is in-place and has different cancellation/rollback
   semantics, so neither operation is a compaction substitute.
+- Apple documents `truncate(blockCount:)` for a read-write disk image. A stacked
+  image changes capacity through its writable top layer; cache layers are not
+  resize targets. NativeContainers therefore opens standalone RAW/ASIF images
+  explicitly read-write, or assembles every historical layer read-only with
+  only the active overlay read-write. It never relies on the open API's
+  automatic mode because that mode may fall back to read-only.
+- `DiskImage.LayerType.overlay(blockCount:)` gives a new overlay an explicit
+  effective size instead of inheriting the layer below it. Snapshot restore
+  uses the manifest's current capacity here, so restoring a checkpoint captured
+  before disk growth cannot silently shrink the virtual block device.
+- Xcode DocumentationSearch confirmed the truncate, read-write, stack, and
+  explicit-overlay contracts in the installed macOS 27 SDK. The isolated code
+  snippet compiled behind the required macOS 27 availability gate, although
+  Xcode's snippet host hit the existing 30-second app-launch timeout. Focused
+  Xcode tests provide the runtime evidence instead: they create real RAW and
+  ASIF images, grow standalone and stacked images, prove only the active top
+  layer changes, and create a restored overlay larger than its base.
 - There is no public `compact` command. A local standalone ASIF-to-ASIF rewrite
   reclaimed stale unmapped allocation while retaining virtual capacity, but
   Apple does not document that outcome as a compact contract. A future UI must

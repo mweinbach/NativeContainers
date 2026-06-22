@@ -269,6 +269,9 @@ private struct GuestVirtualMachineRow: View {
       LinuxVirtualMachineRow(
         machine: machine,
         runtime: model.makeLinuxVirtualMachineRuntimeModel(for: machine),
+        diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
+          for: machine
+        ),
         isSelected: isSelected,
         onSelect: onSelect,
         open: open,
@@ -311,6 +314,9 @@ private struct GuestVirtualMachineConfigurationView: View {
         runtime: model.makeLinuxVirtualMachineRuntimeModel(for: machine),
         naming: model.makeVirtualMachineNameModel(for: machine),
         compute: model.makeVirtualMachineComputeModel(for: machine),
+        diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
+          for: machine
+        ),
         network: model.makeLinuxVirtualMachineNetworkModel(for: machine),
         sharedDirectories: model.makeLinuxVirtualMachineSharedDirectoriesModel(
           for: machine

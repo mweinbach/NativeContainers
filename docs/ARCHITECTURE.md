@@ -844,6 +844,31 @@ RAW source. Launch recovery continues across per-VM failures, rolls back safe
 pre-commit artifacts, or completes post-commit cleanup. Neither migration nor
 recovery truncates or resizes a guest filesystem.
 
+Virtual-disk growth is a distinct guest-neutral transaction rather than a
+compute-setting edit or a reuse of disk replacement. The resize service takes
+the guest's generation-pinned stopped runtime lease, rejects saved state,
+requires manifest capacity to match live DiskImageKit geometry, and seals the
+exact regular file that will change. Standalone RAW/ASIF images open explicitly
+read-write. For a macOS snapshot stack, the base and historical overlays open
+read-only and only the active top overlay opens read-write; the assembled stack
+must reproduce the exact ordered overlay URLs before `truncate(blockCount:)`
+can grow it. Shrink, block misalignment, cache layers, and automatic open-mode
+fallback are rejected.
+
+The owner-only `.DiskImageResize.json` journal advances only
+`planned -> imageExtended -> manifestUpdated`. DiskImageKit output and the
+journal are fully synchronized before the library compares machine, guest,
+paths, format, old/new capacity, runtime generation, and post-growth artifact
+identity for one atomic manifest write. Once the image may have changed, the
+operation is deliberately non-cancellable: recovery either recognizes the
+same file node at the requested geometry and moves forward, or fails closed.
+Ordinary runtime, disk replacement, discard, clone, export, and import paths
+reject any pending resize journal; only the resize recovery lease may open the
+bundle. Startup recovery processes bundles independently and reports deferred
+ownership or invalid artifacts without guessing. SwiftUI exposes whole-GiB
+grow-only controls and explicitly leaves guest partition/filesystem expansion
+to the guest.
+
 macOS disk snapshots use a separate service boundary from replacement and
 saved-state checkpoints. A revisioned manifest value records a bounded linear
 history of named checkpoints and canonical `Snapshots/<UUID>.asif` layers. The
@@ -852,7 +877,12 @@ saved state, recovers only recognized unreferenced private artifacts, creates a
 DiskImageKit overlay through a hidden partial, and commits the new manifest only
 after promotion. Commit failure removes the unreferenced layer; restore commits
 the retained prefix plus a fresh writable layer before best-effort retirement
-of newer layers. A later operation safely retries any post-commit residue.
+of newer layers. Every new active overlay uses
+`DiskImage.LayerType.overlay(blockCount:)` with the manifest's current capacity.
+That explicit geometry is critical when restoring a checkpoint captured before
+disk growth: the historical prefix can remain unchanged while the new writable
+top preserves the VM's larger block device. A later operation safely retries
+any post-commit residue.
 
 The bundle resolver maps every persisted layer in manifest order. Runtime disk
 attachment opens the base and frozen layers read-only and only the top overlay

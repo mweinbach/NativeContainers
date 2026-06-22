@@ -3,6 +3,7 @@ import SwiftUI
 struct LinuxVirtualMachineRow: View {
   let machine: VirtualMachineManifest
   let runtime: LinuxVirtualMachineRuntimeModel
+  let diskMaintenance: VirtualMachineDiskImageMaintenanceModel
   let isSelected: Bool
   let onSelect: () -> Void
   let open: () -> Void
@@ -71,6 +72,7 @@ struct LinuxVirtualMachineRow: View {
           Image(systemName: "ellipsis.circle")
         }
         .menuStyle(.borderlessButton)
+        .disabled(diskMaintenance.isBusy)
         .help("More Linux virtual machine actions")
         .accessibilityLabel("More Linux virtual machine actions")
       }
@@ -118,46 +120,55 @@ struct LinuxVirtualMachineRow: View {
 
   @ViewBuilder
   private var primaryAction: some View {
-    switch machine.installState {
-    case .draft:
-      Label("Needs installer", systemImage: "opticaldisc")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    case .readyToInstall, .stopped:
-      switch runtime.snapshot.state {
-      case .stopped, .ownedElsewhere:
-        if case .incompatible = runtime.snapshot.savedStateStatus {
-          Button("Start Fresh…") {
-            isConfirmingStartFresh = true
-          }
-          .buttonStyle(.borderedProminent)
-          .disabled(!runtime.snapshot.canStartFresh)
-        } else {
-          Button(startTitle) {
-            Task { await runtime.start() }
-          }
-          .buttonStyle(.borderedProminent)
-          .disabled(!runtime.snapshot.canStart)
-        }
-      case .running, .paused, .stopping:
-        Button("Open", action: open)
-          .buttonStyle(.borderedProminent)
-      case .inspectingSavedState, .starting, .pausing, .resuming, .saving,
-        .restoring, .discardingSavedState, .ejectingInstallationMedia:
-        HStack(spacing: 6) {
-          ProgressView()
-            .controlSize(.small)
-          Text(runtime.snapshot.state.label)
-            .font(.caption)
-        }
+    if diskMaintenance.isBusy {
+      HStack(spacing: 6) {
+        ProgressView()
+          .controlSize(.small)
+        Text(diskMaintenance.operation?.progressLabel ?? "Refreshing disk")
+          .font(.caption)
       }
-    case .installing:
-      ProgressView()
-        .controlSize(.small)
-    case .failed:
-      Label("Needs attention", systemImage: "exclamationmark.triangle.fill")
-        .font(.caption)
-        .foregroundStyle(.orange)
+    } else {
+      switch machine.installState {
+      case .draft:
+        Label("Needs installer", systemImage: "opticaldisc")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      case .readyToInstall, .stopped:
+        switch runtime.snapshot.state {
+        case .stopped, .ownedElsewhere:
+          if case .incompatible = runtime.snapshot.savedStateStatus {
+            Button("Start Fresh…") {
+              isConfirmingStartFresh = true
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!runtime.snapshot.canStartFresh)
+          } else {
+            Button(startTitle) {
+              Task { await runtime.start() }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!runtime.snapshot.canStart)
+          }
+        case .running, .paused, .stopping:
+          Button("Open", action: open)
+            .buttonStyle(.borderedProminent)
+        case .inspectingSavedState, .starting, .pausing, .resuming, .saving,
+          .restoring, .discardingSavedState, .ejectingInstallationMedia:
+          HStack(spacing: 6) {
+            ProgressView()
+              .controlSize(.small)
+            Text(runtime.snapshot.state.label)
+              .font(.caption)
+          }
+        }
+      case .installing:
+        ProgressView()
+          .controlSize(.small)
+      case .failed:
+        Label("Needs attention", systemImage: "exclamationmark.triangle.fill")
+          .font(.caption)
+          .foregroundStyle(.orange)
+      }
     }
   }
 
@@ -213,7 +224,13 @@ struct LinuxVirtualMachineRow: View {
   }
 
   private var statusLabel: LocalizedStringResource {
-    switch machine.installState {
+    if let operation = diskMaintenance.operation {
+      return operation.progressLabel
+    }
+    if diskMaintenance.isRefreshing {
+      return "Refreshing virtual disk state"
+    }
+    return switch machine.installState {
     case .draft:
       "Needs installation media"
     case .readyToInstall:
@@ -262,6 +279,7 @@ struct LinuxVirtualMachineRow: View {
   }
 
   private var runtimeDiagnostic: String? {
+    if let errorMessage = diskMaintenance.errorMessage { return errorMessage }
     if let errorMessage = runtime.errorMessage { return errorMessage }
     if case .incompatible(let reason) = runtime.snapshot.savedStateStatus {
       return reason

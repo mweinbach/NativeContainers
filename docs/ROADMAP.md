@@ -151,6 +151,10 @@ must leave a usable, test-backed product slice.
 - [x] Stopped-only GUI Linux CPU and memory editing within the current host's
       Virtualization.framework limits, with generation-pinned persistence and
       cold-start application while disk capacity remains storage-owned.
+- [x] Stopped-only GUI Linux virtual-disk growth through DiskImageKit, with a
+      forward-only phase journal, exact artifact/lease validation, startup
+      recovery, saved-state exclusion, and explicit guest partition/filesystem
+      follow-up guidance.
 - [x] Stopped-only GUI Linux renaming through a generation-pinned metadata
       service that preserves bundle, machine, network, and storage identity.
 - [x] Persistent GUI Linux VirtioFS shared folders through security-scoped
@@ -189,6 +193,9 @@ must leave a usable, test-backed product slice.
 - [x] Transactional same-host save/restore with configuration fingerprints,
       single-use restore consumption, and queued Force Stop. Live verification
       remains gated by an installed guest.
+- [x] Stopped-only macOS virtual-disk growth through the same guest-neutral
+      DiskImageKit transaction, including ASIF/RAW support, active-overlay
+      growth, and capacity-preserving restore of older disk snapshots.
 - [x] Native console with automatic display reconfiguration and system-key
       capture controls.
 - [x] Persistent, security-scoped VirtioFS shared directories with stopped-only
@@ -267,7 +274,8 @@ must leave a usable, test-backed product slice.
 - [x] Measured standalone-ASIF rewrite reclamation without a compaction guarantee.
 - [x] Bounded stopped-only macOS disk snapshots through bundle-local
       DiskImageKit overlay stacks, with transactional manifest commits,
-      restore-to-prune semantics, saved-state invalidation, and native controls.
+      restore-to-prune semantics, explicit current-capacity active layers,
+      saved-state invalidation, and native controls.
 - [x] Native sidebar/toolbar command groups, Command-1 through Command-9
       plus Command-0 Kubernetes navigation, Voice Control input labels, and automatic
       source-language String Catalog extraction.

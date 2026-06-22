@@ -97,6 +97,41 @@ struct VirtualMachineModelsTests {
   }
 
   @Test
+  func diskGrowthUpdatesOnlyCapacityAndRejectsShrink() throws {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var manifest = try VirtualMachineManifest(
+      name: "Growth",
+      guest: .linux,
+      installState: .stopped,
+      resources: resources
+    )
+    let grownAt = Date(timeIntervalSince1970: 1_000)
+    let targetBytes = 72 * VirtualMachineResources.bytesPerGiB
+
+    #expect(try manifest.growDisk(to: targetBytes, updatedAt: grownAt))
+    #expect(manifest.resources.diskBytes == targetBytes)
+    #expect(manifest.resources.cpuCount == resources.cpuCount)
+    #expect(manifest.resources.memoryBytes == resources.memoryBytes)
+    #expect(manifest.updatedAt == grownAt)
+
+    #expect(
+      try !manifest.growDisk(
+        to: targetBytes,
+        updatedAt: Date(timeIntervalSince1970: 2_000)
+      )
+    )
+    #expect(manifest.updatedAt == grownAt)
+    #expect(throws: VirtualMachineDiskImageResizeError.self) {
+      try manifest.growDisk(to: resources.diskBytes)
+    }
+    #expect(manifest.resources.diskBytes == targetBytes)
+  }
+
+  @Test
   func clonePreservesExplicitASIFFormat() throws {
     let resources = try VirtualMachineResources(
       cpuCount: 4,

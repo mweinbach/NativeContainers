@@ -34,6 +34,7 @@ import Testing
         first.createdLayer,
         baseURL: baseURL,
         retainedLayerURLs: [],
+        targetLogicalBytes: 4_096,
         in: bundleURL
       )
       let second = try first.configuration.creatingSnapshot(
@@ -43,6 +44,7 @@ import Testing
         second.createdLayer,
         baseURL: baseURL,
         retainedLayerURLs: [firstURL],
+        targetLogicalBytes: 4_096,
         in: bundleURL
       )
 

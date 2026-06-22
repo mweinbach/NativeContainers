@@ -53,6 +53,35 @@ struct VirtualMachineDiskImageMaintenanceModelTests {
   }
 
   @Test
+  func resizePublishesGrowthAndRefreshesTheLibrary() async throws {
+    let source = try asifManifest()
+    var grown = source
+    _ = try grown.growDisk(
+      to: 12 * VirtualMachineResources.bytesPerGiB
+    )
+    let result = VirtualMachineDiskImageResizeResult(
+      manifest: grown,
+      previousLogicalBytes: source.resources.diskBytes,
+      newLogicalBytes: grown.resources.diskBytes,
+      didResize: true
+    )
+    let counter = MaintenanceMutationCounter()
+    let model = makeModel(
+      manifest: source,
+      resize: DiskResizeServiceDouble(result: result)
+    ) {
+      counter.value += 1
+    }
+
+    model.startResize(to: grown.resources.diskBytes)
+    await waitUntilSettled(model)
+
+    #expect(model.completion == .resize(result))
+    #expect(model.errorMessage == nil)
+    #expect(counter.value == 1)
+  }
+
+  @Test
   func rewriteWithoutMeasuredSavingsDoesNotClaimAMutation() async throws {
     let manifest = try asifManifest()
     let result = VirtualMachineDiskImageRewriteResult(
@@ -220,13 +249,17 @@ struct VirtualMachineDiskImageMaintenanceModelTests {
       DiskMigrationServiceDouble(behavior: .fail(.unavailable)),
     rewrite: any VirtualMachineDiskImageRewriting =
       DiskRewriteServiceDouble(behavior: .fail(.unavailable)),
+    resize: any VirtualMachineDiskImageResizing =
+      UnavailableVirtualMachineDiskImageResizeService(),
     didMutate: @escaping @MainActor @Sendable () async -> Void = {},
     didSettle: @escaping @MainActor @Sendable () async -> Void = {}
   ) -> VirtualMachineDiskImageMaintenanceModel {
     VirtualMachineDiskImageMaintenanceModel(
       machineID: manifest.id,
+      guest: manifest.guest,
       migration: migration,
       rewrite: rewrite,
+      resize: resize,
       didMutate: didMutate,
       didSettle: didSettle
     )
@@ -275,7 +308,9 @@ private final class BlockingMaintenanceRefresh {
     started = true
     let waiters = startWaiters
     startWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters {
+      waiter.resume()
+    }
     await withCheckedContinuation { continuation in
       self.continuation = continuation
     }
@@ -351,7 +386,9 @@ private final class DiskRewriteServiceDouble:
     didStart = true
     let waiters = startWaiters
     startWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters {
+      waiter.resume()
+    }
 
     switch behavior {
     case .succeed(let result):
@@ -371,5 +408,20 @@ private final class DiskRewriteServiceDouble:
     await withCheckedContinuation { continuation in
       startWaiters.append(continuation)
     }
+  }
+}
+
+private struct DiskResizeServiceDouble: VirtualMachineDiskImageResizing {
+  let result: VirtualMachineDiskImageResizeResult
+
+  func grow(
+    machineID: UUID,
+    guest: VirtualMachineGuest,
+    to targetLogicalBytes: UInt64
+  ) async throws -> VirtualMachineDiskImageResizeResult {
+    #expect(machineID == result.manifest.id)
+    #expect(guest == result.manifest.guest)
+    #expect(targetLogicalBytes == result.newLogicalBytes)
+    return result
   }
 }

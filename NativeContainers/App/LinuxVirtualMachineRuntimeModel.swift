@@ -62,6 +62,10 @@ final class LinuxVirtualMachineRuntimeModel {
     }
   }
 
+  func refreshSavedState() async {
+    await service.refreshSavedState(id: machineID)
+  }
+
   func startFresh() async {
     await perform {
       try await service.startFresh(id: machineID)

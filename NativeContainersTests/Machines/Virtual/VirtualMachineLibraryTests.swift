@@ -692,6 +692,101 @@ struct VirtualMachineLibraryTests {
   }
 
   @Test
+  func pendingDiskGrowthBlocksOtherMutationsButAllowsRecoveryLease()
+    async throws
+  {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let sourceURL = fixture.bundle.appending(
+      path: fixture.manifest.diskImagePath
+    )
+    try FileVirtualMachineDiskImageResizeJournalStore().save(
+      VirtualMachineDiskImageResizeJournal(
+        operationID: UUID(),
+        machineID: fixture.manifest.id,
+        guest: .macOS,
+        diskImagePath: fixture.manifest.diskImagePath,
+        resizeArtifactPath: fixture.manifest.diskImagePath,
+        diskImageFormat: fixture.manifest.effectiveDiskImageFormat,
+        sourceIdentity: try FileVirtualMachineStorageArtifactInspector()
+          .inspect(at: sourceURL),
+        sourceLogicalBytes: fixture.manifest.resources.diskBytes,
+        sourceBlockSizeBytes: 512,
+        targetLogicalBytes:
+          fixture.manifest.resources.diskBytes
+          + VirtualMachineResources.bytesPerGiB
+      ),
+      in: fixture.bundle
+    )
+
+    await #expect(
+      throws: MacVirtualMachineRuntimeError.diskResizePending(
+        fixture.manifest.id
+      )
+    ) {
+      _ = try await fixture.library.acquireMacOSRuntime(
+        id: fixture.manifest.id
+      )
+    }
+    await #expect(
+      throws: MacVirtualMachineRuntimeError.diskResizePending(
+        fixture.manifest.id
+      )
+    ) {
+      _ = try await fixture.library.acquireDiskImageReplacementRuntime(
+        id: fixture.manifest.id
+      )
+    }
+    await #expect(
+      throws: MacVirtualMachineRuntimeError.diskResizePending(
+        fixture.manifest.id
+      )
+    ) {
+      try await fixture.library.discardVirtualMachine(
+        id: fixture.manifest.id
+      )
+    }
+
+    let recoveryLease = try await fixture.library
+      .acquireMacOSDiskImageResizeRuntime(id: fixture.manifest.id)
+    recoveryLease.release()
+  }
+
+  @Test
+  func macRuntimeLeasePreservesResolvedSnapshotLayerURLs() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let mutation = try MacVirtualMachineDiskSnapshotConfiguration.empty
+      .creatingSnapshot(named: "Before Growth")
+    var manifest = fixture.manifest
+    manifest.macOSDiskSnapshotConfiguration = mutation.configuration
+    let layerURL = fixture.bundle.appending(
+      path: mutation.createdLayer.relativePath
+    )
+    try FileManager.default.createDirectory(
+      at: layerURL.deletingLastPathComponent(),
+      withIntermediateDirectories: false
+    )
+    try Data("overlay".utf8).write(to: layerURL)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(manifest).write(
+      to: fixture.bundle.appending(
+        path: VirtualMachineLibrary.manifestFilename
+      )
+    )
+
+    let lease = try await fixture.library.acquireMacOSRuntime(
+      id: manifest.id
+    )
+    defer { lease.release() }
+
+    #expect(lease.machine.diskSnapshotLayerURLs == [layerURL])
+  }
+
+  @Test
   func computeConfigurationPersistsThroughMacRuntimeLease() async throws {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }

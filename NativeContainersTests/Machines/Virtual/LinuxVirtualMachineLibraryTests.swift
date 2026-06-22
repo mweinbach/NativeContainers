@@ -349,6 +349,65 @@ struct LinuxVirtualMachineLibraryTests {
     #expect(secondLease.machine.sharedDirectories == configuration)
   }
 
+  @Test
+  func pendingDiskGrowthBlocksLinuxRuntimeAndDiscardButAllowsRecoveryLease()
+    async throws
+  {
+    let fixture = try LinuxLibraryFixture()
+    defer { fixture.remove() }
+    let library = VirtualMachineLibrary(
+      rootURL: fixture.root,
+      linuxPlatformArtifactPreparer: TestLinuxPlatformArtifactPreparer(
+        behavior: .success
+      )
+    )
+    let draft = try await library.createDraft(
+      name: "Pending Growth Linux",
+      guest: .linux,
+      resources: fixture.resources
+    )
+    let prepared = try await library.prepareLinuxVM(
+      id: draft.id,
+      installationMediaURL: fixture.installationMedia
+    )
+    let bundleURL = fixture.bundleURL(for: prepared.id)
+    let sourceURL = bundleURL.appending(path: prepared.diskImagePath)
+    try FileVirtualMachineDiskImageResizeJournalStore().save(
+      VirtualMachineDiskImageResizeJournal(
+        operationID: UUID(),
+        machineID: prepared.id,
+        guest: .linux,
+        diskImagePath: prepared.diskImagePath,
+        resizeArtifactPath: prepared.diskImagePath,
+        diskImageFormat: prepared.effectiveDiskImageFormat,
+        sourceIdentity: try FileVirtualMachineStorageArtifactInspector()
+          .inspect(at: sourceURL),
+        sourceLogicalBytes: prepared.resources.diskBytes,
+        sourceBlockSizeBytes: 512,
+        targetLogicalBytes:
+          prepared.resources.diskBytes
+          + VirtualMachineResources.bytesPerGiB
+      ),
+      in: bundleURL
+    )
+
+    await #expect(
+      throws: LinuxVirtualMachineRuntimeError.diskResizePending(prepared.id)
+    ) {
+      _ = try await library.acquireLinuxRuntime(id: prepared.id)
+    }
+    await #expect(
+      throws: LinuxVirtualMachineRuntimeError.diskResizePending(prepared.id)
+    ) {
+      try await library.discardVirtualMachine(id: prepared.id)
+    }
+
+    let recoveryLease = try await library.acquireLinuxDiskImageResizeRuntime(
+      id: prepared.id
+    )
+    recoveryLease.release()
+  }
+
   private func expectNoPartialDirectories(in bundleURL: URL) throws {
     let entries = try FileManager.default.contentsOfDirectory(
       at: bundleURL,

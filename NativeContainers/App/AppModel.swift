@@ -339,13 +339,22 @@ final class AppModel {
       let diskRecovery =
         try await services.virtualMachineDiskImages.recovery
         .recoverInterruptedDiskImageReplacements()
+      let diskResizeRecovery =
+        try await services.virtualMachineDiskImages.resizeRecovery
+        .recoverInterruptedDiskImageResizes()
       try await services.restoreImageStoreRecovery.recover()
       if let failure = diskRecovery.failures.first {
         virtualMachineRecoveryErrorMessage =
           "Disk replacement recovery needs attention for \(diskRecovery.failures.count) virtual machine(s): \(failure.diagnostic)"
+      } else if let failure = diskResizeRecovery.failures.first {
+        virtualMachineRecoveryErrorMessage =
+          "Virtual disk growth recovery needs attention for \(diskResizeRecovery.failures.count) virtual machine(s): \(failure.diagnostic)"
       } else if !diskRecovery.deferredMachineIDs.isEmpty {
         virtualMachineRecoveryErrorMessage =
           "Disk replacement recovery is waiting for another NativeContainers process to release \(diskRecovery.deferredMachineIDs.count) virtual machine(s)."
+      } else if !diskResizeRecovery.deferredMachineIDs.isEmpty {
+        virtualMachineRecoveryErrorMessage =
+          "Virtual disk growth recovery is waiting for another NativeContainers process to release \(diskResizeRecovery.deferredMachineIDs.count) virtual machine(s)."
       } else {
         virtualMachineRecoveryErrorMessage = nil
       }
@@ -880,16 +889,26 @@ final class AppModel {
     if let model = virtualMachineDiskImageMaintenanceModels[machine.id] {
       return model
     }
-    let runtime = makeMacVirtualMachineRuntimeModel(for: machine)
+    let didSettle: @MainActor @Sendable () async -> Void
+    switch machine.guest {
+    case .macOS:
+      let runtime = makeMacVirtualMachineRuntimeModel(for: machine)
+      didSettle = { await runtime.refreshSavedState() }
+    case .linux:
+      let runtime = makeLinuxVirtualMachineRuntimeModel(for: machine)
+      didSettle = { await runtime.refreshSavedState() }
+    }
     let model = VirtualMachineDiskImageMaintenanceModel(
       machineID: machine.id,
+      guest: machine.guest,
       migration: services.virtualMachineDiskImages.migration,
-      rewrite: services.virtualMachineDiskImages.rewrite
-    ) { [weak self] in
-      await self?.refreshVirtualMachineStorageAfterMutation()
-    } didSettle: {
-      await runtime.refreshSavedState()
-    }
+      rewrite: services.virtualMachineDiskImages.rewrite,
+      resize: services.virtualMachineDiskImages.resize,
+      didMutate: { [weak self] in
+        await self?.refreshVirtualMachineStorageAfterMutation()
+      },
+      didSettle: didSettle
+    )
     virtualMachineDiskImageMaintenanceModels[machine.id] = model
     return model
   }

@@ -372,6 +372,7 @@ struct VirtualMachineBundleValidator {
       || name == VirtualMachineLibrary.runtimeOwnerFilename
       || name == MacVirtualMachineSavedStateStore.directoryName
       || name == VirtualMachineDiskImageReplacementArtifacts.journalFilename
+      || name == VirtualMachineDiskImageResizeArtifacts.journalFilename
       || name.hasPrefix(VirtualMachineLibrary.installationStagingPrefix)
       || name.hasPrefix(MacVirtualMachineSavedStateStore.stagingPrefix)
   }

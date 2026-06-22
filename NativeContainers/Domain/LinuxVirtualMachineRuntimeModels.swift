@@ -157,6 +157,7 @@ enum LinuxVirtualMachineRuntimeError: LocalizedError, Equatable, Sendable {
   case unavailable
   case ownedElsewhere(UUID)
   case diskReplacementPending(UUID)
+  case diskResizePending(UUID)
   case duplicateSession(UUID)
   case operationInProgress(UUID)
   case noActiveSession(UUID)
@@ -174,6 +175,8 @@ enum LinuxVirtualMachineRuntimeError: LocalizedError, Equatable, Sendable {
       "Virtual machine \(identifier.uuidString) is active in another NativeContainers process."
     case .diskReplacementPending(let identifier):
       "Virtual machine \(identifier.uuidString) has disk replacement recovery pending."
+    case .diskResizePending(let identifier):
+      "Virtual machine \(identifier.uuidString) has virtual disk growth recovery pending."
     case .duplicateSession(let identifier):
       "Virtual machine \(identifier.uuidString) already has an active runtime session."
     case .operationInProgress(let identifier):

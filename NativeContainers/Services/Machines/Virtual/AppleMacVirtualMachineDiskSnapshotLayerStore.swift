@@ -12,6 +12,7 @@ protocol MacVirtualMachineDiskSnapshotLayerStoring: Sendable {
     _ layer: MacVirtualMachineDiskSnapshotLayer,
     baseURL: URL,
     retainedLayerURLs: [URL],
+    targetLogicalBytes: UInt64,
     in bundleURL: URL
   ) throws -> URL
 
@@ -78,6 +79,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
     _ layer: MacVirtualMachineDiskSnapshotLayer,
     baseURL: URL,
     retainedLayerURLs: [URL],
+    targetLogicalBytes: UInt64,
     in bundleURL: URL
   ) throws -> URL {
     guard #available(macOS 27.0, *) else {
@@ -102,7 +104,8 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
       try createOverlayStack(
         baseURL: baseURL,
         retainedLayerURLs: retainedLayerURLs,
-        stagingURL: stagingURL
+        stagingURL: stagingURL,
+        targetLogicalBytes: targetLogicalBytes
       )
       _ = try inspectOwnedFile(at: stagingURL)
       try fileManager.setAttributes(
@@ -159,7 +162,8 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
   private func createOverlayStack(
     baseURL: URL,
     retainedLayerURLs: [URL],
-    stagingURL: URL
+    stagingURL: URL,
+    targetLogicalBytes: UInt64
   ) throws {
     var image = try DiskImage(
       opening: .open(url: baseURL, mode: .readOnly)
@@ -170,12 +174,30 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
       )
       image = try image.appending(layer)
     }
+    guard let currentLogicalBytes = UInt64(exactly: image.size),
+      let blockSizeBytes = UInt64(exactly: image.blockSize.rawValue),
+      targetLogicalBytes >= currentLogicalBytes,
+      targetLogicalBytes.isMultiple(of: blockSizeBytes),
+      let targetBlockCount = Int(
+        exactly: targetLogicalBytes / blockSizeBytes
+      )
+    else {
+      throw MacVirtualMachineDiskSnapshotError.invalidConfiguration(
+        "the requested active layer capacity is invalid"
+      )
+    }
     let stack = try image.appending(
-      .asifLayer(url: stagingURL, type: .overlay)
+      .asifLayer(
+        url: stagingURL,
+        type: .overlay(blockCount: targetBlockCount)
+      )
     )
     guard stack.layers.count == retainedLayerURLs.count + 2,
       stack.layers.last?.url.standardizedFileURL
-        == stagingURL.standardizedFileURL
+        == stagingURL.standardizedFileURL,
+      stack.layers.last?.layerType == .overlay,
+      stack.blockCount == targetBlockCount,
+      UInt64(exactly: stack.size) == targetLogicalBytes
     else {
       throw MacVirtualMachineDiskSnapshotError.layerCreationFailed(
         "DiskImageKit returned an unexpected layer stack"

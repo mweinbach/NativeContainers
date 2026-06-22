@@ -104,12 +104,14 @@ actor MacVirtualMachineDiskSnapshotService:
       mutation.createdLayer,
       baseURL: lease.machine.diskImageURL,
       retainedLayerURLs: lease.machine.diskSnapshotLayerURLs,
+      targetLogicalBytes: lease.machine.manifest.resources.diskBytes,
       in: lease.machine.bundleURL
     )
 
     do {
       try Task.checkCancellation()
-      let manifest = try await persistence
+      let manifest =
+        try await persistence
         .commitMacOSDiskSnapshotConfiguration(
           mutation.configuration,
           replacing: current,
@@ -158,13 +160,15 @@ actor MacVirtualMachineDiskSnapshotService:
       mutation.createdLayer,
       baseURL: lease.machine.diskImageURL,
       retainedLayerURLs: retainedLayerURLs,
+      targetLogicalBytes: lease.machine.manifest.resources.diskBytes,
       in: lease.machine.bundleURL
     )
 
     let manifest: VirtualMachineManifest
     do {
       try Task.checkCancellation()
-      manifest = try await persistence
+      manifest =
+        try await persistence
         .commitMacOSDiskSnapshotConfiguration(
           mutation.configuration,
           replacing: current,
@@ -186,7 +190,8 @@ actor MacVirtualMachineDiskSnapshotService:
       )
       cleanupWarning = nil
     } catch {
-      cleanupWarning = MacVirtualMachineDiskSnapshotError
+      cleanupWarning =
+        MacVirtualMachineDiskSnapshotError
         .committedCleanupPending(error.localizedDescription)
         .localizedDescription
     }

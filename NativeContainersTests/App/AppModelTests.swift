@@ -504,13 +504,15 @@ struct AppModelTests {
     )
     let restoreImageRecovery = RecoveryRecordingRestoreImageStoreRecovery()
     let diskRecovery = RecoveryRecordingDiskImageReplacementService()
+    let diskResizeRecovery = RecoveryRecordingDiskImageResizeService()
     let model = AppModel(
       containerService: MockContainerService(inventory: emptyInventory()),
       virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [prepared]),
       virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(
         migration: UnavailableVirtualMachineDiskImageMigrationService(),
         rewrite: UnavailableVirtualMachineDiskImageRewriteService(),
-        recovery: diskRecovery
+        recovery: diskRecovery,
+        resizeRecovery: diskResizeRecovery
       ),
       restoreImageStoreRecovery: restoreImageRecovery
     )
@@ -518,6 +520,7 @@ struct AppModelTests {
     await model.loadIfNeeded()
 
     #expect(diskRecovery.recoveryCount == 1)
+    #expect(diskResizeRecovery.recoveryCount == 1)
     #expect(await restoreImageRecovery.recoveryCount == 1)
   }
 
@@ -552,6 +555,40 @@ struct AppModelTests {
 
     #expect(await restoreImageRecovery.recoveryCount > 0)
     #expect(model.errorMessage?.contains("malformed journal") == true)
+  }
+
+  @Test
+  func diskGrowthRecoveryFailureDoesNotStarveRestoreImageRecovery() async {
+    let machineID = UUID()
+    let restoreImageRecovery = RecoveryRecordingRestoreImageStoreRecovery()
+    let diskResizeRecovery = RecoveryRecordingDiskImageResizeService(
+      report: VirtualMachineDiskImageResizeRecoveryReport(
+        recoveredMachineIDs: [],
+        deferredMachineIDs: [],
+        failures: [
+          VirtualMachineDiskImageResizeRecoveryFailure(
+            machineID: machineID,
+            diagnostic: "stale growth journal"
+          )
+        ]
+      )
+    )
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: []),
+      virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(
+        migration: UnavailableVirtualMachineDiskImageMigrationService(),
+        rewrite: UnavailableVirtualMachineDiskImageRewriteService(),
+        recovery: UnavailableVirtualMachineDiskImageReplacementRecoveryService(),
+        resizeRecovery: diskResizeRecovery
+      ),
+      restoreImageStoreRecovery: restoreImageRecovery
+    )
+
+    await model.loadIfNeeded()
+
+    #expect(await restoreImageRecovery.recoveryCount > 0)
+    #expect(model.errorMessage?.contains("stale growth journal") == true)
   }
 
   @Test
@@ -1671,6 +1708,25 @@ private final class RecoveryRecordingDiskImageReplacementService:
 
   func recoverInterruptedDiskImageReplacements() async throws
     -> VirtualMachineDiskImageReplacementRecoveryReport
+  {
+    recoveryCount += 1
+    return report
+  }
+}
+
+@MainActor
+private final class RecoveryRecordingDiskImageResizeService:
+  VirtualMachineDiskImageResizeRecovering
+{
+  private(set) var recoveryCount = 0
+  private let report: VirtualMachineDiskImageResizeRecoveryReport
+
+  init(report: VirtualMachineDiskImageResizeRecoveryReport = .empty) {
+    self.report = report
+  }
+
+  func recoverInterruptedDiskImageResizes() async throws
+    -> VirtualMachineDiskImageResizeRecoveryReport
   {
     recoveryCount += 1
     return report

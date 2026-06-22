@@ -64,7 +64,7 @@ struct VirtualMachineBundlePreparationService:
   func prepare(_ request: VirtualMachineBundlePreparationRequest) async throws {
     try Task.checkCancellation()
     let sourceSnapshot = try inspector.snapshot(of: request.sourceBundleURL)
-    try requireNoDiskImageReplacementArtifacts(in: sourceSnapshot)
+    try requireNoDiskImageMaintenanceArtifacts(in: sourceSnapshot)
     try validateGuestManifestState(request)
     try requireNoGuestIncompatibleArtifacts(
       in: sourceSnapshot,
@@ -92,7 +92,7 @@ struct VirtualMachineBundlePreparationService:
     try Task.checkCancellation()
   }
 
-  private func requireNoDiskImageReplacementArtifacts(
+  private func requireNoDiskImageMaintenanceArtifacts(
     in snapshot: VirtualMachineBundleSnapshot
   ) throws {
     guard
@@ -100,10 +100,13 @@ struct VirtualMachineBundlePreparationService:
         VirtualMachineDiskImageReplacementArtifacts.isControlArtifact(
           relativePath: $0.relativePath
         )
+          || VirtualMachineDiskImageResizeArtifacts.isControlArtifact(
+            relativePath: $0.relativePath
+          )
       })
     else {
       throw VirtualMachineBundleError.invalidBundle(
-        "disk-image replacement data is pending recovery"
+        "virtual disk maintenance is pending recovery"
       )
     }
   }

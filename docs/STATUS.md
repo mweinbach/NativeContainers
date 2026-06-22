@@ -1643,28 +1643,72 @@ Updated: 2026-06-22.
   installed-distribution suspend/restore remains in the disposable guest smoke
   pass.
 
+## Cross-guest VM disk growth checkpoint
+
+- Stopped macOS and GUI Linux guests now share one DiskImageKit-backed grow
+  transaction instead of treating capacity as a compute field. The service
+  rejects saved state and shrink, revalidates live block geometry against the
+  manifest, seals the exact app-owned file, and holds the guest-specific
+  runtime lease through a compare-and-swap-style manifest commit. Standalone
+  RAW/ASIF images open explicitly read-write; a macOS snapshot stack opens only
+  its active overlay read-write after exact ordered stack validation.
+- A mode-0600 `.DiskImageResize.json` journal advances only through `planned`,
+  `imageExtended`, and `manifestUpdated`. The image and journal are fully
+  synchronized, recovery recognizes extension-before-phase and
+  commit-before-phase crashes, and cancellation is intentionally unavailable
+  after publication because rollback would require unsafe shrink. Ordinary
+  runtime, disk replacement, discard, clone, export, and import reject pending
+  growth; launch recovery alone receives the recovery-capable lease and reports
+  per-VM failures or external ownership without guessing.
+- Native macOS and Linux configuration sections show current capacity, accept a
+  whole-GiB larger target, require confirmation, disable competing row actions,
+  and state that the guest partition and file system must still be expanded.
+  There is no shrink action or claim of automatic guest partitioning.
+- Snapshot restore now creates its fresh active layer with
+  `overlay(blockCount:)` at the manifest's current capacity. A real
+  DiskImageKit regression grows an active overlay beyond its base and proves
+  the assembled restored stack keeps the larger size, closing the case where a
+  checkpoint captured before growth could otherwise shrink the virtual device.
+- Xcode DocumentationSearch confirmed the installed macOS 27 truncate,
+  read-write, stack, and explicit-overlay contracts. The isolated snippet
+  compiled behind the required availability gate but hit the existing
+  30-second `NativeContainers.app` snippet-host launch timeout, so runtime
+  evidence comes from real RAW, ASIF, overlay-stack, recovery, lease, transfer,
+  snapshot, model, and startup tests.
+- Xcode MCP build-for-testing passes and discovers 1,100 enabled tests. The
+  complete plan reports 1,106 outcomes: 1,077 passed, zero failed or unrun, and
+  29 explicitly gated live/destructive checks skipped. The normal
+  `NativeContainers` / `My Mac` build passes in 6.3 seconds with zero warning
+  entries. Xcode launched PID 2694 and stopped that exact process; its two error
+  logs were the existing Core Spotlight `SetStoreUpdateService` donation
+  failures. Strict Swift formatting, the accessibility contract, the repaired
+  data-migration contract, and diff whitespace checks pass.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
 verified. Installing and rebooting a reviewed Linux distribution through the
 new GUI workflow, then suspending/restoring it, cloning it,
-exporting/restoring a portable copy, and verifying shared/host-only packet flow
-plus a shared folder still need a disposable ISO smoke pass. Installing, booting,
-saving/restoring, and clone-booting macOS are not claimed as live-verified until
-a local IPSW and disposable installed guest are available for that destructive
-integration pass.
+exporting/restoring a portable copy, growing its disk and expanding the Linux
+partition/filesystem, and verifying shared/host-only packet flow plus a shared
+folder still need a disposable ISO smoke pass. Installing, booting,
+saving/restoring, growing the disk, expanding the macOS container, and
+clone-booting macOS are not claimed as live-verified until a local IPSW and
+disposable installed guest are available for that destructive integration pass.
 
 ## Next implementation slice
 
 1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
-   change CPU/memory and verify the next boot, suspend and restore the installed
-   session, verify shared and host-only vmnet connectivity, clone and
+   change CPU/memory, grow the virtual disk, expand the guest partition and file
+   system, and verify the next boot; suspend and restore the installed session,
+   verify shared and host-only vmnet connectivity, clone and
    portable-round-trip it, and exercise both graceful and watchdog force-stop
    paths.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
-   recovery, console, CPU/memory reconfiguration, same-host save/restore, and
-   fresh-identity clone boot against a local IPSW.
+   recovery, console, CPU/memory reconfiguration, disk growth plus APFS
+   container expansion, same-host save/restore, and fresh-identity clone boot
+   against a local IPSW.
 3. Live-verify a second reviewed Up that grows a real pinned Socktainer project
    from a contiguous replica prefix, including stable metadata and exact Apple
    attachment observations. Keep recreation blocked until the pinned bridge

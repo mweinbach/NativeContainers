@@ -5,12 +5,32 @@ struct VirtualMachineDiskImageMaintenanceServices: Sendable {
   let migration: any VirtualMachineDiskImageMigrationManaging
   let rewrite: any VirtualMachineDiskImageRewriting
   let recovery: any VirtualMachineDiskImageReplacementRecovering
+  let resize: any VirtualMachineDiskImageResizing
+  let resizeRecovery: any VirtualMachineDiskImageResizeRecovering
+
+  init(
+    migration: any VirtualMachineDiskImageMigrationManaging,
+    rewrite: any VirtualMachineDiskImageRewriting,
+    recovery: any VirtualMachineDiskImageReplacementRecovering,
+    resize: any VirtualMachineDiskImageResizing =
+      UnavailableVirtualMachineDiskImageResizeService(),
+    resizeRecovery: any VirtualMachineDiskImageResizeRecovering =
+      UnavailableVirtualMachineDiskImageResizeService()
+  ) {
+    self.migration = migration
+    self.rewrite = rewrite
+    self.recovery = recovery
+    self.resize = resize
+    self.resizeRecovery = resizeRecovery
+  }
 
   static var unavailable: Self {
     Self(
       migration: UnavailableVirtualMachineDiskImageMigrationService(),
       rewrite: UnavailableVirtualMachineDiskImageRewriteService(),
-      recovery: UnavailableVirtualMachineDiskImageReplacementRecoveryService()
+      recovery: UnavailableVirtualMachineDiskImageReplacementRecoveryService(),
+      resize: UnavailableVirtualMachineDiskImageResizeService(),
+      resizeRecovery: UnavailableVirtualMachineDiskImageResizeService()
     )
   }
 }

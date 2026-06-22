@@ -66,7 +66,13 @@ compaction or APFS free-space recovery. Stopped macOS VMs can also keep up to
 eight named, bundle-local disk checkpoints through native DiskImageKit overlay
 stacks. Creating or restoring a checkpoint is saved-state-free and
 lease-serialized; restore prunes newer history, and the runtime opens only the
-top layer writable. Persistent Linux machines now have native
+top layer writable. Stopped macOS and GUI Linux VMs can grow their virtual disk
+through a shared, crash-recoverable DiskImageKit transaction. Growth is
+forward-only, blocks saved state and competing runtime/transfer operations,
+and preserves the larger capacity when an older macOS disk checkpoint is
+restored. The guest partition and file system still require an in-guest expand;
+NativeContainers does not claim guest-aware shrink or automatic partitioning.
+Persistent Linux machines now have native
 create/start/stop/Force Stop/delete controls, cancellable first-boot user
 provisioning with bounded XPC and automatic stop-to-KILL recovery, and CPU,
 memory, and reviewed home-directory configuration. Existing machines can edit

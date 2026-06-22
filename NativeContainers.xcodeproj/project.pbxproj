@@ -454,6 +454,15 @@
 		1FBCEA2C2FE9A6CC00EAC55C /* LinuxVirtualMachineSavedStateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA2B2FE9A6CC00EAC55C /* LinuxVirtualMachineSavedStateService.swift */; };
 		1FBCEA2E2FE9A6DF00EAC55C /* LinuxVirtualMachineSavedStateStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA2D2FE9A6DF00EAC55C /* LinuxVirtualMachineSavedStateStoreTests.swift */; };
 		1FBCEA302FE9A8AB00EAC55C /* VirtualMachineSavedStateReclamationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA2F2FE9A8AB00EAC55C /* VirtualMachineSavedStateReclamationServiceTests.swift */; };
+		1FBCEA322FE9ACEC00EAC55C /* VirtualMachineDiskImageResizeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA312FE9ACEC00EAC55C /* VirtualMachineDiskImageResizeModels.swift */; };
+		1FBCEA342FE9ACF800EAC55C /* VirtualMachineDiskImageResizeJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA332FE9ACF800EAC55C /* VirtualMachineDiskImageResizeJournal.swift */; };
+		1FBCEA362FE9AD0400EAC55C /* AppleVirtualMachineDiskImageExtender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA352FE9AD0400EAC55C /* AppleVirtualMachineDiskImageExtender.swift */; };
+		1FBCEA382FE9AD3600EAC55C /* VirtualMachineDiskImageResizeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA372FE9AD3600EAC55C /* VirtualMachineDiskImageResizeService.swift */; };
+		1FBCEA3A2FE9ADB900EAC55C /* VirtualMachineDiskGrowthControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA392FE9ADB900EAC55C /* VirtualMachineDiskGrowthControls.swift */; };
+		1FBCEA3C2FE9ADD300EAC55C /* LinuxVirtualMachineDiskImageMaintenanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA3B2FE9ADD300EAC55C /* LinuxVirtualMachineDiskImageMaintenanceView.swift */; };
+		1FBCEA3E2FE9AE5B00EAC55C /* AppleVirtualMachineDiskImageExtenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA3D2FE9AE5B00EAC55C /* AppleVirtualMachineDiskImageExtenderTests.swift */; };
+		1FBCEA402FE9AE6700EAC55C /* VirtualMachineDiskImageResizeJournalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA3F2FE9AE6700EAC55C /* VirtualMachineDiskImageResizeJournalTests.swift */; };
+		1FBCEA422FE9AE9A00EAC55C /* VirtualMachineDiskImageResizeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA412FE9AE9A00EAC55C /* VirtualMachineDiskImageResizeServiceTests.swift */; };
 		1FEC46CD2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */; };
 		1FEC46CF2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */; };
 		1FEC46D12FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */; };
@@ -1076,6 +1085,15 @@
 		1FBCEA2B2FE9A6CC00EAC55C /* LinuxVirtualMachineSavedStateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineSavedStateService.swift; sourceTree = "<group>"; };
 		1FBCEA2D2FE9A6DF00EAC55C /* LinuxVirtualMachineSavedStateStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineSavedStateStoreTests.swift; sourceTree = "<group>"; };
 		1FBCEA2F2FE9A8AB00EAC55C /* VirtualMachineSavedStateReclamationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineSavedStateReclamationServiceTests.swift; sourceTree = "<group>"; };
+		1FBCEA312FE9ACEC00EAC55C /* VirtualMachineDiskImageResizeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageResizeModels.swift; sourceTree = "<group>"; };
+		1FBCEA332FE9ACF800EAC55C /* VirtualMachineDiskImageResizeJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageResizeJournal.swift; sourceTree = "<group>"; };
+		1FBCEA352FE9AD0400EAC55C /* AppleVirtualMachineDiskImageExtender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageExtender.swift; sourceTree = "<group>"; };
+		1FBCEA372FE9AD3600EAC55C /* VirtualMachineDiskImageResizeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageResizeService.swift; sourceTree = "<group>"; };
+		1FBCEA392FE9ADB900EAC55C /* VirtualMachineDiskGrowthControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskGrowthControls.swift; sourceTree = "<group>"; };
+		1FBCEA3B2FE9ADD300EAC55C /* LinuxVirtualMachineDiskImageMaintenanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinuxVirtualMachineDiskImageMaintenanceView.swift; sourceTree = "<group>"; };
+		1FBCEA3D2FE9AE5B00EAC55C /* AppleVirtualMachineDiskImageExtenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageExtenderTests.swift; sourceTree = "<group>"; };
+		1FBCEA3F2FE9AE6700EAC55C /* VirtualMachineDiskImageResizeJournalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageResizeJournalTests.swift; sourceTree = "<group>"; };
+		1FBCEA412FE9AE9A00EAC55C /* VirtualMachineDiskImageResizeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageResizeServiceTests.swift; sourceTree = "<group>"; };
 		1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageModels.swift; sourceTree = "<group>"; };
 		1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageService.swift; sourceTree = "<group>"; };
 		1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageInspectorTests.swift; sourceTree = "<group>"; };
@@ -1335,6 +1353,8 @@
 				1FB6BA852FE9718B00099F15 /* KubernetesPodLogsView.swift */,
 				1FBCEA132FE99DA800EAC55C /* VirtualMachineComputeSection.swift */,
 				1FBCEA1F2FE9A25B00EAC55C /* VirtualMachineNameSection.swift */,
+				1FBCEA392FE9ADB900EAC55C /* VirtualMachineDiskGrowthControls.swift */,
+				1FBCEA3B2FE9ADD300EAC55C /* LinuxVirtualMachineDiskImageMaintenanceView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1400,6 +1420,7 @@
 				1FB6BA7D2FE96C8A00099F15 /* KubernetesResourceModels.swift */,
 				1FBCEA0D2FE99D7300EAC55C /* VirtualMachineComputeModels.swift */,
 				1FBCEA272FE9A69200EAC55C /* LinuxVirtualMachineConfigurationDescriptor.swift */,
+				1FBCEA312FE9ACEC00EAC55C /* VirtualMachineDiskImageResizeModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1735,6 +1756,9 @@
 				1FBCEA252FE9A62F00EAC55C /* MacVirtualMachineSavedStateStore.swift */,
 				1FBCEA292FE9A69F00EAC55C /* LinuxVirtualMachineSavedStateStore.swift */,
 				1FBCEA2B2FE9A6CC00EAC55C /* LinuxVirtualMachineSavedStateService.swift */,
+				1FBCEA332FE9ACF800EAC55C /* VirtualMachineDiskImageResizeJournal.swift */,
+				1FBCEA352FE9AD0400EAC55C /* AppleVirtualMachineDiskImageExtender.swift */,
+				1FBCEA372FE9AD3600EAC55C /* VirtualMachineDiskImageResizeService.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -2047,6 +2071,9 @@
 				1FBCEA172FE99E7D00EAC55C /* VirtualMachineComputeServiceTests.swift */,
 				1FBCEA232FE9A25B00EAC55C /* VirtualMachineNameServiceTests.swift */,
 				1FBCEA2D2FE9A6DF00EAC55C /* LinuxVirtualMachineSavedStateStoreTests.swift */,
+				1FBCEA3D2FE9AE5B00EAC55C /* AppleVirtualMachineDiskImageExtenderTests.swift */,
+				1FBCEA3F2FE9AE6700EAC55C /* VirtualMachineDiskImageResizeJournalTests.swift */,
+				1FBCEA412FE9AE9A00EAC55C /* VirtualMachineDiskImageResizeServiceTests.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -2444,6 +2471,7 @@
 				1F9D2C432FE7E7E20076F5B9 /* ComposeProjectLifecycleServiceTests.swift in Sources */,
 				1F5E64112FE8877100A430FF /* AppleLinuxVirtualMachineConfigurationFactoryTests.swift in Sources */,
 				1F9D2B722FE79B860076F5B9 /* AppleRuntimeCommandExecutorTests.swift in Sources */,
+				1FBCEA422FE9AE9A00EAC55C /* VirtualMachineDiskImageResizeServiceTests.swift in Sources */,
 				1F9D2B332FE7755D0076F5B9 /* ImageBuildSecretServiceTests.swift in Sources */,
 				1F99F1BB2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift in Sources */,
 				1F9D2CA22FE803130076F5B9 /* StorageReclamationClientTests.swift in Sources */,
@@ -2586,12 +2614,14 @@
 				1F9D2B6A2FE797C70076F5B9 /* LiveAppleLinuxMachineSmokeTests.swift in Sources */,
 				28033CCAC546F43031537AAF /* VirtualMachineLibraryTests.swift in Sources */,
 				1F64B95F2FE8D58E00598A65 /* KubernetesClusterServiceTests.swift in Sources */,
+				1FBCEA3E2FE9AE5B00EAC55C /* AppleVirtualMachineDiskImageExtenderTests.swift in Sources */,
 				1F5E64272FE88AAF00A430FF /* LinuxVirtualMachineRuntimeServiceTests.swift in Sources */,
 				1F9D2B412FE77BE10076F5B9 /* ImageBuildHistoryTests.swift in Sources */,
 				C2C2661B8E02F3B836209B2A /* VirtualMachineModelsTests.swift in Sources */,
 				1F5E645D2FE89C6A00A430FF /* AppleVirtualMachineDiskSnapshotStackTests.swift in Sources */,
 				1F5E63E92FE8806300A430FF /* MacVirtualMachineAudioModelsTests.swift in Sources */,
 				1F5E64432FE8949000A430FF /* AppleLinuxMachineConfigurationServiceTests.swift in Sources */,
+				1FBCEA402FE9AE6700EAC55C /* VirtualMachineDiskImageResizeJournalTests.swift in Sources */,
 				1F9D2C082FE7CE330076F5B9 /* SocktainerComposeConformanceServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2641,6 +2671,7 @@
 				1F5E64492FE8979200A430FF /* MacVirtualMachineFirstBootService.swift in Sources */,
 				1F9D2B8E2FE7A1650076F5B9 /* CreateVirtualMachineView.swift in Sources */,
 				1F9D2AF12FE764AD0076F5B9 /* AppleContainerTerminalService.swift in Sources */,
+				1FBCEA362FE9AD0400EAC55C /* AppleVirtualMachineDiskImageExtender.swift in Sources */,
 				1F5E64552FE89B7C00A430FF /* AppleMacVirtualMachineDiskSnapshotLayerStore.swift in Sources */,
 				1FBCEA1E2FE9A25B00EAC55C /* VirtualMachineNameModel.swift in Sources */,
 				1F9D2C752FE7F9860076F5B9 /* VirtualMachineBundlePreparationService.swift in Sources */,
@@ -2670,6 +2701,7 @@
 				1F9D2B2F2FE774B00076F5B9 /* BuildSecretWorkerTransport.swift in Sources */,
 				1F9D2C882FE7FDE40076F5B9 /* StorageOverviewModel.swift in Sources */,
 				1F9D2CBC2FE80A7B0076F5B9 /* RestoreImageCacheService.swift in Sources */,
+				1FBCEA322FE9ACEC00EAC55C /* VirtualMachineDiskImageResizeModels.swift in Sources */,
 				B7F945D799F10D4D0189C473 /* ContainerBuilderSafetyPolicy.swift in Sources */,
 				55143B3A37AFE0BD7CB78CD1 /* ContainerCreationModels.swift in Sources */,
 				1F5E648C2FE8A80000A430FF /* DemandStartedService.swift in Sources */,
@@ -2707,6 +2739,7 @@
 				1FEC474C2FE841A400DC60B2 /* ComposeCanonicalModelValidator.swift in Sources */,
 				EDB26DFD01272D05145851C1 /* ContainerProvisioningModel.swift in Sources */,
 				1F9D2BD62FE7BE380076F5B9 /* MacVirtualMachineSharedDirectoriesView.swift in Sources */,
+				1FBCEA342FE9ACF800EAC55C /* VirtualMachineDiskImageResizeJournal.swift in Sources */,
 				1F9D2B542FE792100076F5B9 /* AppleMachineManagementService.swift in Sources */,
 				1FEC46ED2FE82F7D00DC60B2 /* VirtualMachineBundleStore.swift in Sources */,
 				1F9D2C452FE7E81D0076F5B9 /* ComposeProjectWorkspaceModel.swift in Sources */,
@@ -2719,6 +2752,7 @@
 				1F9D2C902FE800990076F5B9 /* StorageReclamationModels.swift in Sources */,
 				1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */,
 				1F9D2BC02FE7B6FC0076F5B9 /* WorkspaceRoute.swift in Sources */,
+				1FBCEA3A2FE9ADB900EAC55C /* VirtualMachineDiskGrowthControls.swift in Sources */,
 				1F9D2B152FE76B040076F5B9 /* ContainerCreationSections.swift in Sources */,
 				1F9D2BF42FE7C5140076F5B9 /* DockerCompatibilitySettingsView.swift in Sources */,
 				1F9D2B092FE769800076F5B9 /* ApplePublishedSocketWorkspace.swift in Sources */,
@@ -2812,6 +2846,7 @@
 				89BC7AFF7D77A8BEBC3C1009 /* ImageOperationViews.swift in Sources */,
 				1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */,
 				DABB4EFDC45B763D6E0BA7FC /* ImageOperationsModel.swift in Sources */,
+				1FBCEA3C2FE9ADD300EAC55C /* LinuxVirtualMachineDiskImageMaintenanceView.swift in Sources */,
 				1FEC47022FE831A300DC60B2 /* BuildContextFingerprint.swift in Sources */,
 				1F9D2B902FE7A1700076F5B9 /* MacVirtualMachineInstallationView.swift in Sources */,
 				1F9D2AE12FE760790076F5B9 /* AppServices.swift in Sources */,
@@ -2851,6 +2886,7 @@
 				1F9D2B072FE7695B0076F5B9 /* AppleContainerHostAccessService.swift in Sources */,
 				6D997CBC0773804955C7F048 /* NativeContainersApp.swift in Sources */,
 				1F9D2BCC2FE7BD490076F5B9 /* MacVirtualMachineSharedDirectoryService.swift in Sources */,
+				1FBCEA382FE9AD3600EAC55C /* VirtualMachineDiskImageResizeService.swift in Sources */,
 				1F5E63992FE85C9300A430FF /* AppNotificationService.swift in Sources */,
 				1FBCEA202FE9A25B00EAC55C /* VirtualMachineNameSection.swift in Sources */,
 				1F5E64392FE8907500A430FF /* LinuxVirtualMachineSharedDirectoriesView.swift in Sources */,

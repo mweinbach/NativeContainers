@@ -231,6 +231,12 @@ enum AppCompositionRoot {
       LinuxVirtualMachineSavedStateService(
         store: linuxVirtualMachineSavedStateStore
       )
+    let virtualMachineDiskImageResize =
+      VirtualMachineDiskImageResizeService(
+        store: virtualMachineLibrary,
+        macSavedStates: virtualMachineSavedState,
+        linuxSavedStates: linuxVirtualMachineSavedState
+      )
     let virtualMachineDiskImageReplacement =
       VirtualMachineDiskImageReplacementCoordinator(
         store: virtualMachineLibrary,
@@ -436,7 +442,9 @@ enum AppCompositionRoot {
       virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(
         migration: virtualMachineDiskImageMigration,
         rewrite: virtualMachineDiskImageRewrite,
-        recovery: virtualMachineDiskImageReplacement
+        recovery: virtualMachineDiskImageReplacement,
+        resize: virtualMachineDiskImageResize,
+        resizeRecovery: virtualMachineDiskImageResize
       ),
       virtualMachineDiskSnapshots: virtualMachineDiskSnapshots,
       virtualMachineAvailability:

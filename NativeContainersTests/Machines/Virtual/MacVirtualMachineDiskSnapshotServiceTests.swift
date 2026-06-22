@@ -31,6 +31,10 @@ struct MacVirtualMachineDiskSnapshotServiceTests {
     #expect(result.configuration.layers.count == 1)
     #expect(result.cleanupWarning == nil)
     #expect(fixture.layerStore.createdRetainedLayerCounts == [0])
+    #expect(
+      fixture.layerStore.createdTargetLogicalBytes
+        == [fixture.machine.manifest.resources.diskBytes]
+    )
     #expect(fixture.layerStore.removedLayerIDs.isEmpty)
     #expect(await fixture.persistence.commitCount == 1)
     #expect(fixture.releaseRecorder.count == 1)
@@ -98,6 +102,10 @@ struct MacVirtualMachineDiskSnapshotServiceTests {
     #expect(result.configuration.snapshots.map(\.name) == ["Base", "Configured"])
     #expect(result.configuration.layers.count == 2)
     #expect(fixture.layerStore.createdRetainedLayerCounts == [1])
+    #expect(
+      fixture.layerStore.createdTargetLogicalBytes
+        == [fixture.machine.manifest.resources.diskBytes]
+    )
     #expect(fixture.layerStore.removedLayerIDs.count == 2)
     #expect(result.cleanupWarning?.contains("cleanup") == true)
     #expect(await fixture.persistence.commitCount == 1)
@@ -212,6 +220,7 @@ private final class DiskSnapshotLayerStore:
   private let lock = NSLock()
   private let removalError: (any Error)?
   private var storedCreatedRetainedLayerCounts: [Int] = []
+  private var storedCreatedTargetLogicalBytes: [UInt64] = []
   private var storedRemovedLayerIDs: [UUID] = []
 
   init(removalError: (any Error)?) {
@@ -226,6 +235,10 @@ private final class DiskSnapshotLayerStore:
     lock.withLock { storedRemovedLayerIDs }
   }
 
+  var createdTargetLogicalBytes: [UInt64] {
+    lock.withLock { storedCreatedTargetLogicalBytes }
+  }
+
   func recoverUnreferencedLayers(
     in bundleURL: URL,
     configuration: MacVirtualMachineDiskSnapshotConfiguration
@@ -235,10 +248,12 @@ private final class DiskSnapshotLayerStore:
     _ layer: MacVirtualMachineDiskSnapshotLayer,
     baseURL: URL,
     retainedLayerURLs: [URL],
+    targetLogicalBytes: UInt64,
     in bundleURL: URL
   ) -> URL {
     lock.withLock {
       storedCreatedRetainedLayerCounts.append(retainedLayerURLs.count)
+      storedCreatedTargetLogicalBytes.append(targetLogicalBytes)
     }
     return bundleURL.appending(path: layer.relativePath)
   }

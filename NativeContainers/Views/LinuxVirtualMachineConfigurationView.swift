@@ -5,6 +5,7 @@ struct LinuxVirtualMachineConfigurationView: View {
   let runtime: LinuxVirtualMachineRuntimeModel
   let naming: VirtualMachineNameModel
   let compute: VirtualMachineComputeModel
+  let diskMaintenance: VirtualMachineDiskImageMaintenanceModel
   let network: LinuxVirtualMachineNetworkModel
   let sharedDirectories: LinuxVirtualMachineSharedDirectoriesModel
   @State private var isConfirmingDiscardSavedState = false
@@ -25,6 +26,13 @@ struct LinuxVirtualMachineConfigurationView: View {
           compute: compute,
           refreshToken: machine.updatedAt,
           editMessage: topologyEditMessage,
+          discardSavedState: canDiscardSavedState
+            ? { isConfirmingDiscardSavedState = true } : nil
+        )
+        LinuxVirtualMachineDiskImageMaintenanceView(
+          machine: machine,
+          runtime: runtime,
+          maintenance: diskMaintenance,
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
@@ -54,6 +62,7 @@ struct LinuxVirtualMachineConfigurationView: View {
         if let errorMessage =
           naming.errorMessage
           ?? compute.errorMessage
+          ?? diskMaintenance.errorMessage
           ?? network.errorMessage
           ?? runtime.errorMessage
         {
@@ -62,6 +71,7 @@ struct LinuxVirtualMachineConfigurationView: View {
             dismiss: {
               naming.clearError()
               compute.clearError()
+              diskMaintenance.clearError()
               network.clearError()
               runtime.clearActionError()
             }
@@ -87,6 +97,9 @@ struct LinuxVirtualMachineConfigurationView: View {
   }
 
   private var runtimeEditMessage: LocalizedStringResource? {
+    guard !diskMaintenance.isBusy else {
+      return "Wait for virtual disk maintenance to finish."
+    }
     guard machine.linuxConfiguration != nil,
       machine.installState == .readyToInstall || machine.installState == .stopped
     else {
@@ -120,7 +133,7 @@ struct LinuxVirtualMachineConfigurationView: View {
   }
 
   private var canDiscardSavedState: Bool {
-    runtime.snapshot.canDiscardSavedState
+    !diskMaintenance.isBusy && runtime.snapshot.canDiscardSavedState
   }
 }
 

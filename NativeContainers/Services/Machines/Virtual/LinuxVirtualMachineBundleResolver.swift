@@ -2,6 +2,12 @@ import Foundation
 
 protocol LinuxVirtualMachineBundleResolving: Sendable {
   func resolve(_ manifest: VirtualMachineManifest) throws -> ResolvedLinuxVirtualMachine
+  func resolveArtifact(
+    _ path: String,
+    named name: String,
+    in bundleURL: URL,
+    writable: Bool
+  ) throws -> URL
 }
 
 struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Sendable {
@@ -71,7 +77,7 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
     }
   }
 
-  private func resolveArtifact(
+  func resolveArtifact(
     _ path: String,
     named name: String,
     in bundleURL: URL,

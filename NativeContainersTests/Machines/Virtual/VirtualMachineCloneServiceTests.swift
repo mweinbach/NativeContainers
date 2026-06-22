@@ -5,7 +5,7 @@ import Testing
 
 struct VirtualMachineCloneServiceTests {
   @Test
-  func cloneRejectsPendingDiskMigrationJournal() async throws {
+  func cloneRejectsPendingDiskMaintenanceJournal() async throws {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let library = VirtualMachineLibrary(rootURL: root)
@@ -15,15 +15,38 @@ struct VirtualMachineCloneServiceTests {
       name: "Pending Migration"
     )
     let sourceBundle = bundleURL(root: root, id: source.id)
-    try Data("pending".utf8).write(
-      to: sourceBundle.appending(
-        path: VirtualMachineDiskImageReplacementArtifacts.journalFilename
-      )
-    )
-
-    await #expect(throws: VirtualMachineCloneError.self) {
-      _ = try await VirtualMachineCloneService(store: library)
-        .cloneVirtualMachine(id: source.id, name: "Unsafe Copy")
+    for (index, filename) in [
+      VirtualMachineDiskImageReplacementArtifacts.journalFilename,
+      VirtualMachineDiskImageResizeArtifacts.journalFilename,
+    ].enumerated() {
+      let journalURL = sourceBundle.appending(path: filename)
+      try Data("pending".utf8).write(to: journalURL)
+      if filename
+        == VirtualMachineDiskImageReplacementArtifacts.journalFilename
+      {
+        await #expect(
+          throws: MacVirtualMachineRuntimeError.diskReplacementPending(
+            source.id
+          )
+        ) {
+          _ = try await VirtualMachineCloneService(store: library)
+            .cloneVirtualMachine(
+              id: source.id,
+              name: "Unsafe Copy \(index)"
+            )
+        }
+      } else {
+        await #expect(
+          throws: MacVirtualMachineRuntimeError.diskResizePending(source.id)
+        ) {
+          _ = try await VirtualMachineCloneService(store: library)
+            .cloneVirtualMachine(
+              id: source.id,
+              name: "Unsafe Copy \(index)"
+            )
+        }
+      }
+      try FileManager.default.removeItem(at: journalURL)
     }
 
     #expect(try await library.list() == [source])

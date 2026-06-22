@@ -100,7 +100,8 @@ actor VirtualMachineLibrary:
   MacVirtualMachineComputePersisting,
   LinuxVirtualMachineComputePersisting,
   MacVirtualMachineDiskSnapshotPersisting,
-  VirtualMachineDiskImageReplacementStoring
+  VirtualMachineDiskImageReplacementStoring,
+  VirtualMachineDiskImageResizeStoring
 {
   static let bundleExtension = "nativevm"
   static let manifestFilename = "manifest.json"
@@ -726,6 +727,118 @@ actor VirtualMachineLibrary:
     return manifest
   }
 
+  func commitMacOSDiskImageResize(
+    _ commit: VirtualMachineDiskImageResizeCommit,
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineManifest {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try installationManifest(id: lease.target.machineID)
+    let resizeArtifactPath =
+      manifest.effectiveMacOSDiskSnapshotConfiguration.layers.last?.relativePath
+      ?? manifest.diskImagePath
+
+    guard commit.machineID == manifest.id,
+      commit.guest == .macOS,
+      commit.diskImagePath == manifest.diskImagePath,
+      commit.resizeArtifactPath == resizeArtifactPath,
+      commit.diskImageFormat == manifest.effectiveDiskImageFormat,
+      lease.machine.manifest.diskImagePath == manifest.diskImagePath,
+      lease.machine.manifest.effectiveDiskImageFormat
+        == manifest.effectiveDiskImageFormat,
+      lease.machine.manifest.resources.diskBytes
+        == manifest.resources.diskBytes,
+      manifest.resources.diskBytes == commit.sourceLogicalBytes
+        || manifest.resources.diskBytes == commit.targetLogicalBytes,
+      commit.targetLogicalBytes > commit.sourceLogicalBytes
+    else {
+      throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    let resizeArtifactURL = try macVirtualMachineBundleResolver.resolveArtifact(
+      commit.resizeArtifactPath,
+      named: "diskResizeArtifactPath",
+      in: bundleURL,
+      writable: true
+    )
+    let leaseArtifactURL =
+      lease.machine.diskSnapshotLayerURLs.last
+      ?? lease.machine.diskImageURL
+    guard
+      resizeArtifactURL.standardizedFileURL
+        == leaseArtifactURL.standardizedFileURL,
+      try FileVirtualMachineStorageArtifactInspector().inspect(
+        at: resizeArtifactURL
+      ) == commit.resizedIdentity
+    else {
+      throw VirtualMachineDiskImageResizeError.staleSource
+    }
+
+    guard manifest.resources.diskBytes != commit.targetLogicalBytes else {
+      return manifest
+    }
+    _ = try manifest.growDisk(to: commit.targetLogicalBytes)
+    try bundleStore.write(
+      manifest,
+      to: bundleStore.manifestURL(for: manifest.id)
+    )
+    return manifest
+  }
+
+  func commitLinuxDiskImageResize(
+    _ commit: VirtualMachineDiskImageResizeCommit,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineManifest {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try linuxRuntimeManifest(id: lease.target.machineID)
+
+    guard commit.machineID == manifest.id,
+      commit.guest == .linux,
+      commit.diskImagePath == manifest.diskImagePath,
+      commit.resizeArtifactPath == manifest.diskImagePath,
+      commit.diskImageFormat == manifest.effectiveDiskImageFormat,
+      lease.machine.manifest.diskImagePath == manifest.diskImagePath,
+      lease.machine.manifest.effectiveDiskImageFormat
+        == manifest.effectiveDiskImageFormat,
+      lease.machine.manifest.resources.diskBytes
+        == manifest.resources.diskBytes,
+      manifest.resources.diskBytes == commit.sourceLogicalBytes
+        || manifest.resources.diskBytes == commit.targetLogicalBytes,
+      commit.targetLogicalBytes > commit.sourceLogicalBytes
+    else {
+      throw LinuxVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    let resizeArtifactURL = try linuxVirtualMachineBundleResolver.resolveArtifact(
+      commit.resizeArtifactPath,
+      named: "diskResizeArtifactPath",
+      in: bundleURL,
+      writable: true
+    )
+    guard
+      resizeArtifactURL.standardizedFileURL
+        == lease.machine.diskImageURL.standardizedFileURL,
+      try FileVirtualMachineStorageArtifactInspector().inspect(
+        at: resizeArtifactURL
+      ) == commit.resizedIdentity
+    else {
+      throw VirtualMachineDiskImageResizeError.staleSource
+    }
+
+    guard manifest.resources.diskBytes != commit.targetLogicalBytes else {
+      return manifest
+    }
+    _ = try manifest.growDisk(to: commit.targetLogicalBytes)
+    try bundleStore.write(
+      manifest,
+      to: bundleStore.manifestURL(for: manifest.id)
+    )
+    return manifest
+  }
+
   func createDraft(
     name: String,
     guest: VirtualMachineGuest,
@@ -952,7 +1065,10 @@ actor VirtualMachineLibrary:
       throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
     }
     defer { runtimeLock.release() }
-    try requireNoDiskImageReplacementJournal(in: bundleURL, machineID: id)
+    try requireNoPendingDiskImageMaintenance(
+      in: bundleURL,
+      manifest: manifest
+    )
     let tombstoneURL = rootURL.appending(
       path:
         "\(Self.deletionTombstonePrefix)\(id.uuidString.lowercased())-\(UUID().uuidString.lowercased())\(Self.deletionTombstoneSuffix)",
@@ -994,6 +1110,10 @@ actor VirtualMachineLibrary:
       }
     }
     runtimeLock = acquiredRuntimeLock
+    try requireNoPendingDiskImageMaintenance(
+      in: sourceBundleURL,
+      manifest: source
+    )
     try resolveTransferRuntime(source)
 
     let linuxMACAddress =
@@ -1082,6 +1202,10 @@ actor VirtualMachineLibrary:
     }
 
     do {
+      try requireNoPendingDiskImageMaintenance(
+        in: bundleURL,
+        manifest: manifest
+      )
       try resolveTransferRuntime(manifest)
       return VirtualMachineExportSourceLease(
         manifest: manifest,
@@ -1199,18 +1323,37 @@ actor VirtualMachineLibrary:
   }
 
   func acquireMacOSRuntime(id: UUID) throws -> MacVirtualMachineRuntimeLease {
-    try acquireMacOSRuntime(id: id, allowsDiskImageReplacementJournal: false)
+    try acquireMacOSRuntime(
+      id: id,
+      allowsDiskImageReplacementJournal: false,
+      allowsDiskImageResizeJournal: false
+    )
   }
 
   func acquireDiskImageReplacementRuntime(
     id: UUID
   ) throws -> MacVirtualMachineRuntimeLease {
-    try acquireMacOSRuntime(id: id, allowsDiskImageReplacementJournal: true)
+    try acquireMacOSRuntime(
+      id: id,
+      allowsDiskImageReplacementJournal: true,
+      allowsDiskImageResizeJournal: false
+    )
+  }
+
+  func acquireMacOSDiskImageResizeRuntime(
+    id: UUID
+  ) throws -> MacVirtualMachineRuntimeLease {
+    try acquireMacOSRuntime(
+      id: id,
+      allowsDiskImageReplacementJournal: false,
+      allowsDiskImageResizeJournal: true
+    )
   }
 
   private func acquireMacOSRuntime(
     id: UUID,
-    allowsDiskImageReplacementJournal: Bool
+    allowsDiskImageReplacementJournal: Bool,
+    allowsDiskImageResizeJournal: Bool
   ) throws -> MacVirtualMachineRuntimeLease {
     try bundleStore.ensureRootExists()
     let accessToken = UUID()
@@ -1229,6 +1372,12 @@ actor VirtualMachineLibrary:
         machineID: id
       )
     }
+    if !allowsDiskImageResizeJournal {
+      try requireNoMacOSDiskImageResizeJournal(
+        in: bundleURL,
+        machineID: id
+      )
+    }
     let lockURL = bundleURL.appending(path: Self.runtimeLockFilename)
     guard let runtimeLock = try AdvisoryFileLock.acquire(at: lockURL) else {
       throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
@@ -1240,6 +1389,7 @@ actor VirtualMachineLibrary:
         manifest: resolvedMachine.manifest,
         bundleURL: resolvedMachine.bundleURL,
         diskImageURL: resolvedMachine.diskImageURL,
+        diskSnapshotLayerURLs: resolvedMachine.diskSnapshotLayerURLs,
         auxiliaryStorageURL: resolvedMachine.auxiliaryStorageURL,
         hardwareModelURL: resolvedMachine.hardwareModelURL,
         machineIdentifierURL: resolvedMachine.machineIdentifierURL,
@@ -1262,6 +1412,25 @@ actor VirtualMachineLibrary:
   }
 
   func acquireLinuxRuntime(id: UUID) throws -> LinuxVirtualMachineRuntimeLease {
+    try acquireLinuxRuntime(
+      id: id,
+      allowsDiskImageResizeJournal: false
+    )
+  }
+
+  func acquireLinuxDiskImageResizeRuntime(
+    id: UUID
+  ) throws -> LinuxVirtualMachineRuntimeLease {
+    try acquireLinuxRuntime(
+      id: id,
+      allowsDiskImageResizeJournal: true
+    )
+  }
+
+  private func acquireLinuxRuntime(
+    id: UUID,
+    allowsDiskImageResizeJournal: Bool
+  ) throws -> LinuxVirtualMachineRuntimeLease {
     try bundleStore.ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
@@ -1274,6 +1443,12 @@ actor VirtualMachineLibrary:
     let bundleURL = bundleStore.bundleURL(for: manifest.id)
     try bundleStore.requireDirectory(bundleURL)
     try requireNoLinuxDiskImageReplacementJournal(in: bundleURL, machineID: id)
+    if !allowsDiskImageResizeJournal {
+      try requireNoLinuxDiskImageResizeJournal(
+        in: bundleURL,
+        machineID: id
+      )
+    }
 
     let lockURL = bundleURL.appending(path: Self.runtimeLockFilename)
     guard let runtimeLock = try AdvisoryFileLock.acquire(at: lockURL) else {
@@ -1394,6 +1569,70 @@ actor VirtualMachineLibrary:
       throw error
     } catch {
       throw MacVirtualMachineRuntimeError.diskReplacementPending(machineID)
+    }
+  }
+
+  private func requireNoMacOSDiskImageResizeJournal(
+    in bundleURL: URL,
+    machineID: UUID
+  ) throws {
+    do {
+      guard
+        try FileVirtualMachineDiskImageResizeJournalStore(
+          fileManager: fileManager
+        ).load(in: bundleURL) == nil
+      else {
+        throw MacVirtualMachineRuntimeError.diskResizePending(machineID)
+      }
+    } catch let error as MacVirtualMachineRuntimeError {
+      throw error
+    } catch {
+      throw MacVirtualMachineRuntimeError.diskResizePending(machineID)
+    }
+  }
+
+  private func requireNoLinuxDiskImageResizeJournal(
+    in bundleURL: URL,
+    machineID: UUID
+  ) throws {
+    do {
+      guard
+        try FileVirtualMachineDiskImageResizeJournalStore(
+          fileManager: fileManager
+        ).load(in: bundleURL) == nil
+      else {
+        throw LinuxVirtualMachineRuntimeError.diskResizePending(machineID)
+      }
+    } catch let error as LinuxVirtualMachineRuntimeError {
+      throw error
+    } catch {
+      throw LinuxVirtualMachineRuntimeError.diskResizePending(machineID)
+    }
+  }
+
+  private func requireNoPendingDiskImageMaintenance(
+    in bundleURL: URL,
+    manifest: VirtualMachineManifest
+  ) throws {
+    switch manifest.guest {
+    case .macOS:
+      try requireNoDiskImageReplacementJournal(
+        in: bundleURL,
+        machineID: manifest.id
+      )
+      try requireNoMacOSDiskImageResizeJournal(
+        in: bundleURL,
+        machineID: manifest.id
+      )
+    case .linux:
+      try requireNoLinuxDiskImageReplacementJournal(
+        in: bundleURL,
+        machineID: manifest.id
+      )
+      try requireNoLinuxDiskImageResizeJournal(
+        in: bundleURL,
+        machineID: manifest.id
+      )
     }
   }
 

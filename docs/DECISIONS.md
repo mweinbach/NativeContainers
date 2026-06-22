@@ -2396,3 +2396,38 @@ destructive choices; Force Stop can queue while callbacks quiesce. Storage
 reclamation uses a guest-aware router so Linux checkpoints are validated and
 removed only under Linux runtime leases. Saved state remains same-host and is
 stripped from clone and portable-transfer paths.
+
+## ADR-084: Grow stopped GUI VM disks through a forward-only DiskImageKit transaction
+
+**Status:** Accepted — 2026-06-22
+
+Virtual-disk capacity is storage state, not an ordinary manifest or compute
+setting. NativeContainers exposes one guest-neutral grow service for stopped
+macOS and GUI Linux VMs on macOS 27. It takes the existing guest-specific
+runtime lease, rejects saved state, compares the manifest with live DiskImageKit
+geometry, and seals the exact app-owned single-link regular file before
+mutation. Standalone RAW and ASIF images open explicitly read-write. A macOS
+snapshot stack opens every non-active layer read-only and mutates only the
+active overlay after exact ordered stack validation. Cache layers, shrink,
+misalignment, and an implicit read-only fallback fail closed.
+
+Growth is an in-place image mutation, so rollback by shrinking is unsafe. A
+mode-0600 `.DiskImageResize.json` journal therefore records a forward-only
+`planned -> imageExtended -> manifestUpdated` transaction. The resized file and
+each journal phase are fully synchronized. If a hard exit lands after extension
+but before the phase write, recovery accepts only the original file node at the
+exact requested geometry, seals its new identity, and continues. The VM library
+then revalidates guest, paths, format, runtime generation, old/new capacity, and
+the post-growth file identity before atomically growing the manifest. Cleanup
+after that commit is idempotent; ambiguous identity or geometry is never
+guessed. Resize becomes non-cancellable once the journal is published.
+
+Ordinary runtime, disk replacement, discard, clone, export, and import reject a
+pending growth journal. A separate resize recovery lease is the only exception,
+and launch recovery continues across independent bundles while reporting locks
+and invalid journals. Snapshot history remains usable: every new or restored
+active layer uses `overlay(blockCount:)` with the manifest's current capacity,
+so restoring a checkpoint captured before growth cannot shrink the virtual
+device. NativeContainers intentionally does not resize a guest partition or
+filesystem and offers no shrink action; the native UI states that follow-up
+explicitly.

@@ -183,7 +183,7 @@ struct VirtualMachineTransferServiceTests {
   }
 
   @Test
-  func exportRejectsPendingDiskMigrationJournalBeforeCopy() async throws {
+  func exportRejectsPendingDiskMaintenanceJournalBeforeCopy() async throws {
     let fixture = try VirtualMachineTransferFixture()
     defer { fixture.remove() }
     let source = try await fixture.makeStoppedMachine(
@@ -195,19 +195,39 @@ struct VirtualMachineTransferServiceTests {
       root: fixture.sourceLibraryRoot,
       id: source.id
     )
-    try Data("pending".utf8).write(
-      to: sourceBundle.appending(
-        path: VirtualMachineDiskImageReplacementArtifacts.journalFilename
+    for (index, filename) in [
+      VirtualMachineDiskImageReplacementArtifacts.journalFilename,
+      VirtualMachineDiskImageResizeArtifacts.journalFilename,
+    ].enumerated() {
+      let journalURL = sourceBundle.appending(path: filename)
+      try Data("pending".utf8).write(to: journalURL)
+      let destination = fixture.root.appending(
+        path: "Rejected-\(index).nativevm"
       )
-    )
-    let destination = fixture.root.appending(path: "Rejected.nativevm")
 
-    await #expect(throws: VirtualMachineBundleError.self) {
-      _ = try await fixture.service(library: fixture.sourceLibrary)
-        .exportVirtualMachine(id: source.id, to: destination)
+      if filename
+        == VirtualMachineDiskImageReplacementArtifacts.journalFilename
+      {
+        await #expect(
+          throws: MacVirtualMachineRuntimeError.diskReplacementPending(
+            source.id
+          )
+        ) {
+          _ = try await fixture.service(library: fixture.sourceLibrary)
+            .exportVirtualMachine(id: source.id, to: destination)
+        }
+      } else {
+        await #expect(
+          throws: MacVirtualMachineRuntimeError.diskResizePending(source.id)
+        ) {
+          _ = try await fixture.service(library: fixture.sourceLibrary)
+            .exportVirtualMachine(id: source.id, to: destination)
+        }
+      }
+
+      #expect(!FileManager.default.fileExists(atPath: destination.path))
+      try FileManager.default.removeItem(at: journalURL)
     }
-
-    #expect(!FileManager.default.fileExists(atPath: destination.path))
     try fixture.expectNoExportPartials()
   }
 
