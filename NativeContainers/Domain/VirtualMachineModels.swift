@@ -64,6 +64,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var macOSMinimumMemoryBytes: UInt64? = nil
   var macOSFirstBootState: MacVirtualMachineFirstBootState? = nil
   var macOSDiskSnapshotConfiguration: MacVirtualMachineDiskSnapshotConfiguration? = nil
+  var linuxDiskSnapshotConfiguration: VirtualMachineDiskSnapshotConfiguration? = nil
 
   init(
     id: UUID = UUID(),
@@ -137,6 +138,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     macOSMinimumMemoryBytes = source.macOSMinimumMemoryBytes
     macOSFirstBootState = source.macOSFirstBootState
     macOSDiskSnapshotConfiguration = source.macOSDiskSnapshotConfiguration
+    linuxDiskSnapshotConfiguration = source.linuxDiskSnapshotConfiguration
   }
 
   var effectiveAudioConfiguration: MacVirtualMachineAudioConfiguration {
@@ -149,6 +151,19 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
 
   var effectiveMacOSDiskSnapshotConfiguration: MacVirtualMachineDiskSnapshotConfiguration {
     macOSDiskSnapshotConfiguration ?? .empty
+  }
+
+  var effectiveLinuxDiskSnapshotConfiguration: VirtualMachineDiskSnapshotConfiguration {
+    linuxDiskSnapshotConfiguration ?? .empty
+  }
+
+  var effectiveDiskSnapshotConfiguration: VirtualMachineDiskSnapshotConfiguration {
+    switch guest {
+    case .macOS:
+      effectiveMacOSDiskSnapshotConfiguration
+    case .linux:
+      effectiveLinuxDiskSnapshotConfiguration
+    }
   }
 
   @discardableResult
@@ -195,6 +210,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installationFailure = nil
     macOSFirstBootState = .pending
     macOSDiskSnapshotConfiguration = nil
+    linuxDiskSnapshotConfiguration = nil
     self.updatedAt = updatedAt
   }
 
@@ -279,6 +295,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     macOSMinimumMemoryBytes = minimumMemoryBytes
     macOSFirstBootState = nil
     macOSDiskSnapshotConfiguration = nil
+    linuxDiskSnapshotConfiguration = nil
     installationOperationID = nil
     installationFailure = nil
     self.updatedAt = updatedAt
@@ -290,6 +307,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   ) {
     installState = .readyToInstall
     linuxConfiguration = configuration
+    linuxDiskSnapshotConfiguration = nil
     installationOperationID = nil
     installationFailure = nil
     self.updatedAt = updatedAt

@@ -598,16 +598,20 @@ actor VirtualMachineDiskImageResizeService:
   private func context(
     for lease: LinuxVirtualMachineRuntimeLease
   ) -> Context {
-    Context(
+    let configuration = lease.machine.manifest
+      .effectiveLinuxDiskSnapshotConfiguration
+    return Context(
       target: lease.target,
       manifest: lease.machine.manifest,
       bundleURL: lease.machine.bundleURL,
       source: VirtualMachineDiskImageResizeSource(
         baseURL: lease.machine.diskImageURL,
-        layerURLs: [],
+        layerURLs: lease.machine.diskSnapshotLayerURLs,
         expectedFormat: lease.machine.manifest.effectiveDiskImageFormat
       ),
-      resizeArtifactPath: lease.machine.manifest.diskImagePath
+      resizeArtifactPath:
+        configuration.layers.last?.relativePath
+        ?? lease.machine.manifest.diskImagePath
     )
   }
 }

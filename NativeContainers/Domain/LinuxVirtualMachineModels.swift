@@ -30,6 +30,7 @@ struct ResolvedLinuxVirtualMachine: Sendable {
   let manifest: VirtualMachineManifest
   let bundleURL: URL
   let diskImageURL: URL
+  let diskSnapshotLayerURLs: [URL]
   let efiVariableStoreURL: URL
   let machineIdentifierURL: URL
   let installationMediaURL: URL?
@@ -39,6 +40,7 @@ struct ResolvedLinuxVirtualMachine: Sendable {
     manifest: VirtualMachineManifest,
     bundleURL: URL,
     diskImageURL: URL,
+    diskSnapshotLayerURLs: [URL] = [],
     efiVariableStoreURL: URL,
     machineIdentifierURL: URL,
     installationMediaURL: URL?,
@@ -47,6 +49,7 @@ struct ResolvedLinuxVirtualMachine: Sendable {
     self.manifest = manifest
     self.bundleURL = bundleURL
     self.diskImageURL = diskImageURL
+    self.diskSnapshotLayerURLs = diskSnapshotLayerURLs
     self.efiVariableStoreURL = efiVariableStoreURL
     self.machineIdentifierURL = machineIdentifierURL
     self.installationMediaURL = installationMediaURL

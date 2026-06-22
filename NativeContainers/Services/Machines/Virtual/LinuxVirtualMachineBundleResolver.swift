@@ -23,6 +23,11 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
     guard manifest.guest == .linux else {
       throw VirtualMachineModelError.requiresLinuxGuest(manifest.id)
     }
+    guard manifest.macOSDiskSnapshotConfiguration == nil else {
+      throw LinuxVirtualMachineError.invalidBundle(
+        "macOS disk snapshot state is present"
+      )
+    }
     guard let linuxConfiguration = manifest.linuxConfiguration else {
       throw LinuxVirtualMachineError.missingManifestValue("linuxConfiguration")
     }
@@ -40,6 +45,15 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
       in: bundleURL,
       writable: true
     )
+    let snapshotLayers = manifest.effectiveLinuxDiskSnapshotConfiguration.layers
+    let diskSnapshotLayerURLs = try snapshotLayers.enumerated().map { index, layer in
+      try resolveArtifact(
+        layer.relativePath,
+        named: "linuxDiskSnapshotConfiguration.layers[\(index)]",
+        in: bundleURL,
+        writable: index == snapshotLayers.indices.last
+      )
+    }
     let efiVariableStoreURL = try resolveArtifact(
       linuxConfiguration.efiVariableStorePath,
       named: "efiVariableStorePath",
@@ -63,6 +77,7 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
       manifest: manifest,
       bundleURL: bundleURL,
       diskImageURL: diskImageURL,
+      diskSnapshotLayerURLs: diskSnapshotLayerURLs,
       efiVariableStoreURL: efiVariableStoreURL,
       machineIdentifierURL: machineIdentifierURL,
       installationMediaURL: installationMediaURL

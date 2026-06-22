@@ -93,6 +93,7 @@ struct AppServices: Sendable {
   let linuxVirtualMachineSharedDirectories: any LinuxVirtualMachineSharedDirectoryManaging
   let virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices
   let virtualMachineDiskSnapshots: any MacVirtualMachineDiskSnapshotManaging
+  let linuxVirtualMachineDiskSnapshots: any LinuxVirtualMachineDiskSnapshotManaging
   let virtualMachineAvailability: any MacVirtualMachineAvailabilityChecking
   let restoreImageDiscovery: any MacRestoreImageDiscovering
   let restoreImageAcquisition: any RestoreImageAcquiring
@@ -185,6 +186,9 @@ struct AppServices: Sendable {
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
     virtualMachineDiskSnapshots: any MacVirtualMachineDiskSnapshotManaging =
       UnavailableMacVirtualMachineDiskSnapshotService(),
+    linuxVirtualMachineDiskSnapshots:
+      any LinuxVirtualMachineDiskSnapshotManaging =
+      UnavailableLinuxVirtualMachineDiskSnapshotService(),
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -250,6 +254,7 @@ struct AppServices: Sendable {
     self.linuxVirtualMachineSharedDirectories = linuxVirtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages
     self.virtualMachineDiskSnapshots = virtualMachineDiskSnapshots
+    self.linuxVirtualMachineDiskSnapshots = linuxVirtualMachineDiskSnapshots
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageAcquisition = restoreImageAcquisition
@@ -332,6 +337,9 @@ struct AppServices: Sendable {
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
     virtualMachineDiskSnapshots: any MacVirtualMachineDiskSnapshotManaging =
       UnavailableMacVirtualMachineDiskSnapshotService(),
+    linuxVirtualMachineDiskSnapshots:
+      any LinuxVirtualMachineDiskSnapshotManaging =
+      UnavailableLinuxVirtualMachineDiskSnapshotService(),
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -397,6 +405,7 @@ struct AppServices: Sendable {
     self.linuxVirtualMachineSharedDirectories = linuxVirtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages
     self.virtualMachineDiskSnapshots = virtualMachineDiskSnapshots
+    self.linuxVirtualMachineDiskSnapshots = linuxVirtualMachineDiskSnapshots
     self.virtualMachineAvailability = virtualMachineAvailability
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageAcquisition = restoreImageAcquisition

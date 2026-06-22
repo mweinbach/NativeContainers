@@ -2,14 +2,14 @@ import Darwin
 import DiskImageKit
 import Foundation
 
-protocol MacVirtualMachineDiskSnapshotLayerStoring: Sendable {
+protocol VirtualMachineDiskSnapshotLayerStoring: Sendable {
   func recoverUnreferencedLayers(
     in bundleURL: URL,
-    configuration: MacVirtualMachineDiskSnapshotConfiguration
+    configuration: VirtualMachineDiskSnapshotConfiguration
   ) throws
 
   func createLayer(
-    _ layer: MacVirtualMachineDiskSnapshotLayer,
+    _ layer: VirtualMachineDiskSnapshotLayer,
     baseURL: URL,
     retainedLayerURLs: [URL],
     targetLogicalBytes: UInt64,
@@ -17,13 +17,13 @@ protocol MacVirtualMachineDiskSnapshotLayerStoring: Sendable {
   ) throws -> URL
 
   func removeLayers(
-    _ layers: [MacVirtualMachineDiskSnapshotLayer],
+    _ layers: [VirtualMachineDiskSnapshotLayer],
     in bundleURL: URL
   ) throws
 }
 
-struct AppleMacVirtualMachineDiskSnapshotLayerStore:
-  MacVirtualMachineDiskSnapshotLayerStoring,
+struct AppleVirtualMachineDiskSnapshotLayerStore:
+  VirtualMachineDiskSnapshotLayerStoring,
   @unchecked Sendable
 {
   private static let stagingPrefix = ".Snapshot-"
@@ -43,7 +43,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
 
   func recoverUnreferencedLayers(
     in bundleURL: URL,
-    configuration: MacVirtualMachineDiskSnapshotConfiguration
+    configuration: VirtualMachineDiskSnapshotConfiguration
   ) throws {
     let directoryURL = snapshotDirectory(in: bundleURL)
     guard exists(directoryURL) else { return }
@@ -69,24 +69,24 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
       {
         try removeOwnedFile(at: entry)
       } else {
-        throw MacVirtualMachineDiskSnapshotError.unsafeArtifact(name)
+        throw VirtualMachineDiskSnapshotError.unsafeArtifact(name)
       }
     }
     try synchronizeDirectory(directoryURL)
   }
 
   func createLayer(
-    _ layer: MacVirtualMachineDiskSnapshotLayer,
+    _ layer: VirtualMachineDiskSnapshotLayer,
     baseURL: URL,
     retainedLayerURLs: [URL],
     targetLogicalBytes: UInt64,
     in bundleURL: URL
   ) throws -> URL {
     guard #available(macOS 27.0, *) else {
-      throw MacVirtualMachineDiskSnapshotError.unavailable
+      throw VirtualMachineDiskSnapshotError.unavailable
     }
     guard layer.isCanonical else {
-      throw MacVirtualMachineDiskSnapshotError.invalidConfiguration(
+      throw VirtualMachineDiskSnapshotError.invalidConfiguration(
         "a new layer has a noncanonical path"
       )
     }
@@ -122,24 +122,24 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
         try removeOwnedFileIfPresent(at: destinationURL)
         try synchronizeDirectory(directoryURL)
       } catch {
-        throw MacVirtualMachineDiskSnapshotError.operationAndCleanupFailed(
+        throw VirtualMachineDiskSnapshotError.operationAndCleanupFailed(
           operation: operationError.localizedDescription,
           cleanup: error.localizedDescription
         )
       }
       if let snapshotError = operationError
-        as? MacVirtualMachineDiskSnapshotError
+        as? VirtualMachineDiskSnapshotError
       {
         throw snapshotError
       }
-      throw MacVirtualMachineDiskSnapshotError.layerCreationFailed(
+      throw VirtualMachineDiskSnapshotError.layerCreationFailed(
         operationError.localizedDescription
       )
     }
   }
 
   func removeLayers(
-    _ layers: [MacVirtualMachineDiskSnapshotLayer],
+    _ layers: [VirtualMachineDiskSnapshotLayer],
     in bundleURL: URL
   ) throws {
     guard !layers.isEmpty else { return }
@@ -147,7 +147,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
     try requireOwnedDirectory(directoryURL)
     for layer in layers {
       guard layer.isCanonical else {
-        throw MacVirtualMachineDiskSnapshotError.invalidConfiguration(
+        throw VirtualMachineDiskSnapshotError.invalidConfiguration(
           "a retired layer has a noncanonical path"
         )
       }
@@ -182,7 +182,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
         exactly: targetLogicalBytes / blockSizeBytes
       )
     else {
-      throw MacVirtualMachineDiskSnapshotError.invalidConfiguration(
+      throw VirtualMachineDiskSnapshotError.invalidConfiguration(
         "the requested active layer capacity is invalid"
       )
     }
@@ -199,7 +199,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
       stack.blockCount == targetBlockCount,
       UInt64(exactly: stack.size) == targetLogicalBytes
     else {
-      throw MacVirtualMachineDiskSnapshotError.layerCreationFailed(
+      throw VirtualMachineDiskSnapshotError.layerCreationFailed(
         "DiskImageKit returned an unexpected layer stack"
       )
     }
@@ -214,7 +214,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
       return
     }
     guard errno == ENOENT else {
-      throw MacVirtualMachineDiskSnapshotError.unsafeArtifact(
+      throw VirtualMachineDiskSnapshotError.unsafeArtifact(
         directoryURL.lastPathComponent
       )
     }
@@ -230,7 +230,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
 
   private func snapshotDirectory(in bundleURL: URL) -> URL {
     bundleURL.appending(
-      path: MacVirtualMachineDiskSnapshotLayer.directoryName,
+      path: VirtualMachineDiskSnapshotLayer.directoryName,
       directoryHint: .isDirectory
     )
   }
@@ -241,7 +241,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
       (metadata.st_mode & S_IFMT) == S_IFDIR,
       metadata.st_uid == geteuid()
     else {
-      throw MacVirtualMachineDiskSnapshotError.unsafeArtifact(
+      throw VirtualMachineDiskSnapshotError.unsafeArtifact(
         url.lastPathComponent
       )
     }
@@ -255,7 +255,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
       identity.ownerUserID == UInt32(geteuid()),
       identity.linkCount == 1
     else {
-      throw MacVirtualMachineDiskSnapshotError.unsafeArtifact(
+      throw VirtualMachineDiskSnapshotError.unsafeArtifact(
         url.lastPathComponent
       )
     }
@@ -265,7 +265,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
   private func removeOwnedFileIfPresent(at url: URL) throws {
     guard exists(url) else {
       guard errno == ENOENT else {
-        throw MacVirtualMachineDiskSnapshotError.unsafeArtifact(
+        throw VirtualMachineDiskSnapshotError.unsafeArtifact(
           url.lastPathComponent
         )
       }
@@ -281,7 +281,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
 
   private func requireAbsent(_ url: URL) throws {
     guard !exists(url), errno == ENOENT else {
-      throw MacVirtualMachineDiskSnapshotError.unsafeArtifact(
+      throw VirtualMachineDiskSnapshotError.unsafeArtifact(
         url.lastPathComponent
       )
     }
@@ -298,7 +298,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
       O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
     )
     guard descriptor >= 0 else {
-      throw MacVirtualMachineDiskSnapshotError.unsafeArtifact(
+      throw VirtualMachineDiskSnapshotError.unsafeArtifact(
         url.lastPathComponent
       )
     }
@@ -314,7 +314,7 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
 
   private static func isOwnedLayerFilename(_ name: String) -> Bool {
     let url = URL(filePath: name)
-    guard url.pathExtension == MacVirtualMachineDiskSnapshotLayer.fileExtension,
+    guard url.pathExtension == VirtualMachineDiskSnapshotLayer.fileExtension,
       let identifier = UUID(
         uuidString: url.deletingPathExtension().lastPathComponent
       )
@@ -323,9 +323,14 @@ struct AppleMacVirtualMachineDiskSnapshotLayerStore:
     }
     return name
       == URL(
-        filePath: MacVirtualMachineDiskSnapshotLayer.relativePath(
+        filePath: VirtualMachineDiskSnapshotLayer.relativePath(
           for: identifier
         )
       ).lastPathComponent
   }
 }
+
+typealias MacVirtualMachineDiskSnapshotLayerStoring =
+  VirtualMachineDiskSnapshotLayerStoring
+typealias AppleMacVirtualMachineDiskSnapshotLayerStore =
+  AppleVirtualMachineDiskSnapshotLayerStore

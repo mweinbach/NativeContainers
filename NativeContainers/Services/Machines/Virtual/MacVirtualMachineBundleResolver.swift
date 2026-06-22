@@ -50,6 +50,11 @@ struct MacVirtualMachineBundleResolver: MacVirtualMachineBundleResolving, Sendab
     guard manifest.guest == .macOS else {
       throw VirtualMachineModelError.requiresMacOSGuest(manifest.id)
     }
+    guard manifest.linuxDiskSnapshotConfiguration == nil else {
+      throw MacVirtualMachineInstallationError.invalidBundle(
+        "Linux disk snapshot state is present"
+      )
+    }
 
     let bundleURL =
       rootURL

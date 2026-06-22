@@ -36,10 +36,16 @@ struct MacVirtualMachineConfigurationView: View {
   }
 
   var body: some View {
-    let computeEditBlock = MacVirtualMachineConfigurationEditPolicy().block(
+    let editPolicy = MacVirtualMachineConfigurationEditPolicy()
+    let computeEditBlock = editPolicy.block(
       installState: machine.installState,
       runtime: runtime.snapshot,
       diskMaintenanceIsBusy: diskMaintenance.isBusy || diskSnapshots.isBusy
+    )
+    let diskSnapshotEditBlock = editPolicy.block(
+      installState: machine.installState,
+      runtime: runtime.snapshot,
+      diskMaintenanceIsBusy: diskMaintenance.isBusy
     )
     ScrollView {
       VStack(alignment: .leading, spacing: 20) {
@@ -87,12 +93,11 @@ struct MacVirtualMachineConfigurationView: View {
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
-        MacVirtualMachineDiskSnapshotsSection(
-          installState: machine.installState,
-          runtime: runtime,
+        VirtualMachineDiskSnapshotsSection(
           snapshots: diskSnapshots,
-          diskMaintenanceIsBusy: diskMaintenance.isBusy,
-          discardSavedState: canDiscardSavedState
+          editMessage: diskSnapshotEditBlock?.message,
+          discardSavedState: diskSnapshotEditBlock == .savedStatePresent
+            && canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
         MacVirtualMachineSharedDirectoriesView(

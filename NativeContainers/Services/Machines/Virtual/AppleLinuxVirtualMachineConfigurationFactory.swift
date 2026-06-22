@@ -16,6 +16,7 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     any LinuxVirtualMachineSharedDirectoryBookmarkResolving
   private let sharedDirectoryDeviceFactory: AppleLinuxVirtualMachineSharedDirectoryDeviceFactory
   private let networkDeviceFactory: AppleVirtualMachineNetworkDeviceFactory
+  private let diskImageService: any AppleVirtualMachineDiskImageServicing
 
   init(
     sharedDirectoryBookmarkService:
@@ -25,11 +26,14 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
       AppleLinuxVirtualMachineSharedDirectoryDeviceFactory =
       AppleLinuxVirtualMachineSharedDirectoryDeviceFactory(),
     networkDeviceFactory: AppleVirtualMachineNetworkDeviceFactory =
-      AppleVirtualMachineNetworkDeviceFactory()
+      AppleVirtualMachineNetworkDeviceFactory(),
+    diskImageService: any AppleVirtualMachineDiskImageServicing =
+      AppleVirtualMachineDiskImageService()
   ) {
     self.sharedDirectoryBookmarkService = sharedDirectoryBookmarkService
     self.sharedDirectoryDeviceFactory = sharedDirectoryDeviceFactory
     self.networkDeviceFactory = networkDeviceFactory
+    self.diskImageService = diskImageService
   }
 
   func makeConfiguration(
@@ -69,9 +73,8 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     let bootLoader = VZEFIBootLoader()
     bootLoader.variableStore = VZEFIVariableStore(url: machine.efiVariableStoreURL)
 
-    let diskAttachment = try VZDiskImageStorageDeviceAttachment(
-      url: machine.diskImageURL,
-      readOnly: false
+    let diskAttachment = try diskImageService.makeWritableAttachment(
+      for: machine
     )
     let disk = VZVirtioBlockDeviceConfiguration(attachment: diskAttachment)
     var usbControllers: [VZUSBControllerConfiguration] = []

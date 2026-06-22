@@ -66,9 +66,9 @@ struct VirtualMachineBundlePreparationService:
     let sourceSnapshot = try inspector.snapshot(of: request.sourceBundleURL)
     try requireNoDiskImageMaintenanceArtifacts(in: sourceSnapshot)
     try validateGuestManifestState(request)
-    try requireNoGuestIncompatibleArtifacts(
+    try validateDiskSnapshotArtifacts(
       in: sourceSnapshot,
-      guest: request.sourceManifest.guest
+      manifest: request.sourceManifest
     )
     try await transfer.copyBundle(
       from: request.sourceBundleURL,
@@ -177,7 +177,26 @@ struct VirtualMachineBundlePreparationService:
       }
     }
 
-    guard request.sourceManifest.guest == .linux else { return }
+    guard
+      request.destinationManifest.effectiveDiskSnapshotConfiguration
+        == request.sourceManifest.effectiveDiskSnapshotConfiguration
+    else {
+      throw VirtualMachineBundleError.invalidBundle(
+        "the copied manifest changed its disk snapshot history"
+      )
+    }
+
+    if request.sourceManifest.guest == .macOS {
+      guard request.sourceManifest.linuxDiskSnapshotConfiguration == nil,
+        request.destinationManifest.linuxDiskSnapshotConfiguration == nil
+      else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "the macOS manifest contains Linux disk snapshot state"
+        )
+      }
+      return
+    }
+
     for manifest in [request.sourceManifest, request.destinationManifest] {
       guard let configuration = manifest.linuxConfiguration,
         configuration.installationMediaPath == nil,
@@ -190,7 +209,7 @@ struct VirtualMachineBundlePreparationService:
         manifest.macOSMinimumCPUCount == nil,
         manifest.macOSMinimumMemoryBytes == nil,
         manifest.macOSFirstBootState == nil,
-        !manifest.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots
+        manifest.macOSDiskSnapshotConfiguration == nil
       else {
         throw VirtualMachineBundleError.invalidBundle(
           "the Linux manifest contains incomplete or guest-incompatible state"
@@ -217,20 +236,43 @@ struct VirtualMachineBundlePreparationService:
     }
   }
 
-  private func requireNoGuestIncompatibleArtifacts(
+  private func validateDiskSnapshotArtifacts(
     in snapshot: VirtualMachineBundleSnapshot,
-    guest: VirtualMachineGuest
+    manifest: VirtualMachineManifest
   ) throws {
-    guard guest == .linux else { return }
-    let snapshotDirectory = MacVirtualMachineDiskSnapshotLayer.directoryName
+    let directory = VirtualMachineDiskSnapshotLayer.directoryName
+    let snapshotEntries = snapshot.entries.filter {
+      $0.relativePath == directory
+        || $0.relativePath.hasPrefix("\(directory)/")
+    }
+    let expectedPaths = Set(
+      manifest.effectiveDiskSnapshotConfiguration.layers.map(\.relativePath)
+    )
+
+    guard !expectedPaths.isEmpty else {
+      guard snapshotEntries.isEmpty else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "unreferenced disk snapshot data is present in the bundle"
+        )
+      }
+      return
+    }
+
     guard
-      !snapshot.entries.contains(where: {
-        $0.relativePath == snapshotDirectory
-          || $0.relativePath.hasPrefix("\(snapshotDirectory)/")
+      snapshotEntries.contains(where: {
+        $0.relativePath == directory && $0.fileType == UInt16(S_IFDIR)
       })
     else {
       throw VirtualMachineBundleError.invalidBundle(
-        "macOS disk snapshot data is present in the Linux bundle"
+        "the disk snapshot directory is missing or unsafe"
+      )
+    }
+    let layerEntries = snapshotEntries.filter { $0.relativePath != directory }
+    guard Set(layerEntries.map(\.relativePath)) == expectedPaths,
+      layerEntries.allSatisfy({ $0.fileType == UInt16(S_IFREG) })
+    else {
+      throw VirtualMachineBundleError.invalidBundle(
+        "the disk snapshot artifacts do not match the manifest"
       )
     }
   }

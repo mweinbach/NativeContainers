@@ -122,8 +122,14 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
     func descriptor(
       for machine: ResolvedMacVirtualMachine
     ) throws -> VirtualMachineDiskImageDescriptor
+    func descriptor(
+      for machine: ResolvedLinuxVirtualMachine
+    ) throws -> VirtualMachineDiskImageDescriptor
     func makeWritableAttachment(
       for machine: ResolvedMacVirtualMachine
+    ) throws -> VZStorageDeviceAttachment
+    func makeWritableAttachment(
+      for machine: ResolvedLinuxVirtualMachine
     ) throws -> VZStorageDeviceAttachment
   }
 
@@ -131,6 +137,12 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
   struct AppleVirtualMachineDiskImageService:
     AppleVirtualMachineDiskImageServicing
   {
+    private struct Source {
+      let manifest: VirtualMachineManifest
+      let diskImageURL: URL
+      let diskSnapshotLayerURLs: [URL]
+    }
+
     private let inspector: any VirtualMachineDiskImageInspecting
 
     init(
@@ -143,19 +155,43 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
     func descriptor(
       for machine: ResolvedMacVirtualMachine
     ) throws -> VirtualMachineDiskImageDescriptor {
-      guard !machine.diskSnapshotLayerURLs.isEmpty else {
+      try descriptor(
+        for: Source(
+          manifest: machine.manifest,
+          diskImageURL: machine.diskImageURL,
+          diskSnapshotLayerURLs: machine.diskSnapshotLayerURLs
+        )
+      )
+    }
+
+    func descriptor(
+      for machine: ResolvedLinuxVirtualMachine
+    ) throws -> VirtualMachineDiskImageDescriptor {
+      try descriptor(
+        for: Source(
+          manifest: machine.manifest,
+          diskImageURL: machine.diskImageURL,
+          diskSnapshotLayerURLs: machine.diskSnapshotLayerURLs
+        )
+      )
+    }
+
+    private func descriptor(
+      for source: Source
+    ) throws -> VirtualMachineDiskImageDescriptor {
+      guard !source.diskSnapshotLayerURLs.isEmpty else {
         return try inspector.inspect(
-          at: machine.diskImageURL,
-          expectedFormat: machine.manifest.effectiveDiskImageFormat
+          at: source.diskImageURL,
+          expectedFormat: source.manifest.effectiveDiskImageFormat
         )
       }
       guard #available(macOS 27.0, *) else {
         throw VirtualMachineDiskImageError.unsupportedHost(
-          machine.manifest.effectiveDiskImageFormat
+          source.manifest.effectiveDiskImageFormat
         )
       }
       let image = try makeSnapshotStack(
-        for: machine,
+        for: source,
         writableTopLayer: false
       )
       guard let logicalBytes = UInt64(exactly: image.size),
@@ -169,7 +205,7 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
         )
       }
       return VirtualMachineDiskImageDescriptor(
-        format: machine.manifest.effectiveDiskImageFormat,
+        format: source.manifest.effectiveDiskImageFormat,
         logicalBytes: logicalBytes,
         blockSizeBytes: blockSizeBytes,
         layerType: .overlay
@@ -179,15 +215,39 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
     func makeWritableAttachment(
       for machine: ResolvedMacVirtualMachine
     ) throws -> VZStorageDeviceAttachment {
-      if !machine.diskSnapshotLayerURLs.isEmpty {
+      try makeWritableAttachment(
+        for: Source(
+          manifest: machine.manifest,
+          diskImageURL: machine.diskImageURL,
+          diskSnapshotLayerURLs: machine.diskSnapshotLayerURLs
+        )
+      )
+    }
+
+    func makeWritableAttachment(
+      for machine: ResolvedLinuxVirtualMachine
+    ) throws -> VZStorageDeviceAttachment {
+      try makeWritableAttachment(
+        for: Source(
+          manifest: machine.manifest,
+          diskImageURL: machine.diskImageURL,
+          diskSnapshotLayerURLs: machine.diskSnapshotLayerURLs
+        )
+      )
+    }
+
+    private func makeWritableAttachment(
+      for source: Source
+    ) throws -> VZStorageDeviceAttachment {
+      if !source.diskSnapshotLayerURLs.isEmpty {
         guard #available(macOS 27.0, *) else {
           throw VirtualMachineDiskImageError.unsupportedHost(
-            machine.manifest.effectiveDiskImageFormat
+            source.manifest.effectiveDiskImageFormat
           )
         }
         return try VZDiskImageStorageDeviceAttachment(
           diskImage: makeSnapshotStack(
-            for: machine,
+            for: source,
             writableTopLayer: true
           ),
           cachingMode: .automatic,
@@ -195,10 +255,10 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
         )
       }
 
-      switch machine.manifest.effectiveDiskImageFormat {
+      switch source.manifest.effectiveDiskImageFormat {
       case .raw:
         return try VZDiskImageStorageDeviceAttachment(
-          url: machine.diskImageURL,
+          url: source.diskImageURL,
           readOnly: false,
           cachingMode: .automatic,
           synchronizationMode: .full
@@ -207,19 +267,18 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
         guard #available(macOS 27.0, *) else {
           throw VirtualMachineDiskImageError.unsupportedHost(.asif)
         }
-        return try makeASIFAttachment(for: machine)
+        return try makeASIFAttachment(for: source)
       }
     }
 
     @available(macOS 27.0, *)
     private func makeSnapshotStack(
-      for machine: ResolvedMacVirtualMachine,
+      for source: Source,
       writableTopLayer: Bool
     ) throws -> DiskImage {
-      let configuration = machine.manifest
-        .effectiveMacOSDiskSnapshotConfiguration
+      let configuration = source.manifest.effectiveDiskSnapshotConfiguration
       guard configuration.hasSnapshots,
-        configuration.layers.count == machine.diskSnapshotLayerURLs.count
+        configuration.layers.count == source.diskSnapshotLayerURLs.count
       else {
         throw VirtualMachineDiskImageError.inspectionFailed(
           "the snapshot manifest does not match its resolved layer stack"
@@ -228,10 +287,10 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
 
       do {
         var image = try DiskImage(
-          opening: .open(url: machine.diskImageURL, mode: .readOnly)
+          opening: .open(url: source.diskImageURL, mode: .readOnly)
         )
-        for (index, layerURL) in machine.diskSnapshotLayerURLs.enumerated() {
-          let isTopLayer = index == machine.diskSnapshotLayerURLs.indices.last
+        for (index, layerURL) in source.diskSnapshotLayerURLs.enumerated() {
+          let isTopLayer = index == source.diskSnapshotLayerURLs.indices.last
           let layer = try DiskImage(
             opening: .open(
               url: layerURL,
@@ -258,12 +317,12 @@ struct AppleVirtualMachineDiskImageInspector: VirtualMachineDiskImageInspecting 
 
     @available(macOS 27.0, *)
     private func makeASIFAttachment(
-      for machine: ResolvedMacVirtualMachine
+      for source: Source
     ) throws -> VZStorageDeviceAttachment {
       let image: DiskImage
       do {
         image = try DiskImage(
-          opening: .open(url: machine.diskImageURL, mode: .readWrite)
+          opening: .open(url: source.diskImageURL, mode: .readWrite)
         )
       } catch {
         throw VirtualMachineDiskImageError.inspectionFailed(

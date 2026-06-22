@@ -352,6 +352,11 @@ enum AppCompositionRoot {
       persistence: virtualMachineLibrary,
       savedStateService: virtualMachineSavedState
     )
+    let linuxVirtualMachineDiskSnapshots = LinuxVirtualMachineDiskSnapshotService(
+      linuxLeasingStore: virtualMachineLibrary,
+      linuxPersistence: virtualMachineLibrary,
+      linuxSavedStateService: linuxVirtualMachineSavedState
+    )
     let virtualMachineSharedDirectories = MacVirtualMachineSharedDirectoryService(
       leasingStore: virtualMachineLibrary,
       persistence: virtualMachineLibrary,
@@ -447,6 +452,7 @@ enum AppCompositionRoot {
         resizeRecovery: virtualMachineDiskImageResize
       ),
       virtualMachineDiskSnapshots: virtualMachineDiskSnapshots,
+      linuxVirtualMachineDiskSnapshots: linuxVirtualMachineDiskSnapshots,
       virtualMachineAvailability:
         AppleMacVirtualMachineAvailabilityChecker(),
       restoreImageDiscovery: MacRestoreImageService(),

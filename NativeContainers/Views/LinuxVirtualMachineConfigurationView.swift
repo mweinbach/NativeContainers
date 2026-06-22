@@ -6,6 +6,7 @@ struct LinuxVirtualMachineConfigurationView: View {
   let naming: VirtualMachineNameModel
   let compute: VirtualMachineComputeModel
   let diskMaintenance: VirtualMachineDiskImageMaintenanceModel
+  let diskSnapshots: VirtualMachineDiskSnapshotModel
   let network: LinuxVirtualMachineNetworkModel
   let sharedDirectories: LinuxVirtualMachineSharedDirectoriesModel
   @State private var isConfirmingDiscardSavedState = false
@@ -15,7 +16,10 @@ struct LinuxVirtualMachineConfigurationView: View {
       VStack(alignment: .leading, spacing: 20) {
         LinuxVirtualMachineConfigurationHeader(
           machine: machine,
-          snapshot: runtime.snapshot
+          snapshot: runtime.snapshot,
+          diskMaintenanceOperation: diskMaintenance.operation,
+          diskSnapshotOperation: diskSnapshots.operation,
+          isRefreshingDiskState: diskMaintenance.isRefreshing
         )
         VirtualMachineNameSection(
           naming: naming,
@@ -33,6 +37,13 @@ struct LinuxVirtualMachineConfigurationView: View {
           machine: machine,
           runtime: runtime,
           maintenance: diskMaintenance,
+          snapshotOperationIsBusy: diskSnapshots.isBusy,
+          discardSavedState: canDiscardSavedState
+            ? { isConfirmingDiscardSavedState = true } : nil
+        )
+        VirtualMachineDiskSnapshotsSection(
+          snapshots: diskSnapshots,
+          editMessage: snapshotEditMessage,
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
@@ -63,6 +74,8 @@ struct LinuxVirtualMachineConfigurationView: View {
           naming.errorMessage
           ?? compute.errorMessage
           ?? diskMaintenance.errorMessage
+          ?? diskSnapshots.errorMessage
+          ?? diskSnapshots.warningMessage
           ?? network.errorMessage
           ?? runtime.errorMessage
         {
@@ -72,6 +85,7 @@ struct LinuxVirtualMachineConfigurationView: View {
               naming.clearError()
               compute.clearError()
               diskMaintenance.clearError()
+              diskSnapshots.clearMessages()
               network.clearError()
               runtime.clearActionError()
             }
@@ -97,7 +111,7 @@ struct LinuxVirtualMachineConfigurationView: View {
   }
 
   private var runtimeEditMessage: LocalizedStringResource? {
-    guard !diskMaintenance.isBusy else {
+    guard !diskMaintenance.isBusy, !diskSnapshots.isBusy else {
       return "Wait for virtual disk maintenance to finish."
     }
     guard machine.linuxConfiguration != nil,
@@ -132,8 +146,41 @@ struct LinuxVirtualMachineConfigurationView: View {
     }
   }
 
+  private var snapshotEditMessage: LocalizedStringResource? {
+    guard !diskMaintenance.isBusy else {
+      return "Wait for virtual disk maintenance to finish."
+    }
+    guard machine.installState == .stopped else {
+      return "Finish installing this VM before creating disk snapshots."
+    }
+    guard runtime.snapshot.target == nil else {
+      return "Shut down this VM before changing disk snapshots."
+    }
+    switch runtime.snapshot.state {
+    case .stopped:
+      break
+    case .ownedElsewhere:
+      return "Another NativeContainers process owns this VM."
+    case .inspectingSavedState:
+      return "Checking the VM’s saved state…"
+    case .starting, .running, .pausing, .paused, .resuming, .saving,
+      .restoring, .discardingSavedState, .ejectingInstallationMedia,
+      .stopping:
+      return "Wait for this VM to finish changing state."
+    }
+    return switch runtime.snapshot.savedStateStatus {
+    case .none:
+      nil
+    case .unknown:
+      "Checking the VM’s saved state…"
+    case .available, .incompatible:
+      "Discard the saved state before changing disk snapshots."
+    }
+  }
+
   private var canDiscardSavedState: Bool {
-    !diskMaintenance.isBusy && runtime.snapshot.canDiscardSavedState
+    !diskMaintenance.isBusy && !diskSnapshots.isBusy
+      && runtime.snapshot.canDiscardSavedState
   }
 }
 
@@ -164,6 +211,9 @@ private struct LinuxVirtualMachineNetworkSection: View {
 private struct LinuxVirtualMachineConfigurationHeader: View {
   let machine: VirtualMachineManifest
   let snapshot: LinuxVirtualMachineRuntimeSnapshot
+  let diskMaintenanceOperation: VirtualMachineDiskImageMaintenanceOperation?
+  let diskSnapshotOperation: VirtualMachineDiskSnapshotOperation?
+  let isRefreshingDiskState: Bool
 
   var body: some View {
     HStack(alignment: .top, spacing: 16) {
@@ -176,17 +226,33 @@ private struct LinuxVirtualMachineConfigurationHeader: View {
         Text(machine.name)
           .font(.title2.weight(.semibold))
         HStack(spacing: 7) {
-          LinuxVirtualMachineRuntimeStatusIndicator(state: snapshot.state)
-          Text(snapshot.state.label)
-          if snapshot.isForceStopCompleteAwaitingCleanup {
-            Text("Force Stopped — Finishing Cleanup")
-              .foregroundStyle(.orange)
-          } else if snapshot.isForceStopQueued {
-            Text("Force Stop Queued")
-              .foregroundStyle(.orange)
-          } else if snapshot.state == .stopping {
-            Text("Automatic Force Stop Armed")
-              .foregroundStyle(.orange)
+          Group {
+            if isRefreshingDiskState {
+              ProgressView()
+                .controlSize(.small)
+              Text("Refreshing virtual disk state")
+            } else if let diskMaintenanceOperation {
+              ProgressView()
+                .controlSize(.small)
+              Text(diskMaintenanceOperation.progressLabel)
+            } else if let diskSnapshotOperation {
+              ProgressView()
+                .controlSize(.small)
+              Text(diskSnapshotOperation.progressLabel)
+            } else {
+              LinuxVirtualMachineRuntimeStatusIndicator(state: snapshot.state)
+              Text(snapshot.state.label)
+              if snapshot.isForceStopCompleteAwaitingCleanup {
+                Text("Force Stopped — Finishing Cleanup")
+                  .foregroundStyle(.orange)
+              } else if snapshot.isForceStopQueued {
+                Text("Force Stop Queued")
+                  .foregroundStyle(.orange)
+              } else if snapshot.state == .stopping {
+                Text("Automatic Force Stop Armed")
+                  .foregroundStyle(.orange)
+              }
+            }
           }
         }
         .font(.subheadline)

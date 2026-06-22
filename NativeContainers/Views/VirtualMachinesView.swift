@@ -317,6 +317,9 @@ private struct GuestVirtualMachineConfigurationView: View {
         diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
           for: machine
         ),
+        diskSnapshots: model.makeLinuxVirtualMachineDiskSnapshotModel(
+          for: machine
+        ),
         network: model.makeLinuxVirtualMachineNetworkModel(for: machine),
         sharedDirectories: model.makeLinuxVirtualMachineSharedDirectoriesModel(
           for: machine

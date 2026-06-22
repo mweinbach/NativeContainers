@@ -1,24 +1,22 @@
 import SwiftUI
 
-struct MacVirtualMachineDiskSnapshotsSection: View {
-  let installState: VirtualMachineInstallState
-  let runtime: MacVirtualMachineRuntimeModel
-  let snapshots: MacVirtualMachineDiskSnapshotModel
-  let diskMaintenanceIsBusy: Bool
+struct VirtualMachineDiskSnapshotsSection: View {
+  let snapshots: VirtualMachineDiskSnapshotModel
+  let editMessage: LocalizedStringResource?
   let discardSavedState: (() -> Void)?
 
   @State private var newSnapshotName = ""
-  @State private var snapshotToRestore: MacVirtualMachineDiskSnapshot?
+  @State private var snapshotToRestore: VirtualMachineDiskSnapshot?
   @State private var isConfirmingRestore = false
 
   var body: some View {
-    MacVirtualMachineDiskSnapshotsContent(
+    VirtualMachineDiskSnapshotsContent(
       snapshotItems: snapshots.snapshots,
       newSnapshotName: $newSnapshotName,
       isLoading: snapshots.isLoading,
       operation: snapshots.operation,
       isAtLimit: snapshots.isAtLimit,
-      editBlock: editBlock,
+      editMessage: editMessage,
       hostIsSupported: hostIsSupported,
       createSnapshot: createSnapshot,
       requestRestore: requestRestore,
@@ -43,14 +41,6 @@ struct MacVirtualMachineDiskSnapshotsSection: View {
         "The VM remains powered off. Disk changes and snapshots newer than “\(snapshot.name)” are permanently removed, then a fresh writable layer is created."
       )
     }
-  }
-
-  private var editBlock: MacVirtualMachineConfigurationEditBlock? {
-    MacVirtualMachineConfigurationEditPolicy().block(
-      installState: installState,
-      runtime: runtime.snapshot,
-      diskMaintenanceIsBusy: diskMaintenanceIsBusy
-    )
   }
 
   private var hostIsSupported: Bool {
@@ -78,23 +68,23 @@ struct MacVirtualMachineDiskSnapshotsSection: View {
   }
 
   private func requestRestore(
-    _ snapshot: MacVirtualMachineDiskSnapshot
+    _ snapshot: VirtualMachineDiskSnapshot
   ) {
     snapshotToRestore = snapshot
     isConfirmingRestore = true
   }
 }
 
-private struct MacVirtualMachineDiskSnapshotsContent: View {
-  let snapshotItems: [MacVirtualMachineDiskSnapshot]
+private struct VirtualMachineDiskSnapshotsContent: View {
+  let snapshotItems: [VirtualMachineDiskSnapshot]
   @Binding var newSnapshotName: String
   let isLoading: Bool
-  let operation: MacVirtualMachineDiskSnapshotOperation?
+  let operation: VirtualMachineDiskSnapshotOperation?
   let isAtLimit: Bool
-  let editBlock: MacVirtualMachineConfigurationEditBlock?
+  let editMessage: LocalizedStringResource?
   let hostIsSupported: Bool
   let createSnapshot: () -> Void
-  let requestRestore: (MacVirtualMachineDiskSnapshot) -> Void
+  let requestRestore: (VirtualMachineDiskSnapshot) -> Void
   let discardSavedState: (() -> Void)?
 
   var body: some View {
@@ -107,34 +97,33 @@ private struct MacVirtualMachineDiskSnapshotsContent: View {
         .foregroundStyle(.secondary)
 
         if !hostIsSupported {
-          MacVirtualMachineDiskSnapshotLock(
+          VirtualMachineDiskSnapshotLock(
             message: "Disk snapshots require macOS 27 or later.",
             discardSavedState: nil
           )
-        } else if let editBlock {
-          MacVirtualMachineDiskSnapshotLock(
-            message: editBlock.message,
-            discardSavedState: editBlock == .savedStatePresent
-              ? discardSavedState : nil
+        } else if let editMessage {
+          VirtualMachineDiskSnapshotLock(
+            message: editMessage,
+            discardSavedState: discardSavedState
           )
         }
 
-        MacVirtualMachineDiskSnapshotCreator(
+        VirtualMachineDiskSnapshotCreator(
           name: $newSnapshotName,
           isBusy: isLoading || operation != nil,
           isAtLimit: isAtLimit,
-          canCreate: hostIsSupported && editBlock == nil,
+          canCreate: hostIsSupported && editMessage == nil,
           create: createSnapshot
         )
 
         Divider()
 
         if isLoading {
-          MacVirtualMachineDiskSnapshotProgress(
+          VirtualMachineDiskSnapshotProgress(
             label: "Loading disk snapshots"
           )
         } else if let operation {
-          MacVirtualMachineDiskSnapshotProgress(
+          VirtualMachineDiskSnapshotProgress(
             label: operation.progressLabel
           )
         } else if snapshotItems.isEmpty {
@@ -145,11 +134,11 @@ private struct MacVirtualMachineDiskSnapshotsContent: View {
         } else {
           VStack(spacing: 0) {
             ForEach(snapshotItems) { snapshot in
-              MacVirtualMachineDiskSnapshotRow(
+              VirtualMachineDiskSnapshotRow(
                 name: snapshot.name,
                 createdAt: snapshot.createdAt,
                 capturedLayerCount: snapshot.capturedLayerCount,
-                canRestore: hostIsSupported && editBlock == nil,
+                canRestore: hostIsSupported && editMessage == nil,
                 restore: { requestRestore(snapshot) }
               )
               if snapshot.id != snapshotItems.last?.id {
@@ -160,7 +149,7 @@ private struct MacVirtualMachineDiskSnapshotsContent: View {
         }
 
         Text(
-          "Up to \(MacVirtualMachineDiskSnapshotConfiguration.maximumSnapshotCount) snapshots are kept. Restoring an earlier checkpoint prunes every newer checkpoint and layer."
+          "Up to \(VirtualMachineDiskSnapshotConfiguration.maximumSnapshotCount) snapshots are kept. Restoring an earlier checkpoint prunes every newer checkpoint and layer."
         )
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -173,7 +162,7 @@ private struct MacVirtualMachineDiskSnapshotsContent: View {
   }
 }
 
-private struct MacVirtualMachineDiskSnapshotCreator: View {
+private struct VirtualMachineDiskSnapshotCreator: View {
   @Binding var name: String
   let isBusy: Bool
   let isAtLimit: Bool
@@ -204,7 +193,7 @@ private struct MacVirtualMachineDiskSnapshotCreator: View {
   }
 }
 
-private struct MacVirtualMachineDiskSnapshotRow: View {
+private struct VirtualMachineDiskSnapshotRow: View {
   let name: String
   let createdAt: Date
   let capturedLayerCount: Int
@@ -247,7 +236,7 @@ private struct MacVirtualMachineDiskSnapshotRow: View {
   }
 }
 
-private struct MacVirtualMachineDiskSnapshotProgress: View {
+private struct VirtualMachineDiskSnapshotProgress: View {
   let label: LocalizedStringResource
 
   var body: some View {
@@ -261,7 +250,7 @@ private struct MacVirtualMachineDiskSnapshotProgress: View {
   }
 }
 
-private struct MacVirtualMachineDiskSnapshotLock: View {
+private struct VirtualMachineDiskSnapshotLock: View {
   let message: LocalizedStringResource
   let discardSavedState: (() -> Void)?
 
@@ -276,13 +265,13 @@ private struct MacVirtualMachineDiskSnapshotLock: View {
 #Preview("Snapshot history") {
   @Previewable @State var name = "Before Upgrade"
   let snapshotItems = [
-    try! MacVirtualMachineDiskSnapshot(
+    try! VirtualMachineDiskSnapshot(
       id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
       name: "Clean Install",
       createdAt: Date(timeIntervalSince1970: 1_750_000_000),
       capturedLayerCount: 0
     ),
-    try! MacVirtualMachineDiskSnapshot(
+    try! VirtualMachineDiskSnapshot(
       id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
       name: "Developer Tools",
       createdAt: Date(timeIntervalSince1970: 1_750_086_400),
@@ -290,13 +279,13 @@ private struct MacVirtualMachineDiskSnapshotLock: View {
     ),
   ]
 
-  MacVirtualMachineDiskSnapshotsContent(
+  VirtualMachineDiskSnapshotsContent(
     snapshotItems: snapshotItems,
     newSnapshotName: $name,
     isLoading: false,
     operation: nil,
     isAtLimit: false,
-    editBlock: nil,
+    editMessage: nil,
     hostIsSupported: true,
     createSnapshot: {},
     requestRestore: { _ in },

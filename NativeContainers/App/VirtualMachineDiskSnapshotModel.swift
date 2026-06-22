@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-enum MacVirtualMachineDiskSnapshotOperation: Equatable, Sendable {
+enum VirtualMachineDiskSnapshotOperation: Equatable, Sendable {
   case creating
   case restoring(UUID)
 
@@ -17,13 +17,13 @@ enum MacVirtualMachineDiskSnapshotOperation: Equatable, Sendable {
 
 @MainActor
 @Observable
-final class MacVirtualMachineDiskSnapshotModel {
+final class VirtualMachineDiskSnapshotModel {
   let machineID: UUID
 
   private(set) var revision: UInt64
-  private(set) var snapshots: [MacVirtualMachineDiskSnapshot]
+  private(set) var snapshots: [VirtualMachineDiskSnapshot]
   private(set) var isLoading = false
-  private(set) var operation: MacVirtualMachineDiskSnapshotOperation?
+  private(set) var operation: VirtualMachineDiskSnapshotOperation?
   private(set) var errorMessage: String?
   private(set) var warningMessage: String?
 
@@ -33,14 +33,13 @@ final class MacVirtualMachineDiskSnapshotModel {
 
   var isAtLimit: Bool {
     snapshots.count
-      >= MacVirtualMachineDiskSnapshotConfiguration.maximumSnapshotCount
+      >= VirtualMachineDiskSnapshotConfiguration.maximumSnapshotCount
   }
 
   @ObservationIgnored
-  private let service: any MacVirtualMachineDiskSnapshotManaging
+  private let service: any VirtualMachineDiskSnapshotManaging
   @ObservationIgnored
-  private let didCommit:
-    @MainActor @Sendable (VirtualMachineManifest) async -> Void
+  private let didCommit: @MainActor @Sendable (VirtualMachineManifest) async -> Void
   @ObservationIgnored
   private let didSettle: @MainActor @Sendable () async -> Void
   @ObservationIgnored
@@ -48,8 +47,8 @@ final class MacVirtualMachineDiskSnapshotModel {
 
   init(
     machineID: UUID,
-    initialConfiguration: MacVirtualMachineDiskSnapshotConfiguration = .empty,
-    service: any MacVirtualMachineDiskSnapshotManaging,
+    initialConfiguration: VirtualMachineDiskSnapshotConfiguration = .empty,
+    service: any VirtualMachineDiskSnapshotManaging,
     didCommit:
       @escaping @MainActor @Sendable (VirtualMachineManifest) async -> Void = { _ in },
     didSettle: @escaping @MainActor @Sendable () async -> Void = {}
@@ -98,8 +97,8 @@ final class MacVirtualMachineDiskSnapshotModel {
   }
 
   private func perform(
-    _ operation: MacVirtualMachineDiskSnapshotOperation,
-    action: () async throws -> MacVirtualMachineDiskSnapshotOperationResult
+    _ operation: VirtualMachineDiskSnapshotOperation,
+    action: () async throws -> VirtualMachineDiskSnapshotOperationResult
   ) async -> Bool {
     guard !isBusy else { return false }
 
@@ -127,9 +126,13 @@ final class MacVirtualMachineDiskSnapshotModel {
   }
 
   private func apply(
-    _ configuration: MacVirtualMachineDiskSnapshotConfiguration
+    _ configuration: VirtualMachineDiskSnapshotConfiguration
   ) {
     revision = configuration.revision
     snapshots = configuration.snapshots
   }
 }
+
+typealias MacVirtualMachineDiskSnapshotOperation =
+  VirtualMachineDiskSnapshotOperation
+typealias MacVirtualMachineDiskSnapshotModel = VirtualMachineDiskSnapshotModel

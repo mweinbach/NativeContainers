@@ -155,7 +155,7 @@ final class AppModel {
   private var virtualMachineNameModels: [UUID: VirtualMachineNameModel] = [:]
 
   @ObservationIgnored
-  private var macVirtualMachineDiskSnapshotModels: [UUID: MacVirtualMachineDiskSnapshotModel] = [:]
+  private var virtualMachineDiskSnapshotModels: [UUID: VirtualMachineDiskSnapshotModel] = [:]
 
   @ObservationIgnored
   private var macVirtualMachineSharedDirectoryModels:
@@ -262,6 +262,9 @@ final class AppModel {
     virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices = .unavailable,
     virtualMachineDiskSnapshots: any MacVirtualMachineDiskSnapshotManaging =
       UnavailableMacVirtualMachineDiskSnapshotService(),
+    linuxVirtualMachineDiskSnapshots:
+      any LinuxVirtualMachineDiskSnapshotManaging =
+      UnavailableLinuxVirtualMachineDiskSnapshotService(),
     virtualMachineAvailability:
       any MacVirtualMachineAvailabilityChecking =
       StaticMacVirtualMachineAvailabilityChecker(value: .available),
@@ -310,6 +313,7 @@ final class AppModel {
         linuxVirtualMachineSharedDirectories: linuxVirtualMachineSharedDirectories,
         virtualMachineDiskImages: virtualMachineDiskImages,
         virtualMachineDiskSnapshots: virtualMachineDiskSnapshots,
+        linuxVirtualMachineDiskSnapshots: linuxVirtualMachineDiskSnapshots,
         virtualMachineAvailability: virtualMachineAvailability,
         restoreImageDiscovery: restoreImageDiscovery,
         restoreImageAcquisition: restoreImageAcquisition,
@@ -916,22 +920,44 @@ final class AppModel {
   func makeMacVirtualMachineDiskSnapshotModel(
     for machine: VirtualMachineManifest
   ) -> MacVirtualMachineDiskSnapshotModel {
-    if let model = macVirtualMachineDiskSnapshotModels[machine.id] {
+    makeVirtualMachineDiskSnapshotModel(for: machine)
+  }
+
+  func makeLinuxVirtualMachineDiskSnapshotModel(
+    for machine: VirtualMachineManifest
+  ) -> VirtualMachineDiskSnapshotModel {
+    makeVirtualMachineDiskSnapshotModel(for: machine)
+  }
+
+  private func makeVirtualMachineDiskSnapshotModel(
+    for machine: VirtualMachineManifest
+  ) -> VirtualMachineDiskSnapshotModel {
+    if let model = virtualMachineDiskSnapshotModels[machine.id] {
       return model
     }
-    let runtime = makeMacVirtualMachineRuntimeModel(for: machine)
-    let model = MacVirtualMachineDiskSnapshotModel(
-      machineID: machine.id,
-      initialConfiguration:
-        machine.effectiveMacOSDiskSnapshotConfiguration,
-      service: services.virtualMachineDiskSnapshots
-    ) { [weak self] manifest in
-      self?.publishVirtualMachineManifest(manifest)
-      await self?.refreshVirtualMachineStorageAfterMutation()
-    } didSettle: {
-      await runtime.refreshSavedState()
+    let service: any VirtualMachineDiskSnapshotManaging
+    let didSettle: @MainActor @Sendable () async -> Void
+    switch machine.guest {
+    case .macOS:
+      service = services.virtualMachineDiskSnapshots
+      let runtime = makeMacVirtualMachineRuntimeModel(for: machine)
+      didSettle = { await runtime.refreshSavedState() }
+    case .linux:
+      service = services.linuxVirtualMachineDiskSnapshots
+      let runtime = makeLinuxVirtualMachineRuntimeModel(for: machine)
+      didSettle = { await runtime.refreshSavedState() }
     }
-    macVirtualMachineDiskSnapshotModels[machine.id] = model
+    let model = VirtualMachineDiskSnapshotModel(
+      machineID: machine.id,
+      initialConfiguration: machine.effectiveDiskSnapshotConfiguration,
+      service: service,
+      didCommit: { [weak self] manifest in
+        self?.publishVirtualMachineManifest(manifest)
+        await self?.refreshVirtualMachineStorageAfterMutation()
+      },
+      didSettle: didSettle
+    )
+    virtualMachineDiskSnapshotModels[machine.id] = model
     return model
   }
 
@@ -1104,9 +1130,9 @@ final class AppModel {
     where !currentIdentifiers.contains(identifier) {
       virtualMachineNameModels.removeValue(forKey: identifier)
     }
-    for identifier in Array(macVirtualMachineDiskSnapshotModels.keys)
+    for identifier in Array(virtualMachineDiskSnapshotModels.keys)
     where !currentIdentifiers.contains(identifier) {
-      macVirtualMachineDiskSnapshotModels.removeValue(forKey: identifier)
+      virtualMachineDiskSnapshotModels.removeValue(forKey: identifier)
     }
     for identifier in Array(macVirtualMachineSharedDirectoryModels.keys)
     where !currentIdentifiers.contains(identifier) {

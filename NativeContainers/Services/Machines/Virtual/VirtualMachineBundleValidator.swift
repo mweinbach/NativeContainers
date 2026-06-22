@@ -171,8 +171,14 @@ struct VirtualMachineBundleValidator {
 
     switch manifest.guest {
     case .macOS:
+      guard manifest.linuxDiskSnapshotConfiguration == nil else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "the staged macOS manifest contains Linux disk snapshot state"
+        )
+      }
       try validateDiskSnapshotArtifacts(
         manifest.effectiveMacOSDiskSnapshotConfiguration,
+        configurationName: "macOSDiskSnapshotConfiguration",
         in: bundleURL
       )
       for (path, name, writable) in [
@@ -205,7 +211,7 @@ struct VirtualMachineBundleValidator {
         manifest.macOSMinimumCPUCount == nil,
         manifest.macOSMinimumMemoryBytes == nil,
         manifest.macOSFirstBootState == nil,
-        !manifest.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots
+        manifest.macOSDiskSnapshotConfiguration == nil
       else {
         throw VirtualMachineBundleError.invalidBundle(
           "the staged Linux manifest contains incomplete or guest-incompatible state"
@@ -217,15 +223,11 @@ struct VirtualMachineBundleValidator {
         in: bundleURL,
         writable: true
       )
-      let snapshotDirectory = bundleURL.appending(
-        path: MacVirtualMachineDiskSnapshotLayer.directoryName,
-        directoryHint: .isDirectory
+      try validateDiskSnapshotArtifacts(
+        manifest.effectiveLinuxDiskSnapshotConfiguration,
+        configurationName: "linuxDiskSnapshotConfiguration",
+        in: bundleURL
       )
-      guard !fileManager.fileExists(atPath: snapshotDirectory.path) else {
-        throw VirtualMachineBundleError.invalidBundle(
-          "macOS disk snapshot data remains in the staged Linux bundle"
-        )
-      }
     }
   }
 
@@ -287,7 +289,8 @@ struct VirtualMachineBundleValidator {
   }
 
   private func validateDiskSnapshotArtifacts(
-    _ configuration: MacVirtualMachineDiskSnapshotConfiguration,
+    _ configuration: VirtualMachineDiskSnapshotConfiguration,
+    configurationName: String,
     in bundleURL: URL
   ) throws {
     let directoryURL = bundleURL.appending(
@@ -306,7 +309,7 @@ struct VirtualMachineBundleValidator {
     for (index, layer) in configuration.layers.enumerated() {
       _ = try resolver.resolveArtifact(
         layer.relativePath,
-        named: "macOSDiskSnapshotConfiguration.layers[\(index)]",
+        named: "\(configurationName).layers[\(index)]",
         in: bundleURL,
         writable: index == configuration.layers.indices.last
       )

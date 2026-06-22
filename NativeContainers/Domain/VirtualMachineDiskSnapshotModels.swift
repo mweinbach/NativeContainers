@@ -1,6 +1,6 @@
 import Foundation
 
-struct MacVirtualMachineDiskSnapshotLayer: Codable, Equatable, Sendable, Identifiable {
+struct VirtualMachineDiskSnapshotLayer: Codable, Equatable, Sendable, Identifiable {
   static let directoryName = "Snapshots"
   static let fileExtension = "asif"
 
@@ -26,7 +26,7 @@ struct MacVirtualMachineDiskSnapshotLayer: Codable, Equatable, Sendable, Identif
   }
 }
 
-struct MacVirtualMachineDiskSnapshot: Codable, Equatable, Sendable, Identifiable {
+struct VirtualMachineDiskSnapshot: Codable, Equatable, Sendable, Identifiable {
   static let maximumNameLength = 80
 
   let id: UUID
@@ -53,32 +53,32 @@ struct MacVirtualMachineDiskSnapshot: Codable, Equatable, Sendable, Identifiable
       trimmed.count <= maximumNameLength,
       trimmed.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) })
     else {
-      throw MacVirtualMachineDiskSnapshotError.invalidName
+      throw VirtualMachineDiskSnapshotError.invalidName
     }
     return trimmed
   }
 }
 
-struct MacVirtualMachineDiskSnapshotConfiguration:
+struct VirtualMachineDiskSnapshotConfiguration:
   Codable,
   Equatable,
   Sendable
 {
   static let maximumSnapshotCount = 8
-  static let empty = MacVirtualMachineDiskSnapshotConfiguration(
+  static let empty = VirtualMachineDiskSnapshotConfiguration(
     uncheckedRevision: 0,
     layers: [],
     snapshots: []
   )
 
   let revision: UInt64
-  let layers: [MacVirtualMachineDiskSnapshotLayer]
-  let snapshots: [MacVirtualMachineDiskSnapshot]
+  let layers: [VirtualMachineDiskSnapshotLayer]
+  let snapshots: [VirtualMachineDiskSnapshot]
 
   init(
     revision: UInt64 = 0,
-    layers: [MacVirtualMachineDiskSnapshotLayer] = [],
-    snapshots: [MacVirtualMachineDiskSnapshot] = []
+    layers: [VirtualMachineDiskSnapshotLayer] = [],
+    snapshots: [VirtualMachineDiskSnapshot] = []
   ) throws {
     try Self.validate(layers: layers, snapshots: snapshots)
     self.revision = revision
@@ -88,8 +88,8 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
 
   private init(
     uncheckedRevision revision: UInt64,
-    layers: [MacVirtualMachineDiskSnapshotLayer],
-    snapshots: [MacVirtualMachineDiskSnapshot]
+    layers: [VirtualMachineDiskSnapshotLayer],
+    snapshots: [VirtualMachineDiskSnapshot]
   ) {
     self.revision = revision
     self.layers = layers
@@ -101,17 +101,17 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
     try self.init(
       revision: container.decode(UInt64.self, forKey: .revision),
       layers: container.decode(
-        [MacVirtualMachineDiskSnapshotLayer].self,
+        [VirtualMachineDiskSnapshotLayer].self,
         forKey: .layers
       ),
       snapshots: container.decode(
-        [MacVirtualMachineDiskSnapshot].self,
+        [VirtualMachineDiskSnapshot].self,
         forKey: .snapshots
       )
     )
   }
 
-  var activeLayer: MacVirtualMachineDiskSnapshotLayer? {
+  var activeLayer: VirtualMachineDiskSnapshotLayer? {
     layers.last
   }
 
@@ -124,34 +124,36 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
     snapshotID: UUID = UUID(),
     layerID: UUID = UUID(),
     at date: Date = Date()
-  ) throws -> MacVirtualMachineDiskSnapshotMutation {
+  ) throws -> VirtualMachineDiskSnapshotMutation {
     guard revision < UInt64.max else {
-      throw MacVirtualMachineDiskSnapshotError.configurationRevisionOverflow
+      throw VirtualMachineDiskSnapshotError.configurationRevisionOverflow
     }
     guard snapshots.count < Self.maximumSnapshotCount else {
-      throw MacVirtualMachineDiskSnapshotError.maximumSnapshotCount(
+      throw VirtualMachineDiskSnapshotError.maximumSnapshotCount(
         Self.maximumSnapshotCount
       )
     }
 
-    let normalizedName = try MacVirtualMachineDiskSnapshot.normalizedName(name)
-    guard !snapshots.contains(where: {
-      $0.name.compare(
-        normalizedName,
-        options: [.caseInsensitive, .diacriticInsensitive],
-        locale: Locale(identifier: "en_US_POSIX")
-      ) == .orderedSame
-    }) else {
-      throw MacVirtualMachineDiskSnapshotError.duplicateName(normalizedName)
+    let normalizedName = try VirtualMachineDiskSnapshot.normalizedName(name)
+    guard
+      !snapshots.contains(where: {
+        $0.name.compare(
+          normalizedName,
+          options: [.caseInsensitive, .diacriticInsensitive],
+          locale: Locale(identifier: "en_US_POSIX")
+        ) == .orderedSame
+      })
+    else {
+      throw VirtualMachineDiskSnapshotError.duplicateName(normalizedName)
     }
 
-    let snapshot = try MacVirtualMachineDiskSnapshot(
+    let snapshot = try VirtualMachineDiskSnapshot(
       id: snapshotID,
       name: normalizedName,
       createdAt: date,
       capturedLayerCount: layers.count
     )
-    let layer = MacVirtualMachineDiskSnapshotLayer(
+    let layer = VirtualMachineDiskSnapshotLayer(
       id: layerID,
       createdAt: date
     )
@@ -160,7 +162,7 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
       layers: layers + [layer],
       snapshots: snapshots + [snapshot]
     )
-    return MacVirtualMachineDiskSnapshotMutation(
+    return VirtualMachineDiskSnapshotMutation(
       configuration: configuration,
       createdLayer: layer,
       retiredLayers: []
@@ -171,19 +173,19 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
     snapshotID: UUID,
     layerID: UUID = UUID(),
     at date: Date = Date()
-  ) throws -> MacVirtualMachineDiskSnapshotMutation {
+  ) throws -> VirtualMachineDiskSnapshotMutation {
     guard revision < UInt64.max else {
-      throw MacVirtualMachineDiskSnapshotError.configurationRevisionOverflow
+      throw VirtualMachineDiskSnapshotError.configurationRevisionOverflow
     }
     guard let index = snapshots.firstIndex(where: { $0.id == snapshotID }) else {
-      throw MacVirtualMachineDiskSnapshotError.snapshotNotFound(snapshotID)
+      throw VirtualMachineDiskSnapshotError.snapshotNotFound(snapshotID)
     }
 
     let snapshot = snapshots[index]
     let retainedLayers = Array(layers.prefix(snapshot.capturedLayerCount))
     let retiredLayers = Array(layers.dropFirst(snapshot.capturedLayerCount))
     let retainedSnapshots = Array(snapshots.prefix(index + 1))
-    let layer = MacVirtualMachineDiskSnapshotLayer(
+    let layer = VirtualMachineDiskSnapshotLayer(
       id: layerID,
       createdAt: date
     )
@@ -192,7 +194,7 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
       layers: retainedLayers + [layer],
       snapshots: retainedSnapshots
     )
-    return MacVirtualMachineDiskSnapshotMutation(
+    return VirtualMachineDiskSnapshotMutation(
       configuration: configuration,
       createdLayer: layer,
       retiredLayers: retiredLayers
@@ -200,13 +202,13 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
   }
 
   private static func validate(
-    layers: [MacVirtualMachineDiskSnapshotLayer],
-    snapshots: [MacVirtualMachineDiskSnapshot]
+    layers: [VirtualMachineDiskSnapshotLayer],
+    snapshots: [VirtualMachineDiskSnapshot]
   ) throws {
     guard layers.count == snapshots.count,
       layers.count <= maximumSnapshotCount
     else {
-      throw MacVirtualMachineDiskSnapshotError.invalidConfiguration(
+      throw VirtualMachineDiskSnapshotError.invalidConfiguration(
         "snapshot and layer counts must match within the supported limit"
       )
     }
@@ -214,7 +216,7 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
       Set(layers.map(\.relativePath)).count == layers.count,
       layers.allSatisfy(\.isCanonical)
     else {
-      throw MacVirtualMachineDiskSnapshotError.invalidConfiguration(
+      throw VirtualMachineDiskSnapshotError.invalidConfiguration(
         "snapshot layers must have unique canonical paths"
       )
     }
@@ -223,20 +225,20 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
         $0.element.capturedLayerCount == $0.offset
       })
     else {
-      throw MacVirtualMachineDiskSnapshotError.invalidConfiguration(
+      throw VirtualMachineDiskSnapshotError.invalidConfiguration(
         "snapshot history is not a linear layer stack"
       )
     }
 
     var normalizedNames = Set<String>()
     for snapshot in snapshots {
-      let normalized = try MacVirtualMachineDiskSnapshot.normalizedName(snapshot.name)
+      let normalized = try VirtualMachineDiskSnapshot.normalizedName(snapshot.name)
         .folding(
           options: [.caseInsensitive, .diacriticInsensitive],
           locale: Locale(identifier: "en_US_POSIX")
         )
       guard normalizedNames.insert(normalized).inserted else {
-        throw MacVirtualMachineDiskSnapshotError.invalidConfiguration(
+        throw VirtualMachineDiskSnapshotError.invalidConfiguration(
           "snapshot names must be unique"
         )
       }
@@ -244,22 +246,22 @@ struct MacVirtualMachineDiskSnapshotConfiguration:
   }
 }
 
-struct MacVirtualMachineDiskSnapshotMutation: Equatable, Sendable {
-  let configuration: MacVirtualMachineDiskSnapshotConfiguration
-  let createdLayer: MacVirtualMachineDiskSnapshotLayer
-  let retiredLayers: [MacVirtualMachineDiskSnapshotLayer]
+struct VirtualMachineDiskSnapshotMutation: Equatable, Sendable {
+  let configuration: VirtualMachineDiskSnapshotConfiguration
+  let createdLayer: VirtualMachineDiskSnapshotLayer
+  let retiredLayers: [VirtualMachineDiskSnapshotLayer]
 }
 
-struct MacVirtualMachineDiskSnapshotOperationResult: Equatable, Sendable {
+struct VirtualMachineDiskSnapshotOperationResult: Equatable, Sendable {
   let manifest: VirtualMachineManifest
   let cleanupWarning: String?
 
-  var configuration: MacVirtualMachineDiskSnapshotConfiguration {
-    manifest.effectiveMacOSDiskSnapshotConfiguration
+  var configuration: VirtualMachineDiskSnapshotConfiguration {
+    manifest.effectiveDiskSnapshotConfiguration
   }
 }
 
-enum MacVirtualMachineDiskSnapshotError:
+enum VirtualMachineDiskSnapshotError:
   LocalizedError,
   Equatable,
   Sendable
@@ -282,7 +284,7 @@ enum MacVirtualMachineDiskSnapshotError:
     case .unavailable:
       "Virtual machine disk snapshots require macOS 27 or later."
     case .invalidName:
-      "Enter a snapshot name between 1 and \(MacVirtualMachineDiskSnapshot.maximumNameLength) characters."
+      "Enter a snapshot name between 1 and \(VirtualMachineDiskSnapshot.maximumNameLength) characters."
     case .duplicateName(let name):
       "A snapshot named “\(name)” already exists."
     case .maximumSnapshotCount(let count):
@@ -306,3 +308,13 @@ enum MacVirtualMachineDiskSnapshotError:
     }
   }
 }
+
+typealias MacVirtualMachineDiskSnapshotLayer = VirtualMachineDiskSnapshotLayer
+typealias MacVirtualMachineDiskSnapshot = VirtualMachineDiskSnapshot
+typealias MacVirtualMachineDiskSnapshotConfiguration =
+  VirtualMachineDiskSnapshotConfiguration
+typealias MacVirtualMachineDiskSnapshotMutation =
+  VirtualMachineDiskSnapshotMutation
+typealias MacVirtualMachineDiskSnapshotOperationResult =
+  VirtualMachineDiskSnapshotOperationResult
+typealias MacVirtualMachineDiskSnapshotError = VirtualMachineDiskSnapshotError

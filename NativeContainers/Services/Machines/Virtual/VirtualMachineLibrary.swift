@@ -100,6 +100,7 @@ actor VirtualMachineLibrary:
   MacVirtualMachineComputePersisting,
   LinuxVirtualMachineComputePersisting,
   MacVirtualMachineDiskSnapshotPersisting,
+  LinuxVirtualMachineDiskSnapshotPersisting,
   VirtualMachineDiskImageReplacementStoring,
   VirtualMachineDiskImageResizeStoring
 {
@@ -551,6 +552,52 @@ actor VirtualMachineLibrary:
     return manifest
   }
 
+  func linuxDiskSnapshotConfiguration(
+    id: UUID
+  ) throws -> VirtualMachineDiskSnapshotConfiguration {
+    try linuxRuntimeManifest(id: id)
+      .effectiveLinuxDiskSnapshotConfiguration
+  }
+
+  func commitLinuxDiskSnapshotConfiguration(
+    _ configuration: VirtualMachineDiskSnapshotConfiguration,
+    replacing expected: VirtualMachineDiskSnapshotConfiguration,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineManifest {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try linuxRuntimeManifest(id: lease.target.machineID)
+    let current = manifest.effectiveLinuxDiskSnapshotConfiguration
+
+    guard manifest.installState == .stopped,
+      current == expected,
+      lease.machine.manifest.effectiveLinuxDiskSnapshotConfiguration
+        == expected,
+      expected.revision < UInt64.max,
+      configuration.revision == expected.revision + 1
+    else {
+      throw LinuxVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    for (index, layer) in configuration.layers.enumerated() {
+      _ = try linuxVirtualMachineBundleResolver.resolveArtifact(
+        layer.relativePath,
+        named: "linuxDiskSnapshotConfiguration.layers[\(index)]",
+        in: bundleURL,
+        writable: index == configuration.layers.indices.last
+      )
+    }
+
+    manifest.linuxDiskSnapshotConfiguration = configuration
+    manifest.updatedAt = Date()
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
+    )
+    return manifest
+  }
+
   func macOSSharedDirectoryConfiguration(
     id: UUID
   ) throws -> MacVirtualMachineSharedDirectoryConfiguration {
@@ -794,11 +841,14 @@ actor VirtualMachineLibrary:
     defer { borrow.release() }
     let bundleURL = try requireConfigurationMutationLease(lease)
     var manifest = try linuxRuntimeManifest(id: lease.target.machineID)
+    let resizeArtifactPath =
+      manifest.effectiveLinuxDiskSnapshotConfiguration.layers.last?.relativePath
+      ?? manifest.diskImagePath
 
     guard commit.machineID == manifest.id,
       commit.guest == .linux,
       commit.diskImagePath == manifest.diskImagePath,
-      commit.resizeArtifactPath == manifest.diskImagePath,
+      commit.resizeArtifactPath == resizeArtifactPath,
       commit.diskImageFormat == manifest.effectiveDiskImageFormat,
       lease.machine.manifest.diskImagePath == manifest.diskImagePath,
       lease.machine.manifest.effectiveDiskImageFormat
@@ -818,9 +868,12 @@ actor VirtualMachineLibrary:
       in: bundleURL,
       writable: true
     )
+    let leaseArtifactURL =
+      lease.machine.diskSnapshotLayerURLs.last
+      ?? lease.machine.diskImageURL
     guard
       resizeArtifactURL.standardizedFileURL
-        == lease.machine.diskImageURL.standardizedFileURL,
+        == leaseArtifactURL.standardizedFileURL,
       try FileVirtualMachineStorageArtifactInspector().inspect(
         at: resizeArtifactURL
       ) == commit.resizedIdentity
@@ -1461,6 +1514,7 @@ actor VirtualMachineLibrary:
         manifest: resolvedMachine.manifest,
         bundleURL: resolvedMachine.bundleURL,
         diskImageURL: resolvedMachine.diskImageURL,
+        diskSnapshotLayerURLs: resolvedMachine.diskSnapshotLayerURLs,
         efiVariableStoreURL: resolvedMachine.efiVariableStoreURL,
         machineIdentifierURL: resolvedMachine.machineIdentifierURL,
         installationMediaURL: resolvedMachine.installationMediaURL,
@@ -1881,6 +1935,11 @@ actor VirtualMachineLibrary:
     guard manifest.guest == .macOS else {
       throw VirtualMachineModelError.requiresMacOSGuest(id)
     }
+    guard manifest.linuxDiskSnapshotConfiguration == nil else {
+      throw MacVirtualMachineInstallationError.invalidBundle(
+        "Linux disk snapshot state is present"
+      )
+    }
     return manifest
   }
 
@@ -1888,6 +1947,11 @@ actor VirtualMachineLibrary:
     let manifest = try bundleStore.manifest(id: id)
     guard manifest.guest == .linux else {
       throw VirtualMachineModelError.requiresLinuxGuest(id)
+    }
+    guard manifest.macOSDiskSnapshotConfiguration == nil else {
+      throw LinuxVirtualMachineError.invalidBundle(
+        "macOS disk snapshot state is present"
+      )
     }
     return manifest
   }

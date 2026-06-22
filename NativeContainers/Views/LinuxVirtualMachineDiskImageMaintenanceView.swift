@@ -4,6 +4,7 @@ struct LinuxVirtualMachineDiskImageMaintenanceView: View {
   let machine: VirtualMachineManifest
   let runtime: LinuxVirtualMachineRuntimeModel
   let maintenance: VirtualMachineDiskImageMaintenanceModel
+  let snapshotOperationIsBusy: Bool
   let discardSavedState: (() -> Void)?
 
   var body: some View {
@@ -78,6 +79,9 @@ struct LinuxVirtualMachineDiskImageMaintenanceView: View {
   }
 
   private var growthBlockReason: LocalizedStringResource? {
+    guard !snapshotOperationIsBusy else {
+      return "Wait for the disk snapshot operation to finish."
+    }
     guard
       machine.installState == .readyToInstall
         || machine.installState == .stopped

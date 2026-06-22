@@ -13,7 +13,7 @@ struct LinuxVirtualMachineSharedDirectoryDescriptor:
 struct LinuxVirtualMachineConfigurationDescriptor:
   Codable, Equatable, Sendable
 {
-  static let currentTopologyVersion = 1
+  static let currentTopologyVersion = 2
 
   let topologyVersion: Int
   let cpuCount: Int
@@ -21,6 +21,8 @@ struct LinuxVirtualMachineConfigurationDescriptor:
   let diskBytes: UInt64
   let diskImagePath: String
   let diskImageFormat: String
+  let diskSnapshotRevision: UInt64?
+  let diskSnapshotLayerPaths: [String]?
   let efiVariableStorePath: String
   let machineIdentifierPath: String
   let installationMediaPath: String?
@@ -87,6 +89,16 @@ struct LinuxVirtualMachineConfigurationDescriptorService:
       diskBytes: machine.manifest.resources.diskBytes,
       diskImagePath: machine.manifest.diskImagePath,
       diskImageFormat: machine.manifest.effectiveDiskImageFormat.rawValue,
+      diskSnapshotRevision:
+        machine.manifest.effectiveLinuxDiskSnapshotConfiguration.revision > 0
+        ? machine.manifest.effectiveLinuxDiskSnapshotConfiguration.revision
+        : nil,
+      diskSnapshotLayerPaths:
+        machine.manifest.effectiveLinuxDiskSnapshotConfiguration.hasSnapshots
+        ? machine.manifest.effectiveLinuxDiskSnapshotConfiguration.layers.map(
+          \.relativePath
+        )
+        : nil,
       efiVariableStorePath: linux.efiVariableStorePath,
       machineIdentifierPath: linux.machineIdentifierPath,
       installationMediaPath: linux.installationMediaPath,
