@@ -2068,3 +2068,39 @@ left untouched and fails the gate. Clone absence, source equality, and no
 run-prefix residue are required after every iteration. One warmup and three
 measured clones emit raw timings, median/P95, host OS, source identity and name,
 guest build/version, VM resources, and the explicit readiness boundary.
+
+## ADR-073: Measure verified external HTTPS work from a fresh container
+
+**Status:** Accepted — 2026-06-22
+
+The external-network lane is enabled only by
+`NATIVECONTAINERS_LIVE_PERFORMANCE=1` and
+`NATIVECONTAINERS_LIVE_PERFORMANCE_NETWORK=1`. NativeContainers intentionally
+ships no default internet benchmark target. The operator must provide a stable
+HTTPS URL, expected byte count, and lowercase SHA-256 through the corresponding
+`NATIVECONTAINERS_LIVE_PERFORMANCE_NETWORK_*` variables. The URL is bounded,
+contains no embedded credentials, and rejects obvious loopback, link-local,
+private-address, and `.local` targets. The payload must be 1–128 MiB. This is a
+fixture integrity boundary, not a claim that DNS can never resolve an otherwise
+valid hostname to private infrastructure.
+
+Each iteration creates and starts a unique digest-pinned Apple container before
+the clock begins. The measured production process-XPC command uses the local
+Alpine BusyBox surface to resolve the endpoint, negotiate HTTPS with certificate
+checking intact, request `Cache-Control: no-cache`, download to a fixed
+guest-root file, count the bytes, calculate SHA-256, and emit one bounded
+verification record. NativeContainers compares both values and reconfirms the
+container's authoritative running identity before the sample ends. The byte
+count is the throughput numerator. DNS, TLS, HTTP, guest storage, hashing, and
+command transport are all in the denominator; this is deliberately not called
+raw network or link throughput. The cache request also cannot prove that every
+remote intermediary performed a cache miss.
+
+An exit trap removes the guest file on success, failure, or cancellation. The
+benchmark runner then gracefully stops, force-stops only the operation-owned
+container when needed, deletes it, and verifies run-prefix absence outside the
+clock. One warmup and three measurements emit raw timings, median/P95, aggregate
+throughput, host and Apple runtime versions, exact image provenance, endpoint
+authority without query data, expected bytes/digest, cache request, and
+verification mode. Fixture drift fails the lane while preserving the same
+cancellation-independent cleanup contract as the other mutating benchmarks.

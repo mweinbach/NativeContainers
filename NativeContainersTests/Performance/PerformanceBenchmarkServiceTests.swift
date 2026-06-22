@@ -25,6 +25,11 @@ struct PerformanceBenchmarkServiceTests {
         .coldMacVirtualMachineStartup
       )
     )
+    #expect(
+      !PerformanceBenchmarkKind.settingsSuiteCases.contains(
+        .externalNetworkTransfer
+      )
+    )
   }
 
   @Test
@@ -807,6 +812,170 @@ struct PerformanceBenchmarkServiceTests {
   }
 
   @Test
+  func externalNetworkTransferVerifiesFixedPayloadAndDeletesContainer() async throws {
+    let id = "nativecontainers-network-fixture"
+    let digest = String(repeating: "a", count: 64)
+    let byteCount: Int64 = 8 * 1_048_576
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let commands = ExternalNetworkCommandRuntimeDouble(
+      standardOutput:
+        "bytes=\(byteCount)\nsha256=\(digest)\nnativecontainers-network-ok\n"
+    )
+    let endpoint = try #require(
+      URL(string: "https://fixtures.example.com/nativecontainers/payload.bin?run=fixed")
+    )
+    let scenario = try ExternalNetworkPerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      commands: commands,
+      endpoint: endpoint,
+      expectedByteCount: byteCount,
+      expectedSHA256: digest,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      makeContainerID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [1_000, 9_000])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured external-network result.")
+      return
+    }
+    #expect(result.kind == .externalNetworkTransfer)
+    #expect(result.samples.map(\.durationNanoseconds) == [8_000])
+    #expect(result.samples.map(\.processedByteCount) == [byteCount])
+    let request = try #require(await commands.requests.first)
+    #expect(request.executable == "/bin/sh")
+    #expect(request.arguments.first == "-c")
+    #expect(request.arguments.dropFirst().first?.contains("wget -q -T 180") == true)
+    #expect(
+      request.arguments.dropFirst().first?.contains("Cache-Control: no-cache") == true
+    )
+    #expect(request.arguments.dropFirst().first?.contains("sha256sum") == true)
+    #expect(request.arguments.dropFirst().first?.contains("trap cleanup") == true)
+    #expect(request.arguments.contains(endpoint.absoluteString))
+    #expect(request.arguments.contains("/tmp/nativecontainers-external-network.bin"))
+    #expect(request.timeoutSeconds == 300)
+    #expect(await commands.containerIDs == [id])
+    #expect(try await runtime.listedObservation(forContainerID: id) == nil)
+  }
+
+  @Test
+  func externalNetworkTransferRejectsUnsafeOrUnboundedFixture() async throws {
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let commands = ExternalNetworkCommandRuntimeDouble(standardOutput: "")
+    let digest = String(repeating: "a", count: 64)
+    let localEndpoint = try #require(URL(string: "https://127.0.0.1/payload"))
+    let plainEndpoint = try #require(URL(string: "http://fixtures.example.com/payload"))
+    let publicEndpoint = try #require(
+      URL(string: "https://fixtures.example.com/payload")
+    )
+
+    #expect(throws: ExternalNetworkPerformanceBenchmarkError.invalidEndpoint) {
+      _ = try ExternalNetworkPerformanceBenchmarkScenario(
+        containers: runtime,
+        stateReader: runtime,
+        commands: commands,
+        endpoint: localEndpoint,
+        expectedByteCount: 1_048_576,
+        expectedSHA256: digest,
+        expectedImageDigest: "sha256:fixture"
+      )
+    }
+    #expect(throws: ExternalNetworkPerformanceBenchmarkError.invalidEndpoint) {
+      _ = try ExternalNetworkPerformanceBenchmarkScenario(
+        containers: runtime,
+        stateReader: runtime,
+        commands: commands,
+        endpoint: plainEndpoint,
+        expectedByteCount: 1_048_576,
+        expectedSHA256: digest,
+        expectedImageDigest: "sha256:fixture"
+      )
+    }
+    #expect(
+      throws: ExternalNetworkPerformanceBenchmarkError.invalidExpectedByteCount
+    ) {
+      _ = try ExternalNetworkPerformanceBenchmarkScenario(
+        containers: runtime,
+        stateReader: runtime,
+        commands: commands,
+        endpoint: publicEndpoint,
+        expectedByteCount: 0,
+        expectedSHA256: digest,
+        expectedImageDigest: "sha256:fixture"
+      )
+    }
+    #expect(throws: ExternalNetworkPerformanceBenchmarkError.invalidExpectedDigest) {
+      _ = try ExternalNetworkPerformanceBenchmarkScenario(
+        containers: runtime,
+        stateReader: runtime,
+        commands: commands,
+        endpoint: publicEndpoint,
+        expectedByteCount: 1_048_576,
+        expectedSHA256: String(repeating: "A", count: 64),
+        expectedImageDigest: "sha256:fixture"
+      )
+    }
+  }
+
+  @Test
+  func externalNetworkTransferRejectsPayloadDriftAndStillCleansUp() async throws {
+    let id = "nativecontainers-network-drift"
+    let digest = String(repeating: "b", count: 64)
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let commands = ExternalNetworkCommandRuntimeDouble(
+      standardOutput:
+        "bytes=1048577\nsha256=\(digest)\nnativecontainers-network-ok\n"
+    )
+    let endpoint = try #require(URL(string: "https://fixtures.example.com/payload"))
+    let scenario = try ExternalNetworkPerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      commands: commands,
+      endpoint: endpoint,
+      expectedByteCount: 1_048_576,
+      expectedSHA256: digest,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      makeContainerID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [10])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .failed(let kind, let message) = report.outcomes[0] else {
+      Issue.record("Expected external payload drift to fail.")
+      return
+    }
+    #expect(kind == .externalNetworkTransfer)
+    #expect(
+      message
+        == ExternalNetworkPerformanceBenchmarkError.byteCountMismatch(
+          expected: 1_048_576,
+          actual: 1_048_577
+        ).localizedDescription
+    )
+    #expect(try await runtime.listedObservation(forContainerID: id) == nil)
+  }
+
+  @Test
   func imageBuildUsesReviewedNoCachePlanAndRemovesOCIOutput() async throws {
     let fixture = try ImageBuildPerformanceFixture()
     defer { fixture.remove() }
@@ -984,6 +1153,8 @@ struct LiveApplePerformanceBenchmarkTests {
     "__NATIVECONTAINERS_COLD_CONTAINER_BENCHMARK__"
   private static let ioOutputMarker =
     "__NATIVECONTAINERS_CONTAINER_IO_BENCHMARK__"
+  private static let networkOutputMarker =
+    "__NATIVECONTAINERS_EXTERNAL_NETWORK_BENCHMARK__"
   private static let buildOutputMarker =
     "__NATIVECONTAINERS_IMAGE_BUILD_BENCHMARK__"
   private static let machineOutputMarker =
@@ -1467,6 +1638,128 @@ struct LiveApplePerformanceBenchmarkTests {
         "NATIVECONTAINERS_LIVE_PERFORMANCE"
       ] == "1"
         && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_NETWORK"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_NETWORK=1 with a local image plus NETWORK_URL, NETWORK_BYTES, and NETWORK_SHA256 fixture values."
+    )
+  )
+  func measuresVerifiedExternalHTTPSTransferWithoutResidue() async throws {
+    let environment = ProcessInfo.processInfo.environment
+    guard
+      let endpointValue = environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_NETWORK_URL"
+      ],
+      let endpoint = URL(string: endpointValue),
+      let byteCountValue = environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_NETWORK_BYTES"
+      ],
+      let byteCount = Int64(byteCountValue),
+      let sha256 = environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_NETWORK_SHA256"
+      ]
+    else {
+      throw LivePerformanceBenchmarkError.missingExternalNetworkFixture
+    }
+
+    let service = AppleContainerService()
+    let imageReference =
+      environment["NATIVECONTAINERS_LIVE_PERFORMANCE_IMAGE"]
+      ?? "docker.io/library/alpine:3.21"
+    let initialInventory = try await service.loadInventory()
+    guard
+      let image = initialInventory.images.first(where: {
+        $0.reference == imageReference
+      })
+    else {
+      throw LivePerformanceBenchmarkError.missingLocalImage(imageReference)
+    }
+
+    let runPrefix =
+      "nativecontainers-network-\(UUID().uuidString.lowercased().prefix(8))-"
+    let scenario = try ExternalNetworkPerformanceBenchmarkScenario(
+      containers: service,
+      commands: service,
+      endpoint: endpoint,
+      expectedByteCount: byteCount,
+      expectedSHA256: sha256,
+      imageReference: image.reference,
+      expectedImageDigest: image.digest,
+      makeContainerID: {
+        "\(runPrefix)\(UUID().uuidString.lowercased().prefix(6))"
+      }
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 1,
+        measuredIterations: 3
+      )
+    )
+
+    let report: PerformanceBenchmarkReport
+    do {
+      report = try await benchmark.run { _ in }
+    } catch {
+      try await requireNoResidualContainers(prefix: runPrefix, service: service)
+      throw error
+    }
+    try await requireNoResidualContainers(prefix: runPrefix, service: service)
+
+    guard
+      let outcome = report.outcomes.first,
+      case .measured(let result) = outcome
+    else {
+      if let outcome = report.outcomes.first,
+        case .failed(let kind, let message) = outcome
+      {
+        throw LivePerformanceBenchmarkError.scenarioFailed(
+          kind: kind.rawValue,
+          message: message
+        )
+      }
+      throw LivePerformanceBenchmarkError.missingScenarioResult(
+        PerformanceBenchmarkKind.externalNetworkTransfer.rawValue
+      )
+    }
+    #expect(result.kind == .externalNetworkTransfer)
+    #expect(result.samples.count == 3)
+    #expect(result.samples.allSatisfy { $0.durationNanoseconds > 0 })
+    #expect(result.samples.allSatisfy { $0.processedByteCount == byteCount })
+
+    let authority =
+      endpoint.port.map { "\(endpoint.host ?? "unknown"):\($0)" }
+      ?? endpoint.host ?? "unknown"
+    let output = LiveExternalNetworkBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      appleContainerVersion: initialInventory.system.version,
+      imageReference: image.reference,
+      imageDigest: image.digest,
+      endpointAuthority: authority,
+      protocolName: "HTTPS",
+      expectedByteCount: byteCount,
+      expectedSHA256: sha256,
+      cacheRequest: "no-cache",
+      verification: "byte-count+sha256",
+      samplesNanoseconds: result.samples.map(\.durationNanoseconds),
+      medianMilliseconds: result.medianDurationMilliseconds,
+      p95Milliseconds: result.p95DurationMilliseconds,
+      throughputMebibytesPerSecond: result.throughputMebibytesPerSecond
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.networkOutputMarker)\(json)")
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
           "NATIVECONTAINERS_LIVE_PERFORMANCE_BUILD"
         ] == "1",
       "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_BUILD=1 with Apple container services running and the selected base image already local."
@@ -1748,6 +2041,24 @@ private struct LiveContainerIOBenchmarkResult: Encodable {
   let throughputMebibytesPerSecond: Double?
 }
 
+private struct LiveExternalNetworkBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let appleContainerVersion: String
+  let imageReference: String
+  let imageDigest: String
+  let endpointAuthority: String
+  let protocolName: String
+  let expectedByteCount: Int64
+  let expectedSHA256: String
+  let cacheRequest: String
+  let verification: String
+  let samplesNanoseconds: [UInt64]
+  let medianMilliseconds: Double
+  let p95Milliseconds: Double
+  let throughputMebibytesPerSecond: Double?
+}
+
 private struct LiveImageBuildBenchmarkOutput: Encodable {
   let generatedAt: Date
   let hostOperatingSystem: String
@@ -1769,6 +2080,7 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
   case invalidMacVirtualMachineSource(String)
   case missingMacVirtualMachineSource(UUID)
   case macVirtualMachineSourceChanged(UUID)
+  case missingExternalNetworkFixture
   case residualContainers([String])
   case residualMachines([String])
   case residualMacVirtualMachines([String])
@@ -1792,6 +2104,8 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
       "No macOS virtual-machine benchmark source with identifier \(id.uuidString) exists."
     case .macVirtualMachineSourceChanged(let id):
       "The macOS virtual-machine benchmark source \(id.uuidString) changed during the live gate."
+    case .missingExternalNetworkFixture:
+      "Set the external-network benchmark URL, byte count, and lowercase SHA-256 fixture values."
     case .residualContainers(let ids):
       "The live performance gate left benchmark containers behind: \(ids.joined(separator: ", "))."
     case .residualMachines(let ids):
@@ -2596,6 +2910,32 @@ private func makeMacVirtualMachinePerformanceSource() throws -> VirtualMachineMa
   )
   manifest.macOSFirstBootState = .started
   return manifest
+}
+
+private actor ExternalNetworkCommandRuntimeDouble: ContainerCommandRunning {
+  private(set) var containerIDs: [String] = []
+  private(set) var requests: [ContainerCommandRequest] = []
+
+  private let standardOutput: String
+
+  init(standardOutput: String) {
+    self.standardOutput = standardOutput
+  }
+
+  func executeCommand(
+    in id: String,
+    request: ContainerCommandRequest
+  ) async throws -> ContainerCommandResult {
+    containerIDs.append(id)
+    requests.append(request)
+    return ContainerCommandResult(
+      exitCode: 0,
+      standardOutput: standardOutput,
+      standardError: "",
+      outputWasTruncated: false,
+      duration: .milliseconds(1)
+    )
+  }
 }
 
 private actor ContainerIOCommandRuntimeDouble: ContainerCommandRunning {

@@ -10,6 +10,7 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
   case imageBuild
   case coldLinuxMachineStartup
   case coldMacVirtualMachineStartup
+  case externalNetworkTransfer
 
   static let settingsSuiteCases: [Self] = [
     .warmInventory,
@@ -39,6 +40,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Cold Linux machine startup"
     case .coldMacVirtualMachineStartup:
       "Cold macOS virtual machine startup"
+    case .externalNetworkTransfer:
+      "External HTTPS transfer"
     }
   }
 
@@ -62,6 +65,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Starts a newly created stopped Apple Linux machine through first-user provisioning and confirmed readiness."
     case .coldMacVirtualMachineStartup:
       "Starts a disposable clone of an installed macOS virtual machine and confirms running console readiness."
+    case .externalNetworkTransfer:
+      "Downloads and verifies a fixed HTTPS payload through a fresh Apple container."
     }
   }
 }

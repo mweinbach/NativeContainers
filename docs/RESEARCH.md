@@ -104,6 +104,15 @@ Verified architecture:
   application readiness. Sources:
   <https://developer.apple.com/documentation/virtualization/vzvirtualmachine/start%28%29>
   and <https://developer.apple.com/documentation/virtualization>.
+- BusyBox's official command reference documents `wget` output-file, custom
+  header, user-agent, quiet, and network-read-timeout options, together with
+  `wc`, `sha256sum`, and the shell tools used by the fixed external fixture.
+  The external-network gate can therefore keep its guest workload inside the
+  already-local Alpine image: it requests no-cache semantics without disabling
+  TLS verification, writes one bounded file, emits only byte/digest metadata,
+  and removes the file through an exit trap. A no-cache request does not prove
+  a remote intermediary missed its cache, so the result remains an end-to-end
+  session measurement. Source: <https://busybox.net/downloads/BusyBox.html>.
 - The installed 1.0.0 `MachineClient.setConfig(id:bootConfig:)` and matching
   server route persist a replacement `MachineConfig` for the next boot. The
   supported mutable CLI surface is exactly CPU count, memory, and home-mount

@@ -1256,6 +1256,21 @@ Updated: 2026-06-22.
   guest build/version, resources, raw timing, median, P95, and the precise
   readiness boundary. This exact head awaits Xcode MCP build/test/live
   execution because the bridge remains unavailable.
+- A sixth opt-in gate now measures an operator-supplied non-local HTTPS payload
+  from inside a fresh digest-pinned Apple container. Container creation and
+  startup remain outside the clock. The timed production command performs DNS,
+  TLS and certificate validation, an HTTP transfer with a no-cache request,
+  guest-root file writes, byte counting, SHA-256 verification, and a final
+  authoritative running-state check. Payloads are limited to 1–128 MiB; the
+  URL may not embed credentials or name an obvious local/private literal, and
+  no third-party endpoint is selected by default. A remote cache can still
+  satisfy the request, so this is an end-to-end guest HTTPS metric rather than
+  a pure link-capacity claim. Exit-trap file removal plus exact container
+  stop/delete and run-prefix absence remain outside the interval. One warmup
+  plus three samples emit raw timing, median/P95, aggregate throughput,
+  host/runtime/image provenance, endpoint authority, cache request, byte count,
+  digest, and verification mode. This exact head awaits Xcode MCP
+  build/test/live execution because the bridge remains unavailable.
 
 ## Distribution-readiness checkpoint
 

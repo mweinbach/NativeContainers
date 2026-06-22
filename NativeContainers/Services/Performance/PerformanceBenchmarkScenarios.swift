@@ -1203,6 +1203,215 @@ enum ContainerIOPerformanceBenchmarkError: LocalizedError, Equatable, Sendable {
   }
 }
 
+actor ExternalNetworkPerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
+  private static let successMarker = "nativecontainers-network-ok"
+  private static let targetPath = "/tmp/nativecontainers-external-network.bin"
+  private static let allowedSHA256Characters = Set("0123456789abcdef")
+  private static let workload = """
+    set -eu
+    url=$1
+    target=$2
+    cleanup() { rm -f -- "$target"; }
+    trap cleanup EXIT HUP INT TERM
+    wget -q -T 180 --header 'Cache-Control: no-cache' -U 'NativeContainers-Performance/1' -O "$target" "$url"
+    actual_bytes=$(wc -c < "$target" | tr -d '[:space:]')
+    actual_sha256=$(sha256sum "$target")
+    actual_sha256=${actual_sha256%% *}
+    printf 'bytes=%s\nsha256=%s\n%s\n' "$actual_bytes" "$actual_sha256" nativecontainers-network-ok
+    """
+
+  nonisolated let kind = PerformanceBenchmarkKind.externalNetworkTransfer
+
+  private let lifecycle: ColdContainerStartupPerformanceBenchmarkScenario
+  private let commands: any ContainerCommandRunning
+  private let endpoint: URL
+  private let expectedByteCount: Int64
+  private let expectedSHA256: String
+
+  init(
+    containers: any ContainerCreating & ContainerLifecycleManaging,
+    stateReader: any ContainerStartupBenchmarkStateReading =
+      AppleContainerStartupBenchmarkStateReader(),
+    commands: any ContainerCommandRunning,
+    endpoint: URL,
+    expectedByteCount: Int64,
+    expectedSHA256: String,
+    imageReference: String = "docker.io/library/alpine:3.21",
+    expectedImageDigest: String,
+    makeContainerID: @escaping @Sendable () -> String = {
+      "nativecontainers-network-\(UUID().uuidString.lowercased().prefix(8))"
+    }
+  ) throws {
+    guard Self.isExternalHTTPSEndpoint(endpoint) else {
+      throw ExternalNetworkPerformanceBenchmarkError.invalidEndpoint
+    }
+    guard (1...128 * 1_048_576).contains(expectedByteCount) else {
+      throw ExternalNetworkPerformanceBenchmarkError.invalidExpectedByteCount
+    }
+    guard
+      expectedSHA256.count == 64,
+      expectedSHA256.allSatisfy(Self.allowedSHA256Characters.contains)
+    else {
+      throw ExternalNetworkPerformanceBenchmarkError.invalidExpectedDigest
+    }
+
+    lifecycle = ColdContainerStartupPerformanceBenchmarkScenario(
+      containers: containers,
+      stateReader: stateReader,
+      imageReference: imageReference,
+      expectedImageDigest: expectedImageDigest,
+      makeContainerID: makeContainerID
+    )
+    self.commands = commands
+    self.endpoint = endpoint
+    self.expectedByteCount = expectedByteCount
+    self.expectedSHA256 = expectedSHA256
+  }
+
+  func prepareIteration() async throws {
+    try await lifecycle.prepareIteration()
+    try await lifecycle.prepareMeasurement()
+    _ = try await lifecycle.perform()
+  }
+
+  func prepareMeasurement() async throws {
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+  }
+
+  func perform() async throws -> Int64? {
+    let id = try await lifecycle.currentContainerID()
+    let result = try await commands.executeCommand(
+      in: id,
+      request: ContainerCommandRequest(
+        executable: "/bin/sh",
+        arguments: [
+          "-c",
+          Self.workload,
+          "nativecontainers-network",
+          endpoint.absoluteString,
+          Self.targetPath,
+        ],
+        timeoutSeconds: 300
+      )
+    )
+    guard !result.outputWasTruncated else {
+      throw ExternalNetworkPerformanceBenchmarkError.outputWasTruncated
+    }
+    guard result.exitCode == 0 else {
+      throw ExternalNetworkPerformanceBenchmarkError.commandFailed(
+        result.exitCode
+      )
+    }
+    let observation = try Self.parse(result.standardOutput)
+    guard observation.byteCount == expectedByteCount else {
+      throw ExternalNetworkPerformanceBenchmarkError.byteCountMismatch(
+        expected: expectedByteCount,
+        actual: observation.byteCount
+      )
+    }
+    guard observation.sha256 == expectedSHA256 else {
+      throw ExternalNetworkPerformanceBenchmarkError.digestMismatch
+    }
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+    return expectedByteCount
+  }
+
+  func cleanUpIteration() async throws {
+    try await lifecycle.cleanUpIteration()
+  }
+
+  private static func parse(
+    _ output: String
+  ) throws -> (byteCount: Int64, sha256: String) {
+    let lines = output.split(whereSeparator: \.isNewline).map(String.init)
+    guard
+      lines.count == 3,
+      lines[0].hasPrefix("bytes="),
+      let byteCount = Int64(lines[0].dropFirst("bytes=".count)),
+      lines[1].hasPrefix("sha256="),
+      lines[2] == successMarker
+    else {
+      throw ExternalNetworkPerformanceBenchmarkError.invalidOutput
+    }
+    let sha256 = String(lines[1].dropFirst("sha256=".count))
+    guard
+      sha256.count == 64,
+      sha256.allSatisfy(allowedSHA256Characters.contains)
+    else {
+      throw ExternalNetworkPerformanceBenchmarkError.invalidOutput
+    }
+    return (byteCount, sha256)
+  }
+
+  private static func isExternalHTTPSEndpoint(_ endpoint: URL) -> Bool {
+    guard
+      endpoint.scheme?.lowercased() == "https",
+      let host = endpoint.host?.lowercased(),
+      !host.isEmpty,
+      endpoint.user == nil,
+      endpoint.password == nil,
+      endpoint.fragment == nil,
+      endpoint.absoluteString.utf8.count <= 2_048
+    else {
+      return false
+    }
+    let isIPv6Literal = host.contains(":")
+    if host == "localhost" || host == "::1" || host == "[::1]"
+      || host == "0.0.0.0" || host.hasSuffix(".local")
+      || host.hasPrefix("127.") || host.hasPrefix("10.")
+      || host.hasPrefix("192.168.") || host.hasPrefix("169.254.")
+      || (isIPv6Literal
+        && (host.hasPrefix("fc") || host.hasPrefix("fd")
+          || host.hasPrefix("fe80:")))
+    {
+      return false
+    }
+    if host.hasPrefix("172."),
+      let secondOctet = host.split(separator: ".").dropFirst().first.flatMap(Int.init),
+      (16...31).contains(secondOctet)
+    {
+      return false
+    }
+    return true
+  }
+}
+
+enum ExternalNetworkPerformanceBenchmarkError:
+  LocalizedError,
+  Equatable,
+  Sendable
+{
+  case invalidEndpoint
+  case invalidExpectedByteCount
+  case invalidExpectedDigest
+  case commandFailed(Int32)
+  case outputWasTruncated
+  case invalidOutput
+  case byteCountMismatch(expected: Int64, actual: Int64)
+  case digestMismatch
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidEndpoint:
+      "The external-network benchmark requires a bounded non-local HTTPS URL without embedded credentials."
+    case .invalidExpectedByteCount:
+      "The external-network benchmark payload must be between 1 and 128 MiB."
+    case .invalidExpectedDigest:
+      "The external-network benchmark requires a lowercase SHA-256 payload digest."
+    case .commandFailed(let exitCode):
+      "The external HTTPS workload exited with status \(exitCode)."
+    case .outputWasTruncated:
+      "The external HTTPS workload exceeded its bounded output limit."
+    case .invalidOutput:
+      "The external HTTPS workload returned an invalid verification record."
+    case .byteCountMismatch(let expected, let actual):
+      "The external HTTPS payload contained \(actual) bytes instead of \(expected)."
+    case .digestMismatch:
+      "The external HTTPS payload did not match the reviewed SHA-256 digest."
+    }
+  }
+}
+
 actor ImageBuildPerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
   nonisolated let kind = PerformanceBenchmarkKind.imageBuild
 

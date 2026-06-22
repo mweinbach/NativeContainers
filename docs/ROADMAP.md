@@ -302,7 +302,10 @@ must leave a usable, test-backed product slice.
   - [x] IPSW-backed macOS GUI-VM cold startup behind a fifth explicit live gate,
         using disposable identity-regenerated clones, authoritative running plus
         graphical-console readiness, exact-manifest cleanup, and provenance JSON.
-  - [ ] External-network and idle-resource lanes behind explicit live gates.
+  - [x] Verified external HTTPS transfer behind a sixth explicit live gate,
+        with an operator-supplied bounded fixture, fresh digest-pinned
+        containers, exact byte/digest checks, and provenance JSON.
+  - [ ] Idle-resource lane behind an explicit live gate.
 
 ## Public-API constraint log
 
