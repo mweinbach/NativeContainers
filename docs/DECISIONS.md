@@ -1632,3 +1632,30 @@ Cold container or VM launch, guest or bind-mount I/O, real image builds,
 external-network throughput, and idle-resource sampling are not disguised as
 equivalent local measurements. They remain separate opt-in live gates with
 their own cleanup and environmental provenance requirements.
+
+## ADR-059: Ship one arm64 hardened product with a nested build worker
+
+**Status:** Accepted — 2026-06-21
+
+NativeContainers distributes as one Apple-silicon macOS app. The one-shot
+`NativeContainersBuildWorker` remains a separately compiled tool so image-build
+responsibilities and failures stay outside the SwiftUI process, but Xcode embeds
+that signed executable exactly once under the app's `Contents/Helpers`
+directory. `SKIP_INSTALL=YES` prevents the worker from appearing as a second
+archive product.
+
+Both executables use hardened runtime and the same signing team. Capabilities
+are assigned by executable instead of inherited for convenience: the app has
+only microphone input and virtualization, while the worker has no app
+capability. Broad file, network, device, personal-information, printing, Apple
+Events, and runtime-exception entitlements are rejected by the artifact
+validator. Development-only Xcode signing metadata is tolerated locally but
+`get-task-allow` is forbidden for Developer ID validation on either binary.
+
+The archive validator is the executable product contract, not a substitute for
+Apple's trust service. A local Apple Development archive can prove layout,
+architecture, versioning, nested signing, runtime flags, and entitlements. A
+public release additionally requires an externally provisioned Developer ID
+Application identity, successful notarization, Gatekeeper acceptance, and a
+stapled ticket. Updater, migration, and crash-diagnostic policy remain separate
+roadmap work.

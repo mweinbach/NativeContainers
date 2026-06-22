@@ -240,7 +240,15 @@ must leave a usable, test-backed product slice.
       source-language String Catalog extraction.
 - [ ] Reviewed non-English translations and full VoiceOver/Full Keyboard
       Access QA across every management workflow.
-- [ ] Signed/notarized packaging, updater, migration, crash diagnostics.
+- [ ] Distribution, updater, migration, and crash diagnostics.
+  - [x] Arm64-only versioned archive with hardened runtime on the app and
+        embedded build worker, constrained entitlements, exact layout checks,
+        and a repeatable local validator.
+  - [ ] Developer ID Application signing, notarization submission, accepted
+        ticket stapling, and strict Gatekeeper validation.
+  - [ ] Signed updater with rollback and version-policy tests.
+  - [ ] User-data migration and rollback strategy.
+  - [ ] Privacy-reviewed crash diagnostics and release-symbol handling.
 - [ ] Complete performance benchmark coverage.
   - [x] User-initiated local baselines for warm Apple inventory, private
         temporary-file write/read I/O, and Network.framework localhost TCP,

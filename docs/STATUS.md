@@ -8,6 +8,11 @@ Updated: 2026-06-21.
 - Exact `apple/container` 1.0.0 package resolves and compiles.
 - Build-for-testing and the normal app build succeed; refreshed source
   diagnostics and the Issue Navigator report no warnings or errors.
+- A clean Release archive for version 0.1.0 (1) succeeds through Xcode on
+  `Any Mac (arm64)`. It contains one arm64 app and one arm64 embedded build
+  worker, both strictly signed by team `6UHAW5UAT4` with hardened runtime. The
+  archive validator confirms that the app carries only microphone input and
+  virtualization while the worker carries no app capability.
 - The current full app-hosted Xcode run contains 942 expanded outcomes: all 921
   deterministic outcomes passed, with 21 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
@@ -15,9 +20,9 @@ Updated: 2026-06-21.
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
   none run against public services by default.
-- The app launched through Xcode as PID 93433 and Xcode stopped that exact
-  process. Preview-owned PID 57859 accepted bounded TERM cleanup, and no
-  NativeContainers or Preview process remained.
+- The final app launched through Xcode as PID 60505, idled at 0.7% CPU, and
+  Xcode stopped that exact process. No NativeContainers or build-worker process
+  remained.
 - A native menu-bar control plane shares the app-scoped `AppModel`, inventory,
   lifecycle services, routing, and error state instead of introducing a second
   poller. It reports runtime and machine counts, exposes bounded container
@@ -1184,6 +1189,28 @@ Updated: 2026-06-21.
   no NativeContainers or Preview process remained. Console errors were limited
   to the existing macOS 27 beta CoreSpotlight/SetStore service failure.
 
+## Distribution-readiness checkpoint
+
+- Project and target settings now define arm64 architecture, marketing version
+  0.1.0, build 1, Apple-generic versioning, product validation, and hardened
+  runtime for both the app and one-shot build worker. The worker remains
+  `SKIP_INSTALL=YES` and is embedded exactly once in the app.
+- Stale inherited capability settings were removed from both executable
+  targets. The clean Release signature contains microphone input and
+  virtualization on the app only; the worker contains no app capability. The
+  validator fails archives that reintroduce broad file, network, device,
+  personal-information, printing, Apple Events, or runtime-exception
+  entitlements.
+- Xcode archived version 0.1.0 (1) successfully on `Any Mac (arm64)`. The local
+  validator passed architecture, layout, version, strict nested signature,
+  hardened-runtime, team, and entitlement gates. The final Xcode test run also
+  passed all 942 outcomes: 921 deterministic tests passed, 21 explicit live
+  gates skipped, and no outcome failed or remained unrun.
+- The strict release gate correctly rejects the archive because its authority
+  is Apple Development. The signing keychain currently exposes no Developer ID
+  Application identity, so public signing, notarization, and stapling are not
+  claimed. The repeatable operator flow is in `docs/DISTRIBUTION.md`.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
@@ -1206,3 +1233,6 @@ integration pass.
    from a contiguous replica prefix, including stable metadata and exact Apple
    attachment observations. Keep recreation blocked until the pinned bridge
    implements rename and network attachment routes.
+4. Provision a Developer ID Application identity, run Xcode's Developer ID
+   distribution and notarization flow, then pass the strict stapled-product
+   validator before calling the app publicly distributable.

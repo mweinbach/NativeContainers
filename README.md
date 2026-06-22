@@ -23,6 +23,7 @@ services are running.
 Foundation work is underway. See:
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Distribution](docs/DISTRIBUTION.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Feature matrix](docs/FEATURE_MATRIX.md)
 - [Research notes](docs/RESEARCH.md)

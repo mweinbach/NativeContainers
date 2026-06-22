@@ -1034,6 +1034,27 @@ than sharing presentation state across an implied multi-window group.
 - No container or VM is deleted without a confirmation that names the affected
   disks and snapshots.
 
+## Distribution boundary
+
+The distributable product is one arm64 macOS application with one signed
+`NativeContainersBuildWorker` nested under `Contents/Helpers`. The worker is a
+build dependency with `SKIP_INSTALL=YES`; it is never emitted as a second
+installable archive product. Both executables enable hardened runtime and share
+one signing team.
+
+Capabilities stay at the narrowest executable boundary. The app carries only
+microphone input and virtualization. The worker carries no app capability.
+`scripts/validate-distribution-artifact.sh` verifies architecture, version,
+layout, nested signatures, hardened runtime, team identity, and capability
+allowlists before an archive can advance. Its strict mode also enforces
+Developer ID Application authority, absence of `get-task-allow`, Gatekeeper
+acceptance, and a stapled notarization ticket.
+
+Signing credentials and notarization state are external release inputs, not
+repository configuration. A local Apple Development archive proves product
+layout and signing mechanics but does not claim public distribution readiness.
+The complete operator flow is recorded in `docs/DISTRIBUTION.md`.
+
 ## Compatibility policy
 
 - App deployment target: macOS 26.
