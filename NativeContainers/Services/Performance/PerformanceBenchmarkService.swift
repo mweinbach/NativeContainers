@@ -13,7 +13,14 @@ struct PerformanceBenchmarkConfiguration: Equatable, Sendable {
 protocol PerformanceBenchmarkScenario: Sendable {
   var kind: PerformanceBenchmarkKind { get }
 
+  func prepareIteration() async throws
   func perform() async throws -> Int64?
+  func cleanUpIteration() async throws
+}
+
+extension PerformanceBenchmarkScenario {
+  func prepareIteration() async throws {}
+  func cleanUpIteration() async throws {}
 }
 
 protocol PerformanceBenchmarkClock: Sendable {
@@ -58,7 +65,10 @@ struct PerformanceBenchmarkService: PerformanceBenchmarking {
         do {
           for _ in 0..<configuration.warmupIterations {
             try Task.checkCancellation()
-            _ = try await scenario.perform()
+            _ = try await runIteration(
+              scenario,
+              recordsMeasurement: false
+            )
           }
 
           var samples: [PerformanceBenchmarkSample] = []
@@ -66,18 +76,15 @@ struct PerformanceBenchmarkService: PerformanceBenchmarking {
 
           for _ in 0..<configuration.measuredIterations {
             try Task.checkCancellation()
-            let startedAt = clock.nowNanoseconds()
-            let byteCount = try await scenario.perform()
-            let finishedAt = clock.nowNanoseconds()
-            guard finishedAt >= startedAt else {
-              throw PerformanceBenchmarkError.nonMonotonicClock
-            }
-            samples.append(
-              PerformanceBenchmarkSample(
-                durationNanoseconds: finishedAt - startedAt,
-                processedByteCount: byteCount
+            guard
+              let sample = try await runIteration(
+                scenario,
+                recordsMeasurement: true
               )
-            )
+            else {
+              throw PerformanceBenchmarkError.missingMeasurement
+            }
+            samples.append(sample)
           }
 
           outcomes.append(
@@ -91,6 +98,12 @@ struct PerformanceBenchmarkService: PerformanceBenchmarking {
         } catch is CancellationError {
           throw CancellationError()
         } catch {
+          if Task.isCancelled
+            || (error as? PerformanceBenchmarkError)?.requiresSuiteAbort
+              == true
+          {
+            throw error
+          }
           outcomes.append(
             .failed(
               kind: scenario.kind,
@@ -110,10 +123,66 @@ struct PerformanceBenchmarkService: PerformanceBenchmarking {
       outcomes: outcomes
     )
   }
+
+  private func runIteration(
+    _ scenario: any PerformanceBenchmarkScenario,
+    recordsMeasurement: Bool
+  ) async throws -> PerformanceBenchmarkSample? {
+    var operationResult: Result<PerformanceBenchmarkSample?, any Error>
+    do {
+      try await scenario.prepareIteration()
+      try Task.checkCancellation()
+
+      let startedAt = recordsMeasurement ? clock.nowNanoseconds() : nil
+      let byteCount = try await scenario.perform()
+      let finishedAt = recordsMeasurement ? clock.nowNanoseconds() : nil
+      if let startedAt, let finishedAt {
+        guard finishedAt >= startedAt else {
+          throw PerformanceBenchmarkError.nonMonotonicClock
+        }
+        operationResult = .success(
+          PerformanceBenchmarkSample(
+            durationNanoseconds: finishedAt - startedAt,
+            processedByteCount: byteCount
+          )
+        )
+      } else {
+        operationResult = .success(nil)
+      }
+    } catch {
+      operationResult = .failure(error)
+    }
+
+    let cleanupErrorDescription = await Task.detached {
+      do {
+        try await scenario.cleanUpIteration()
+        return nil as String?
+      } catch {
+        return error.localizedDescription
+      }
+    }.value
+
+    switch (operationResult, cleanupErrorDescription) {
+    case (.success(let sample), nil):
+      return sample
+    case (.success, .some(let cleanup)):
+      throw PerformanceBenchmarkError.iterationCleanupFailed(cleanup)
+    case (.failure(let operation), nil):
+      throw operation
+    case (.failure(let operation), .some(let cleanup)):
+      throw PerformanceBenchmarkError.iterationAndCleanupFailed(
+        operation: operation.localizedDescription,
+        cleanup: cleanup
+      )
+    }
+  }
 }
 
 enum PerformanceBenchmarkError: LocalizedError, Equatable, Sendable {
   case nonMonotonicClock
+  case missingMeasurement
+  case iterationCleanupFailed(String)
+  case iterationAndCleanupFailed(operation: String, cleanup: String)
   case privateDiskWorkspaceUnavailable
   case privateDiskWriteFailed
   case privateDiskReadFailed
@@ -122,10 +191,27 @@ enum PerformanceBenchmarkError: LocalizedError, Equatable, Sendable {
   case loopbackTransferIncomplete(expected: Int, actual: Int)
   case loopbackTimedOut
 
+  var requiresSuiteAbort: Bool {
+    switch self {
+    case .iterationCleanupFailed, .iterationAndCleanupFailed:
+      true
+    case .nonMonotonicClock, .missingMeasurement, .privateDiskWorkspaceUnavailable,
+      .privateDiskWriteFailed, .privateDiskReadFailed, .loopbackListenerUnavailable,
+      .loopbackConnectionFailed, .loopbackTransferIncomplete, .loopbackTimedOut:
+      false
+    }
+  }
+
   var errorDescription: String? {
     switch self {
     case .nonMonotonicClock:
       "The benchmark clock moved backward, so the measurement was discarded."
+    case .missingMeasurement:
+      "The benchmark iteration completed without a measurement."
+    case .iterationCleanupFailed(let cleanup):
+      "The benchmark iteration completed, but cleanup failed: \(cleanup)"
+    case .iterationAndCleanupFailed(let operation, let cleanup):
+      "The benchmark iteration failed: \(operation) Cleanup also failed: \(cleanup)"
     case .privateDiskWorkspaceUnavailable:
       "The private benchmark workspace could not be prepared."
     case .privateDiskWriteFailed:

@@ -1,6 +1,6 @@
 # Research notes
 
-Last updated: 2026-06-21.
+Last updated: 2026-06-22.
 
 ## Host baseline
 
@@ -60,6 +60,15 @@ Verified architecture:
 - Release 1.0.0 pins Containerization 0.33.3. Its XPC compatibility shim was
   removed and protocol negotiation is not yet available, so client/server
   versions must remain matched.
+- In the exact 1.0.0 source, `ContainerClient.bootstrap` prepares the init
+  process and `ClientProcess.start()` asks the API service to start it. The
+  server returns from that start only after its snapshot has been updated to
+  `running`, network state captured, and `startedDate` assigned. A cold-start
+  benchmark can therefore time production start through one exact follow-up
+  snapshot without inventing a CLI readiness heuristic. Containerization's
+  project overview describes sub-second starts as a design target, not a
+  universal threshold, so NativeContainers records per-host samples rather
+  than asserting that marketing-level bound on every machine.
 - The installed 1.0.0 `MachineClient.setConfig(id:bootConfig:)` and matching
   server route persist a replacement `MachineConfig` for the next boot. The
   supported mutable CLI surface is exactly CPU count, memory, and home-mount

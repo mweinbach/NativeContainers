@@ -1900,3 +1900,37 @@ untouched, or the reviewed object is still waiting on foreground finalizers.
 Transport or API failures during that poll produce no success claim. The host
 reloads the bounded inventory after every accepted or rejected request and
 never retries by name.
+
+## ADR-068: Measure cold container startup around prepared start-to-running only
+
+**Status:** Accepted — 2026-06-22
+
+The cold-container benchmark is an explicit live gate, not another Settings
+baseline. It refuses to fetch its workload image: the selected reference must
+already exist in Apple inventory, and the output records that reference,
+digest, Apple container version, host OS, three raw samples, median, and P95.
+This keeps registry latency and mutable network conditions outside the startup
+number without pretending the image tag itself is immutable. Each created
+container must retain that preflighted reference and digest before timing.
+
+Every iteration prepares a fresh stopped one-CPU/256-MiB container before the
+clock starts. The measured operation calls the production Apple lifecycle
+service and ends only after an exact API snapshot reports `running` with a
+start timestamp. Container creation, one warmup, stop, KILL fallback, deletion,
+and absence verification are outside the timed interval. The scenario freezes
+the creation-operation UUID and revalidates it before every lifecycle mutation;
+a same-name replacement observed at those boundaries is reported and left
+untouched. Apple 1.0 lifecycle routes remain ID-only and expose no conditional
+mutation token, so the narrow final validation-to-mutation race is unchanged
+and explicitly not claimed away. The benchmark runner
+invokes cleanup even after preparation failure, measured failure, clock failure,
+or cancellation; a recovered cleanup fault still invalidates that sample, and
+an unrecovered fault reports the exact benchmark-owned container ID. Any
+cleanup fault aborts the remaining suite rather than allowing another mutating
+lane to begin after uncertain teardown.
+
+The gate requires `NATIVECONTAINERS_LIVE_PERFORMANCE=1`, uses one warmup plus
+three measured fresh containers, and emits a marker-framed JSON record to the
+Xcode test log. It does not set a universal latency threshold: results are
+host-session evidence for regression comparison, not a cross-machine product
+promise.

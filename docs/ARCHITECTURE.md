@@ -913,14 +913,28 @@ Performance baselines are another focused service graph rather than timing code
 inside Settings. `PerformanceBenchmarking` is the app-facing contract;
 `PerformanceBenchmarkService` owns warmup/measured iteration policy, a
 monotonic injectable clock, per-scenario failure isolation, cancellation, and
-median/P95/aggregate-throughput reports. Three narrow scenarios call the
-existing read-only Apple inventory service, write/synchronize/read/remove a
-private temporary file, and perform a bounded localhost TCP transfer through
-Network.framework. The app-scoped observable model owns only progress, the last
-completed report, and cancellation. Nothing starts automatically during launch
-or inventory refresh, and cold starts, guest I/O, real builds, external traffic,
-and idle-resource sampling remain separate opt-in lanes because they mutate
-runtime state or depend materially on the host environment.
+median/P95/aggregate-throughput reports. Per-iteration preparation and cleanup
+run outside the timed interval; cleanup still runs in a cancellation-independent
+task, and any cleanup failure invalidates the sample and aborts later lanes.
+Three narrow Settings scenarios call the existing read-only Apple inventory service,
+write/synchronize/read/remove a private temporary file, and perform a bounded
+localhost TCP transfer through Network.framework. The app-scoped observable
+model owns only progress, the last completed report, and cancellation. Nothing
+starts automatically during launch or inventory refresh.
+
+Cold Apple-container startup is a separate opt-in live scenario, never part of
+the Settings suite. It requires an already-local image, creates a stopped
+one-CPU/256-MiB container before each timing interval, and measures only the
+existing lifecycle service's start through an authoritative running snapshot.
+The created configuration must retain the preflighted reference and digest.
+One warmup and three fresh-container samples are emitted as provenance-bearing
+JSON. Graceful stop, bounded KILL fallback, exact deletion, and an empty
+run-prefix inventory check happen outside the measured interval. Every mutation
+revalidates the creation-operation UUID; a same-name replacement aborts cleanup
+and is never modified. Guest and
+bind-mount I/O, real builds, external traffic, VM startup, and idle-resource
+sampling remain separate opt-in lanes because they mutate runtime state or
+depend materially on the host environment.
 
 Workspace navigation is a separate focused slice. `WorkspaceRoute` represents
 both top-level destinations and exact resource identities. A pure

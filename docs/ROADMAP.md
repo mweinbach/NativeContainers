@@ -284,7 +284,12 @@ must leave a usable, test-backed product slice.
         temporary-file write/read I/O, and Network.framework localhost TCP,
         with warmups, median/P95 reporting, bounded cancellation, and no
         container or VM mutation.
-  - [ ] Cold container/VM startup, guest and bind-mount I/O, real image-build,
+  - [x] Prepared-image cold Apple-container startup behind an explicit live
+        gate, with fresh stopped containers, setup/cleanup outside the timed
+        interval, authoritative running confirmation, one warmup plus three
+        measured samples, operation-identity-pinned cleanup, provenance JSON,
+        and residual-container rejection.
+  - [ ] Cold VM startup, guest and bind-mount I/O, real image-build,
         external-network, and idle-resource lanes behind explicit live gates.
 
 ## Public-API constraint log

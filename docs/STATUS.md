@@ -1188,6 +1188,21 @@ Updated: 2026-06-22.
   Xcode stopped that exact process. The preview-owned PID 11613 accepted TERM;
   no NativeContainers or Preview process remained. Console errors were limited
   to the existing macOS 27 beta CoreSpotlight/SetStore service failure.
+- The benchmark runner now has per-iteration preparation and
+  cancellation-independent cleanup outside the measured interval. The first
+  mutating lane is a separate `NATIVECONTAINERS_LIVE_PERFORMANCE=1` gate: it
+  requires an already-local image, creates a fresh stopped one-CPU/256-MiB
+  container, verifies the preflighted image reference/digest, and measures
+  production lifecycle start through an authoritative
+  running snapshot, then gracefully stops (with KILL fallback), deletes, and
+  verifies no run-prefixed container remains. Creation-operation identity is
+  revalidated before every mutation, and a same-name replacement is left
+  untouched. One warmup and three samples are
+  emitted as marker-framed JSON with host OS, Apple runtime version, image
+  reference/digest, median, and P95. Deterministic coverage proves setup and
+  cleanup boundaries, cancellation/failure cleanup, and suite abort before any
+  later lane after a cleanup fault. This exact head is unclaimed because Xcode
+  MCP currently fails at `XcodeListWindows` with `Transport closed`.
 
 ## Distribution-readiness checkpoint
 

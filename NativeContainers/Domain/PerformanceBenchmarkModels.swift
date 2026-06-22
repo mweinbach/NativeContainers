@@ -4,6 +4,13 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
   case warmInventory
   case privateDiskIO
   case loopbackNetwork
+  case coldContainerStartup
+
+  static let settingsSuiteCases: [Self] = [
+    .warmInventory,
+    .privateDiskIO,
+    .loopbackNetwork,
+  ]
 
   var id: Self { self }
 
@@ -15,6 +22,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Private disk I/O"
     case .loopbackNetwork:
       "Loopback TCP"
+    case .coldContainerStartup:
+      "Cold container startup"
     }
   }
 
@@ -26,6 +35,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Writes, synchronizes, and reads a temporary file in the app’s private workspace, then removes it."
     case .loopbackNetwork:
       "Transfers data through Network.framework over localhost without using an external network."
+    case .coldContainerStartup:
+      "Starts a newly created stopped Apple container and confirms its authoritative running state."
     }
   }
 }
@@ -118,7 +129,7 @@ struct UnavailablePerformanceBenchmarkService: PerformanceBenchmarking {
     await progress(nil)
     return PerformanceBenchmarkReport(
       generatedAt: Date(),
-      outcomes: PerformanceBenchmarkKind.allCases.map {
+      outcomes: PerformanceBenchmarkKind.settingsSuiteCases.map {
         .failed(
           kind: $0,
           message: "Performance benchmarks are unavailable in this app context."
