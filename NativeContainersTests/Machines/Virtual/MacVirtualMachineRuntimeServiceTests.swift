@@ -894,7 +894,9 @@ private final class RuntimeServiceSavedStateService:
   ) async throws -> MacVirtualMachineSavedStateStatus {
     let waiters = inspectWaiters
     inspectWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters {
+      waiter.resume()
+    }
     if inspectWaits {
       await withCheckedContinuation { continuation in
         inspectContinuation = continuation
@@ -910,7 +912,9 @@ private final class RuntimeServiceSavedStateService:
     saveCount += 1
     let waiters = saveWaiters
     saveWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters {
+      waiter.resume()
+    }
     if saveWaits {
       await withCheckedContinuation { continuation in
         saveContinuation = continuation
@@ -936,7 +940,9 @@ private final class RuntimeServiceSavedStateService:
     discardCount += 1
     let waiters = discardWaiters
     discardWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters {
+      waiter.resume()
+    }
     if discardWaits {
       await withCheckedContinuation { continuation in
         discardContinuation = continuation
@@ -1080,7 +1086,9 @@ private final class RuntimeServiceEngine: MacVirtualMachineRuntimeEngine {
       guard let self else { return }
       let waiters = firstSessionStartWaiters
       firstSessionStartWaiters.removeAll()
-      waiters.forEach { $0.resume() }
+      for waiter in waiters {
+        waiter.resume()
+      }
     }
     sessions.append(session)
     return session
