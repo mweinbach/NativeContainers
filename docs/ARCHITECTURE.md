@@ -175,9 +175,11 @@ descriptor whose exact current Apple machine is running. A fixed guest command
 uses `jq` to project Deployment, StatefulSet, DaemonSet, Job, Pod, and Service
 JSON down to identity, counts, phases, nodes, container names, addresses, and
 ports before the payload crosses Apple's process transport. Pod records retain
-the API UID so a same-name replacement is a new SwiftUI identity. The host
-parser caps each resource family at 500, rejects duplicate UIDs or natural
-identities and malformed values, and sorts stable records for SwiftUI. Pod
+the API UID, while workload records retain UID and resourceVersion, so a
+same-name replacement is a new SwiftUI identity and a future reviewed scale can
+carry a server-enforced version precondition. The host parser caps each resource
+family at 500, rejects duplicate UIDs or natural identities and malformed
+values, and sorts stable records for SwiftUI. Pod
 environment, annotations, images, and Kubernetes secret payloads are not
 represented in the projected document or domain model.
 

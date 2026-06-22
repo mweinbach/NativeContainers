@@ -204,6 +204,8 @@ struct KubernetesClusterServiceTests {
     #expect(invocation.command.contains("deployments.apps"))
     #expect(invocation.command.contains("services --all-namespaces"))
     #expect(invocation.command.contains("jq --compact-output"))
+    #expect(invocation.command.contains("uid: .metadata.uid"))
+    #expect(invocation.command.contains("resourceVersion: .metadata.resourceVersion"))
     #expect(invocation.command.contains("(.spec.containers // [])"))
     #expect(!invocation.command.contains(".spec.env"))
     #expect(!invocation.command.contains(".metadata.annotations"))
@@ -1055,6 +1057,8 @@ private func readyResourceInventory() -> KubernetesResourceInventory {
   KubernetesResourceInventory(
     workloads: [
       KubernetesWorkloadRecord(
+        uid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        resourceVersion: "101",
         namespace: "default",
         name: "api",
         kind: .deployment,
@@ -1104,7 +1108,12 @@ private func testKubernetesResourceInventoryOutput() -> String {
     "items": [
       {
         "kind": "Deployment",
-        "metadata": {"namespace": "default", "name": "api"},
+        "metadata": {
+          "uid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "resourceVersion": "101",
+          "namespace": "default",
+          "name": "api"
+        },
         "spec": {"replicas": 2},
         "status": {
           "replicas": 2,

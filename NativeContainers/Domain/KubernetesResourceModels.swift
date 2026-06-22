@@ -21,6 +21,8 @@ enum KubernetesWorkloadKind: String, CaseIterable, Codable, Equatable, Sendable 
 }
 
 struct KubernetesWorkloadRecord: Identifiable, Equatable, Sendable {
+  let uid: String
+  let resourceVersion: String
   let namespace: String
   let name: String
   let kind: KubernetesWorkloadKind
@@ -30,10 +32,12 @@ struct KubernetesWorkloadRecord: Identifiable, Equatable, Sendable {
   let failedCount: Int
 
   var id: String {
-    "\(namespace)/\(kind.rawValue)/\(name)"
+    uid
   }
 
   init(
+    uid: String,
+    resourceVersion: String,
     namespace: String,
     name: String,
     kind: KubernetesWorkloadKind,
@@ -42,6 +46,8 @@ struct KubernetesWorkloadRecord: Identifiable, Equatable, Sendable {
     availableCount: Int,
     failedCount: Int
   ) {
+    self.uid = uid
+    self.resourceVersion = resourceVersion
     self.namespace = namespace
     self.name = name
     self.kind = kind
@@ -178,6 +184,10 @@ enum KubernetesResourceReferenceValidator {
   }
 
   static func isPodUID(_ value: String) -> Bool {
+    isUID(value)
+  }
+
+  static func isUID(_ value: String) -> Bool {
     UUID(uuidString: value) != nil
   }
 

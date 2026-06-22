@@ -724,6 +724,8 @@ extension KubernetesResourceInventory {
   fileprivate static let preview = Self(
     workloads: [
       KubernetesWorkloadRecord(
+        uid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        resourceVersion: "101",
         namespace: "default",
         name: "api",
         kind: .deployment,
@@ -733,6 +735,8 @@ extension KubernetesResourceInventory {
         failedCount: 0
       ),
       KubernetesWorkloadRecord(
+        uid: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        resourceVersion: "202",
         namespace: "data",
         name: "postgres",
         kind: .statefulSet,
@@ -742,6 +746,8 @@ extension KubernetesResourceInventory {
         failedCount: 0
       ),
       KubernetesWorkloadRecord(
+        uid: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        resourceVersion: "303",
         namespace: "default",
         name: "database-migration",
         kind: .job,

@@ -18,6 +18,8 @@ struct KubernetesResourceInventoryParser: Sendable {
           {
             kind: .kind,
             metadata: {
+              uid: .metadata.uid,
+              resourceVersion: .metadata.resourceVersion,
               namespace: .metadata.namespace,
               name: .metadata.name
             },
@@ -128,6 +130,9 @@ struct KubernetesResourceInventoryParser: Sendable {
       )
 
       try requireUniqueIDs(workloads)
+      try requireUniqueKeys(workloads) {
+        "\($0.namespace)/\($0.kind.rawValue)/\($0.name)"
+      }
       try requireUniqueIDs(pods)
       try requireUniqueKeys(pods) { "\($0.namespace)/\($0.name)" }
       try requireUniqueIDs(services)
@@ -216,11 +221,17 @@ struct KubernetesResourceInventoryParser: Sendable {
   private func parseWorkload(
     _ item: WorkloadItem
   ) throws -> KubernetesWorkloadRecord {
+    let uid = try validatedText(item.metadata.uid ?? "", maximumLength: 128)
+    let resourceVersion = try validatedText(
+      item.metadata.resourceVersion ?? "",
+      maximumLength: 128
+    )
     let namespace = try validatedName(item.metadata.namespace, maximumLength: 63)
     let name = try validatedName(item.metadata.name)
     guard
       KubernetesResourceReferenceValidator.isNamespace(namespace),
-      KubernetesResourceReferenceValidator.isResourceName(name)
+      KubernetesResourceReferenceValidator.isResourceName(name),
+      KubernetesResourceReferenceValidator.isUID(uid)
     else {
       throw KubernetesClusterError.invalidResourceInventory
     }
@@ -262,6 +273,8 @@ struct KubernetesResourceInventoryParser: Sendable {
     }
 
     return KubernetesWorkloadRecord(
+      uid: uid,
+      resourceVersion: resourceVersion,
       namespace: namespace,
       name: name,
       kind: kind,
@@ -506,6 +519,7 @@ private struct APIList<Item: Decodable>: Decodable {
 
 private struct ResourceMetadata: Decodable {
   let uid: String?
+  let resourceVersion: String?
   let namespace: String?
   let name: String?
 }

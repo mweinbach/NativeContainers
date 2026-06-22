@@ -774,6 +774,8 @@ Primary sources:
 - [Apple TN3179: Understanding local network privacy](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)
 - [Kubernetes: kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/)
 - [Kubernetes: kubectl exec](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_exec/)
+- [Kubernetes: kubectl scale](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_scale/)
+- [Kubernetes: kubectl delete](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_delete/)
 - [K3s quick start](https://docs.k3s.io/quick-start)
 - [K3s requirements](https://docs.k3s.io/installation/requirements)
 - [K3s installer source](https://github.com/k3s-io/k3s/blob/master/install.sh)
@@ -837,6 +839,17 @@ Primary sources:
   bounded UID read must still match before the live session is returned. That
   narrows but cannot eliminate replacement between a check and the upstream
   exec; the product does not describe the name-addressed call as atomic.
+- `kubectl scale` exposes server-checked `--current-replicas` and
+  `--resource-version` preconditions. NativeContainers can therefore make a
+  reviewed Deployment or StatefulSet scale request conditional on the exact
+  UID/resourceVersion and desired count loaded into the browser, rather than
+  issuing a blind name-only mutation. The inventory now projects those two
+  non-secret metadata values and treats UID as the stable SwiftUI identity.
+- `kubectl delete` explicitly performs no resource-version check. Workload or
+  Pod deletion is therefore not bundled into the scale slice: a name-only
+  delete could erase a replacement created after review. It remains blocked
+  until the app uses an API operation with an enforceable UID/resourceVersion
+  precondition and a separately reviewed cascade/grace policy.
 - A 2026-06-22 live pass established an Apple-machine-specific service detail:
   the guest boots under Apple's `vminitd`, not OpenRC or systemd as PID 1. The
   K3s installer can write a valid OpenRC unit, but its ordinary cgroups

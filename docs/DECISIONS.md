@@ -1754,6 +1754,14 @@ inventory whenever lifecycle or machine identity changes. Workload mutation
 and exec remain later reviewed capabilities rather than being smuggled into
 this read-only foundation.
 
+Workload projection includes only two additional mutation-safety values:
+metadata UID and resourceVersion. UID becomes the stable row identity and the
+parser separately rejects duplicate namespace/kind/name tuples. ResourceVersion
+is retained as an opaque bounded string so a later scale action can use
+Kubernetes' server-enforced current-replica and resource-version preconditions.
+Their presence does not itself authorize mutation; the browser remains
+read-only until the reviewed execution and confirmation contract lands.
+
 ## ADR-063: Read Pod logs through an identity-checked bounded snapshot
 
 **Status:** Accepted — 2026-06-22

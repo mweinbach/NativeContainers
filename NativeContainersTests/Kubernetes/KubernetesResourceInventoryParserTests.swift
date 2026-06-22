@@ -15,6 +15,8 @@ struct KubernetesResourceInventoryParserTests {
               {
                 "kind": "Deployment",
                 "metadata": {
+                  "uid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  "resourceVersion": "101",
                   "namespace": "default",
                   "name": "web",
                   "annotations": {
@@ -30,13 +32,23 @@ struct KubernetesResourceInventoryParserTests {
               },
               {
                 "kind": "Job",
-                "metadata": {"namespace": "batch", "name": "migrate"},
+                "metadata": {
+                  "uid": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                  "resourceVersion": "202",
+                  "namespace": "batch",
+                  "name": "migrate"
+                },
                 "spec": {"completions": 1},
                 "status": {"succeeded": 1, "active": 0, "failed": 0}
               },
               {
                 "kind": "DaemonSet",
-                "metadata": {"namespace": "kube-system", "name": "ingress"},
+                "metadata": {
+                  "uid": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                  "resourceVersion": "303",
+                  "namespace": "kube-system",
+                  "name": "ingress"
+                },
                 "status": {
                   "desiredNumberScheduled": 1,
                   "numberReady": 1,
@@ -129,11 +141,12 @@ struct KubernetesResourceInventoryParserTests {
     #expect(inventory.capturedAt == capturedAt)
     #expect(
       inventory.workloads.map(\.id) == [
-        "batch/job/migrate",
-        "default/deployment/web",
-        "kube-system/daemonSet/ingress",
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       ]
     )
+    #expect(inventory.workloads[1].resourceVersion == "101")
     #expect(inventory.workloads[1].desiredCount == 3)
     #expect(inventory.workloads[1].readyCount == 2)
     #expect(inventory.workloads[0].readyCount == 1)
@@ -160,6 +173,39 @@ struct KubernetesResourceInventoryParserTests {
 
   @Test
   func rejectsDuplicateStableResourceIdentity() {
+    let workload = """
+      {
+        "kind": "Deployment",
+        "metadata": {
+          "uid": "66666666-6666-4666-8666-666666666666",
+          "resourceVersion": "601",
+          "namespace": "default",
+          "name": "duplicate"
+        },
+        "spec": {"replicas": 1},
+        "status": {"readyReplicas": 1, "availableReplicas": 1}
+      }
+      """
+    let replacementWorkload =
+      workload
+      .replacingOccurrences(
+        of: "66666666-6666-4666-8666-666666666666",
+        with: "77777777-7777-4777-8777-777777777777"
+      )
+      .replacingOccurrences(of: "601", with: "602")
+    let duplicateWorkloadOutput = inventoryOutput(
+      workloads: "{\"items\":[\(workload),\(replacementWorkload)]}",
+      pods: #"{"items":[]}"#,
+      services: #"{"items":[]}"#
+    )
+
+    #expect(throws: KubernetesClusterError.invalidResourceInventory) {
+      _ = try KubernetesResourceInventoryParser().parse(
+        duplicateWorkloadOutput,
+        capturedAt: .distantPast
+      )
+    }
+
     let duplicatePod = """
       {
         "metadata": {
@@ -220,7 +266,12 @@ struct KubernetesResourceInventoryParserTests {
     let workload = """
       {
         "kind": "Deployment",
-        "metadata": {"namespace": "default", "name": "workload"},
+        "metadata": {
+          "uid": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "resourceVersion": "404",
+          "namespace": "default",
+          "name": "workload"
+        },
         "spec": {"replicas": 1},
         "status": {"readyReplicas": 1, "availableReplicas": 1}
       }

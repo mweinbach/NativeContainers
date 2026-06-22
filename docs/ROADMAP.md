@@ -251,6 +251,13 @@ must leave a usable, test-backed product slice.
   - [x] Explicit-container Pod terminals with exact cluster-machine and Pod API
         identity, allowlisted shell discovery, Apple process-XPC PTY transport,
         native terminal windows, and no arbitrary preset injection.
+  - [ ] Reviewed workload mutation.
+    - [x] Project bounded workload UID/resourceVersion and use UID as stable row
+          identity without admitting environment, annotation, or secret data.
+    - [ ] Scale Deployments/StatefulSets only with exact UID, resource-version,
+          and current-replica preconditions plus authoritative reconciliation.
+    - [ ] Keep restart and delete blocked until their identity, cascade, and
+          grace contracts can fail closed against same-name replacement.
   - [x] Live-provision the gated Alpine machine, verify API reachability and a
         real Deployment, Service, and disposable pod, verify the app-owned
         inventory path, survive a stop/start, then delete the exact machine,
