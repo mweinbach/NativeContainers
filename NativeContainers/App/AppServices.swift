@@ -64,6 +64,7 @@ struct AppServices: Sendable {
   let linuxVirtualMachineRuntime: any LinuxVirtualMachineRuntimeManaging
   let virtualMachineAudio: any MacVirtualMachineAudioManaging
   let virtualMachineNetwork: any MacVirtualMachineNetworkManaging
+  let linuxVirtualMachineNetwork: any LinuxVirtualMachineNetworkManaging
   let virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging
   let linuxVirtualMachineSharedDirectories: any LinuxVirtualMachineSharedDirectoryManaging
   let virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices
@@ -142,6 +143,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineAudioService(),
     virtualMachineNetwork: any MacVirtualMachineNetworkManaging =
       UnavailableMacVirtualMachineNetworkService(),
+    linuxVirtualMachineNetwork: any LinuxVirtualMachineNetworkManaging =
+      UnavailableLinuxVirtualMachineNetworkService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
     linuxVirtualMachineSharedDirectories:
@@ -206,6 +209,7 @@ struct AppServices: Sendable {
     self.linuxVirtualMachineRuntime = linuxVirtualMachineRuntime
     self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineNetwork = virtualMachineNetwork
+    self.linuxVirtualMachineNetwork = linuxVirtualMachineNetwork
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
     self.linuxVirtualMachineSharedDirectories = linuxVirtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages
@@ -274,6 +278,8 @@ struct AppServices: Sendable {
       UnavailableMacVirtualMachineAudioService(),
     virtualMachineNetwork: any MacVirtualMachineNetworkManaging =
       UnavailableMacVirtualMachineNetworkService(),
+    linuxVirtualMachineNetwork: any LinuxVirtualMachineNetworkManaging =
+      UnavailableLinuxVirtualMachineNetworkService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
     linuxVirtualMachineSharedDirectories:
@@ -338,6 +344,7 @@ struct AppServices: Sendable {
     self.linuxVirtualMachineRuntime = linuxVirtualMachineRuntime
     self.virtualMachineAudio = virtualMachineAudio
     self.virtualMachineNetwork = virtualMachineNetwork
+    self.linuxVirtualMachineNetwork = linuxVirtualMachineNetwork
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
     self.linuxVirtualMachineSharedDirectories = linuxVirtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages

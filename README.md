@@ -48,8 +48,8 @@ persistent build history, and macOS restore-image preparation, installation,
 generation-safe runtime/console controls, per-VM opt-in host audio input that
 resets on clone/export, host audio output, same-host suspend,
 persistent macOS and GUI Linux VirtioFS shares, per-VM automatic
-NAT/shared/host-only networking,
-and stopped-only macOS and GUI Linux VM cloning with fresh guest-specific
+NAT/shared/host-only networking for both guest families, and stopped-only
+macOS and GUI Linux VM cloning with fresh guest-specific
 platform identity and cancellable APFS/sparse transfer. Portable VM package
 export/import supports both guests, identity-preserving restore, or an explicit
 fresh-identity copy, with cancellable transaction cleanup and no destination

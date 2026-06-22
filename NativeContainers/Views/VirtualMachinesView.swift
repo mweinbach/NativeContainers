@@ -307,6 +307,7 @@ private struct GuestVirtualMachineConfigurationView: View {
       LinuxVirtualMachineConfigurationView(
         machine: machine,
         runtime: model.makeLinuxVirtualMachineRuntimeModel(for: machine),
+        network: model.makeLinuxVirtualMachineNetworkModel(for: machine),
         sharedDirectories: model.makeLinuxVirtualMachineSharedDirectoriesModel(
           for: machine
         )

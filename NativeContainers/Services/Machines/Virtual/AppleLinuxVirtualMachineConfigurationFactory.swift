@@ -14,6 +14,7 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
   private let sharedDirectoryBookmarkService:
     any LinuxVirtualMachineSharedDirectoryBookmarkResolving
   private let sharedDirectoryDeviceFactory: AppleLinuxVirtualMachineSharedDirectoryDeviceFactory
+  private let networkDeviceFactory: AppleVirtualMachineNetworkDeviceFactory
 
   init(
     sharedDirectoryBookmarkService:
@@ -21,10 +22,13 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
       LinuxVirtualMachineSharedDirectoryBookmarkService(),
     sharedDirectoryDeviceFactory:
       AppleLinuxVirtualMachineSharedDirectoryDeviceFactory =
-      AppleLinuxVirtualMachineSharedDirectoryDeviceFactory()
+      AppleLinuxVirtualMachineSharedDirectoryDeviceFactory(),
+    networkDeviceFactory: AppleVirtualMachineNetworkDeviceFactory =
+      AppleVirtualMachineNetworkDeviceFactory()
   ) {
     self.sharedDirectoryBookmarkService = sharedDirectoryBookmarkService
     self.sharedDirectoryDeviceFactory = sharedDirectoryDeviceFactory
+    self.networkDeviceFactory = networkDeviceFactory
   }
 
   func makeConfiguration(
@@ -90,9 +94,10 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
       )
     ]
 
-    let network = VZVirtioNetworkDeviceConfiguration()
-    network.macAddress = macAddress
-    network.attachment = VZNATNetworkDeviceAttachment()
+    let network = try networkDeviceFactory.makeDevice(
+      configuration: machine.manifest.effectiveNetworkConfiguration,
+      macAddress: macAddress.string
+    )
 
     let outputStream = VZVirtioSoundDeviceOutputStreamConfiguration()
     outputStream.sink = VZHostAudioOutputStreamSink()

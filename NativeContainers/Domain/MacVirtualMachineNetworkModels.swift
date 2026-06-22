@@ -1,6 +1,6 @@
 import Foundation
 
-enum MacVirtualMachineNetworkAttachment:
+enum VirtualMachineNetworkAttachment:
   String,
   Codable,
   CaseIterable,
@@ -17,43 +17,43 @@ enum MacVirtualMachineNetworkAttachment:
   }
 }
 
-struct MacVirtualMachineNetworkConfiguration: Codable, Equatable, Sendable {
-  static let nat = MacVirtualMachineNetworkConfiguration()
+struct VirtualMachineNetworkConfiguration: Codable, Equatable, Sendable {
+  static let nat = VirtualMachineNetworkConfiguration()
 
   let revision: UInt64
-  let attachment: MacVirtualMachineNetworkAttachment
+  let attachment: VirtualMachineNetworkAttachment
 
   init(
     revision: UInt64 = 0,
-    attachment: MacVirtualMachineNetworkAttachment = .nat
+    attachment: VirtualMachineNetworkAttachment = .nat
   ) {
     self.revision = revision
     self.attachment = attachment
   }
 
   func settingAttachment(
-    _ attachment: MacVirtualMachineNetworkAttachment
-  ) throws -> MacVirtualMachineNetworkConfiguration {
+    _ attachment: VirtualMachineNetworkAttachment
+  ) throws -> VirtualMachineNetworkConfiguration {
     guard attachment != self.attachment else { return self }
     guard revision < UInt64.max else {
-      throw MacVirtualMachineNetworkError.configurationRevisionOverflow
+      throw VirtualMachineNetworkError.configurationRevisionOverflow
     }
-    return MacVirtualMachineNetworkConfiguration(
+    return VirtualMachineNetworkConfiguration(
       revision: revision + 1,
       attachment: attachment
     )
   }
 }
 
-struct MacVirtualMachineNetworkSnapshot: Equatable, Sendable {
-  let configuration: MacVirtualMachineNetworkConfiguration
+struct VirtualMachineNetworkSnapshot: Equatable, Sendable {
+  let configuration: VirtualMachineNetworkConfiguration
 }
 
-enum MacVirtualMachineNetworkError: LocalizedError, Equatable, Sendable {
+enum VirtualMachineNetworkError: LocalizedError, Equatable, Sendable {
   case unavailable
   case configurationRevisionOverflow
   case savedStateBlocksChanges(UUID)
-  case vmnetNetworkCreationFailed(MacVirtualMachineNetworkAttachment, Int)
+  case vmnetNetworkCreationFailed(VirtualMachineNetworkAttachment, Int)
   case invalidMACAddress(String)
 
   var errorDescription: String? {
@@ -72,7 +72,7 @@ enum MacVirtualMachineNetworkError: LocalizedError, Equatable, Sendable {
   }
 }
 
-extension MacVirtualMachineNetworkAttachment {
+extension VirtualMachineNetworkAttachment {
   fileprivate var displayName: String {
     switch self {
     case .nat:
@@ -84,3 +84,12 @@ extension MacVirtualMachineNetworkAttachment {
     }
   }
 }
+
+typealias MacVirtualMachineNetworkAttachment = VirtualMachineNetworkAttachment
+typealias LinuxVirtualMachineNetworkAttachment = VirtualMachineNetworkAttachment
+typealias MacVirtualMachineNetworkConfiguration = VirtualMachineNetworkConfiguration
+typealias LinuxVirtualMachineNetworkConfiguration = VirtualMachineNetworkConfiguration
+typealias MacVirtualMachineNetworkSnapshot = VirtualMachineNetworkSnapshot
+typealias LinuxVirtualMachineNetworkSnapshot = VirtualMachineNetworkSnapshot
+typealias MacVirtualMachineNetworkError = VirtualMachineNetworkError
+typealias LinuxVirtualMachineNetworkError = VirtualMachineNetworkError

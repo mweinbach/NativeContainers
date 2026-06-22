@@ -203,12 +203,17 @@ enum AppCompositionRoot {
       importStore: virtualMachineLibrary,
       preparer: virtualMachineBundlePreparer
     )
-    let virtualMachineNetworkPool = AppleMacVirtualMachineVmnetNetworkPool()
-    let virtualMachineConfigurationFactory = AppleMacVirtualMachineConfigurationFactory(
-      networkDeviceFactory: AppleMacVirtualMachineNetworkDeviceFactory(
-        vmnetNetworks: virtualMachineNetworkPool
-      )
+    let virtualMachineNetworkPool = AppleVirtualMachineVmnetNetworkPool()
+    let virtualMachineNetworkDeviceFactory = AppleVirtualMachineNetworkDeviceFactory(
+      vmnetNetworks: virtualMachineNetworkPool
     )
+    let virtualMachineConfigurationFactory = AppleMacVirtualMachineConfigurationFactory(
+      networkDeviceFactory: virtualMachineNetworkDeviceFactory
+    )
+    let linuxVirtualMachineConfigurationFactory =
+      AppleLinuxVirtualMachineConfigurationFactory(
+        networkDeviceFactory: virtualMachineNetworkDeviceFactory
+      )
     let virtualMachineInstaller = MacVirtualMachineInstallationService(
       store: virtualMachineLibrary,
       engine: AppleMacVirtualMachineInstallationEngine(
@@ -282,7 +287,9 @@ enum AppCompositionRoot {
     let linuxVirtualMachineRuntime = LinuxVirtualMachineRuntimeService(
       leasingStore: virtualMachineLibrary,
       installationStore: virtualMachineLibrary,
-      engine: AppleLinuxVirtualMachineRuntimeEngine()
+      engine: AppleLinuxVirtualMachineRuntimeEngine(
+        configurationFactory: linuxVirtualMachineConfigurationFactory
+      )
     )
     let virtualMachineAudio = MacVirtualMachineAudioService(
       leasingStore: virtualMachineLibrary,
@@ -293,6 +300,10 @@ enum AppCompositionRoot {
       leasingStore: virtualMachineLibrary,
       persistence: virtualMachineLibrary,
       savedStateService: virtualMachineSavedState
+    )
+    let linuxVirtualMachineNetwork = LinuxVirtualMachineNetworkService(
+      leasingStore: virtualMachineLibrary,
+      persistence: virtualMachineLibrary
     )
     let virtualMachineDiskSnapshots = MacVirtualMachineDiskSnapshotService(
       leasingStore: virtualMachineLibrary,
@@ -378,6 +389,7 @@ enum AppCompositionRoot {
       linuxVirtualMachineRuntime: linuxVirtualMachineRuntime,
       virtualMachineAudio: virtualMachineAudio,
       virtualMachineNetwork: virtualMachineNetwork,
+      linuxVirtualMachineNetwork: linuxVirtualMachineNetwork,
       virtualMachineSharedDirectories: virtualMachineSharedDirectories,
       linuxVirtualMachineSharedDirectories: linuxVirtualMachineSharedDirectories,
       virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(

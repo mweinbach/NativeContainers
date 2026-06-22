@@ -11,14 +11,17 @@ protocol MacVirtualMachineNetworkConfigurationPersisting: Sendable {
   ) async throws -> MacVirtualMachineNetworkConfiguration
 }
 
-protocol MacVirtualMachineNetworkManaging: Sendable {
-  func snapshot(id: UUID) async throws -> MacVirtualMachineNetworkSnapshot
+protocol VirtualMachineNetworkManaging: Sendable {
+  func snapshot(id: UUID) async throws -> VirtualMachineNetworkSnapshot
 
   func setAttachment(
-    _ attachment: MacVirtualMachineNetworkAttachment,
+    _ attachment: VirtualMachineNetworkAttachment,
     for machineID: UUID
-  ) async throws -> MacVirtualMachineNetworkSnapshot
+  ) async throws -> VirtualMachineNetworkSnapshot
 }
+
+typealias MacVirtualMachineNetworkManaging = VirtualMachineNetworkManaging
+typealias LinuxVirtualMachineNetworkManaging = VirtualMachineNetworkManaging
 
 struct UnavailableMacVirtualMachineNetworkService:
   MacVirtualMachineNetworkManaging
@@ -80,5 +83,65 @@ actor MacVirtualMachineNetworkService: MacVirtualMachineNetworkManaging {
         lease.target.machineID
       )
     }
+  }
+}
+
+protocol LinuxVirtualMachineNetworkConfigurationPersisting: Sendable {
+  func linuxNetworkConfiguration(
+    id: UUID
+  ) async throws -> LinuxVirtualMachineNetworkConfiguration
+
+  func setLinuxNetworkAttachment(
+    _ attachment: LinuxVirtualMachineNetworkAttachment,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineNetworkConfiguration
+}
+
+struct UnavailableLinuxVirtualMachineNetworkService:
+  LinuxVirtualMachineNetworkManaging
+{
+  func snapshot(id: UUID) async throws -> LinuxVirtualMachineNetworkSnapshot {
+    throw LinuxVirtualMachineNetworkError.unavailable
+  }
+
+  func setAttachment(
+    _ attachment: LinuxVirtualMachineNetworkAttachment,
+    for machineID: UUID
+  ) async throws -> LinuxVirtualMachineNetworkSnapshot {
+    throw LinuxVirtualMachineNetworkError.unavailable
+  }
+}
+
+actor LinuxVirtualMachineNetworkService: LinuxVirtualMachineNetworkManaging {
+  private let leasingStore: any LinuxVirtualMachineRuntimeLeasing
+  private let persistence: any LinuxVirtualMachineNetworkConfigurationPersisting
+
+  init(
+    leasingStore: any LinuxVirtualMachineRuntimeLeasing,
+    persistence: any LinuxVirtualMachineNetworkConfigurationPersisting
+  ) {
+    self.leasingStore = leasingStore
+    self.persistence = persistence
+  }
+
+  func snapshot(id: UUID) async throws -> LinuxVirtualMachineNetworkSnapshot {
+    LinuxVirtualMachineNetworkSnapshot(
+      configuration: try await persistence.linuxNetworkConfiguration(id: id)
+    )
+  }
+
+  func setAttachment(
+    _ attachment: LinuxVirtualMachineNetworkAttachment,
+    for machineID: UUID
+  ) async throws -> LinuxVirtualMachineNetworkSnapshot {
+    let lease = try await leasingStore.acquireLinuxRuntime(id: machineID)
+    defer { lease.release() }
+
+    return LinuxVirtualMachineNetworkSnapshot(
+      configuration: try await persistence.setLinuxNetworkAttachment(
+        attachment,
+        for: lease
+      )
+    )
   }
 }

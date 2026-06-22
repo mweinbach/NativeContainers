@@ -329,6 +329,7 @@ struct VirtualMachineTransferServiceTests {
       library: fixture.sourceLibrary,
       libraryRoot: fixture.sourceLibraryRoot,
       name: "Portable Linux",
+      networkAttachment: .hostOnly,
       includeHostLocalState: true
     )
     let sourceBundle = fixture.bundleURL(root: fixture.sourceLibraryRoot, id: source.id)
@@ -348,6 +349,9 @@ struct VirtualMachineTransferServiceTests {
 
     #expect(packaged == source.portableRepresentation())
     #expect(packaged.guest == .linux)
+    #expect(source.effectiveNetworkConfiguration.attachment == .hostOnly)
+    #expect(packaged.networkConfiguration == nil)
+    #expect(packaged.effectiveNetworkConfiguration == .nat)
     #expect(packaged.linuxConfiguration?.macAddress == sourceConfiguration.macAddress)
     #expect(
       try fixture.linuxMachineIdentifier(in: package, manifest: packaged)
@@ -826,6 +830,7 @@ private struct VirtualMachineTransferFixture {
     name: String,
     machineIdentifier: Data? = nil,
     macAddress: String? = nil,
+    networkAttachment: LinuxVirtualMachineNetworkAttachment? = nil,
     includeHostLocalState: Bool = false
   ) async throws -> VirtualMachineManifest {
     let draft = try await library.createDraft(
@@ -863,6 +868,11 @@ private struct VirtualMachineTransferFixture {
       macAddress: macAddress ?? identityGenerator.makeMACAddress(),
       sharesClipboard: true
     )
+    if let networkAttachment {
+      stopped.networkConfiguration = LinuxVirtualMachineNetworkConfiguration(
+        attachment: networkAttachment
+      )
+    }
     try write(stopped, to: bundle)
 
     if includeHostLocalState {

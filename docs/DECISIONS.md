@@ -2283,3 +2283,30 @@ Same-host clone retains shared-folder capability; portable export removes it.
 The native Linux row exposes Clone and Export only while the installed guest is
 stopped and unowned, and the existing import sheet offers identity-preserving
 restore or fresh-identity copy without learning platform internals.
+
+## ADR-080: Share app-owned vmnet topology across GUI guest families
+
+**Status:** Accepted — 2026-06-22
+
+ADR-048's automatic NAT, shared, and host-only modes now apply to both macOS and
+GUI Linux VMs. `VZVmnetNetworkDeviceAttachment` belongs to Virtualization's
+common network-device surface, and Apple's vmnet shared/host modes describe
+guest interfaces without constraining the guest platform. NativeContainers
+therefore keeps one process-owned logical network per custom mode and injects
+the same focused device factory into macOS installation/runtime and Linux
+runtime configuration factories. A macOS and Linux guest selecting shared mode
+join the same logical network rather than isolated guest-specific pools.
+
+Persistence remains guest-specific. Each mode change acquires that guest's
+generation-pinned stopped runtime lease, revalidates the manifest observed by
+the lease, advances the existing network revision, and atomically writes the
+manifest. macOS still rejects a saved checkpoint and fingerprints the revision;
+Linux has no saved-memory lane and needs no synthetic checkpoint rule. The
+shared SwiftUI mode selector receives only a snapshot, a guest-specific lock
+message, and a typed action.
+
+Custom vmnet objects remain process-local and changes apply on the next cold
+start. Same-host clones preserve the explicit mode. Portable export/import
+clears it to automatic NAT for both guest families, while retaining Linux's
+stable MAC separately. Physical bridging remains excluded because the target
+does not carry its restricted entitlement.

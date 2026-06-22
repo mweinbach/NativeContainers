@@ -94,6 +94,7 @@ actor VirtualMachineLibrary:
   LinuxVirtualMachineSharedDirectoryPersisting,
   MacVirtualMachineAudioConfigurationPersisting,
   MacVirtualMachineNetworkConfigurationPersisting,
+  LinuxVirtualMachineNetworkConfigurationPersisting,
   MacVirtualMachineDiskSnapshotPersisting,
   VirtualMachineDiskImageReplacementStoring
 {
@@ -338,6 +339,38 @@ actor VirtualMachineLibrary:
 
     guard current == lease.machine.manifest.effectiveNetworkConfiguration else {
       throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    let updated = try current.settingAttachment(attachment)
+    guard updated != current else { return current }
+
+    manifest.networkConfiguration = updated
+    manifest.updatedAt = Date()
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
+    )
+    return updated
+  }
+
+  func linuxNetworkConfiguration(
+    id: UUID
+  ) throws -> LinuxVirtualMachineNetworkConfiguration {
+    try linuxRuntimeManifest(id: id).effectiveNetworkConfiguration
+  }
+
+  func setLinuxNetworkAttachment(
+    _ attachment: LinuxVirtualMachineNetworkAttachment,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) throws -> LinuxVirtualMachineNetworkConfiguration {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try linuxRuntimeManifest(id: lease.target.machineID)
+    let current = manifest.effectiveNetworkConfiguration
+
+    guard current == lease.machine.manifest.effectiveNetworkConfiguration else {
+      throw LinuxVirtualMachineRuntimeError.staleTarget(lease.target)
     }
 
     let updated = try current.settingAttachment(attachment)

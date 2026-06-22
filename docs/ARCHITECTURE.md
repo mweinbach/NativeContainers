@@ -1109,24 +1109,27 @@ than sharing presentation state across an implied multi-window group.
   checkpoint. Clone and portable-manifest constructors erase the host-local
   opt-in, so copied or imported VMs require a fresh Connect action. The app model
   and view receive only snapshots and actions.
-- macOS VM networking follows the same boundary. A manifest-backed domain value
-  selects automatic NAT, shared, or host-only attachment; a lease-aware service
-  owns stopped-only persistence and rejects saved-state conflicts; an app-owned
-  pool creates and retains one `vmnet_network_ref` per custom mode; and a focused
-  factory is the only layer that constructs `VZNATNetworkDeviceAttachment` or
-  `VZVmnetNetworkDeviceAttachment`. The composition root shares the pool between
-  installation and runtime factories so every VM in the process joins the same
-  logical network for its selected mode. SwiftUI receives only the current mode
-  and invokes service actions.
+- VM networking follows the same boundary for macOS and GUI Linux. One
+  manifest-backed domain value selects automatic NAT, shared, or host-only
+  attachment. Guest-specific lease-aware services own stopped-only persistence;
+  the macOS lane additionally rejects saved-state conflicts. An app-owned pool
+  creates and retains one `vmnet_network_ref` per custom mode, and a focused
+  guest-neutral factory is the only layer that constructs
+  `VZNATNetworkDeviceAttachment` or `VZVmnetNetworkDeviceAttachment`. The
+  composition root shares the pool across macOS installation/runtime and Linux
+  runtime factories, so either guest family selecting the same mode joins the
+  same logical network. SwiftUI receives only the current mode and invokes
+  service actions.
 - Shared and host-only vmnet networks are process-owned and recreated after app
   relaunch. Their runtime configurations therefore report save/restore as
   unsupported rather than persisting guest memory against a vanished logical
-  network. Every mode change advances a revision included in the saved-state
-  descriptor, so toggling back cannot validate an older checkpoint. Same-host
-  clones retain the selected mode; portable package preparation clears it to
-  automatic NAT. Physical bridging is deliberately excluded because its
-  restricted entitlement is not available through the target capability
-  surface.
+  network. Every macOS mode change advances a revision included in the
+  saved-state descriptor, so toggling back cannot validate an older checkpoint;
+  Linux retains the same revisioned persistence without offering saved memory.
+  Same-host clones of either guest retain the selected mode; portable package
+  preparation clears it to automatic NAT. Physical bridging is deliberately
+  excluded because its restricted entitlement is not available through the
+  target capability surface.
 - Physical USB is a separate host-local service lane. AccessoryAccess owns
   discovery and system authorization; a focused Apple adapter parses only the
   stable registry ID and standard device descriptor needed by the domain. The

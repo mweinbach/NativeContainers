@@ -13,15 +13,17 @@ struct MacVirtualMachineNetworkSection: View {
       runtime: runtime.snapshot,
       diskMaintenanceIsBusy: diskMaintenanceIsBusy
     )
-    MacVirtualMachineNetworkContent(
+    VirtualMachineNetworkContent(
+      guest: .macOS,
       attachment: network.attachment,
       isLoading: network.isLoading,
       isWorking: network.isWorking,
-      editBlock: editBlock,
+      editMessage: editBlock?.message,
       select: { attachment in
         Task { await network.use(attachment) }
       },
-      discardSavedState: discardSavedState
+      discardSavedState: editBlock == .savedStatePresent
+        ? discardSavedState : nil
     )
     .task {
       await network.load()
@@ -29,41 +31,44 @@ struct MacVirtualMachineNetworkSection: View {
   }
 }
 
-private struct MacVirtualMachineNetworkContent: View {
-  let attachment: MacVirtualMachineNetworkAttachment
+struct VirtualMachineNetworkContent: View {
+  let guest: VirtualMachineGuest
+  let attachment: VirtualMachineNetworkAttachment
   let isLoading: Bool
   let isWorking: Bool
-  let editBlock: MacVirtualMachineConfigurationEditBlock?
-  let select: (MacVirtualMachineNetworkAttachment) -> Void
+  let editMessage: LocalizedStringResource?
+  let select: (VirtualMachineNetworkAttachment) -> Void
   let discardSavedState: (() -> Void)?
 
   var body: some View {
     GroupBox {
       VStack(alignment: .leading, spacing: 0) {
-        if let editBlock {
-          MacVirtualMachineConfigurationEditLockBanner(
-            message: editBlock.message,
-            discardSavedState: editBlock == .savedStatePresent
-              ? discardSavedState : nil
+        if let editMessage {
+          VirtualMachineConfigurationEditLockBanner(
+            message: editMessage,
+            discardSavedState: discardSavedState
           )
           .padding(.vertical, 8)
           Divider()
         }
 
-        ForEach(MacVirtualMachineNetworkAttachment.allCases, id: \.self) { option in
-          MacVirtualMachineNetworkOptionRow(
+        ForEach(VirtualMachineNetworkAttachment.allCases, id: \.self) { option in
+          VirtualMachineNetworkOptionRow(
             option: option,
             isSelected: option == attachment,
-            canEdit: editBlock == nil && !isLoading && !isWorking,
+            canEdit: editMessage == nil && !isLoading && !isWorking,
             select: { select(option) }
           )
-          if option != MacVirtualMachineNetworkAttachment.allCases.last {
+          if option != VirtualMachineNetworkAttachment.allCases.last {
             Divider()
           }
         }
 
         Divider()
-        MacVirtualMachineNetworkGuidance(attachment: attachment)
+        VirtualMachineNetworkGuidance(
+          guest: guest,
+          attachment: attachment
+        )
       }
       .padding(.horizontal, 4)
     } label: {
@@ -80,8 +85,8 @@ private struct MacVirtualMachineNetworkContent: View {
   }
 }
 
-private struct MacVirtualMachineNetworkOptionRow: View {
-  let option: MacVirtualMachineNetworkAttachment
+private struct VirtualMachineNetworkOptionRow: View {
+  let option: VirtualMachineNetworkAttachment
   let isSelected: Bool
   let canEdit: Bool
   let select: () -> Void
@@ -130,12 +135,13 @@ private struct MacVirtualMachineNetworkOptionRow: View {
   }
 }
 
-private struct MacVirtualMachineNetworkGuidance: View {
-  let attachment: MacVirtualMachineNetworkAttachment
+private struct VirtualMachineNetworkGuidance: View {
+  let guest: VirtualMachineGuest
+  let attachment: VirtualMachineNetworkAttachment
 
   var body: some View {
     Label {
-      Text(attachment.guidance)
+      Text(guidance)
     } icon: {
       Image(
         systemName: attachment.usesCustomVmnetNetwork
@@ -146,10 +152,27 @@ private struct MacVirtualMachineNetworkGuidance: View {
     .foregroundStyle(attachment.usesCustomVmnetNetwork ? .orange : .secondary)
     .padding(.vertical, 10)
   }
+
+  private var guidance: LocalizedStringResource {
+    switch (guest, attachment) {
+    case (.macOS, .nat):
+      "NAT is portable and supports suspend. Network changes apply on the next cold start."
+    case (.macOS, .shared):
+      "NativeContainers recreates this shared network when the app launches. Suspend is unavailable in this mode."
+    case (.macOS, .hostOnly):
+      "NativeContainers recreates this isolated network when the app launches. Suspend and external access are unavailable."
+    case (.linux, .nat):
+      "NAT is portable. Network changes apply on the next cold start."
+    case (.linux, .shared):
+      "NativeContainers recreates this shared network when the app launches. Changes apply on the next cold start."
+    case (.linux, .hostOnly):
+      "NativeContainers recreates this isolated network when the app launches. External access is unavailable."
+    }
+  }
 }
 
-extension MacVirtualMachineNetworkAttachment {
-  fileprivate var title: String {
+extension VirtualMachineNetworkAttachment {
+  fileprivate var title: LocalizedStringResource {
     switch self {
     case .nat:
       "Automatic NAT"
@@ -160,7 +183,7 @@ extension MacVirtualMachineNetworkAttachment {
     }
   }
 
-  fileprivate var summary: String {
+  fileprivate var summary: LocalizedStringResource {
     switch self {
     case .nat:
       "Private guest with outbound access through this Mac"
@@ -168,17 +191,6 @@ extension MacVirtualMachineNetworkAttachment {
       "VMs can reach each other, this Mac, and the internet"
     case .hostOnly:
       "VMs can reach each other and this Mac, without internet access"
-    }
-  }
-
-  fileprivate var guidance: String {
-    switch self {
-    case .nat:
-      "NAT is portable and supports suspend. Network changes apply on the next cold start."
-    case .shared:
-      "NativeContainers recreates this shared network when the app launches. Suspend is unavailable in this mode."
-    case .hostOnly:
-      "NativeContainers recreates this isolated network when the app launches. Suspend and external access are unavailable."
     }
   }
 
@@ -206,11 +218,12 @@ extension MacVirtualMachineNetworkAttachment {
 }
 
 #Preview("Automatic NAT") {
-  MacVirtualMachineNetworkContent(
+  VirtualMachineNetworkContent(
+    guest: .macOS,
     attachment: .nat,
     isLoading: false,
     isWorking: false,
-    editBlock: nil,
+    editMessage: nil,
     select: { _ in },
     discardSavedState: nil
   )
@@ -219,11 +232,12 @@ extension MacVirtualMachineNetworkAttachment {
 }
 
 #Preview("Shared VM network · Dark") {
-  MacVirtualMachineNetworkContent(
+  VirtualMachineNetworkContent(
+    guest: .macOS,
     attachment: .shared,
     isLoading: false,
     isWorking: false,
-    editBlock: nil,
+    editMessage: nil,
     select: { _ in },
     discardSavedState: nil
   )
@@ -233,13 +247,28 @@ extension MacVirtualMachineNetworkAttachment {
 }
 
 #Preview("Host-only network locked") {
-  MacVirtualMachineNetworkContent(
+  VirtualMachineNetworkContent(
+    guest: .macOS,
     attachment: .hostOnly,
     isLoading: false,
     isWorking: false,
-    editBlock: .savedStatePresent,
+    editMessage: MacVirtualMachineConfigurationEditBlock.savedStatePresent.message,
     select: { _ in },
     discardSavedState: {}
+  )
+  .padding(24)
+  .frame(width: 650)
+}
+
+#Preview("Linux shared network") {
+  VirtualMachineNetworkContent(
+    guest: .linux,
+    attachment: .shared,
+    isLoading: false,
+    isWorking: false,
+    editMessage: nil,
+    select: { _ in },
+    discardSavedState: nil
   )
   .padding(24)
   .frame(width: 650)

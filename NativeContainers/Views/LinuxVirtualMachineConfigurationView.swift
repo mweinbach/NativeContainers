@@ -3,6 +3,7 @@ import SwiftUI
 struct LinuxVirtualMachineConfigurationView: View {
   let machine: VirtualMachineManifest
   let runtime: LinuxVirtualMachineRuntimeModel
+  let network: LinuxVirtualMachineNetworkModel
   let sharedDirectories: LinuxVirtualMachineSharedDirectoriesModel
 
   var body: some View {
@@ -18,18 +19,29 @@ struct LinuxVirtualMachineConfigurationView: View {
           configuration: machine.linuxConfiguration,
           hasLiveInstallationMedia: runtime.snapshot.hasInstallationMedia
         )
+        LinuxVirtualMachineNetworkSection(
+          installState: machine.installState,
+          isPrepared: machine.linuxConfiguration != nil,
+          runtimeState: runtime.snapshot.state,
+          hasActiveRuntime: runtime.snapshot.target != nil,
+          network: network
+        )
         LinuxVirtualMachineConnectivitySection(
-          configuration: machine.linuxConfiguration
+          macAddress: machine.linuxConfiguration?.macAddress,
+          sharesClipboard: machine.linuxConfiguration?.sharesClipboard == true
         )
         LinuxVirtualMachineSharedDirectoriesView(
           runtimeState: runtime.snapshot.state,
           hasActiveRuntime: runtime.snapshot.target != nil,
           sharedDirectories: sharedDirectories
         )
-        if let errorMessage = runtime.errorMessage {
+        if let errorMessage = network.errorMessage ?? runtime.errorMessage {
           LinuxVirtualMachineConfigurationErrorBanner(
             message: errorMessage,
-            dismiss: runtime.clearActionError
+            dismiss: {
+              network.clearError()
+              runtime.clearActionError()
+            }
           )
         }
       }
@@ -39,6 +51,51 @@ struct LinuxVirtualMachineConfigurationView: View {
     }
     .navigationTitle(machine.name)
     .task { runtime.observe() }
+  }
+}
+
+private struct LinuxVirtualMachineNetworkSection: View {
+  let installState: VirtualMachineInstallState
+  let isPrepared: Bool
+  let runtimeState: LinuxVirtualMachineRuntimeState
+  let hasActiveRuntime: Bool
+  let network: LinuxVirtualMachineNetworkModel
+
+  var body: some View {
+    VirtualMachineNetworkContent(
+      guest: .linux,
+      attachment: network.attachment,
+      isLoading: network.isLoading,
+      isWorking: network.isWorking,
+      editMessage: editMessage,
+      select: { attachment in
+        Task { await network.use(attachment) }
+      },
+      discardSavedState: nil
+    )
+    .task {
+      await network.load()
+    }
+  }
+
+  private var editMessage: LocalizedStringResource? {
+    guard isPrepared,
+      installState == .readyToInstall || installState == .stopped
+    else {
+      return "Finish preparing this VM before changing its network."
+    }
+    guard !hasActiveRuntime else {
+      return "Shut down this VM before changing its network."
+    }
+    switch runtimeState {
+    case .stopped:
+      return nil
+    case .ownedElsewhere:
+      return "Another NativeContainers process owns this VM."
+    case .starting, .running, .pausing, .paused, .resuming,
+      .ejectingInstallationMedia, .stopping:
+      return "Wait for this VM to finish changing state."
+    }
   }
 }
 
@@ -137,14 +194,14 @@ private struct LinuxVirtualMachineBootSection: View {
 }
 
 private struct LinuxVirtualMachineConnectivitySection: View {
-  let configuration: LinuxVirtualMachineConfiguration?
+  let macAddress: String?
+  let sharesClipboard: Bool
 
   var body: some View {
     GroupBox("Connectivity") {
       VStack(alignment: .leading, spacing: 10) {
-        LabeledContent("Network", value: "NAT")
         LabeledContent("MAC address") {
-          if let macAddress = configuration?.macAddress {
+          if let macAddress {
             Text(macAddress)
           } else {
             Text("Not prepared")
@@ -162,7 +219,7 @@ private struct LinuxVirtualMachineConnectivitySection: View {
   }
 
   private var sharedClipboardLabel: LocalizedStringResource {
-    configuration?.sharesClipboard == true ? "Enabled" : "Disabled"
+    sharesClipboard ? "Enabled" : "Disabled"
   }
 }
 

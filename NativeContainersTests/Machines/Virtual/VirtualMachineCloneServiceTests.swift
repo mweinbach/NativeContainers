@@ -165,7 +165,8 @@ struct VirtualMachineCloneServiceTests {
     let source = try await makeStoppedLinuxMachine(
       library: library,
       root: root,
-      name: "Source Linux"
+      name: "Source Linux",
+      networkAttachment: .shared
     )
     let sourceBundle = bundleURL(root: root, id: source.id)
     let sourceConfiguration = try #require(source.linuxConfiguration)
@@ -188,6 +189,8 @@ struct VirtualMachineCloneServiceTests {
     #expect(clone.installState == .stopped)
     #expect(cloneConfiguration.installationMediaPath == nil)
     #expect(cloneConfiguration.sharesClipboard == sourceConfiguration.sharesClipboard)
+    #expect(clone.effectiveNetworkConfiguration.attachment == .shared)
+    #expect(clone.networkConfiguration == source.networkConfiguration)
     #expect(cloneIdentifier != sourceIdentifier)
     #expect(identityGenerator.isValidIdentifierData(cloneIdentifier))
     #expect(
@@ -450,7 +453,8 @@ struct VirtualMachineCloneServiceTests {
   private func makeStoppedLinuxMachine(
     library: VirtualMachineLibrary,
     root: URL,
-    name: String
+    name: String,
+    networkAttachment: LinuxVirtualMachineNetworkAttachment? = nil
   ) async throws -> VirtualMachineManifest {
     let draft = try await library.createDraft(
       name: name,
@@ -481,6 +485,11 @@ struct VirtualMachineCloneServiceTests {
       macAddress: identityGenerator.makeMACAddress(),
       sharesClipboard: true
     )
+    if let networkAttachment {
+      stopped.networkConfiguration = LinuxVirtualMachineNetworkConfiguration(
+        attachment: networkAttachment
+      )
+    }
     try write(stopped, to: bundle)
     return stopped
   }

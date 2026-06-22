@@ -3,21 +3,21 @@ import Observation
 
 @MainActor
 @Observable
-final class MacVirtualMachineNetworkModel {
+final class VirtualMachineNetworkModel {
   let machineID: UUID
 
-  private(set) var attachment: MacVirtualMachineNetworkAttachment
+  private(set) var attachment: VirtualMachineNetworkAttachment
   private(set) var isLoading = false
   private(set) var isWorking = false
   private(set) var errorMessage: String?
 
-  private let service: any MacVirtualMachineNetworkManaging
+  private let service: any VirtualMachineNetworkManaging
   @ObservationIgnored private var hasLoaded = false
 
   init(
     machineID: UUID,
-    initialConfiguration: MacVirtualMachineNetworkConfiguration = .nat,
-    service: any MacVirtualMachineNetworkManaging
+    initialConfiguration: VirtualMachineNetworkConfiguration = .nat,
+    service: any VirtualMachineNetworkManaging
   ) {
     self.machineID = machineID
     attachment = initialConfiguration.attachment
@@ -40,7 +40,7 @@ final class MacVirtualMachineNetworkModel {
   }
 
   @discardableResult
-  func use(_ attachment: MacVirtualMachineNetworkAttachment) async -> Bool {
+  func use(_ attachment: VirtualMachineNetworkAttachment) async -> Bool {
     guard !isLoading, !isWorking, attachment != self.attachment else {
       return false
     }
@@ -68,7 +68,10 @@ final class MacVirtualMachineNetworkModel {
     errorMessage = nil
   }
 
-  private func apply(_ snapshot: MacVirtualMachineNetworkSnapshot) {
+  private func apply(_ snapshot: VirtualMachineNetworkSnapshot) {
     attachment = snapshot.configuration.attachment
   }
 }
+
+typealias MacVirtualMachineNetworkModel = VirtualMachineNetworkModel
+typealias LinuxVirtualMachineNetworkModel = VirtualMachineNetworkModel

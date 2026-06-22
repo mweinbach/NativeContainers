@@ -57,7 +57,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var installationOperationID: UUID? = nil
   var installationFailure: VirtualMachineInstallationFailure? = nil
   var audioConfiguration: MacVirtualMachineAudioConfiguration? = nil
-  var networkConfiguration: MacVirtualMachineNetworkConfiguration? = nil
+  var networkConfiguration: VirtualMachineNetworkConfiguration? = nil
   var linuxConfiguration: LinuxVirtualMachineConfiguration? = nil
   var macOSGuestOperatingSystem: MacGuestOperatingSystemIdentity? = nil
   var macOSFirstBootState: MacVirtualMachineFirstBootState? = nil
@@ -145,7 +145,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     audioConfiguration ?? .disconnected
   }
 
-  var effectiveNetworkConfiguration: MacVirtualMachineNetworkConfiguration {
+  var effectiveNetworkConfiguration: VirtualMachineNetworkConfiguration {
     networkConfiguration ?? .nat
   }
 

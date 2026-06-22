@@ -4,7 +4,7 @@ import vmnet
 
 #if arch(arm64)
   @MainActor
-  final class AppleMacVirtualMachineVmnetNetworkPool {
+  final class AppleVirtualMachineVmnetNetworkPool {
     private final class OwnedNetwork {
       let reference: vmnet_network_ref
 
@@ -17,10 +17,10 @@ import vmnet
       }
     }
 
-    private var networks: [MacVirtualMachineNetworkAttachment: OwnedNetwork] = [:]
+    private var networks: [VirtualMachineNetworkAttachment: OwnedNetwork] = [:]
 
     func network(
-      for attachment: MacVirtualMachineNetworkAttachment
+      for attachment: VirtualMachineNetworkAttachment
     ) throws -> vmnet_network_ref {
       precondition(attachment.usesCustomVmnetNetwork)
 
@@ -40,7 +40,7 @@ import vmnet
 
       var status = vmnet_return_t.VMNET_FAILURE
       guard let configuration = vmnet_network_configuration_create(mode, &status) else {
-        throw MacVirtualMachineNetworkError.vmnetNetworkCreationFailed(
+        throw VirtualMachineNetworkError.vmnetNetworkCreationFailed(
           attachment,
           Int(status.rawValue)
         )
@@ -48,7 +48,7 @@ import vmnet
       defer { releaseVmnetObject(configuration) }
 
       guard let network = vmnet_network_create(configuration, &status) else {
-        throw MacVirtualMachineNetworkError.vmnetNetworkCreationFailed(
+        throw VirtualMachineNetworkError.vmnetNetworkCreationFailed(
           attachment,
           Int(status.rawValue)
         )
@@ -59,6 +59,9 @@ import vmnet
       return ownedNetwork.reference
     }
   }
+
+  typealias AppleMacVirtualMachineVmnetNetworkPool =
+    AppleVirtualMachineVmnetNetworkPool
 
   private func releaseVmnetObject(_ object: OpaquePointer) {
     Unmanaged<CFTypeRef>

@@ -120,6 +120,17 @@ struct AppModelTests {
   }
 
   @Test
+  func linuxVirtualMachineNetworkUsesAStableAppScopedModel() throws {
+    let model = AppModel.previewVirtualMachines
+    let machine = try #require(model.virtualMachines.first { $0.guest == .linux })
+
+    #expect(
+      model.makeLinuxVirtualMachineNetworkModel(for: machine)
+        === model.makeLinuxVirtualMachineNetworkModel(for: machine)
+    )
+  }
+
+  @Test
   func macVirtualMachineDiskSnapshotsUseAStableAppScopedModel() throws {
     let model = AppModel.previewVirtualMachines
     let machine = try #require(model.virtualMachines.first)

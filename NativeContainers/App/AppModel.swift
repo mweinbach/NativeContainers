@@ -146,6 +146,9 @@ final class AppModel {
   private var macVirtualMachineNetworkModels: [UUID: MacVirtualMachineNetworkModel] = [:]
 
   @ObservationIgnored
+  private var linuxVirtualMachineNetworkModels: [UUID: LinuxVirtualMachineNetworkModel] = [:]
+
+  @ObservationIgnored
   private var macVirtualMachineDiskSnapshotModels: [UUID: MacVirtualMachineDiskSnapshotModel] = [:]
 
   @ObservationIgnored
@@ -235,6 +238,8 @@ final class AppModel {
       UnavailableMacVirtualMachineAudioService(),
     virtualMachineNetwork: any MacVirtualMachineNetworkManaging =
       UnavailableMacVirtualMachineNetworkService(),
+    linuxVirtualMachineNetwork: any LinuxVirtualMachineNetworkManaging =
+      UnavailableLinuxVirtualMachineNetworkService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
     linuxVirtualMachineSharedDirectories:
@@ -282,6 +287,7 @@ final class AppModel {
         virtualMachineUSB: virtualMachineUSB,
         virtualMachineAudio: virtualMachineAudio,
         virtualMachineNetwork: virtualMachineNetwork,
+        linuxVirtualMachineNetwork: linuxVirtualMachineNetwork,
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
         linuxVirtualMachineSharedDirectories: linuxVirtualMachineSharedDirectories,
         virtualMachineDiskImages: virtualMachineDiskImages,
@@ -922,6 +928,21 @@ final class AppModel {
     return model
   }
 
+  func makeLinuxVirtualMachineNetworkModel(
+    for machine: VirtualMachineManifest
+  ) -> LinuxVirtualMachineNetworkModel {
+    if let model = linuxVirtualMachineNetworkModels[machine.id] {
+      return model
+    }
+    let model = LinuxVirtualMachineNetworkModel(
+      machineID: machine.id,
+      initialConfiguration: machine.effectiveNetworkConfiguration,
+      service: services.linuxVirtualMachineNetwork
+    )
+    linuxVirtualMachineNetworkModels[machine.id] = model
+    return model
+  }
+
   func makeMacVirtualMachineSharedDirectoriesModel(
     for machine: VirtualMachineManifest
   ) -> MacVirtualMachineSharedDirectoriesModel {
@@ -985,6 +1006,10 @@ final class AppModel {
     for identifier in Array(macVirtualMachineNetworkModels.keys)
     where !currentIdentifiers.contains(identifier) {
       macVirtualMachineNetworkModels.removeValue(forKey: identifier)
+    }
+    for identifier in Array(linuxVirtualMachineNetworkModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      linuxVirtualMachineNetworkModels.removeValue(forKey: identifier)
     }
     for identifier in Array(macVirtualMachineDiskSnapshotModels.keys)
     where !currentIdentifiers.contains(identifier) {

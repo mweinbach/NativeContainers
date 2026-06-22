@@ -538,10 +538,13 @@ The installed Apple documentation confirms:
   both modes without an additional target entitlement, and
   `VZVmnetNetworkDeviceAttachment` accepts only a network created by the same
   application process. NativeContainers retains one logical network per mode in
-  its composition root so participating VMs share it. Because those references
-  are recreated after relaunch, custom vmnet modes are cold-start-only and do
-  not advertise suspend/save-restore support. Automatic `VZNATNetworkDeviceAttachment`
-  remains the portable default.
+  its composition root so participating macOS and GUI Linux VMs share it.
+  Apple's attachment is defined on the common Virtualization network-device
+  surface rather than a guest platform class. Because those references are
+  recreated after relaunch, custom vmnet modes are cold-start-only; macOS does
+  not advertise suspend/save-restore support in those modes, and Linux does not
+  offer saved memory. Automatic `VZNATNetworkDeviceAttachment` remains the
+  portable default.
 - Virtualization.framework exposes guest audio through
   `VZVirtioSoundDeviceConfiguration`. An output stream using
   `VZHostAudioOutputStreamSink` follows the host's current default output

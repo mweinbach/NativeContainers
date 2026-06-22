@@ -1527,19 +1527,43 @@ Updated: 2026-06-22.
   assuming randomness is a conditional token.
 - Focused model/service coverage now exercises Linux same-host cloning,
   identity-preserving portable round trip, copy-import identity rotation,
-  shared-bookmark stripping, and network-identity collision rejection. Swift
-  format lint plus the accessibility and data-migration source contracts pass;
-  exact-head Xcode build/test execution remains pending because
-  `XcodeListWindows` still reports `Transport closed`, and no shell build/test
-  substituted for MCP.
+  shared-bookmark stripping, and network-identity collision rejection. The
+  exact-head Xcode build-for-testing and full test suite pass through Xcode MCP.
+
+## Cross-guest GUI VM networking checkpoint
+
+- GUI Linux no longer hardcodes `VZNATNetworkDeviceAttachment`. Its persisted
+  revisioned network choice now flows through a Linux runtime-lease service and
+  the same focused device factory already used by macOS.
+- The composition root owns one shared and one host-only vmnet logical network
+  and injects the same pool into both guest factories. Automatic NAT remains
+  private with outbound access; shared mode lets participating macOS/Linux VMs,
+  the host, and external networks communicate; host-only omits external access.
+- The Linux configuration screen uses the shared native mode selector. Edits
+  are disabled until platform preparation completes and whenever a runtime or
+  another app instance owns the bundle. Accepted changes apply on the next cold
+  start. Same-host clone preserves the mode, while portable package preparation
+  clears it to NAT independently of the stable Linux MAC.
+- Focused tests cover Linux lease-backed persistence, app-model reuse,
+  same-host and portable policy, and one real shared vmnet object reused by a
+  Linux configuration and a peer device. Thirteen focused tests pass. The
+  exact-head normal build and build-for-testing pass on the `NativeContainers`
+  scheme for `My Mac` (arm64, macOS 27.0); the full suite reports 1,016 passed,
+  zero failed, and 29 explicitly gated live/destructive tests skipped.
+- A Linux-specific network preview is checked in. Xcode compiled it, but the
+  canvas host timed out twice while launching `NativeContainers.app`; an
+  ordinary Xcode MCP launch succeeded immediately. Its only captured live log
+  was the existing Core Spotlight/SetStore donation failure. Static canvas
+  inspection and live cross-guest packet flow therefore remain in the
+  disposable installed-guest smoke pass rather than being inferred.
 
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
 verified. Installing and rebooting a reviewed Linux distribution through the
 new GUI workflow, then cloning it, exporting/restoring a portable copy, and
-mounting and exercising a shared folder still need a disposable ISO smoke pass.
-Installing, booting,
+verifying shared/host-only packet flow plus a shared folder still need a
+disposable ISO smoke pass. Installing, booting,
 saving/restoring, and clone-booting macOS are not claimed as live-verified until
 a local IPSW and disposable installed guest are available for that destructive
 integration pass.
@@ -1548,8 +1572,8 @@ integration pass.
 
 1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
-   clone and portable-round-trip it, and exercise both graceful and watchdog
-   force-stop paths.
+   verify shared and host-only vmnet connectivity, clone and portable-round-trip
+   it, and exercise both graceful and watchdog force-stop paths.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, same-host save/restore, and fresh-identity clone boot
    against a local IPSW.

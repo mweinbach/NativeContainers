@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct MacVirtualMachineConfigurationEditLockBanner: View {
+struct VirtualMachineConfigurationEditLockBanner: View {
   let message: LocalizedStringResource
   let discardSavedState: (() -> Void)?
 
@@ -18,3 +18,6 @@ struct MacVirtualMachineConfigurationEditLockBanner: View {
     .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
   }
 }
+
+typealias MacVirtualMachineConfigurationEditLockBanner =
+  VirtualMachineConfigurationEditLockBanner

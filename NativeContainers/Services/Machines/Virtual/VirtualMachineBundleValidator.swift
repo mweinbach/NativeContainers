@@ -130,7 +130,11 @@ struct VirtualMachineBundleValidator {
       writable: true
     )
     let identity = try platformIdentity(manifest: manifest, bundleURL: bundleURL)
-    try validateStagedPlatformArtifacts(manifest: manifest, bundleURL: bundleURL)
+    try validateStagedPlatformArtifacts(
+      manifest: manifest,
+      bundleURL: bundleURL,
+      isPortable: !allowsSharedDirectories
+    )
 
     if allowsSharedDirectories {
       _ = try sharedDirectoryConfiguration(in: bundleURL)
@@ -160,7 +164,8 @@ struct VirtualMachineBundleValidator {
 
   private func validateStagedPlatformArtifacts(
     manifest: VirtualMachineManifest,
-    bundleURL: URL
+    bundleURL: URL,
+    isPortable: Bool
   ) throws {
     switch manifest.guest {
     case .macOS:
@@ -193,7 +198,7 @@ struct VirtualMachineBundleValidator {
         manifest.machineIdentifierPath == nil,
         manifest.restoreImageURL == nil,
         manifest.audioConfiguration == nil,
-        manifest.networkConfiguration == nil,
+        !isPortable || manifest.networkConfiguration == nil,
         manifest.macOSGuestOperatingSystem == nil,
         manifest.macOSFirstBootState == nil,
         !manifest.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots

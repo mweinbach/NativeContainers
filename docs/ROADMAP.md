@@ -147,6 +147,10 @@ must leave a usable, test-backed product slice.
 - [x] Persistent GUI Linux VirtioFS shared folders through security-scoped
       bookmarks, stopped-only lease-backed editing, one stable
       `nativecontainers` mount tag, and exact in-guest mount guidance.
+- [x] Persistent GUI Linux automatic NAT, shared VM, and host-only networking
+      through the app-owned vmnet pool, with stopped-only lease-backed edits,
+      cold-start application, same-host clone retention, and portable reset to
+      NAT.
 - [x] Stopped-only GUI Linux same-host clone and portable `.nativevm`
       export/import through the shared VM transaction stack, with fresh
       `VZGenericMachineIdentifier` plus MAC identity for copies, collision

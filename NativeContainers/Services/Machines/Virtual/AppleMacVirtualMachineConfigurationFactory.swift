@@ -14,7 +14,7 @@ import Foundation
     private let sharedDirectoryBookmarkService:
       any MacVirtualMachineSharedDirectoryBookmarkResolving
     private let sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory
-    private let networkDeviceFactory: AppleMacVirtualMachineNetworkDeviceFactory
+    private let networkDeviceFactory: AppleVirtualMachineNetworkDeviceFactory
     private let audioDeviceFactory: AppleMacVirtualMachineAudioDeviceFactory
     private let diskImageService: any AppleVirtualMachineDiskImageServicing
 
@@ -26,8 +26,8 @@ import Foundation
         MacVirtualMachineSharedDirectoryBookmarkService(),
       sharedDirectoryDeviceFactory: AppleMacVirtualMachineSharedDirectoryDeviceFactory =
         AppleMacVirtualMachineSharedDirectoryDeviceFactory(),
-      networkDeviceFactory: AppleMacVirtualMachineNetworkDeviceFactory =
-        AppleMacVirtualMachineNetworkDeviceFactory(),
+      networkDeviceFactory: AppleVirtualMachineNetworkDeviceFactory =
+        AppleVirtualMachineNetworkDeviceFactory(),
       audioDeviceFactory: AppleMacVirtualMachineAudioDeviceFactory =
         AppleMacVirtualMachineAudioDeviceFactory(),
       diskImageService: any AppleVirtualMachineDiskImageServicing =

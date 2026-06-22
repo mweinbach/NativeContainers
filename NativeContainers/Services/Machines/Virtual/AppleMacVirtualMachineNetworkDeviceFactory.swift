@@ -3,18 +3,18 @@ import Foundation
 
 #if arch(arm64)
   @MainActor
-  struct AppleMacVirtualMachineNetworkDeviceFactory {
-    private let vmnetNetworks: AppleMacVirtualMachineVmnetNetworkPool
+  struct AppleVirtualMachineNetworkDeviceFactory {
+    private let vmnetNetworks: AppleVirtualMachineVmnetNetworkPool
 
     init(
-      vmnetNetworks: AppleMacVirtualMachineVmnetNetworkPool =
-        AppleMacVirtualMachineVmnetNetworkPool()
+      vmnetNetworks: AppleVirtualMachineVmnetNetworkPool =
+        AppleVirtualMachineVmnetNetworkPool()
     ) {
       self.vmnetNetworks = vmnetNetworks
     }
 
     func makeDevice(
-      configuration: MacVirtualMachineNetworkConfiguration,
+      configuration: VirtualMachineNetworkConfiguration,
       macAddress: String
     ) throws -> VZVirtioNetworkDeviceConfiguration {
       let attachment: VZNetworkDeviceAttachment
@@ -28,7 +28,7 @@ import Foundation
       }
 
       guard let macAddress = VZMACAddress(string: macAddress) else {
-        throw MacVirtualMachineNetworkError.invalidMACAddress(macAddress)
+        throw VirtualMachineNetworkError.invalidMACAddress(macAddress)
       }
 
       let device = VZVirtioNetworkDeviceConfiguration()
@@ -37,4 +37,7 @@ import Foundation
       return device
     }
   }
+
+  typealias AppleMacVirtualMachineNetworkDeviceFactory =
+    AppleVirtualMachineNetworkDeviceFactory
 #endif

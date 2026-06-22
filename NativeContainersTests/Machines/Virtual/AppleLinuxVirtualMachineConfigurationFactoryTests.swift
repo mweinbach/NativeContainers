@@ -112,6 +112,42 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
   }
 
   @Test
+  func sharedModeUsesTheAppOwnedCrossGuestVmnetNetwork() async throws {
+    let fixture = try LinuxConfigurationFixture()
+    defer { fixture.remove() }
+    var prepared = try await fixture.prepare()
+    prepared.networkConfiguration = LinuxVirtualMachineNetworkConfiguration(
+      attachment: .shared
+    )
+    let machine = try LinuxVirtualMachineBundleResolver(
+      rootURL: fixture.root
+    ).resolve(prepared)
+    let pool = AppleVirtualMachineVmnetNetworkPool()
+    let deviceFactory = AppleVirtualMachineNetworkDeviceFactory(
+      vmnetNetworks: pool
+    )
+
+    let configuration = try AppleLinuxVirtualMachineConfigurationFactory(
+      networkDeviceFactory: deviceFactory
+    ).makeConfiguration(for: machine)
+    let linuxDevice = try #require(
+      configuration.networkDevices.first as? VZVirtioNetworkDeviceConfiguration
+    )
+    let linuxAttachment = try #require(
+      linuxDevice.attachment as? VZVmnetNetworkDeviceAttachment
+    )
+    let peerDevice = try deviceFactory.makeDevice(
+      configuration: VirtualMachineNetworkConfiguration(attachment: .shared),
+      macAddress: "02:00:00:00:00:22"
+    )
+    let peerAttachment = try #require(
+      peerDevice.attachment as? VZVmnetNetworkDeviceAttachment
+    )
+
+    #expect(linuxAttachment.network == peerAttachment.network)
+  }
+
+  @Test
   func runtimeConfigurationAttachesResolvedVirtioFSShare() async throws {
     let fixture = try LinuxConfigurationFixture()
     defer { fixture.remove() }

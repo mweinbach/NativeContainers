@@ -171,13 +171,30 @@ struct VirtualMachineBundlePreparationService:
         manifest.machineIdentifierPath == nil,
         manifest.restoreImageURL == nil,
         manifest.audioConfiguration == nil,
-        manifest.networkConfiguration == nil,
         manifest.macOSGuestOperatingSystem == nil,
         manifest.macOSFirstBootState == nil,
         !manifest.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots
       else {
         throw VirtualMachineBundleError.invalidBundle(
           "the Linux manifest contains incomplete or guest-incompatible state"
+        )
+      }
+    }
+
+    switch request.portability {
+    case .sameHost:
+      guard
+        request.destinationManifest.networkConfiguration
+          == request.sourceManifest.networkConfiguration
+      else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "the same-host Linux copy changed its network configuration"
+        )
+      }
+    case .portable:
+      guard request.destinationManifest.networkConfiguration == nil else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "host-local Linux network configuration remains in the portable manifest"
         )
       }
     }

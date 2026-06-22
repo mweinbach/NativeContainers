@@ -138,6 +138,45 @@ struct LinuxVirtualMachineLibraryTests {
   }
 
   @Test
+  func networkConfigurationPersistsThroughLinuxRuntimeLease() async throws {
+    let fixture = try LinuxLibraryFixture()
+    defer { fixture.remove() }
+    let library = VirtualMachineLibrary(
+      rootURL: fixture.root,
+      linuxPlatformArtifactPreparer: TestLinuxPlatformArtifactPreparer(
+        behavior: .success
+      )
+    )
+    let draft = try await library.createDraft(
+      name: "Network Linux",
+      guest: .linux,
+      resources: fixture.resources
+    )
+    let prepared = try await library.prepareLinuxVM(
+      id: draft.id,
+      installationMediaURL: fixture.installationMedia
+    )
+    let service = LinuxVirtualMachineNetworkService(
+      leasingStore: library,
+      persistence: library
+    )
+
+    #expect(try await service.snapshot(id: prepared.id).configuration == .nat)
+    let updated = try await service.setAttachment(.shared, for: prepared.id)
+
+    #expect(updated.configuration.revision == 1)
+    #expect(updated.configuration.attachment == .shared)
+    let reloaded = try #require(try await library.list().first)
+    #expect(reloaded.effectiveNetworkConfiguration == updated.configuration)
+    let replacementLease = try await library.acquireLinuxRuntime(id: prepared.id)
+    #expect(
+      replacementLease.machine.manifest.effectiveNetworkConfiguration
+        == updated.configuration
+    )
+    replacementLease.release()
+  }
+
+  @Test
   func linuxRuntimeLeasePersistsAndReloadsSharedDirectories() async throws {
     let fixture = try LinuxLibraryFixture()
     defer { fixture.remove() }
