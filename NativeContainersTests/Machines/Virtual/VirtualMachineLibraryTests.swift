@@ -146,6 +146,36 @@ struct VirtualMachineLibraryTests {
   }
 
   @Test
+  func identityPinnedDiscardRejectsAChangedManifest() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let library = VirtualMachineLibrary(rootURL: root)
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 4 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 8 * VirtualMachineResources.bytesPerGiB
+    )
+    let machine = try await library.createDraft(
+      name: "Reviewed",
+      guest: .macOS,
+      resources: resources
+    )
+    var stale = machine
+    stale.name = "Changed"
+
+    await #expect(
+      throws: VirtualMachineModelError.virtualMachineIdentityChanged(machine.id)
+    ) {
+      try await library.discardVirtualMachine(ifUnchanged: stale)
+    }
+    #expect(try await library.list() == [machine])
+
+    try await library.discardVirtualMachine(ifUnchanged: machine)
+    #expect(try await library.list().isEmpty)
+  }
+
+  @Test
   func suspendedPreparationDoesNotPermitAReentrantDiscard() async throws {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }

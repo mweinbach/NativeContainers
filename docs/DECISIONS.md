@@ -2032,3 +2032,39 @@ fails the suite and is left untouched. One warmup plus three fresh-machine
 samples emit raw timing, median/P95, host/runtime/image provenance, CPU, memory,
 platform, and the provisioning boundary. This decision does not claim coverage
 for an IPSW-installed macOS GUI VM; that remains its own fixture-dependent lane.
+
+## ADR-072: Measure macOS GUI-VM startup on disposable installed clones
+
+**Status:** Accepted — 2026-06-22
+
+The IPSW-backed macOS performance lane is gated by
+`NATIVECONTAINERS_LIVE_PERFORMANCE=1` and
+`NATIVECONTAINERS_LIVE_PERFORMANCE_MAC_VM=1`; the operator supplies an existing
+fixture UUID through `NATIVECONTAINERS_LIVE_PERFORMANCE_MAC_VM_SOURCE`. The
+fixture must be an installed, stopped macOS VM with recorded guest OS provenance
+and completed first boot. It is never started or modified by the benchmark.
+Before each iteration, the gate revalidates its complete manifest and creates a
+same-host clone through the production clone service. Clone preparation,
+identity regeneration, saved-state inspection, and source validation remain
+outside the measured interval.
+
+The clock surrounds the production `MacVirtualMachineRuntimeService.start`
+contract and one exact follow-up observation. A valid sample requires a newer
+snapshot in `.running`, a non-nil runtime-generation target tied to the clone,
+no runtime error, no saved state, and a graphical console for that exact target.
+Apple documents `VZVirtualMachine.start()` as starting and booting the guest and
+reporting successful startup, while `VZVirtualMachineView` is the surface for
+displaying and interacting with graphical content. This metric therefore means
+host runtime plus graphical-console readiness. It does not claim that the guest
+login screen, a user session, networking, or an application is interactive.
+
+Cleanup runs outside the clock and independently of benchmark cancellation. It
+revalidates the clone manifest before any mutation, requests guest shutdown when
+available, and falls back to force-stop only for the reviewed runtime generation.
+Deletion uses a new conditional library operation that compares the full
+manifest while holding the library operation lock before acquiring the runtime
+lock and tombstoning the bundle. A changed manifest or runtime generation is
+left untouched and fails the gate. Clone absence, source equality, and no
+run-prefix residue are required after every iteration. One warmup and three
+measured clones emit raw timings, median/P95, host OS, source identity and name,
+guest build/version, VM resources, and the explicit readiness boundary.

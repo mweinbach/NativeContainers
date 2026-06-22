@@ -61,8 +61,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var linuxConfiguration: LinuxVirtualMachineConfiguration? = nil
   var macOSGuestOperatingSystem: MacGuestOperatingSystemIdentity? = nil
   var macOSFirstBootState: MacVirtualMachineFirstBootState? = nil
-  var macOSDiskSnapshotConfiguration:
-    MacVirtualMachineDiskSnapshotConfiguration? = nil
+  var macOSDiskSnapshotConfiguration: MacVirtualMachineDiskSnapshotConfiguration? = nil
 
   init(
     id: UUID = UUID(),
@@ -138,9 +137,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     networkConfiguration ?? .nat
   }
 
-  var effectiveMacOSDiskSnapshotConfiguration:
-    MacVirtualMachineDiskSnapshotConfiguration
-  {
+  var effectiveMacOSDiskSnapshotConfiguration: MacVirtualMachineDiskSnapshotConfiguration {
     macOSDiskSnapshotConfiguration ?? .empty
   }
 
@@ -273,6 +270,7 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
   case bundleIdentifierMismatch(expected: UUID, bundleName: String)
   case libraryInUse
   case virtualMachineNotFound(UUID)
+  case virtualMachineIdentityChanged(UUID)
   case requiresMacOSGuest(UUID)
   case requiresLinuxGuest(UUID)
   case invalidInstallState(VirtualMachineInstallState)
@@ -303,6 +301,8 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
       "Another NativeContainers process is changing the virtual machine library. Try again when that operation finishes."
     case .virtualMachineNotFound(let identifier):
       "No virtual machine with identifier \(identifier.uuidString) exists."
+    case .virtualMachineIdentityChanged(let identifier):
+      "Virtual machine \(identifier.uuidString) changed after it was reviewed."
     case .requiresMacOSGuest(let identifier):
       "Virtual machine \(identifier.uuidString) is not configured for macOS."
     case .requiresLinuxGuest(let identifier):

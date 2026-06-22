@@ -27,6 +27,10 @@ protocol VirtualMachineDiscarding: Sendable {
   func discardVirtualMachine(id: UUID) async throws
 }
 
+protocol VirtualMachineIdentityDiscarding: Sendable {
+  func discardVirtualMachine(ifUnchanged manifest: VirtualMachineManifest) async throws
+}
+
 protocol VirtualMachineLibraryProtocol:
   VirtualMachineInventoryLoading,
   VirtualMachineDraftCreating,
@@ -78,6 +82,7 @@ actor VirtualMachineLibrary:
   VirtualMachineCloneStoring,
   VirtualMachineExportSourceLeasing,
   VirtualMachineImportStoring,
+  VirtualMachineIdentityDiscarding,
   VirtualMachineStorageInventoryLoading,
   VirtualMachineRestoreImageReferenceStoring,
   MacVirtualMachineInstallationStoring,
@@ -754,12 +759,26 @@ actor VirtualMachineLibrary:
   }
 
   func discardVirtualMachine(id: UUID) async throws {
+    try discardVirtualMachine(id: id, expectedManifest: nil)
+  }
+
+  func discardVirtualMachine(ifUnchanged manifest: VirtualMachineManifest) async throws {
+    try discardVirtualMachine(id: manifest.id, expectedManifest: manifest)
+  }
+
+  private func discardVirtualMachine(
+    id: UUID,
+    expectedManifest: VirtualMachineManifest?
+  ) throws {
     try bundleStore.ensureRootExists()
     let accessToken = UUID()
     try acquireOperationAccess(token: accessToken)
     defer { releaseOperationAccess(token: accessToken) }
 
     let manifest = try bundleStore.manifest(id: id)
+    if let expectedManifest, manifest != expectedManifest {
+      throw VirtualMachineModelError.virtualMachineIdentityChanged(id)
+    }
     guard manifest.installState != .installing else {
       throw VirtualMachineModelError.invalidInstallState(manifest.installState)
     }

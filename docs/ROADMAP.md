@@ -299,8 +299,10 @@ must leave a usable, test-backed product slice.
   - [x] Cold Apple persistent Linux-machine startup through first-user readiness
         behind a fourth explicit live gate, with fresh stopped machines,
         digest/creation identity pinning, exact cleanup, and provenance JSON.
-  - [ ] IPSW-backed macOS GUI-VM cold startup, external-network, and
-        idle-resource lanes behind explicit live gates.
+  - [x] IPSW-backed macOS GUI-VM cold startup behind a fifth explicit live gate,
+        using disposable identity-regenerated clones, authoritative running plus
+        graphical-console readiness, exact-manifest cleanup, and provenance JSON.
+  - [ ] External-network and idle-resource lanes behind explicit live gates.
 
 ## Public-API constraint log
 

@@ -9,6 +9,7 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
   case bindMountFileIO
   case imageBuild
   case coldLinuxMachineStartup
+  case coldMacVirtualMachineStartup
 
   static let settingsSuiteCases: [Self] = [
     .warmInventory,
@@ -36,6 +37,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "No-cache OCI image build"
     case .coldLinuxMachineStartup:
       "Cold Linux machine startup"
+    case .coldMacVirtualMachineStartup:
+      "Cold macOS virtual machine startup"
     }
   }
 
@@ -57,6 +60,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Builds a fixed local context without cache or registry refresh and exports a reviewed OCI archive."
     case .coldLinuxMachineStartup:
       "Starts a newly created stopped Apple Linux machine through first-user provisioning and confirmed readiness."
+    case .coldMacVirtualMachineStartup:
+      "Starts a disposable clone of an installed macOS virtual machine and confirms running console readiness."
     }
   }
 }

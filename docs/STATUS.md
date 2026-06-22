@@ -1241,6 +1241,21 @@ Updated: 2026-06-22.
   three fresh-machine samples emit raw timing, median/P95, host/runtime/image,
   platform, CPU, memory, and provisioning provenance. This exact head awaits
   Xcode MCP build/test/live execution because the bridge remains unavailable.
+- A fifth opt-in gate now measures an IPSW-installed macOS GUI VM without
+  starting or mutating the selected source. Each iteration verifies the source
+  is stopped, installed, and through first boot, then creates an
+  identity-regenerated disposable clone outside the clock and confirms the
+  clone has no saved state. The timed interval runs the production
+  `MacVirtualMachineRuntimeService.start` path through a newer authoritative
+  running snapshot, a fresh runtime generation, and an available graphical
+  console. It intentionally does not claim that a guest login screen or user
+  session is interactive. Cleanup requests guest shutdown, force-stops only the
+  reviewed runtime generation when necessary, and conditionally deletes only
+  an unchanged clone manifest; source equality and empty run-prefix residue are
+  postconditions. One warmup plus three samples emit host, source UUID/name,
+  guest build/version, resources, raw timing, median, P95, and the precise
+  readiness boundary. This exact head awaits Xcode MCP build/test/live
+  execution because the bridge remains unavailable.
 
 ## Distribution-readiness checkpoint
 

@@ -94,6 +94,16 @@ Verified architecture:
   those fields to keep image unpack and machine creation outside the clock,
   measure production boot plus first-user provisioning, and require exact
   running/initialized readiness before stopping and deleting the same machine.
+- Apple's Virtualization framework documentation says `VZVirtualMachine.start()`
+  starts and boots the guest, and reports whether startup succeeded. Its
+  framework overview separately identifies `VZVirtualMachineView` as the host
+  surface that displays and interacts with a VM's graphical content. The macOS
+  GUI-VM gate therefore times production start completion plus
+  NativeContainers' authoritative `.running` snapshot and non-nil console. It
+  records that exact host/runtime boundary instead of claiming guest login or
+  application readiness. Sources:
+  <https://developer.apple.com/documentation/virtualization/vzvirtualmachine/start%28%29>
+  and <https://developer.apple.com/documentation/virtualization>.
 - The installed 1.0.0 `MachineClient.setConfig(id:bootConfig:)` and matching
   server route persist a replacement `MachineConfig` for the next boot. The
   supported mutable CLI surface is exactly CPU count, memory, and home-mount

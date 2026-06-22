@@ -688,6 +688,373 @@ enum ColdLinuxMachineStartupBenchmarkError:
   }
 }
 
+protocol MacVirtualMachineStartupBenchmarkRuntime: Sendable {
+  func refreshSavedState(id: UUID) async
+  func snapshot(id: UUID) async -> MacVirtualMachineRuntimeSnapshot
+  func start(id: UUID) async throws
+  func requestStop(target: MacVirtualMachineRuntimeTarget) async throws
+  func forceStop(target: MacVirtualMachineRuntimeTarget) async throws
+  func hasConsole(for target: MacVirtualMachineRuntimeTarget) async -> Bool
+}
+
+struct AppleMacVirtualMachineStartupBenchmarkRuntime:
+  MacVirtualMachineStartupBenchmarkRuntime
+{
+  private let runtime: any MacVirtualMachineRuntimeManaging
+
+  init(runtime: any MacVirtualMachineRuntimeManaging) {
+    self.runtime = runtime
+  }
+
+  func refreshSavedState(id: UUID) async {
+    await runtime.refreshSavedState(id: id)
+  }
+
+  func snapshot(id: UUID) async -> MacVirtualMachineRuntimeSnapshot {
+    await runtime.snapshot(for: id)
+  }
+
+  func start(id: UUID) async throws {
+    try await runtime.start(id: id)
+  }
+
+  func requestStop(target: MacVirtualMachineRuntimeTarget) async throws {
+    try await runtime.requestStop(target: target)
+  }
+
+  func forceStop(target: MacVirtualMachineRuntimeTarget) async throws {
+    try await runtime.forceStop(target: target)
+  }
+
+  func hasConsole(for target: MacVirtualMachineRuntimeTarget) async -> Bool {
+    await MainActor.run {
+      runtime.console(for: target) != nil
+    }
+  }
+}
+
+actor ColdMacVirtualMachineStartupPerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  nonisolated let kind = PerformanceBenchmarkKind.coldMacVirtualMachineStartup
+
+  private struct PreparedClone: Sendable {
+    let manifest: VirtualMachineManifest
+    var preflightRevision: UInt64?
+    var runtimeTarget: MacVirtualMachineRuntimeTarget?
+  }
+
+  private let source: VirtualMachineManifest
+  private let inventory: any VirtualMachineInventoryLoading
+  private let cloner: any VirtualMachineCloning
+  private let discarder: any VirtualMachineIdentityDiscarding
+  private let runtime: any MacVirtualMachineStartupBenchmarkRuntime
+  private let makeCloneName: @Sendable () -> String
+  private var preparedClone: PreparedClone?
+
+  init(
+    source: VirtualMachineManifest,
+    inventory: any VirtualMachineInventoryLoading,
+    cloner: any VirtualMachineCloning,
+    discarder: any VirtualMachineIdentityDiscarding,
+    runtime: any MacVirtualMachineStartupBenchmarkRuntime,
+    makeCloneName: @escaping @Sendable () -> String = {
+      "NativeContainers Performance \(UUID().uuidString.lowercased().prefix(8))"
+    }
+  ) {
+    self.source = source
+    self.inventory = inventory
+    self.cloner = cloner
+    self.discarder = discarder
+    self.runtime = runtime
+    self.makeCloneName = makeCloneName
+  }
+
+  func prepareIteration() async throws {
+    guard preparedClone == nil else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.invalidIterationState
+    }
+    try validateSource(try await requireManifest(source.id))
+
+    let name = makeCloneName()
+    let clone = try await cloner.cloneVirtualMachine(id: source.id, name: name)
+    preparedClone = PreparedClone(
+      manifest: clone,
+      preflightRevision: nil,
+      runtimeTarget: nil
+    )
+    try validateClone(clone, expectedName: name)
+    _ = try await requireExactClone(clone)
+    try validateSource(try await requireManifest(source.id))
+    await runtime.refreshSavedState(id: clone.id)
+  }
+
+  func prepareMeasurement() async throws {
+    guard var preparedClone else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.invalidIterationState
+    }
+    _ = try await requireExactClone(preparedClone.manifest)
+    try validateSource(try await requireManifest(source.id))
+
+    let snapshot = await runtime.snapshot(id: preparedClone.manifest.id)
+    guard
+      snapshot.machineID == preparedClone.manifest.id,
+      snapshot.target == nil,
+      snapshot.state == .stopped,
+      snapshot.savedStateStatus == .none,
+      snapshot.errorMessage == nil
+    else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.cloneWasNotPrepared(
+        preparedClone.manifest.id
+      )
+    }
+    preparedClone.preflightRevision = snapshot.revision
+    self.preparedClone = preparedClone
+  }
+
+  func perform() async throws -> Int64? {
+    guard
+      var preparedClone,
+      let preflightRevision = preparedClone.preflightRevision
+    else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.invalidIterationState
+    }
+
+    try await runtime.start(id: preparedClone.manifest.id)
+    let snapshot = await runtime.snapshot(id: preparedClone.manifest.id)
+    if let target = snapshot.target {
+      preparedClone.runtimeTarget = target
+      self.preparedClone = preparedClone
+    }
+    guard
+      snapshot.machineID == preparedClone.manifest.id,
+      snapshot.revision > preflightRevision,
+      let target = snapshot.target,
+      target.machineID == preparedClone.manifest.id,
+      snapshot.state == .running,
+      snapshot.savedStateStatus == .none,
+      snapshot.errorMessage == nil
+    else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.startupNotConfirmed(
+        preparedClone.manifest.id
+      )
+    }
+    guard await runtime.hasConsole(for: target) else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.consoleNotReady(
+        preparedClone.manifest.id
+      )
+    }
+    return nil
+  }
+
+  func cleanUpIteration() async throws {
+    guard let preparedClone else { return }
+    self.preparedClone = nil
+
+    do {
+      guard let current = try await manifestIfPresent(preparedClone.manifest.id) else {
+        try validateSource(try await requireManifest(source.id))
+        return
+      }
+      guard current == preparedClone.manifest else {
+        throw ColdMacVirtualMachineStartupBenchmarkError.cloneIdentityChanged(
+          preparedClone.manifest.id
+        )
+      }
+
+      var snapshot = await runtime.snapshot(id: preparedClone.manifest.id)
+      if let reviewedTarget = preparedClone.runtimeTarget,
+        let currentTarget = snapshot.target,
+        currentTarget != reviewedTarget
+      {
+        throw ColdMacVirtualMachineStartupBenchmarkError.runtimeIdentityChanged(
+          preparedClone.manifest.id
+        )
+      }
+
+      if snapshot.canRequestStop, let target = snapshot.target {
+        do {
+          try await runtime.requestStop(target: target)
+          snapshot = await waitForStoppedClone(id: preparedClone.manifest.id)
+        } catch {
+          snapshot = await runtime.snapshot(id: preparedClone.manifest.id)
+        }
+      }
+      if snapshot.state != .stopped || snapshot.target != nil {
+        guard let target = snapshot.target else {
+          throw ColdMacVirtualMachineStartupBenchmarkError.stopNotConfirmed(
+            preparedClone.manifest.id
+          )
+        }
+        if let reviewedTarget = preparedClone.runtimeTarget,
+          target != reviewedTarget
+        {
+          throw ColdMacVirtualMachineStartupBenchmarkError.runtimeIdentityChanged(
+            preparedClone.manifest.id
+          )
+        }
+        try await runtime.forceStop(target: target)
+        snapshot = await waitForStoppedClone(id: preparedClone.manifest.id)
+      }
+      guard snapshot.state == .stopped, snapshot.target == nil else {
+        throw ColdMacVirtualMachineStartupBenchmarkError.stopNotConfirmed(
+          preparedClone.manifest.id
+        )
+      }
+
+      _ = try await requireExactClone(preparedClone.manifest)
+      try await discarder.discardVirtualMachine(
+        ifUnchanged: preparedClone.manifest
+      )
+      if let remaining = try await manifestIfPresent(preparedClone.manifest.id) {
+        guard remaining == preparedClone.manifest else {
+          throw ColdMacVirtualMachineStartupBenchmarkError.replacementPresent(
+            preparedClone.manifest.id
+          )
+        }
+        throw ColdMacVirtualMachineStartupBenchmarkError.deletionNotConfirmed(
+          preparedClone.manifest.id
+        )
+      }
+      try validateSource(try await requireManifest(source.id))
+    } catch let error as ColdMacVirtualMachineStartupBenchmarkError {
+      throw error
+    } catch {
+      throw ColdMacVirtualMachineStartupBenchmarkError.cleanupFailed(
+        id: preparedClone.manifest.id,
+        operation: error.localizedDescription
+      )
+    }
+  }
+
+  private func waitForStoppedClone(
+    id: UUID
+  ) async -> MacVirtualMachineRuntimeSnapshot {
+    var snapshot = await runtime.snapshot(id: id)
+    for _ in 0..<100 where snapshot.state != .stopped || snapshot.target != nil {
+      try? await Task.sleep(for: .milliseconds(50))
+      snapshot = await runtime.snapshot(id: id)
+    }
+    return snapshot
+  }
+
+  private func requireManifest(_ id: UUID) async throws -> VirtualMachineManifest {
+    guard let manifest = try await manifestIfPresent(id) else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.machineMissing(id)
+    }
+    return manifest
+  }
+
+  private func manifestIfPresent(_ id: UUID) async throws -> VirtualMachineManifest? {
+    try await inventory.list().first { $0.id == id }
+  }
+
+  private func requireExactClone(
+    _ expected: VirtualMachineManifest
+  ) async throws -> VirtualMachineManifest {
+    guard let current = try await manifestIfPresent(expected.id) else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.machineMissing(expected.id)
+    }
+    guard current == expected else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.cloneIdentityChanged(expected.id)
+    }
+    return current
+  }
+
+  private func validateSource(_ current: VirtualMachineManifest) throws {
+    guard current == source else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.sourceIdentityChanged(source.id)
+    }
+    guard
+      current.guest == .macOS,
+      current.installState == .stopped,
+      current.macOSGuestOperatingSystem != nil,
+      current.macOSFirstBootState == .started,
+      current.restoreImageURL == nil,
+      current.auxiliaryStoragePath != nil,
+      current.hardwareModelPath != nil,
+      current.machineIdentifierPath != nil
+    else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.sourceNotReady(source.id)
+    }
+  }
+
+  private func validateClone(
+    _ clone: VirtualMachineManifest,
+    expectedName: String
+  ) throws {
+    guard
+      clone.id != source.id,
+      clone.name == expectedName,
+      clone.guest == source.guest,
+      clone.installState == .stopped,
+      clone.resources == source.resources,
+      clone.effectiveDiskImageFormat == source.effectiveDiskImageFormat,
+      clone.macOSGuestOperatingSystem == source.macOSGuestOperatingSystem,
+      clone.macOSFirstBootState == .started,
+      clone.restoreImageURL == nil,
+      clone.installationOperationID == nil,
+      clone.installationFailure == nil
+    else {
+      throw ColdMacVirtualMachineStartupBenchmarkError.invalidClone(clone.id)
+    }
+  }
+}
+
+enum ColdMacVirtualMachineStartupBenchmarkError:
+  LocalizedError,
+  Equatable,
+  Sendable
+{
+  case invalidIterationState
+  case machineMissing(UUID)
+  case sourceIdentityChanged(UUID)
+  case sourceNotReady(UUID)
+  case invalidClone(UUID)
+  case cloneIdentityChanged(UUID)
+  case cloneWasNotPrepared(UUID)
+  case runtimeIdentityChanged(UUID)
+  case startupNotConfirmed(UUID)
+  case consoleNotReady(UUID)
+  case stopNotConfirmed(UUID)
+  case replacementPresent(UUID)
+  case deletionNotConfirmed(UUID)
+  case cleanupFailed(id: UUID, operation: String)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidIterationState:
+      "The cold macOS virtual-machine benchmark iteration is not in a valid state."
+    case .machineMissing(let id):
+      "Benchmark macOS virtual machine \(id.uuidString) is missing."
+    case .sourceIdentityChanged(let id):
+      "Source macOS virtual machine \(id.uuidString) changed after review."
+    case .sourceNotReady(let id):
+      "Source macOS virtual machine \(id.uuidString) must be installed, stopped, and through first boot."
+    case .invalidClone(let id):
+      "Benchmark macOS virtual machine clone \(id.uuidString) does not match the reviewed source."
+    case .cloneIdentityChanged(let id):
+      "Benchmark macOS virtual machine clone \(id.uuidString) changed after preparation."
+    case .cloneWasNotPrepared(let id):
+      "Benchmark macOS virtual machine clone \(id.uuidString) was not prepared without saved state."
+    case .runtimeIdentityChanged(let id):
+      "Benchmark macOS virtual machine clone \(id.uuidString) changed runtime generation."
+    case .startupNotConfirmed(let id):
+      "Benchmark macOS virtual machine clone \(id.uuidString) did not reach authoritative running readiness."
+    case .consoleNotReady(let id):
+      "Benchmark macOS virtual machine clone \(id.uuidString) did not expose its graphical console."
+    case .stopNotConfirmed(let id):
+      "Benchmark macOS virtual machine clone \(id.uuidString) did not confirm its stopped state."
+    case .replacementPresent(let id):
+      "A replacement macOS virtual machine with identifier \(id.uuidString) appeared during cleanup and was not modified."
+    case .deletionNotConfirmed(let id):
+      "Benchmark macOS virtual machine clone \(id.uuidString) remained after cleanup."
+    case .cleanupFailed(let id, let operation):
+      "Benchmark macOS virtual machine clone \(id.uuidString) cleanup failed: \(operation)"
+    }
+  }
+}
+
 enum ContainerIOPerformanceStorage: Equatable, Sendable {
   case guestRoot
   case bindMount
