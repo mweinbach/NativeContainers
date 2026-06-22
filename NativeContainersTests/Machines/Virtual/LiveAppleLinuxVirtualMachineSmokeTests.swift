@@ -11,6 +11,12 @@ import Testing
 @MainActor
 struct LiveAppleLinuxVirtualMachineSmokeTests {
   private static let outputMarker = "NATIVECONTAINERS_LIVE_LINUX_VM_RESULT "
+  private static let inputProbeActivationDelaySeconds = 4
+  private static let inputProbeObservationSeconds = 30
+  private static let inputProbeDurationSeconds =
+    inputProbeActivationDelaySeconds + inputProbeObservationSeconds
+  private static let inputCommandMaximumBytes = 4 * 1_024
+  private static let inputTextMaximumCharacters = 256
 
   @Test(
     .enabled(
@@ -23,6 +29,13 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
   func bootsReviewedInstallerAndCleansIsolatedBundle() async throws {
     let environment = ProcessInfo.processInfo.environment
     let visualHoldSeconds = try Self.visualHoldSeconds(environment)
+    let probesGuestInput =
+      environment["NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_PROBE"] == "1"
+    if probesGuestInput && visualHoldSeconds < Self.inputProbeDurationSeconds {
+      throw LiveLinuxVirtualMachineSmokeError.inputProbeRequiresVisualHold(
+        minimumSeconds: Self.inputProbeDurationSeconds
+      )
+    }
     guard
       let isoPath = environment["NATIVECONTAINERS_LIVE_LINUX_VM_ISO"],
       !isoPath.isEmpty
@@ -108,7 +121,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       if visualHoldSeconds > 0 {
         try await presentVisualConsole(
           console,
-          seconds: visualHoldSeconds
+          seconds: visualHoldSeconds,
+          probesGuestInput: probesGuestInput
         )
       } else {
         try await Task.sleep(for: .seconds(10))
@@ -182,7 +196,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         "NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS"
       ]
     else { return 0 }
-    guard let seconds = Int(value), (1...240).contains(seconds) else {
+    guard let seconds = Int(value), (1...1_800).contains(seconds) else {
       throw LiveLinuxVirtualMachineSmokeError.invalidVisualHold(value)
     }
     return seconds
@@ -190,7 +204,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
 
   private func presentVisualConsole(
     _ console: LinuxVirtualMachineConsole,
-    seconds: Int
+    seconds: Int,
+    probesGuestInput: Bool
   ) async throws {
     let content = NSHostingView(
       rootView: VirtualMachineConsoleView(
@@ -218,23 +233,616 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         "nativecontainers-live-linux-vm-visual-ready-\(ProcessInfo.processInfo.processIdentifier).txt",
       directoryHint: .notDirectory
     )
+    let inputChannel =
+      probesGuestInput ? try Self.makeInputCommandChannel() : nil
     defer {
       window.orderOut(nil)
       window.close()
       try? FileManager.default.removeItem(at: readyURL)
+      if let inputChannel {
+        try? FileManager.default.removeItem(at: inputChannel.rootURL)
+      }
     }
-    try Data("window=\(window.windowNumber)\n".utf8).write(
-      to: readyURL,
-      options: .atomic
-    )
-    try FileManager.default.setAttributes(
-      [.posixPermissions: 0o600],
-      ofItemAtPath: readyURL.nativeContainersPOSIXPath
+    try Self.writeVisualReadyMarker(
+      at: readyURL,
+      windowNumber: window.windowNumber,
+      stage: "ready",
+      commandURL: inputChannel?.commandURL
     )
     print(
       "NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_READY window=\(window.windowNumber) seconds=\(seconds)"
     )
-    try await Task.sleep(for: .seconds(seconds))
+
+    if probesGuestInput {
+      try await performGuestInputProbe(
+        in: content,
+        window: window,
+        readyURL: readyURL,
+        commandURL: inputChannel?.commandURL
+      )
+    }
+    let remainingSeconds =
+      seconds - (probesGuestInput ? Self.inputProbeDurationSeconds : 0)
+    if remainingSeconds > 0 {
+      if let inputChannel {
+        try await processGuestInputCommands(
+          for: remainingSeconds,
+          channel: inputChannel,
+          content: content,
+          window: window,
+          readyURL: readyURL
+        )
+      } else {
+        try await Task.sleep(for: .seconds(remainingSeconds))
+      }
+    }
+  }
+
+  private func performGuestInputProbe(
+    in content: NSView,
+    window: NSWindow,
+    readyURL: URL,
+    commandURL: URL?
+  ) async throws {
+    try await Task.sleep(
+      for: .seconds(Self.inputProbeActivationDelaySeconds)
+    )
+    content.layoutSubtreeIfNeeded()
+    guard
+      let virtualMachineView = Self.firstDescendant(
+        of: VZVirtualMachineView.self,
+        in: content
+      )
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.missingVirtualMachineView
+    }
+    guard window.makeFirstResponder(virtualMachineView) else {
+      throw LiveLinuxVirtualMachineSmokeError.virtualMachineViewRejectedFocus
+    }
+
+    try Self.sendGuestKey(.downArrow, to: virtualMachineView, in: window)
+    try Self.writeVisualReadyMarker(
+      at: readyURL,
+      windowNumber: window.windowNumber,
+      stage: "down-arrow",
+      commandURL: commandURL
+    )
+    print(
+      "NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_READY window=\(window.windowNumber) key=down-arrow seconds=\(Self.inputProbeObservationSeconds)"
+    )
+    try await Task.sleep(
+      for: .seconds(Self.inputProbeObservationSeconds)
+    )
+
+    try Self.sendGuestKey(.upArrow, to: virtualMachineView, in: window)
+    try Self.sendGuestKey(.carriageReturn, to: virtualMachineView, in: window)
+    try Self.writeVisualReadyMarker(
+      at: readyURL,
+      windowNumber: window.windowNumber,
+      stage: "boot",
+      commandURL: commandURL
+    )
+    print(
+      "NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_SENT window=\(window.windowNumber) keys=down-arrow,up-arrow,return"
+    )
+  }
+
+  private func processGuestInputCommands(
+    for seconds: Int,
+    channel: LiveLinuxVirtualMachineInputChannel,
+    content: NSView,
+    window: NSWindow,
+    readyURL: URL
+  ) async throws {
+    content.layoutSubtreeIfNeeded()
+    guard
+      let virtualMachineView = Self.firstDescendant(
+        of: VZVirtualMachineView.self,
+        in: content
+      )
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.missingVirtualMachineView
+    }
+    guard window.makeFirstResponder(virtualMachineView) else {
+      throw LiveLinuxVirtualMachineSmokeError.virtualMachineViewRejectedFocus
+    }
+
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(seconds))
+    while clock.now < deadline {
+      try Task.checkCancellation()
+      if FileManager.default.fileExists(
+        atPath: channel.commandURL.nativeContainersPOSIXPath
+      ) {
+        let attributes = try FileManager.default.attributesOfItem(
+          atPath: channel.commandURL.nativeContainersPOSIXPath
+        )
+        let byteCount = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        guard byteCount <= Self.inputCommandMaximumBytes else {
+          throw LiveLinuxVirtualMachineSmokeError.inputCommandTooLarge(
+            byteCount
+          )
+        }
+        let command = try Self.parseInputCommand(
+          Data(contentsOf: channel.commandURL)
+        )
+        try FileManager.default.removeItem(at: channel.commandURL)
+        if case .finish = command.action {
+          try Self.writeVisualReadyMarker(
+            at: readyURL,
+            windowNumber: window.windowNumber,
+            stage: "command-\(command.id)",
+            commandURL: channel.commandURL
+          )
+          print(
+            "NATIVECONTAINERS_LIVE_LINUX_VM_COMMAND id=\(command.id) action=\(command.summary)"
+          )
+          return
+        }
+        try await Self.executeGuestInputCommand(
+          command,
+          in: virtualMachineView,
+          window: window
+        )
+        try Self.writeVisualReadyMarker(
+          at: readyURL,
+          windowNumber: window.windowNumber,
+          stage: "command-\(command.id)",
+          commandURL: channel.commandURL
+        )
+        print(
+          "NATIVECONTAINERS_LIVE_LINUX_VM_COMMAND id=\(command.id) action=\(command.summary)"
+        )
+      }
+
+      let remaining = clock.now.duration(to: deadline)
+      if remaining > .zero {
+        try await Task.sleep(
+          for: min(remaining, .milliseconds(200))
+        )
+      }
+    }
+  }
+
+  private static func makeInputCommandChannel() throws
+    -> LiveLinuxVirtualMachineInputChannel
+  {
+    let rootURL = FileManager.default.temporaryDirectory.appending(
+      path:
+        "nativecontainers-live-linux-vm-input-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false
+    )
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o700],
+      ofItemAtPath: rootURL.nativeContainersPOSIXPath
+    )
+    return LiveLinuxVirtualMachineInputChannel(rootURL: rootURL)
+  }
+
+  private static func parseInputCommand(_ data: Data) throws
+    -> LiveLinuxVirtualMachineInputCommand
+  {
+    guard data.count <= inputCommandMaximumBytes,
+      let value = String(data: data, encoding: .utf8)
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand(
+        "encoding"
+      )
+    }
+    let fields = value.trimmingCharacters(in: .newlines).split(
+      separator: "\t",
+      omittingEmptySubsequences: false
+    )
+    guard fields.count >= 3 else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand(
+        "field-count"
+      )
+    }
+    let identifier = String(fields[0])
+    guard (1...64).contains(identifier.count),
+      identifier.allSatisfy({
+        $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_")
+      })
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand(
+        "identifier"
+      )
+    }
+
+    let action: LiveLinuxVirtualMachineInputCommand.Action
+    switch fields[1] {
+    case "key":
+      guard fields.count == 3,
+        let key = LiveLinuxVirtualMachineInputKey(
+          commandValue: String(fields[2])
+        )
+      else {
+        throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand("key")
+      }
+      action = .key(key)
+    case "click":
+      guard fields.count == 4,
+        let x = Double(fields[2]), x.isFinite,
+        let y = Double(fields[3]), y.isFinite
+      else {
+        throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand("click")
+      }
+      action = .click(x: x, y: y)
+    case "text":
+      guard fields.count == 3,
+        let encoded = Data(base64Encoded: String(fields[2])),
+        let text = String(data: encoded, encoding: .utf8),
+        text.count <= inputTextMaximumCharacters
+      else {
+        throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand("text")
+      }
+      action = .text(text)
+    case "finish":
+      guard fields.count == 3, fields[2] == "-" else {
+        throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand("finish")
+      }
+      action = .finish
+    default:
+      throw LiveLinuxVirtualMachineSmokeError.invalidInputCommand("action")
+    }
+    return LiveLinuxVirtualMachineInputCommand(
+      id: identifier,
+      action: action
+    )
+  }
+
+  private static func executeGuestInputCommand(
+    _ command: LiveLinuxVirtualMachineInputCommand,
+    in view: VZVirtualMachineView,
+    window: NSWindow
+  ) async throws {
+    switch command.action {
+    case .key(let key):
+      try sendGuestKey(key, to: view, in: window)
+    case .click(let x, let y):
+      try sendGuestClick(x: x, y: y, to: view, in: window)
+    case .text(let text):
+      for character in text {
+        try sendGuestCharacter(character, to: view, in: window)
+        try await Task.sleep(for: .milliseconds(20))
+      }
+    case .finish:
+      break
+    }
+  }
+
+  private static func firstDescendant<View: NSView>(
+    of type: View.Type,
+    in root: NSView
+  ) -> View? {
+    if let match = root as? View { return match }
+    for subview in root.subviews {
+      if let match = firstDescendant(of: type, in: subview) {
+        return match
+      }
+    }
+    return nil
+  }
+
+  private static func sendGuestKey(
+    _ key: LiveLinuxVirtualMachineInputKey,
+    to view: VZVirtualMachineView,
+    in window: NSWindow
+  ) throws {
+    try sendGuestKeyEvents(
+      characters: key.characters,
+      charactersIgnoringModifiers: key.charactersIgnoringModifiers,
+      modifierFlags: key.modifierFlags,
+      keyCode: key.keyCode,
+      description: key.description,
+      to: view,
+      in: window
+    )
+  }
+
+  private static func sendGuestCharacter(
+    _ character: Character,
+    to view: VZVirtualMachineView,
+    in window: NSWindow
+  ) throws {
+    guard let typingKey = LiveLinuxVirtualMachineTypingKey(character) else {
+      throw LiveLinuxVirtualMachineSmokeError.unsupportedInputCharacter(
+        character
+      )
+    }
+    try sendGuestKeyEvents(
+      characters: String(character),
+      charactersIgnoringModifiers: String(typingKey.characterIgnoringModifiers),
+      modifierFlags: typingKey.modifierFlags,
+      keyCode: typingKey.keyCode,
+      description: "text-character",
+      to: view,
+      in: window
+    )
+  }
+
+  private static func sendGuestKeyEvents(
+    characters: String,
+    charactersIgnoringModifiers: String,
+    modifierFlags: NSEvent.ModifierFlags,
+    keyCode: UInt16,
+    description: String,
+    to view: VZVirtualMachineView,
+    in window: NSWindow
+  ) throws {
+    guard
+      let down = NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: modifierFlags,
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: window.windowNumber,
+        context: nil,
+        characters: characters,
+        charactersIgnoringModifiers: charactersIgnoringModifiers,
+        isARepeat: false,
+        keyCode: keyCode
+      ),
+      let up = NSEvent.keyEvent(
+        with: .keyUp,
+        location: .zero,
+        modifierFlags: modifierFlags,
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: window.windowNumber,
+        context: nil,
+        characters: characters,
+        charactersIgnoringModifiers: charactersIgnoringModifiers,
+        isARepeat: false,
+        keyCode: keyCode
+      )
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.couldNotCreateKeyEvent(
+        description
+      )
+    }
+    view.keyDown(with: down)
+    view.keyUp(with: up)
+  }
+
+  private static func sendGuestClick(
+    x: Double,
+    y: Double,
+    to view: VZVirtualMachineView,
+    in window: NSWindow
+  ) throws {
+    guard x >= 0, x <= view.bounds.width,
+      y >= 0, y <= view.bounds.height
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.inputClickOutsideDisplay(
+        x: x,
+        y: y,
+        width: view.bounds.width,
+        height: view.bounds.height
+      )
+    }
+    let viewLocation = NSPoint(x: x, y: view.bounds.height - y)
+    let windowLocation = view.convert(viewLocation, to: nil)
+    guard
+      let moved = NSEvent.mouseEvent(
+        with: .mouseMoved,
+        location: windowLocation,
+        modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: window.windowNumber,
+        context: nil,
+        eventNumber: 0,
+        clickCount: 0,
+        pressure: 0
+      ),
+      let down = NSEvent.mouseEvent(
+        with: .leftMouseDown,
+        location: windowLocation,
+        modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: window.windowNumber,
+        context: nil,
+        eventNumber: 0,
+        clickCount: 1,
+        pressure: 1
+      ),
+      let up = NSEvent.mouseEvent(
+        with: .leftMouseUp,
+        location: windowLocation,
+        modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: window.windowNumber,
+        context: nil,
+        eventNumber: 0,
+        clickCount: 1,
+        pressure: 0
+      )
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.couldNotCreateMouseEvent
+    }
+    view.mouseMoved(with: moved)
+    view.mouseDown(with: down)
+    view.mouseUp(with: up)
+  }
+
+  private static func writeVisualReadyMarker(
+    at url: URL,
+    windowNumber: Int,
+    stage: String,
+    commandURL: URL?
+  ) throws {
+    var marker = "window=\(windowNumber)\nstage=\(stage)\n"
+    if let commandURL {
+      marker += "command=\(commandURL.nativeContainersPOSIXPath)\n"
+    }
+    try Data(marker.utf8).write(
+      to: url,
+      options: .atomic
+    )
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: url.nativeContainersPOSIXPath
+    )
+  }
+}
+
+private struct LiveLinuxVirtualMachineInputChannel {
+  let rootURL: URL
+
+  var commandURL: URL {
+    rootURL.appending(path: "command", directoryHint: .notDirectory)
+  }
+}
+
+private struct LiveLinuxVirtualMachineInputCommand {
+  enum Action {
+    case key(LiveLinuxVirtualMachineInputKey)
+    case click(x: Double, y: Double)
+    case text(String)
+    case finish
+  }
+
+  let id: String
+  let action: Action
+
+  var summary: String {
+    switch action {
+    case .key(let key): "key:\(key.description)"
+    case .click(let x, let y): "click:\(Int(x)),\(Int(y))"
+    case .text(let value): "text:\(value.count)-characters"
+    case .finish: "finish"
+    }
+  }
+}
+
+private enum LiveLinuxVirtualMachineInputKey: CustomStringConvertible {
+  case tab
+  case shiftTab
+  case escape
+  case space
+  case leftArrow
+  case rightArrow
+  case downArrow
+  case upArrow
+  case carriageReturn
+
+  init?(commandValue: String) {
+    switch commandValue {
+    case "tab": self = .tab
+    case "shift-tab": self = .shiftTab
+    case "escape": self = .escape
+    case "space": self = .space
+    case "left": self = .leftArrow
+    case "right": self = .rightArrow
+    case "down": self = .downArrow
+    case "up": self = .upArrow
+    case "return": self = .carriageReturn
+    default: return nil
+    }
+  }
+
+  var keyCode: UInt16 {
+    switch self {
+    case .tab, .shiftTab: 0x30
+    case .escape: 0x35
+    case .space: 0x31
+    case .leftArrow: 0x7B
+    case .rightArrow: 0x7C
+    case .downArrow: 0x7D
+    case .upArrow: 0x7E
+    case .carriageReturn: 0x24
+    }
+  }
+
+  var characters: String {
+    switch self {
+    case .tab, .shiftTab: "\t"
+    case .escape: "\u{1B}"
+    case .space: " "
+    case .leftArrow: String(NSEvent.SpecialKey.leftArrow.unicodeScalar)
+    case .rightArrow: String(NSEvent.SpecialKey.rightArrow.unicodeScalar)
+    case .downArrow: String(NSEvent.SpecialKey.downArrow.unicodeScalar)
+    case .upArrow: String(NSEvent.SpecialKey.upArrow.unicodeScalar)
+    case .carriageReturn:
+      String(NSEvent.SpecialKey.carriageReturn.unicodeScalar)
+    }
+  }
+
+  var charactersIgnoringModifiers: String { characters }
+
+  var modifierFlags: NSEvent.ModifierFlags {
+    self == .shiftTab ? .shift : []
+  }
+
+  var description: String {
+    switch self {
+    case .tab: "tab"
+    case .shiftTab: "shift-tab"
+    case .escape: "escape"
+    case .space: "space"
+    case .leftArrow: "left-arrow"
+    case .rightArrow: "right-arrow"
+    case .downArrow: "down-arrow"
+    case .upArrow: "up-arrow"
+    case .carriageReturn: "return"
+    }
+  }
+}
+
+private struct LiveLinuxVirtualMachineTypingKey {
+  let keyCode: UInt16
+  let characterIgnoringModifiers: Character
+  let modifierFlags: NSEvent.ModifierFlags
+
+  init?(_ character: Character) {
+    let lowercased = Character(String(character).lowercased())
+    let letterKeyCodes: [Character: UInt16] = [
+      "a": 0x00, "b": 0x0B, "c": 0x08, "d": 0x02, "e": 0x0E,
+      "f": 0x03, "g": 0x05, "h": 0x04, "i": 0x22, "j": 0x26,
+      "k": 0x28, "l": 0x25, "m": 0x2E, "n": 0x2D, "o": 0x1F,
+      "p": 0x23, "q": 0x0C, "r": 0x0F, "s": 0x01, "t": 0x11,
+      "u": 0x20, "v": 0x09, "w": 0x0D, "x": 0x07, "y": 0x10,
+      "z": 0x06,
+    ]
+    if let keyCode = letterKeyCodes[lowercased] {
+      self.keyCode = keyCode
+      characterIgnoringModifiers = lowercased
+      modifierFlags = character.isUppercase ? .shift : []
+      return
+    }
+    let digitKeyCodes: [Character: UInt16] = [
+      "0": 0x1D, "1": 0x12, "2": 0x13, "3": 0x14, "4": 0x15,
+      "5": 0x17, "6": 0x16, "7": 0x1A, "8": 0x1C, "9": 0x19,
+    ]
+    if let keyCode = digitKeyCodes[character] {
+      self.keyCode = keyCode
+      characterIgnoringModifiers = character
+      modifierFlags = []
+      return
+    }
+    switch character {
+    case " ":
+      keyCode = 0x31
+      characterIgnoringModifiers = " "
+      modifierFlags = []
+    case "-":
+      keyCode = 0x1B
+      characterIgnoringModifiers = "-"
+      modifierFlags = []
+    case "_":
+      keyCode = 0x1B
+      characterIgnoringModifiers = "-"
+      modifierFlags = .shift
+    case ".":
+      keyCode = 0x2F
+      characterIgnoringModifiers = "."
+      modifierFlags = []
+    default:
+      return nil
+    }
   }
 }
 
@@ -243,6 +851,20 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
   case invalidISO(URL)
   case digestMismatch(expected: String, actual: String)
   case invalidVisualHold(String)
+  case inputProbeRequiresVisualHold(minimumSeconds: Int)
+  case missingVirtualMachineView
+  case virtualMachineViewRejectedFocus
+  case couldNotCreateKeyEvent(String)
+  case couldNotCreateMouseEvent
+  case inputCommandTooLarge(Int)
+  case invalidInputCommand(String)
+  case unsupportedInputCharacter(Character)
+  case inputClickOutsideDisplay(
+    x: Double,
+    y: Double,
+    width: Double,
+    height: Double
+  )
 
   var errorDescription: String? {
     switch self {
@@ -253,7 +875,25 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
     case .digestMismatch(let expected, let actual):
       "The live Linux virtual-machine ISO SHA-256 changed (expected \(expected), found \(actual))."
     case .invalidVisualHold(let value):
-      "The live visual hold must be between 1 and 240 seconds, not \(value)."
+      "The live visual hold must be between 1 and 1,800 seconds, not \(value)."
+    case .inputProbeRequiresVisualHold(let minimumSeconds):
+      "The live guest-input probe requires a visual hold of at least \(minimumSeconds) seconds."
+    case .missingVirtualMachineView:
+      "The live visual console did not create its VZVirtualMachineView."
+    case .virtualMachineViewRejectedFocus:
+      "The live VZVirtualMachineView refused first-responder focus."
+    case .couldNotCreateKeyEvent(let key):
+      "AppKit could not create the live guest \(key) key event."
+    case .couldNotCreateMouseEvent:
+      "AppKit could not create the live guest mouse event."
+    case .inputCommandTooLarge(let byteCount):
+      "The live guest-input command is too large (\(byteCount) bytes)."
+    case .invalidInputCommand(let reason):
+      "The live guest-input command is invalid (\(reason))."
+    case .unsupportedInputCharacter(let character):
+      "The live guest-input command cannot type \(String(reflecting: character))."
+    case .inputClickOutsideDisplay(let x, let y, let width, let height):
+      "The live guest click (\(x), \(y)) is outside the \(width)×\(height) display."
     }
   }
 }
