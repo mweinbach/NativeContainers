@@ -184,7 +184,11 @@ final class KubernetesClusterModel {
   }
 
   func makePodLogsModel(for pod: KubernetesPodRecord) -> KubernetesPodLogsModel {
-    KubernetesPodLogsModel(service: service, pod: pod)
+    KubernetesPodLogsModel(
+      service: service,
+      machine: snapshot.descriptor?.machine,
+      pod: pod
+    )
   }
 
   func scaleWorkload(

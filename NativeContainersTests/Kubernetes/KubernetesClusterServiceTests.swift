@@ -335,6 +335,244 @@ struct KubernetesClusterServiceTests {
   }
 
   @Test
+  func podCommandRequestEnforcesBoundedArgumentsAndTimeout() throws {
+    let identity = (
+      machine: stableIdentity(),
+      podUID: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      podName: "api-abc",
+      containerName: "api"
+    )
+
+    _ = try KubernetesPodCommandRequest(
+      machine: identity.machine,
+      podUID: identity.podUID,
+      namespace: identity.namespace,
+      podName: identity.podName,
+      containerName: identity.containerName,
+      executable: "env",
+      arguments: ["NAME=value"],
+      timeoutSeconds: KubernetesPodCommandRequest.maximumTimeoutSeconds
+    )
+
+    let invalidRequests: [() throws -> KubernetesPodCommandRequest] = [
+      {
+        try KubernetesPodCommandRequest(
+          machine: LinuxMachineIdentity(
+            id: identity.machine.id,
+            imageReference: identity.machine.imageReference,
+            platform: identity.machine.platform,
+            createdAt: nil
+          ),
+          podUID: identity.podUID,
+          namespace: identity.namespace,
+          podName: identity.podName,
+          containerName: identity.containerName,
+          executable: "env"
+        )
+      },
+      {
+        try KubernetesPodCommandRequest(
+          machine: identity.machine,
+          podUID: identity.podUID,
+          namespace: identity.namespace,
+          podName: identity.podName,
+          containerName: identity.containerName,
+          executable: "  "
+        )
+      },
+      {
+        try KubernetesPodCommandRequest(
+          machine: identity.machine,
+          podUID: identity.podUID,
+          namespace: identity.namespace,
+          podName: identity.podName,
+          containerName: identity.containerName,
+          executable: "env",
+          arguments: Array(
+            repeating: "value",
+            count: KubernetesPodCommandRequest.maximumArgumentCount + 1
+          )
+        )
+      },
+      {
+        try KubernetesPodCommandRequest(
+          machine: identity.machine,
+          podUID: identity.podUID,
+          namespace: identity.namespace,
+          podName: identity.podName,
+          containerName: identity.containerName,
+          executable: "env",
+          arguments: [
+            String(
+              repeating: "x",
+              count: KubernetesPodCommandRequest.maximumArgumentBytes + 1
+            )
+          ]
+        )
+      },
+      {
+        try KubernetesPodCommandRequest(
+          machine: identity.machine,
+          podUID: identity.podUID,
+          namespace: identity.namespace,
+          podName: identity.podName,
+          containerName: identity.containerName,
+          executable: "env",
+          arguments: Array(
+            repeating: String(
+              repeating: "x",
+              count: KubernetesPodCommandRequest.maximumArgumentBytes
+            ),
+            count: 9
+          )
+        )
+      },
+      {
+        try KubernetesPodCommandRequest(
+          machine: identity.machine,
+          podUID: identity.podUID,
+          namespace: identity.namespace,
+          podName: identity.podName,
+          containerName: identity.containerName,
+          executable: "env\0bad"
+        )
+      },
+      {
+        try KubernetesPodCommandRequest(
+          machine: identity.machine,
+          podUID: identity.podUID,
+          namespace: "default; unsafe",
+          podName: identity.podName,
+          containerName: identity.containerName,
+          executable: "env"
+        )
+      },
+      {
+        try KubernetesPodCommandRequest(
+          machine: identity.machine,
+          podUID: identity.podUID,
+          namespace: identity.namespace,
+          podName: identity.podName,
+          containerName: identity.containerName,
+          executable: "env",
+          timeoutSeconds: KubernetesPodCommandRequest.maximumTimeoutSeconds + 1
+        )
+      },
+    ]
+    for invalidRequest in invalidRequests {
+      #expect(throws: KubernetesClusterError.invalidPodCommandRequest) {
+        _ = try invalidRequest()
+      }
+    }
+  }
+
+  @Test
+  func executesOneBoundedCommandAgainstTheExactPodContainer() async throws {
+    let machine = makeMachine()
+    let runtime = KubernetesMachineRuntimeDouble(machine: machine)
+    let commands = KubernetesRootCommandDouble()
+    let descriptor = KubernetesClusterDescriptor(
+      operationID: UUID(),
+      machine: LinuxMachineIdentity(machine: machine),
+      distribution: .current,
+      phase: .ready,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_100)
+    )
+    let store = InMemoryKubernetesDescriptorStore(descriptor: descriptor)
+    let service = makeService(runtime: runtime, commands: commands, store: store)
+    let request = try KubernetesPodCommandRequest(
+      machine: descriptor.machine,
+      podUID: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      podName: "api-abc",
+      containerName: "api",
+      executable: "tool; touch /tmp/pwned",
+      arguments: ["$(touch /tmp/pwned)", "quote'value"],
+      timeoutSeconds: 30
+    )
+    await commands.setPodCommandResult(
+      exitCode: 23,
+      standardOutput: "command output\n",
+      standardError: "command warning\n",
+      outputWasTruncated: true
+    )
+
+    let commandResult = try await service.executePodCommand(request)
+
+    #expect(commandResult.request == request)
+    #expect(commandResult.process.exitCode == 23)
+    #expect(commandResult.process.standardOutput == "command output\n")
+    #expect(commandResult.process.standardError == "command warning\n")
+    #expect(commandResult.process.outputWasTruncated)
+    #expect(commandResult.capturedAt == Date(timeIntervalSince1970: 1_700_000_100))
+    let invocation = try #require(
+      await commands.commands.first(where: {
+        $0.command.contains(AppleKubernetesClusterService.podCommandResultMarker)
+      })
+    )
+    #expect(invocation.target == descriptor.machine)
+    #expect(invocation.timeoutSeconds == 50)
+    #expect(invocation.command.contains("--namespace=default"))
+    #expect(invocation.command.contains("--container=api"))
+    #expect(invocation.command.contains("--pod-running-timeout=15s"))
+    #expect(invocation.command.contains("--request-timeout=30s"))
+    #expect(invocation.command.contains("-- 'tool; touch /tmp/pwned'"))
+    #expect(invocation.command.contains("'$(touch /tmp/pwned)'"))
+    #expect(invocation.command.contains("'quote'\"'\"'value'"))
+    #expect(!invocation.command.contains("--stdin"))
+    #expect(!invocation.command.contains("--tty"))
+    #expect(
+      invocation.command.components(separatedBy: "kubectl get pod").count - 1
+        == 2
+    )
+
+    let replacementMachine = LinuxMachineIdentity(
+      id: descriptor.machine.id,
+      imageReference: descriptor.machine.imageReference,
+      platform: descriptor.machine.platform,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_500)
+    )
+    let replacementRequest = try KubernetesPodCommandRequest(
+      machine: replacementMachine,
+      podUID: request.podUID,
+      namespace: request.namespace,
+      podName: request.podName,
+      containerName: request.containerName,
+      executable: request.executable,
+      arguments: request.arguments,
+      timeoutSeconds: request.timeoutSeconds
+    )
+    let invocationCount = await commands.commands.count
+    await #expect(
+      throws: KubernetesClusterError.machineIdentityChanged(replacementMachine.id)
+    ) {
+      _ = try await service.executePodCommand(replacementRequest)
+    }
+    #expect(await commands.commands.count == invocationCount)
+
+    await commands.setPodCommandResult(
+      exitCode: -1,
+      standardOutput: "invalid status\n",
+      standardError: "",
+      outputWasTruncated: false
+    )
+    await #expect(throws: KubernetesClusterError.invalidPodCommandResult) {
+      _ = try await service.executePodCommand(request)
+    }
+
+    await commands.setPodCommandUID("22222222-2222-4222-8222-222222222222")
+    await #expect(throws: KubernetesClusterError.invalidPodCommandResult) {
+      _ = try await service.executePodCommand(request)
+    }
+
+    await commands.setPodCommandWrapperExitCode(66)
+    await #expect(throws: KubernetesClusterError.podIdentityChanged(request.podName)) {
+      _ = try await service.executePodCommand(request)
+    }
+  }
+
+  @Test
   func scalesOnlyTheReviewedWorkloadVersionAndConfirmsTheResult() async throws {
     let machine = makeMachine()
     let runtime = KubernetesMachineRuntimeDouble(machine: machine)
@@ -1023,6 +1261,62 @@ struct KubernetesClusterModelTests {
   }
 
   @Test
+  func podCommandModelPublishesTheIdentityBoundResult() async {
+    let model = KubernetesPodCommandModel(
+      machine: stableIdentity(),
+      podUID: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      podName: "api-abc",
+      containerName: "api"
+    ) { request in
+      KubernetesPodCommandResult(
+        request: request,
+        process: ContainerCommandResult(
+          exitCode: 7,
+          standardOutput: "stdout\n",
+          standardError: "stderr\n",
+          outputWasTruncated: false,
+          duration: .milliseconds(25)
+        ),
+        capturedAt: Date(timeIntervalSince1970: 1_700_000_100)
+      )
+    }
+
+    await model.execute(
+      executable: "env",
+      arguments: ["NAME=value"],
+      timeoutSeconds: 30
+    )
+
+    #expect(!model.isRunning)
+    #expect(model.errorMessage == nil)
+    #expect(model.result?.request.containerName == "api")
+    #expect(model.result?.request.executable == "env")
+    #expect(model.result?.process.exitCode == 7)
+    #expect(model.result?.process.standardOutput == "stdout\n")
+
+    let cancelledModel = KubernetesPodCommandModel(
+      machine: stableIdentity(),
+      podUID: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      podName: "api-abc",
+      containerName: "api"
+    ) { _ in
+      throw CancellationError()
+    }
+    await cancelledModel.execute(
+      executable: "env",
+      arguments: [],
+      timeoutSeconds: 30
+    )
+    #expect(cancelledModel.result == nil)
+    #expect(
+      cancelledModel.errorMessage
+        == String(localized: "The Pod command was cancelled.")
+    )
+  }
+
+  @Test
   func failedMutationKeepsTheErrorAndReloadsAuthoritativeState() async {
     let snapshot = readyKubernetesSnapshot()
     let service = KubernetesModelServiceDouble(snapshot: snapshot)
@@ -1144,6 +1438,22 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
       text: "test log output\n",
       capturedAt: Date(timeIntervalSince1970: 1_700_000_100),
       isTruncated: false
+    )
+  }
+
+  func executePodCommand(
+    _ request: KubernetesPodCommandRequest
+  ) -> KubernetesPodCommandResult {
+    KubernetesPodCommandResult(
+      request: request,
+      process: ContainerCommandResult(
+        exitCode: 0,
+        standardOutput: "test command output\n",
+        standardError: "",
+        outputWasTruncated: false,
+        duration: .milliseconds(1)
+      ),
+      capturedAt: Date(timeIntervalSince1970: 1_700_000_100)
     )
   }
 
@@ -1374,6 +1684,12 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
   private var kubeconfig: String
   private var podLogOutput: String
   private var podLogUID: String
+  private var podCommandExitCode: Int32 = 0
+  private var podCommandOutput = "command output\n"
+  private var podCommandError = ""
+  private var podCommandUID: String
+  private var podCommandOutputWasTruncated = false
+  private var podCommandWrapperExitCode: Int32 = 0
   private var workloadScaleExitCode: Int32 = 0
   private var workloadScaleOutput =
     "\(AppleKubernetesClusterService.workloadScaleMarker)aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\t102\t3\n"
@@ -1413,6 +1729,7 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
     self.kubeconfig = kubeconfig
     self.podLogOutput = podLogOutput
     self.podLogUID = podLogUID
+    podCommandUID = podLogUID
   }
 
   func executeRootCommand(
@@ -1444,6 +1761,21 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
     }
     if command.contains(KubernetesResourceInventoryParser.workloadsMarker) {
       return result(standardOutput: testKubernetesResourceInventoryOutput())
+    }
+    if command.contains(AppleKubernetesClusterService.podCommandResultMarker) {
+      if podCommandWrapperExitCode != 0 {
+        return result(
+          exitCode: podCommandWrapperExitCode,
+          standardError: "Pod identity changed"
+        )
+      }
+      return result(
+        standardOutput:
+          podCommandOutput
+          + "\n\(AppleKubernetesClusterService.podCommandResultMarker)\(podCommandUID)\t\(podCommandExitCode)\n",
+        standardError: podCommandError,
+        outputWasTruncated: podCommandOutputWasTruncated
+      )
     }
     if command.contains("kubectl logs") {
       return result(
@@ -1501,6 +1833,26 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
     podLogUID = value
   }
 
+  func setPodCommandResult(
+    exitCode: Int32,
+    standardOutput: String,
+    standardError: String,
+    outputWasTruncated: Bool
+  ) {
+    podCommandExitCode = exitCode
+    podCommandOutput = standardOutput
+    podCommandError = standardError
+    podCommandOutputWasTruncated = outputWasTruncated
+  }
+
+  func setPodCommandUID(_ value: String) {
+    podCommandUID = value
+  }
+
+  func setPodCommandWrapperExitCode(_ value: Int32) {
+    podCommandWrapperExitCode = value
+  }
+
   func setWorkloadScaleExitCode(_ value: Int32) {
     workloadScaleExitCode = value
   }
@@ -1528,13 +1880,14 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
   private func result(
     exitCode: Int32 = 0,
     standardOutput: String = "",
-    standardError: String = ""
+    standardError: String = "",
+    outputWasTruncated: Bool = false
   ) -> ContainerCommandResult {
     ContainerCommandResult(
       exitCode: exitCode,
       standardOutput: standardOutput,
       standardError: standardError,
-      outputWasTruncated: false,
+      outputWasTruncated: outputWasTruncated,
       duration: .zero
     )
   }

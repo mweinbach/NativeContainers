@@ -248,6 +248,9 @@ protocol KubernetesClusterManaging: Sendable {
   func loadPodLogs(
     _ request: KubernetesPodLogRequest
   ) async throws -> KubernetesPodLogSnapshot
+  func executePodCommand(
+    _ request: KubernetesPodCommandRequest
+  ) async throws -> KubernetesPodCommandResult
   func scaleWorkload(
     _ request: KubernetesWorkloadScaleRequest
   ) async throws -> KubernetesWorkloadScaleResult
@@ -284,6 +287,12 @@ struct UnavailableKubernetesClusterService: KubernetesClusterManaging {
   func loadPodLogs(
     _ request: KubernetesPodLogRequest
   ) async throws -> KubernetesPodLogSnapshot {
+    throw KubernetesClusterError.unavailable
+  }
+
+  func executePodCommand(
+    _ request: KubernetesPodCommandRequest
+  ) async throws -> KubernetesPodCommandResult {
     throw KubernetesClusterError.unavailable
   }
 
@@ -361,6 +370,8 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
   case invalidResourceInventory
   case invalidKubernetesResourceReference
   case invalidPodLogSnapshot
+  case invalidPodCommandRequest
+  case invalidPodCommandResult
   case invalidWorkloadScaleRequest
   case workloadNotScalable
   case workloadIdentityChanged(String)
@@ -427,6 +438,13 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
       String(localized: "The Kubernetes resource reference is invalid.")
     case .invalidPodLogSnapshot:
       String(localized: "K3s returned an invalid Pod log snapshot.")
+    case .invalidPodCommandRequest:
+      String(
+        localized:
+          "Enter one executable, no more than 128 bounded arguments, and a timeout from 1 to 300 seconds."
+      )
+    case .invalidPodCommandResult:
+      String(localized: "K3s returned an invalid Pod command result.")
     case .invalidWorkloadScaleRequest:
       String(localized: "The Kubernetes workload scale request is invalid.")
     case .workloadNotScalable:

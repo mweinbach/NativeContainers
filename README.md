@@ -81,8 +81,9 @@ export without host-side credential persistence. Its bounded native resource
 browser keeps workload and Pod identity pinned, supports preconditioned
 Deployment/StatefulSet scaling, optimistic-locked Deployment, StatefulSet, and
 DaemonSet restarts, UID/resourceVersion-preconditioned foreground workload
-deletion, bounded Pod logs, and identity-checked interactive Pod terminals
-without exporting workload payloads or credentials to the host.
+deletion, bounded Pod logs, identity-bracketed one-shot Pod commands, and
+identity-checked interactive Pod terminals without exporting workload payloads
+or credentials to the host.
 Ordinary container terminals and the exec sheet share typed, bounded shell
 discovery instead of assuming `/bin/sh`, while preserving explicit executable
 overrides for minimal and custom images. Container and Linux-machine shells now

@@ -279,6 +279,73 @@ struct KubernetesPodLogSnapshot: Equatable, Sendable {
   let isTruncated: Bool
 }
 
+struct KubernetesPodCommandRequest: Equatable, Sendable {
+  static let maximumExecutableBytes = 1_024
+  static let maximumArgumentCount = 128
+  static let maximumArgumentBytes = 4 * 1_024
+  static let maximumCommandBytes = 32 * 1_024
+  static let maximumTimeoutSeconds = 300
+
+  let machine: LinuxMachineIdentity
+  let podUID: String
+  let namespace: String
+  let podName: String
+  let containerName: String
+  let executable: String
+  let arguments: [String]
+  let timeoutSeconds: Int
+
+  init(
+    machine: LinuxMachineIdentity,
+    podUID: String,
+    namespace: String,
+    podName: String,
+    containerName: String,
+    executable: String,
+    arguments: [String] = [],
+    timeoutSeconds: Int = 30
+  ) throws {
+    let executable = executable.trimmingCharacters(in: .whitespacesAndNewlines)
+    let argumentByteCounts = arguments.map { $0.utf8.count }
+    guard
+      machine.hasStableCreationIdentity,
+      KubernetesResourceReferenceValidator.isPodUID(podUID),
+      KubernetesResourceReferenceValidator.isNamespace(namespace),
+      KubernetesResourceReferenceValidator.isResourceName(podName),
+      KubernetesResourceReferenceValidator.isContainerName(containerName),
+      !executable.isEmpty,
+      executable.utf8.count <= Self.maximumExecutableBytes,
+      !executable.contains("\0"),
+      arguments.count <= Self.maximumArgumentCount,
+      zip(arguments, argumentByteCounts).allSatisfy({
+        $0.1 <= Self.maximumArgumentBytes && !$0.0.contains("\0")
+      }),
+      (1...Self.maximumTimeoutSeconds).contains(timeoutSeconds)
+    else {
+      throw KubernetesClusterError.invalidPodCommandRequest
+    }
+    let totalCommandBytes = argumentByteCounts.reduce(executable.utf8.count, +)
+    guard totalCommandBytes <= Self.maximumCommandBytes else {
+      throw KubernetesClusterError.invalidPodCommandRequest
+    }
+
+    self.machine = machine
+    self.podUID = podUID
+    self.namespace = namespace
+    self.podName = podName
+    self.containerName = containerName
+    self.executable = executable
+    self.arguments = arguments
+    self.timeoutSeconds = timeoutSeconds
+  }
+}
+
+struct KubernetesPodCommandResult: Equatable, Sendable {
+  let request: KubernetesPodCommandRequest
+  let process: ContainerCommandResult
+  let capturedAt: Date
+}
+
 struct KubernetesServicePortRecord: Identifiable, Equatable, Sendable {
   let name: String?
   let protocolName: String

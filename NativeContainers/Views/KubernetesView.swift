@@ -683,6 +683,22 @@ private struct PreviewKubernetesClusterService: KubernetesClusterManaging {
     )
   }
 
+  func executePodCommand(
+    _ request: KubernetesPodCommandRequest
+  ) async throws -> KubernetesPodCommandResult {
+    KubernetesPodCommandResult(
+      request: request,
+      process: ContainerCommandResult(
+        exitCode: 0,
+        standardOutput: "preview command output\n",
+        standardError: "",
+        outputWasTruncated: false,
+        duration: .milliseconds(42)
+      ),
+      capturedAt: Date()
+    )
+  }
+
   func scaleWorkload(
     _ request: KubernetesWorkloadScaleRequest
   ) async throws -> KubernetesWorkloadScaleResult {

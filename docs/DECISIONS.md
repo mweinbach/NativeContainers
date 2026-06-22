@@ -1814,9 +1814,8 @@ The final UID check therefore cannot prevent replacement in the narrow interval
 before the upstream exec begins, and an interactive stream cannot be bracketed
 with a useful post-read identity decision. NativeContainers fails closed for
 replacement detected during discovery, final preflight, or the immediate
-post-launch check and documents the remaining upstream race. A general
-arbitrary-command/non-interactive exec UI remains a separate reviewed
-capability.
+post-launch check and documents the remaining upstream race. Noninteractive
+execution follows the separate bounded contract in ADR-078.
 
 ## ADR-065: Scale workloads only with server-enforced review preconditions
 
@@ -2227,3 +2226,33 @@ management workflow using VoiceOver and Full Keyboard Access, plus Voice
 Control, visual accessibility settings, pseudolocalization, and reviewed
 shipping translations. Until that matrix is complete, only the source contract
 is closed; end-to-end accessibility and non-English localization remain open.
+
+## ADR-078: Run Pod commands through bounded argv and bracketed identity
+
+**Status:** Accepted — 2026-06-22
+
+One-shot Kubernetes Pod commands reuse the app-owned K3s service and Apple's
+machine process-XPC transport. They do not export kubeconfig, invoke a host
+`kubectl`, expose the cluster machine's root shell, allocate a PTY, or persist
+command text or output. A typed request carries the selected Pod API UID,
+the exact Apple machine identity, namespace, Pod name, explicit container name,
+one executable, up to 128 arguments, and a 1–300 second timeout. Executable,
+per-argument, and aggregate byte limits bound the guest command frame.
+
+Kubernetes defines exec as `COMMAND [args...]` after `--`. NativeContainers
+therefore adds no implicit shell. It shell-quotes each typed value only while
+lowering argv into the fixed root wrapper, so quotes, substitutions, separators,
+and whitespace remain argument data rather than host-script syntax. The wrapper
+requires the exact current Apple machine, reads and compares the Pod UID, calls
+explicit-container `k3s kubectl exec` without stdin or TTY, then reads the UID
+again. A service-owned suffix binds the expected UID to the remote exit status;
+the host accepts only that exact final marker and preserves nonzero command exit
+as a result rather than misclassifying it as transport failure.
+
+Stdout and stderr remain in the sheet model and retain at most the newest 1 MiB
+per stream. Cancellation kills the app-owned Apple process transport and rejects
+late results. Kubernetes exec remains name-addressed and supplies no conditional
+UID token or remote-process identity, so the two UID reads cannot make the call
+atomic and cancellation cannot claim rollback or confirmed remote termination.
+Replacement detected before or after the call fails closed; the remaining
+upstream race is documented instead of hidden.

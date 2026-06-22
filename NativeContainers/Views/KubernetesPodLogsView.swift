@@ -8,6 +8,7 @@ struct KubernetesPodLogsView: View {
   @State private var model: KubernetesPodLogsModel
   @State private var isExporting = false
   @State private var exportErrorMessage: String?
+  @State private var commandModel: KubernetesPodCommandModel?
   private let terminalMachine: LinuxMachineIdentity?
 
   init(clusterModel: KubernetesClusterModel, pod: KubernetesPodRecord) {
@@ -93,6 +94,14 @@ struct KubernetesPodLogsView: View {
           }
         }
         ToolbarItemGroup(placement: .primaryAction) {
+          Button("Run Command", systemImage: "chevron.left.forwardslash.chevron.right") {
+            commandModel = model.makeCommandModel()
+          }
+          .disabled(
+            terminalMachine == nil
+              || !model.containerNames.contains(model.selectedContainerName)
+          )
+
           Button("Open Terminal", systemImage: "terminal") {
             openPodTerminal()
           }
@@ -118,6 +127,9 @@ struct KubernetesPodLogsView: View {
     .frame(minWidth: 820, minHeight: 560)
     .task(id: model.selectedContainerName) {
       await model.refresh()
+    }
+    .sheet(item: $commandModel) { commandModel in
+      KubernetesPodCommandView(model: commandModel)
     }
     .fileExporter(
       isPresented: $isExporting,
@@ -156,6 +168,8 @@ struct KubernetesPodLogsView: View {
 final class KubernetesPodLogsModel {
   typealias Loader =
     @Sendable (KubernetesPodLogRequest) async throws -> KubernetesPodLogSnapshot
+  typealias CommandExecutor =
+    @Sendable (KubernetesPodCommandRequest) async throws -> KubernetesPodCommandResult
 
   let namespace: String
   let podName: String
@@ -197,10 +211,17 @@ final class KubernetesPodLogsModel {
   private let loader: Loader
 
   @ObservationIgnored
+  private let commandExecutor: CommandExecutor
+
+  @ObservationIgnored
+  private let commandMachine: LinuxMachineIdentity?
+
+  @ObservationIgnored
   private var refreshGeneration = 0
 
   init(
     service: any KubernetesClusterManaging,
+    machine: LinuxMachineIdentity?,
     pod: KubernetesPodRecord
   ) {
     namespace = pod.namespace
@@ -211,6 +232,10 @@ final class KubernetesPodLogsModel {
     loader = { request in
       try await service.loadPodLogs(request)
     }
+    commandExecutor = { request in
+      try await service.executePodCommand(request)
+    }
+    commandMachine = machine
   }
 
   init(
@@ -223,6 +248,22 @@ final class KubernetesPodLogsModel {
     containerNames = pod.containerNames
     selectedContainerName = pod.containerNames.first ?? ""
     self.loader = loader
+    commandExecutor = { _ in
+      throw KubernetesClusterError.unavailable
+    }
+    commandMachine = nil
+  }
+
+  func makeCommandModel() -> KubernetesPodCommandModel? {
+    guard let commandMachine else { return nil }
+    return KubernetesPodCommandModel(
+      machine: commandMachine,
+      podUID: podUID,
+      namespace: namespace,
+      podName: podName,
+      containerName: selectedContainerName,
+      executor: commandExecutor
+    )
   }
 
   func refresh() async {
@@ -294,6 +335,318 @@ final class KubernetesPodLogsModel {
 
   private var normalizedSearchText: String {
     searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
+@MainActor
+@Observable
+final class KubernetesPodCommandModel: Identifiable {
+  typealias Executor =
+    @Sendable (KubernetesPodCommandRequest) async throws -> KubernetesPodCommandResult
+
+  let id = UUID()
+  let machine: LinuxMachineIdentity
+  let podUID: String
+  let namespace: String
+  let podName: String
+  let containerName: String
+
+  private(set) var isRunning = false
+  private(set) var result: KubernetesPodCommandResult?
+  private(set) var errorMessage: String?
+
+  @ObservationIgnored
+  private let executor: Executor
+
+  init(
+    machine: LinuxMachineIdentity,
+    podUID: String,
+    namespace: String,
+    podName: String,
+    containerName: String,
+    executor: @escaping Executor
+  ) {
+    self.machine = machine
+    self.podUID = podUID
+    self.namespace = namespace
+    self.podName = podName
+    self.containerName = containerName
+    self.executor = executor
+  }
+
+  func execute(
+    executable: String,
+    arguments: [String],
+    timeoutSeconds: Int
+  ) async {
+    guard !isRunning else { return }
+    isRunning = true
+    result = nil
+    errorMessage = nil
+    defer { isRunning = false }
+
+    do {
+      let request = try KubernetesPodCommandRequest(
+        machine: machine,
+        podUID: podUID,
+        namespace: namespace,
+        podName: podName,
+        containerName: containerName,
+        executable: executable,
+        arguments: arguments,
+        timeoutSeconds: timeoutSeconds
+      )
+      let nextResult = try await executor(request)
+      try Task.checkCancellation()
+      guard nextResult.request == request else {
+        throw KubernetesClusterError.invalidPodCommandResult
+      }
+      result = nextResult
+    } catch is CancellationError {
+      errorMessage = String(localized: "The Pod command was cancelled.")
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+}
+
+private struct KubernetesPodCommandView: View {
+  @Environment(\.dismiss) private var dismiss
+  @State private var model: KubernetesPodCommandModel
+  @State private var executable = ""
+  @State private var argumentsText = ""
+  @State private var timeoutSeconds = 30
+  @State private var selectedOutput = KubernetesPodCommandOutputKind.standardOutput
+  @State private var commandTask: Task<Void, Never>?
+
+  init(model: KubernetesPodCommandModel) {
+    _model = State(initialValue: model)
+  }
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        KubernetesPodCommandTargetSection(
+          namespace: model.namespace,
+          podName: model.podName,
+          containerName: model.containerName
+        )
+        KubernetesPodCommandInputSection(
+          executable: $executable,
+          argumentsText: $argumentsText,
+          timeoutSeconds: $timeoutSeconds
+        )
+        if let result = model.result {
+          KubernetesPodCommandResultSection(
+            result: result,
+            selectedOutput: $selectedOutput
+          )
+        }
+        if let errorMessage = model.errorMessage {
+          KubernetesPodCommandErrorSection(message: errorMessage)
+        }
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Run Pod Command")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button(model.isRunning ? "Stop" : "Close") {
+            if model.isRunning {
+              commandTask?.cancel()
+            } else {
+              dismiss()
+            }
+          }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Run", systemImage: "play.fill") {
+            runCommand()
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(
+            model.isRunning
+              || executable.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          )
+        }
+      }
+    }
+    .frame(minWidth: 680, minHeight: 640)
+    .interactiveDismissDisabled(model.isRunning)
+    .onDisappear {
+      commandTask?.cancel()
+    }
+  }
+
+  private func runCommand() {
+    let arguments = argumentsText.components(separatedBy: .newlines)
+      .filter { !$0.isEmpty }
+    commandTask = Task {
+      await model.execute(
+        executable: executable,
+        arguments: arguments,
+        timeoutSeconds: timeoutSeconds
+      )
+      commandTask = nil
+    }
+  }
+}
+
+private struct KubernetesPodCommandTargetSection: View {
+  let namespace: String
+  let podName: String
+  let containerName: String
+
+  var body: some View {
+    Section("Target") {
+      LabeledContent("Namespace", value: namespace)
+      LabeledContent("Pod", value: podName)
+      LabeledContent("Container", value: containerName)
+      Label(
+        "The Pod UID is checked before and after execution. A same-name replacement is never addressed.",
+        systemImage: "checkmark.shield"
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    }
+  }
+}
+
+private struct KubernetesPodCommandInputSection: View {
+  @Binding var executable: String
+  @Binding var argumentsText: String
+  @Binding var timeoutSeconds: Int
+
+  var body: some View {
+    Section("Command") {
+      TextField(
+        "Executable",
+        text: $executable,
+        prompt: Text("For example: env or /bin/sh")
+      )
+      .font(.body.monospaced())
+
+      LabeledContent("Arguments") {
+        TextEditor(text: $argumentsText)
+          .font(.body.monospaced())
+          .frame(minHeight: 100)
+      }
+      Text(
+        "Enter one argument per line; empty lines are omitted. NativeContainers passes the executable and arguments directly after kubectl’s separator; it does not add a shell."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      Label(
+        "Command output stays in memory and may contain sensitive application data.",
+        systemImage: "lock.shield"
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+
+      Stepper(
+        value: $timeoutSeconds,
+        in: 1...KubernetesPodCommandRequest.maximumTimeoutSeconds,
+        step: 5
+      ) {
+        LabeledContent("Timeout") {
+          Text("\(timeoutSeconds) seconds")
+        }
+      }
+    }
+  }
+}
+
+private struct KubernetesPodCommandResultSection: View {
+  let result: KubernetesPodCommandResult
+  @Binding var selectedOutput: KubernetesPodCommandOutputKind
+
+  var body: some View {
+    Section("Result") {
+      HStack {
+        Label(
+          "Exit \(result.process.exitCode)",
+          systemImage: result.process.exitCode == 0
+            ? "checkmark.circle.fill"
+            : "exclamationmark.circle.fill"
+        )
+        .foregroundStyle(result.process.exitCode == 0 ? .green : .orange)
+        Spacer()
+        Text(
+          "\(durationSeconds, format: .number.precision(.fractionLength(2))) s"
+        )
+        .foregroundStyle(.secondary)
+        .monospacedDigit()
+        Text(result.capturedAt, format: .dateTime.hour().minute().second())
+          .foregroundStyle(.secondary)
+      }
+
+      Picker("Output", selection: $selectedOutput) {
+        ForEach(KubernetesPodCommandOutputKind.allCases) { output in
+          Text(output.title).tag(output)
+        }
+      }
+      .pickerStyle(.segmented)
+      .labelsHidden()
+
+      ScrollView([.horizontal, .vertical]) {
+        Text(outputText.isEmpty ? "No output." : outputText)
+          .font(.system(.caption, design: .monospaced))
+          .textSelection(.enabled)
+          .privacySensitive()
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(12)
+      }
+      .frame(minHeight: 180, maxHeight: 320)
+      .background(.black.opacity(0.88), in: RoundedRectangle(cornerRadius: 10))
+      .foregroundStyle(.white)
+
+      if result.process.outputWasTruncated {
+        Text("Showing the newest 1 MiB from each output stream.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  private var outputText: String {
+    switch selectedOutput {
+    case .standardOutput:
+      result.process.standardOutput
+    case .standardError:
+      result.process.standardError
+    }
+  }
+
+  private var durationSeconds: Double {
+    let components = result.process.duration.components
+    return Double(components.seconds) + Double(components.attoseconds) / 1e18
+  }
+}
+
+private struct KubernetesPodCommandErrorSection: View {
+  let message: String
+
+  var body: some View {
+    Section {
+      Label(message, systemImage: "exclamationmark.triangle.fill")
+        .foregroundStyle(.red)
+        .textSelection(.enabled)
+    }
+  }
+}
+
+private enum KubernetesPodCommandOutputKind: String, CaseIterable, Identifiable {
+  case standardOutput
+  case standardError
+
+  var id: Self { self }
+
+  var title: LocalizedStringResource {
+    switch self {
+    case .standardOutput:
+      "Standard Output"
+    case .standardError:
+      "Standard Error"
+    }
   }
 }
 
@@ -490,6 +843,35 @@ private struct KubernetesPodLogUnavailableView: View {
           """,
         capturedAt: Date(),
         isTruncated: false
+      )
+    }
+  )
+}
+
+#Preview("Kubernetes Pod Command") {
+  KubernetesPodCommandView(
+    model: KubernetesPodCommandModel(
+      machine: LinuxMachineIdentity(
+        id: "nativecontainers-kubernetes",
+        imageReference: "docker.io/library/alpine:3.22",
+        platform: "linux/arm64",
+        createdAt: Date()
+      ),
+      podUID: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      podName: "api-7f8d9b6c4d-x2mqp",
+      containerName: "api"
+    ) { request in
+      KubernetesPodCommandResult(
+        request: request,
+        process: ContainerCommandResult(
+          exitCode: 0,
+          standardOutput: "NAME=nativecontainers\n",
+          standardError: "",
+          outputWasTruncated: false,
+          duration: .milliseconds(42)
+        ),
+        capturedAt: Date()
       )
     }
   )

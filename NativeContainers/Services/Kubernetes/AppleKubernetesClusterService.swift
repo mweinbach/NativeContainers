@@ -67,6 +67,7 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
   static let maximumPodLogBytes = 512 * 1_024
   static let maximumPodLogLines = 2_000
   static let podLogIdentityMarker = "__NATIVECONTAINERS_K3S_POD_LOG_UID__"
+  static let podCommandResultMarker = "__NATIVECONTAINERS_K3S_POD_COMMAND__"
   static let workloadScaleMarker = "__NATIVECONTAINERS_K3S_WORKLOAD_SCALE__"
   static let workloadRestartMarker = "__NATIVECONTAINERS_K3S_WORKLOAD_RESTART__"
   static let workloadDeleteMarker = "__NATIVECONTAINERS_K3S_WORKLOAD_DELETE__"
@@ -202,6 +203,35 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
       text: String(decoding: boundedOutput, as: UTF8.self),
       capturedAt: now(),
       isTruncated: isTruncated
+    )
+  }
+
+  func executePodCommand(
+    _ request: KubernetesPodCommandRequest
+  ) async throws -> KubernetesPodCommandResult {
+    let descriptor = try await requireReadyRunningDescriptor()
+    guard descriptor.machine == request.machine else {
+      throw KubernetesClusterError.machineIdentityChanged(request.machine.id)
+    }
+    let command = Self.podCommand(request)
+    let result = try await rootCommands.executeRootCommand(
+      command,
+      in: descriptor.machine,
+      timeoutSeconds: request.timeoutSeconds + 20
+    )
+    guard result.exitCode == 0 else {
+      if result.exitCode == 66 {
+        throw KubernetesClusterError.podIdentityChanged(request.podName)
+      }
+      throw KubernetesClusterError.guestCommandFailed(
+        operation: String(localized: "Running Pod command"),
+        detail: Self.sanitizedFailureDetail(result)
+      )
+    }
+    return try Self.validatedPodCommandResult(
+      result,
+      request: request,
+      capturedAt: now()
     )
   }
 
@@ -737,6 +767,32 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
       """
   }
 
+  private static func podCommand(
+    _ request: KubernetesPodCommandRequest
+  ) -> String {
+    let command = ([request.executable] + request.arguments)
+      .map(shellQuote)
+      .joined(separator: " ")
+    return """
+      set -eu
+      pod_uid=$(/usr/local/bin/k3s kubectl get pod --namespace=\(request.namespace) --output=jsonpath='{.metadata.uid}' --request-timeout=5s \(request.podName))
+      if [ "$pod_uid" != '\(request.podUID)' ]; then
+        echo 'The selected Pod identity changed.' >&2
+        exit 66
+      fi
+      set +e
+      /usr/local/bin/k3s kubectl exec --namespace=\(request.namespace) --container=\(request.containerName) --pod-running-timeout=15s --request-timeout=\(request.timeoutSeconds)s \(request.podName) -- \(command)
+      command_status=$?
+      set -e
+      pod_uid=$(/usr/local/bin/k3s kubectl get pod --namespace=\(request.namespace) --output=jsonpath='{.metadata.uid}' --request-timeout=5s \(request.podName))
+      if [ "$pod_uid" != '\(request.podUID)' ]; then
+        echo 'The selected Pod identity changed.' >&2
+        exit 66
+      fi
+      printf '\n\(podCommandResultMarker)%s\t%s\n' "$pod_uid" "$command_status"
+      """
+  }
+
   private static func workloadScaleCommand(
     _ request: KubernetesWorkloadScaleRequest
   ) throws -> String {
@@ -1089,6 +1145,46 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
       throw KubernetesClusterError.invalidPodLogSnapshot
     }
     return String(output.dropLast(identitySuffix.count))
+  }
+
+  private static func validatedPodCommandResult(
+    _ result: ContainerCommandResult,
+    request: KubernetesPodCommandRequest,
+    capturedAt: Date
+  ) throws -> KubernetesPodCommandResult {
+    let marker = "\n\(podCommandResultMarker)\(request.podUID)\t"
+    guard
+      result.standardOutput.hasSuffix("\n"),
+      let markerRange = result.standardOutput.range(
+        of: marker,
+        options: .backwards
+      )
+    else {
+      throw KubernetesClusterError.invalidPodCommandResult
+    }
+
+    let statusEnd = result.standardOutput.index(before: result.standardOutput.endIndex)
+    let statusText = result.standardOutput[markerRange.upperBound..<statusEnd]
+    guard
+      !statusText.isEmpty,
+      statusText.utf8.allSatisfy({ (48...57).contains($0) }),
+      let exitCode = Int32(String(statusText)),
+      (0...255).contains(exitCode)
+    else {
+      throw KubernetesClusterError.invalidPodCommandResult
+    }
+
+    return KubernetesPodCommandResult(
+      request: request,
+      process: ContainerCommandResult(
+        exitCode: exitCode,
+        standardOutput: String(result.standardOutput[..<markerRange.lowerBound]),
+        standardError: result.standardError,
+        outputWasTruncated: result.outputWasTruncated,
+        duration: result.duration
+      ),
+      capturedAt: capturedAt
+    )
   }
 
   private func snapshot(

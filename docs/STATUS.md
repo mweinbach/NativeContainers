@@ -1430,6 +1430,16 @@ Updated: 2026-06-22.
   still match before the session is returned, otherwise the PTY is closed. Pod
   presets and arbitrary startup commands are disabled; the remaining upstream
   name-addressed race is documented.
+- The Pod detail sheet now also presents a native one-shot command form for the
+  selected standard container. A typed request caps executable/argument bytes,
+  128 arguments, aggregate command size, and a 300-second timeout. The fixed
+  guest wrapper shell-quotes each argv value, adds no implicit shell, brackets
+  explicit-container `kubectl exec` with Pod-UID checks, and marker-binds the
+  expected UID to the remote exit status. Stdout and stderr stay in memory with
+  newest-1-MiB retention; cancellation rejects late results without claiming
+  authoritative remote-process termination. Deterministic validation, quoting,
+  identity-marker, nonzero-exit, truncation, model, and gated live-smoke coverage
+  are checked in; exact-head Xcode execution remains pending while MCP is closed.
 - Deployment and StatefulSet rows now expose a native scale review sheet;
   DaemonSets and Jobs remain non-scalable. The request freezes UID,
   resourceVersion, current replicas, and target replicas. The bounded guest

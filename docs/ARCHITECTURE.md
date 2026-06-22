@@ -184,9 +184,10 @@ environment, annotations, images, and Kubernetes secret payloads are not
 represented in the projected document or domain model.
 
 `KubernetesClusterModel` owns the separately cancellable inventory state and
-clears it across lifecycle or identity changes. The browser is read-only,
-searches cached prepared arrays rather than filtering in `body`, and uses
-stable runtime identities for native lists. Pod rows can load one explicit
+clears it across lifecycle or identity changes. Inventory projection and search
+are read-only; explicit Pod and workload tools cross separate typed services.
+Search uses cached prepared arrays rather than filtering in `body`, and native
+lists use stable runtime identities. Pod rows can load one explicit
 standard container's latest 2,000 lines through the same exact-machine path.
 The service validates the UID, namespace, Pod name, and container name; checks
 that the current Pod UID still matches; and then asks `kubectl logs` for at
@@ -195,6 +196,18 @@ read and service-owned output marker must also match before any log snapshot is
 accepted, so replacement during the name-addressed read fails closed. Search
 uses cached prepared text, container switches discard stale asynchronous
 responses, and export remains user-initiated.
+
+The same explicit-container detail surface can run one bounded noninteractive
+command. Its typed request caps executable and argument bytes, argument count,
+and timeout; it adds no implicit shell and persists neither request nor output.
+The host uses shell quoting only to preserve each argv boundary while lowering
+the typed request into the fixed guest wrapper. That wrapper checks the Pod UID,
+runs `k3s kubectl exec` without stdin or TTY, checks the UID again, and appends
+the exact UID plus remote exit status. The host publishes stdout, stderr, and
+status only when that suffix matches. Each stream retains at most the newest
+1 MiB. Cancellation stops the Apple process transport and discards any late
+result, but does not claim rollback or authoritative remote-process termination
+because Kubernetes exposes no process identity for a completed exec request.
 
 Deployment and StatefulSet rows additionally expose a reviewed scale sheet;
 DaemonSets and Jobs do not. The request freezes UID, resourceVersion, namespace,

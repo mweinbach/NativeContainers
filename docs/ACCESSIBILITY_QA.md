@@ -79,7 +79,7 @@ live gate is not yet satisfied, even when its source structure has passed.
 | Volumes, networks, and storage | Create/delete/prune, in-use states, accounting refresh, reclamation review, destructive confirmation and partial results | Open |
 | Persistent Linux machines | Create, first-user setup, selection versus tools, configuration, start/stop/Force Stop/delete, command runner and terminal | Open |
 | Compose | Project discovery, reviewed Up/Down, scale/start/stop, recovery records, external-resource warnings and locked navigation | Open |
-| Kubernetes | Cluster setup/lifecycle/delete/export, workload/pod/service browser, search, scale/restart/delete review, Pod logs and terminal tabs | Open |
+| Kubernetes | Cluster setup/lifecycle/delete/export, workload/pod/service browser, search, scale/restart/delete review, Pod logs, one-shot commands, and terminal tabs | Open |
 | GUI Linux virtual machines | ISO selection/copy, create, selection versus runtime actions, install console, configuration, shared folders, pause/resume/shutdown/Force Stop/eject/delete | Open |
 | macOS virtual machines | IPSW download/import, prepare/install, selection versus runtime actions, console, saved state, disk and snapshots, shares, audio, network, USB, clone, export/import and delete | Open |
 | Settings and optional integrations | App behavior, menu-bar controls, Docker compatibility, diagnostics export/delete, performance baselines, cancellation and unavailable states | Open |

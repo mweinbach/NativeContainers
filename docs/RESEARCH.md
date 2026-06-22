@@ -910,15 +910,19 @@ Primary sources:
   remains name-addressed, but replacement before or during the read is detected
   and its output discarded.
 - The generated `kubectl exec` reference exposes explicit container selection,
-  stdin attachment, TTY allocation, and a bounded Pod-running wait. Pod exec is
-  still name-addressed and exposes no UID precondition. NativeContainers therefore
-  carries the inventory Pod UID in the terminal target, requires the exact Ready
-  cluster machine to be running, and brackets bounded allowlisted shell discovery
-  with UID reads. The terminal child performs one more UID check immediately
-  before a fixed `kubectl exec --stdin=true --tty=true` command, and a separate
-  bounded UID read must still match before the live session is returned. That
-  narrows but cannot eliminate replacement between a check and the upstream
-  exec; the product does not describe the name-addressed call as atomic.
+  direct `COMMAND [args...]` after `--`, stdin attachment, TTY allocation, a
+  request timeout, and a bounded Pod-running wait. Pod exec is still
+  name-addressed and exposes no UID precondition. NativeContainers therefore
+  carries the inventory Pod UID in both terminal and one-shot command targets
+  and requires the exact Ready cluster machine to be running. Noninteractive
+  commands preserve one typed executable and bounded argv without an implicit
+  shell, run without stdin/TTY, and bracket exec with UID reads plus a final
+  UID/status marker. Terminals bracket allowlisted shell discovery with UID
+  reads, perform one more in-process UID check before fixed stdin/TTY exec, and
+  require a separate UID read to match before returning the session. Those
+  checks narrow but cannot eliminate replacement between a check and the
+  upstream name-addressed call; the product does not describe either lane as
+  atomic.
 - `kubectl scale` exposes server-checked `--current-replicas` and
   `--resource-version` preconditions. NativeContainers therefore makes a
   reviewed Deployment or StatefulSet scale request conditional on the exact

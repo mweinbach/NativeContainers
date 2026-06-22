@@ -235,10 +235,29 @@ struct LiveAppleKubernetesSmokeTests {
       )
       #expect(podLogs.text.contains("nativecontainers-k3s-live"))
       #expect(!podLogs.isTruncated)
+      let clusterMachine = try #require(snapshot.descriptor?.machine)
+
+      let podCommand = try await graph.cluster.executePodCommand(
+        try KubernetesPodCommandRequest(
+          machine: clusterMachine,
+          podUID: smokePod.uid,
+          namespace: namespace,
+          podName: "smoke",
+          containerName: "smoke",
+          executable: "/bin/sh",
+          arguments: [
+            "-c",
+            "printf 'nativecontainers-k3s-command\\n'",
+          ]
+        )
+      )
+      #expect(podCommand.process.exitCode == 0)
+      #expect(podCommand.process.standardOutput == "nativecontainers-k3s-command\n")
+      #expect(!podCommand.process.outputWasTruncated)
 
       try await exercisePodTerminal(
         graph: graph,
-        machine: try #require(snapshot.descriptor?.machine),
+        machine: clusterMachine,
         pod: smokePod
       )
 

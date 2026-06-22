@@ -258,6 +258,10 @@ must leave a usable, test-backed product slice.
   - [x] Explicit-container Pod log snapshots with API-UID revalidation,
         timestamped 2,000-line/512-KiB bounds, cached search, stale-response
         rejection, and user-initiated export.
+  - [x] Explicit-container one-shot Pod commands with bounded typed input,
+        exact cluster-machine and pre/post Pod-UID checks, shell-safe argv
+        transport, in-memory output, timeout/cancellation, and a native result
+        sheet. The destructive live gate now includes a direct command probe.
   - [x] Explicit-container Pod terminals with exact cluster-machine and Pod API
         identity, allowlisted shell discovery, Apple process-XPC PTY transport,
         native terminal windows, and no arbitrary preset injection.
