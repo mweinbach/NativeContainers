@@ -36,6 +36,25 @@ struct NativeContainersApp: App {
     }
     .defaultSize(width: 1_000, height: 700)
 
+    WindowGroup(
+      "Virtual Machine",
+      id: VirtualMachineConsoleWindowRequest.windowGroupID,
+      for: VirtualMachineConsoleWindowRequest.self
+    ) { $request in
+      if let request {
+        VirtualMachineConsoleWindow(request: request, appModel: model)
+      } else {
+        ContentUnavailableView(
+          "Choose a Virtual Machine",
+          systemImage: "display",
+          description: Text(
+            "Open a macOS or Linux virtual machine from the main window."
+          )
+        )
+      }
+    }
+    .defaultSize(width: 1_180, height: 760)
+
     Settings {
       SettingsView(model: model)
         .frame(width: 680, height: 700)

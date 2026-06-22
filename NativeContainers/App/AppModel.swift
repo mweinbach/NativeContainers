@@ -856,6 +856,12 @@ final class AppModel {
     return model
   }
 
+  func virtualMachine(
+    matching request: VirtualMachineConsoleWindowRequest
+  ) -> VirtualMachineManifest? {
+    request.resolve(in: virtualMachines)
+  }
+
   func makeMacVirtualMachineUSBModel(
     for machine: VirtualMachineManifest
   ) -> MacVirtualMachineUSBModel {

@@ -13,12 +13,13 @@ private struct VirtualMachineImportRequest: Identifiable {
 }
 
 struct VirtualMachinesView: View {
+  @Environment(\.openWindow) private var openWindow
+
   let model: AppModel
 
   @State private var isCreating = false
   @State private var machineToPrepare: VirtualMachineManifest?
   @State private var machineToInstall: VirtualMachineManifest?
-  @State private var machineToOpen: VirtualMachineManifest?
   @State private var machineToForceStop: VirtualMachineManifest?
   @State private var machineToClone: VirtualMachineManifest?
   @State private var machineToDiscard: VirtualMachineManifest?
@@ -55,7 +56,7 @@ struct VirtualMachinesView: View {
                   },
                   prepare: { machineToPrepare = machine },
                   install: { machineToInstall = machine },
-                  open: { machineToOpen = machine },
+                  open: { openVirtualMachine(machine) },
                   confirmForceStop: { machineToForceStop = machine },
                   clone: { machineToClone = machine },
                   export: { chooseExportDestination(for: machine) },
@@ -108,9 +109,6 @@ struct VirtualMachinesView: View {
     }
     .sheet(item: $machineToInstall) { machine in
       MacVirtualMachineInstallationView(machine: machine, appModel: model)
-    }
-    .sheet(item: $machineToOpen) { machine in
-      GuestVirtualMachineRuntimeView(machine: machine, model: model)
     }
     .sheet(item: $machineToClone) { machine in
       CloneVirtualMachineView(machine: machine, model: model)
@@ -214,6 +212,13 @@ struct VirtualMachinesView: View {
         await model.makeLinuxVirtualMachineRuntimeModel(for: machine).forceStop()
       }
     }
+  }
+
+  private func openVirtualMachine(_ machine: VirtualMachineManifest) {
+    openWindow(
+      id: VirtualMachineConsoleWindowRequest.windowGroupID,
+      value: VirtualMachineConsoleWindowRequest(machine: machine)
+    )
   }
 
   private func chooseExportDestination(for machine: VirtualMachineManifest) {
@@ -324,27 +329,6 @@ private struct GuestVirtualMachineConfigurationView: View {
         sharedDirectories: model.makeLinuxVirtualMachineSharedDirectoriesModel(
           for: machine
         )
-      )
-    }
-  }
-}
-
-private struct GuestVirtualMachineRuntimeView: View {
-  let machine: VirtualMachineManifest
-  let model: AppModel
-
-  var body: some View {
-    switch machine.guest {
-    case .macOS:
-      MacVirtualMachineRuntimeView(
-        machine: machine,
-        model: model.makeMacVirtualMachineRuntimeModel(for: machine),
-        usb: model.makeMacVirtualMachineUSBModel(for: machine)
-      )
-    case .linux:
-      LinuxVirtualMachineRuntimeView(
-        machine: machine,
-        model: model.makeLinuxVirtualMachineRuntimeModel(for: machine)
       )
     }
   }

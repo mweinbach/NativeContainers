@@ -2463,3 +2463,29 @@ boot restores full allocation. After saved-state restore, snapshots read the
 current device target instead of inventing a separate app value. Automatic
 memory-pressure control remains out of scope until an authoritative feedback
 signal can distinguish a request from pages the guest actually returned.
+
+## ADR-086: Present each graphical VM in one typed restorable window
+
+**Status:** Accepted — 2026-06-22
+
+Graphical VM runtime controls are independent workspace content, not a modal
+sheet owned by the VM inventory. NativeContainers presents them with a
+data-driven SwiftUI `WindowGroup` whose value contains only the manifest UUID
+and immutable guest family. Apple's value presentation brings an existing
+window for the same request to the front, so repeated Open actions cannot create
+competing `VZVirtualMachineView` attachments for one guest. macOS also owns
+window restoration and native window tabbing.
+
+The restored value is identity, not runtime state. Each window resolves the
+current canonical manifest and dispatches to the matching macOS or Linux view,
+which reuses `AppModel`'s stable per-VM runtime model. A missing VM or guest
+mismatch fails closed into an inert unavailable view. No virtual-machine object,
+view adaptor, console generation, saved-state choice, or auto-start intent is
+encoded, so relaunch cannot boot or resume a guest merely because its window
+was previously open.
+
+Console closure remains presentation cleanup rather than lifecycle authority.
+The `VZVirtualMachineView` dismantle path detaches its adaptor, while stop,
+Force Stop, suspend, and saved-state transitions continue through the exact
+generation-pinned runtime service. This preserves long-running guest ownership
+across window closure without maintaining a second console or lifecycle model.

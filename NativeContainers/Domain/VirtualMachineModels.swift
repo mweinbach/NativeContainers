@@ -1,6 +1,6 @@
 import Foundation
 
-enum VirtualMachineGuest: String, Codable, CaseIterable, Sendable {
+enum VirtualMachineGuest: String, Codable, CaseIterable, Hashable, Sendable {
   case macOS
   case linux
 }

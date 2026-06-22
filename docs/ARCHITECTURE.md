@@ -795,6 +795,17 @@ same device twice. The shared `VirtualMachineConsole` abstraction presents the
 generation's `VZVirtualMachineViewAdaptor`; guest-specific SwiftUI row,
 configuration, and runtime views remain separate behind small guest dispatchers.
 
+Graphical runtime presentation is a separate app scene rather than modal state
+owned by the VM list. A data-driven SwiftUI `WindowGroup` receives only a
+`Codable`/`Hashable` machine UUID and immutable guest family. SwiftUI brings the
+existing window forward for that value and persists the lightweight request for
+system restoration. The window resolves the current canonical manifest before
+building guest-specific content and reuses `AppModel`'s stable runtime and USB
+models; no `VZVirtualMachine`, console adaptor, or lifecycle state is encoded.
+A deleted or guest-mismatched request becomes an inert unavailable window, and
+restoration never starts or resumes a VM. Closing the window only detaches the
+native view; VM shutdown remains an explicit generation-pinned lifecycle action.
+
 Downloaded macOS IPSWs are intentionally outside the bundle boundary so
 multiple VMs can reuse one multi-gigabyte installer. New downloads and local
 imports live in the mode-0700, backup-excluded

@@ -144,6 +144,9 @@ must leave a usable, test-backed product slice.
 - [x] Generation-pinned GUI Linux runtime ownership, start/pause/resume,
       graceful stop with a 30-second automatic force-stop watchdog, explicit
       Force Stop, native console, installer-media ejection, and creation UI.
+- [x] One typed, system-restorable GUI Linux console window per VM, with
+      repeated-open deduplication, current-manifest revalidation, and inert
+      restoration that never starts the guest.
 - [x] Same-host GUI Linux suspend/restore through Apple's configuration-gated
       VZ saved-state APIs, with shared transactional storage, Linux topology
       fingerprinting, single-use restore, explicit Start Fresh/Discard,
@@ -201,7 +204,8 @@ must leave a usable, test-backed product slice.
       DiskImageKit transaction, including ASIF/RAW support, active-overlay
       growth, and capacity-preserving restore of older disk snapshots.
 - [x] Native console with automatic display reconfiguration and system-key
-      capture controls.
+      capture controls in one typed, system-restorable window per VM; repeated
+      Open brings that window forward and restoration never starts the guest.
 - [x] Persistent, security-scoped VirtioFS shared directories with stopped-only
       editing, saved-state invalidation, read-only/read-write access, and a
       selected-VM configuration inspector. Live guest mount verification remains

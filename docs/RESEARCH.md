@@ -205,6 +205,11 @@ release and isolating it behind an adapter are both deliberate.
   that binding for system restoration. NativeContainers uses a unique workspace
   UUID plus exact resource identity, so repeated Open Terminal actions can make
   independent windows without serializing live process state.
+- The same value-presentation rule gives graphical VM consoles the opposite
+  identity policy: the request is the VM UUID plus immutable guest family, so
+  repeated Open actions bring one existing console window forward. Restoration
+  resolves the latest manifest and cached app-scoped runtime model; it does not
+  encode a `VZVirtualMachine`, adaptor, or an instruction to boot the guest.
 - `SceneStorage` is per scene and intended to complement, not replace, the data
   model. Its persistence timing is system-owned and Apple explicitly excludes
   sensitive data. The terminal payload therefore contains only workspace/tab

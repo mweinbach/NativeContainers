@@ -47,6 +47,7 @@ cache with token-bound promotion and separate status/reset controls, private
 persistent build history, and macOS restore-image preparation, installation,
 generation-safe runtime/console controls, per-VM opt-in host audio input that
 resets on clone/export, host audio output, same-host suspend for macOS and GUI Linux,
+persistent typed console windows that restore without starting a guest,
 persistent macOS and GUI Linux VirtioFS shares, stopped-only renaming and
 host-bounded CPU/memory editing, generation-pinned cooperative runtime memory
 targets for both GUI guest families, per-VM automatic
@@ -100,6 +101,11 @@ open in detached, system-restorable SwiftUI windows with bounded app tabs,
 identity-pinned reconnects, and validated saved shell presets. Restored tabs stay
 disconnected until explicit interaction, so reopening the app does not silently
 start machines or shell processes.
+
+macOS and GUI Linux VM consoles likewise open in typed SwiftUI windows instead
+of modal sheets. Reopening the same VM brings its existing window forward,
+while restoration resolves the current manifest and never serializes or starts
+a live Virtualization session.
 
 The app is composed from narrow injectable service facets. Inventory, container
 creation and lifecycle, inspection, command tools, terminal sessions, image
