@@ -25,6 +25,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
   private static let inputCommandMaximumBytes = 4 * 1_024
   private static let inputTextMaximumCharacters = 256
   private static let runRequestMaximumBytes = 8 * 1_024
+  private static let visualHoldMaximumSeconds = 2 * 60 * 60
 
   @Test(
     .enabled(
@@ -208,6 +209,45 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     #expect(command.summary == "eject-media")
   }
 
+  @Test("Live input command rejects symbolic and hard links")
+  func liveInputCommandRejectsLinkedFiles() throws {
+    let rootURL = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-live-input-test-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false
+    )
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let regularURL = rootURL.appending(
+      path: "regular.command",
+      directoryHint: .notDirectory
+    )
+    let symbolicLinkURL = rootURL.appending(
+      path: "symbolic.command",
+      directoryHint: .notDirectory
+    )
+    let hardLinkURL = rootURL.appending(
+      path: "hard.command",
+      directoryHint: .notDirectory
+    )
+    try Data("linked\tfinish\t-\n".utf8).write(to: regularURL)
+    try FileManager.default.createSymbolicLink(
+      at: symbolicLinkURL,
+      withDestinationURL: regularURL
+    )
+
+    #expect(throws: LiveLinuxVirtualMachineSmokeError.self) {
+      _ = try Self.readInputCommand(at: symbolicLinkURL)
+    }
+
+    try FileManager.default.linkItem(at: regularURL, to: hardLinkURL)
+    #expect(throws: LiveLinuxVirtualMachineSmokeError.self) {
+      _ = try Self.readInputCommand(at: hardLinkURL)
+    }
+  }
+
   @Test("Owner-only live run request is consumed once")
   func ownerOnlyRunRequestIsConsumedOnce() throws {
     let rootURL = FileManager.default.temporaryDirectory.appending(
@@ -230,7 +270,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     let request = LiveLinuxVirtualMachineRunRequest(
       isoPath: "/private/tmp/reviewed.iso",
       isoSHA256: String(repeating: "a", count: 64),
-      visualHoldSeconds: 1_800,
+      visualHoldSeconds: Self.visualHoldMaximumSeconds,
       probesGuestInput: true,
       requiresInstallationMediaEjection: true
     )
@@ -244,7 +284,9 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
 
     #expect(configuration.isoPath == request.isoPath)
     #expect(configuration.isoSHA256 == request.isoSHA256)
-    #expect(configuration.visualHoldSeconds == 1_800)
+    #expect(
+      configuration.visualHoldSeconds == Self.visualHoldMaximumSeconds
+    )
     #expect(configuration.probesGuestInput)
     #expect(configuration.requiresInstallationMediaEjection)
     #expect(
@@ -345,7 +387,9 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         "NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS"
       ]
     else { return 0 }
-    guard let seconds = Int(value), (1...1_800).contains(seconds) else {
+    guard let seconds = Int(value),
+      (1...Self.visualHoldMaximumSeconds).contains(seconds)
+    else {
       throw LiveLinuxVirtualMachineSmokeError.invalidVisualHold(value)
     }
     return seconds
@@ -378,7 +422,11 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       LiveLinuxVirtualMachineRunRequest.self,
       from: Data(contentsOf: url)
     )
-    guard (0...1_800).contains(request.visualHoldSeconds) else {
+    guard
+      (0...Self.visualHoldMaximumSeconds).contains(
+        request.visualHoldSeconds
+      )
+    else {
       throw LiveLinuxVirtualMachineSmokeError.invalidVisualHold(
         String(request.visualHoldSeconds)
       )
@@ -548,18 +596,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       if FileManager.default.fileExists(
         atPath: channel.commandURL.nativeContainersPOSIXPath
       ) {
-        let attributes = try FileManager.default.attributesOfItem(
-          atPath: channel.commandURL.nativeContainersPOSIXPath
-        )
-        let byteCount = (attributes[.size] as? NSNumber)?.intValue ?? 0
-        guard byteCount <= Self.inputCommandMaximumBytes else {
-          throw LiveLinuxVirtualMachineSmokeError.inputCommandTooLarge(
-            byteCount
-          )
-        }
-        let command = try Self.parseInputCommand(
-          Data(contentsOf: channel.commandURL)
-        )
+        let command = try Self.readInputCommand(at: channel.commandURL)
         try FileManager.default.removeItem(at: channel.commandURL)
         if case .finish = command.action {
           try Self.writeVisualReadyMarker(
@@ -695,6 +732,30 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       id: identifier,
       action: action
     )
+  }
+
+  private static func readInputCommand(
+    at url: URL
+  ) throws -> LiveLinuxVirtualMachineInputCommand {
+    var metadata = stat()
+    guard
+      url.nativeContainersPOSIXPath.withCString({
+        Darwin.lstat($0, &metadata)
+      }) == 0,
+      metadata.st_mode & S_IFMT == S_IFREG,
+      metadata.st_uid == getuid(),
+      metadata.st_nlink == 1
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidInputCommandFile
+    }
+    guard metadata.st_size >= 0,
+      metadata.st_size <= Self.inputCommandMaximumBytes
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.inputCommandTooLarge(
+        Int(metadata.st_size)
+      )
+    }
+    return try parseInputCommand(Data(contentsOf: url))
   }
 
   private static func executeGuestInputCommand(
@@ -1080,6 +1141,7 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
   case couldNotCreateKeyEvent(String)
   case couldNotCreateMouseEvent
   case inputCommandTooLarge(Int)
+  case invalidInputCommandFile
   case invalidInputCommand(String)
   case invalidRunRequestFile
   case invalidRunRequestSize(Int)
@@ -1103,7 +1165,7 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
     case .digestMismatch(let expected, let actual):
       "The live Linux virtual-machine ISO SHA-256 changed (expected \(expected), found \(actual))."
     case .invalidVisualHold(let value):
-      "The live visual hold must be between 1 and 1,800 seconds, not \(value)."
+      "The live visual hold must be between 1 and 7,200 seconds, not \(value)."
     case .inputProbeRequiresVisualHold(let minimumSeconds):
       "The live guest-input probe requires a visual hold of at least \(minimumSeconds) seconds."
     case .missingVirtualMachineView:
@@ -1116,6 +1178,8 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
       "AppKit could not create the live guest mouse event."
     case .inputCommandTooLarge(let byteCount):
       "The live guest-input command is too large (\(byteCount) bytes)."
+    case .invalidInputCommandFile:
+      "The live guest-input command must be a single-link regular file owned by this user."
     case .invalidInputCommand(let reason):
       "The live guest-input command is invalid (\(reason))."
     case .invalidRunRequestFile:

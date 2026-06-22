@@ -642,8 +642,9 @@ The installed Apple documentation confirms:
   installer beyond its language page.
 - The current Xcode MCP `RunSomeTests` request stops waiting at about 300
   seconds. Automated visual runs therefore use `finish` before that boundary.
-  The test accepts a visual hold up to 1,800 seconds for direct observation in
-  Xcode, but that larger harness limit does not extend the MCP request timeout.
+  An owner-only, consumed-once request file lets a started Xcode test retain a
+  visual hold up to 7,200 seconds for direct observation, but that larger
+  harness limit does not extend the MCP request timeout.
 - `VZVirtioFileSystemDeviceConfiguration`, `VZMultipleDirectoryShare`, and
   `VZSharedDirectory` expose native host directories through VirtioFS. A Linux
   guest kernel must include `CONFIG_VIRTIO_FS`.

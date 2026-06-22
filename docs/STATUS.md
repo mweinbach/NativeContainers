@@ -1845,7 +1845,7 @@ Updated: 2026-06-22.
 - `bootsReviewedInstallerAndCleansIsolatedBundle()` adds a reusable destructive
   gate requiring `NATIVECONTAINERS_LIVE_LINUX_VM=1`, an explicit local ISO path,
   and its reviewed digest. An optional bounded
-  `NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS` value from 1 through 1,800
+  `NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS` value from 1 through 7,200
   presents the exact production `VirtualMachineConsoleView` and publishes its
   visible native window number for operator capture. With
   `NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_PROBE=1`, a mode-0700, 4-KiB-bounded,
@@ -1884,7 +1884,11 @@ Updated: 2026-06-22.
   manifest deletion, and complete isolated-library cleanup.
 - Xcode MCP's current test request stops waiting at about 300 seconds, so its
   automated runs use the explicit `finish` command while direct Xcode
-  observation may use the harness's 1,800-second maximum. One exploratory
+  observation may use the harness's 7,200-second maximum. A current-user,
+  mode-0600, single-link regular JSON request provides the reviewed ISO digest,
+  hold, input, and required-media-ejection policy to one Xcode run and is
+  consumed before the VM starts. The input channel likewise rejects symbolic
+  and multiply linked command files. One exploratory
   over-bound run required cleanup after Xcode's Stop action also timed out; only
   that exact current test host and uniquely named temporary bundle were
   removed. The unrelated long-lived app process was left untouched, and no

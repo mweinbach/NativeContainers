@@ -164,7 +164,7 @@ hashes the source, boots the production Virtio configuration, verifies the
 running console object, pause/resume, memory-balloon requests, force stop, and
 exact cleanup. Optionally set
 `NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS` to an integer from 1 through
-1,800 to present the exact production `VirtualMachineConsoleView` in a native
+7,200 to present the exact production `VirtualMachineConsoleView` in a native
 window before the lifecycle checks. The reviewed Ubuntu 26.04 run rendered
 GRUB, the live GNOME desktop, and the installer's Welcome/language screen there.
 Set `NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_PROBE=1` with a visual hold of at
@@ -177,15 +177,25 @@ at-most-4-KiB command at a time:
 <id>\tkey\t<tab|shift-tab|escape|space|left|right|down|up|return>
 <id>\tclick\t<x>\t<y>
 <id>\ttext\t<base64-encoded UTF-8>
+<id>\teject-media\t-
 <id>\tfinish\t-
 ```
 
 Click coordinates use the guest display's top-left origin. Write through a
-temporary sibling and rename it to the advertised `command` path; each accepted
-command appears as `stage=command-<id>` in the marker. `finish` ends the visual
-hold early and continues the lifecycle and cleanup assertions. The reviewed
-run used this path to advance the Ubuntu installer. It does not claim that the
-graphical installation completed, audio works, or the guest boots from disk.
+single-link regular temporary sibling owned by the current user and rename it
+to the advertised `command` path; each accepted command appears as
+`stage=command-<id>` in the marker. `eject-media` uses the production runtime to
+persist installation completion and detach the ISO. `finish` ends the visual
+hold early and continues the lifecycle and cleanup assertions.
+
+For an Xcode MCP run that cannot inherit test-scheme environment variables,
+write the equivalent configuration as owner-only mode-0600 JSON to
+`/private/tmp/nativecontainers-live-linux-vm-run-request.json`. The smoke
+accepts only a current-user, single-link regular file, consumes it once, and
+supports `isoPath`, `isoSHA256`, `visualHoldSeconds`, `probesGuestInput`, and
+`requiresInstallationMediaEjection`. The reviewed run used the command channel
+to advance the Ubuntu installer. It does not claim that the graphical
+installation completed, audio works, or the guest boots from disk.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when
