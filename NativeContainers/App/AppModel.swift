@@ -112,6 +112,11 @@ final class AppModel {
   )
 
   @ObservationIgnored
+  private lazy var fieldDiagnosticModel = FieldDiagnosticModel(
+    service: services.fieldDiagnostics
+  )
+
+  @ObservationIgnored
   private lazy var composeProjectWorkspaceModel = ComposeProjectWorkspaceModel(
     service: services.composeProjectLifecycle
   ) { [weak self] in
@@ -181,6 +186,7 @@ final class AppModel {
     services.notifications.setResponseHandler { [weak self] destination in
       await self?.handleNotificationResponse(destination)
     }
+    services.fieldDiagnostics.start()
   }
 
   convenience init(
@@ -714,6 +720,10 @@ final class AppModel {
 
   func makePerformanceBenchmarkModel() -> PerformanceBenchmarkModel {
     performanceBenchmarkModel
+  }
+
+  func makeFieldDiagnosticModel() -> FieldDiagnosticModel {
+    fieldDiagnosticModel
   }
 
   func makeDockerCompatibilityModel() -> DockerCompatibilityModel {

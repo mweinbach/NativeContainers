@@ -37,6 +37,10 @@ enum AppCompositionRoot {
         LoopbackNetworkPerformanceBenchmarkScenario(),
       ]
     )
+    let fieldDiagnosticService: any FieldDiagnosticManaging =
+      AppExecutionContext.current.allowsSystemReportCollection
+      ? MetricKitFieldDiagnosticService()
+      : UnavailableFieldDiagnosticService()
     let infrastructureService = AppleInfrastructureService(
       infrastructureClient: infrastructureClient,
       containerReader: containerReader,
@@ -299,6 +303,7 @@ enum AppCompositionRoot {
       launchAtLogin: SMAppServiceLaunchAtLoginService(),
       notifications: UserNotificationService(),
       performanceBenchmarks: performanceBenchmarkService,
+      fieldDiagnostics: fieldDiagnosticService,
       composeTopology: ComposeTopologyService(),
       storageUsage: storageUsage,
       storageReclamation: storageReclamation,

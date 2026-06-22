@@ -21,6 +21,7 @@ struct AppServices: Sendable {
   let notifications: any AppNotificationManaging
   let workloadCreationDefaults: any WorkloadCreationDefaultsProviding
   let performanceBenchmarks: any PerformanceBenchmarking
+  let fieldDiagnostics: any FieldDiagnosticManaging
   let composeTopology: any ComposeTopologyDeriving
   let storageUsage: any StorageUsageLoading
   let storageReclamation: any StorageReclamationManaging
@@ -79,6 +80,8 @@ struct AppServices: Sendable {
       HostResourceDefaultService(),
     performanceBenchmarks: any PerformanceBenchmarking =
       UnavailablePerformanceBenchmarkService(),
+    fieldDiagnostics: any FieldDiagnosticManaging =
+      UnavailableFieldDiagnosticService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -157,6 +160,7 @@ struct AppServices: Sendable {
     self.notifications = notifications
     self.workloadCreationDefaults = workloadCreationDefaults
     self.performanceBenchmarks = performanceBenchmarks
+    self.fieldDiagnostics = fieldDiagnostics
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation
@@ -219,6 +223,8 @@ struct AppServices: Sendable {
       HostResourceDefaultService(),
     performanceBenchmarks: any PerformanceBenchmarking =
       UnavailablePerformanceBenchmarkService(),
+    fieldDiagnostics: any FieldDiagnosticManaging =
+      UnavailableFieldDiagnosticService(),
     composeTopology: any ComposeTopologyDeriving = ComposeTopologyService(),
     storageUsage: any StorageUsageLoading = UnavailableStorageUsageService(),
     storageReclamation: any StorageReclamationManaging =
@@ -283,6 +289,7 @@ struct AppServices: Sendable {
     self.notifications = notifications
     self.workloadCreationDefaults = workloadCreationDefaults
     self.performanceBenchmarks = performanceBenchmarks
+    self.fieldDiagnostics = fieldDiagnostics
     self.composeTopology = composeTopology
     self.storageUsage = storageUsage
     self.storageReclamation = storageReclamation

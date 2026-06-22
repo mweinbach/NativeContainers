@@ -30,6 +30,7 @@ input=$1
 [[ -e "$input" ]] || fail "artifact does not exist: $input"
 
 if [[ "$input" == *.xcarchive ]]; then
+  archive=$input
   app="$input/Products/Applications/NativeContainers.app"
   [[ -d "$app" ]] || fail "archive does not contain Products/Applications/NativeContainers.app"
 
@@ -39,6 +40,7 @@ if [[ "$input" == *.xcarchive ]]; then
   [[ "$worker_count" == "1" ]] ||
     fail "archive must contain exactly one embedded build worker; found $worker_count"
 else
+  archive=
   app=$input
 fi
 
@@ -48,6 +50,23 @@ executable="$app/Contents/MacOS/NativeContainers"
 worker="$app/Contents/Helpers/NativeContainersBuildWorker"
 [[ -f "$executable" ]] || fail "main executable is missing"
 [[ -f "$worker" ]] || fail "embedded build worker is missing"
+
+if [[ -n "$archive" ]]; then
+  app_dsym="$archive/dSYMs/NativeContainers.app.dSYM/Contents/Resources/DWARF/NativeContainers"
+  worker_dsym="$archive/dSYMs/NativeContainersBuildWorker.dSYM/Contents/Resources/DWARF/NativeContainersBuildWorker"
+  [[ -f "$app_dsym" ]] || fail "archive is missing the NativeContainers app dSYM"
+  [[ -f "$worker_dsym" ]] || fail "archive is missing the build-worker dSYM"
+
+  binary_uuid() {
+    xcrun dwarfdump --uuid "$1" | sed -n 's/^UUID: \([^ ]*\).*/\1/p'
+  }
+
+  [[ "$(binary_uuid "$executable")" == "$(binary_uuid "$app_dsym")" ]] ||
+    fail "NativeContainers app dSYM UUID does not match its executable"
+  [[ "$(binary_uuid "$worker")" == "$(binary_uuid "$worker_dsym")" ]] ||
+    fail "build-worker dSYM UUID does not match its executable"
+  note "archive contains matching app and build-worker dSYMs"
+fi
 
 for binary in "$executable" "$worker"; do
   architectures=$(lipo -archs "$binary")

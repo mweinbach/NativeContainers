@@ -17,6 +17,8 @@ separate product.
   injected by Xcode, but the worker must not inherit app capabilities.
 - Archive layout: one app under `Products/Applications`, with exactly one
   embedded build worker and no independently installed worker product.
+- Symbols: the archive contains app and build-worker dSYMs whose UUIDs match
+  their corresponding signed executables.
 
 ## Create and validate a local archive
 
@@ -34,7 +36,7 @@ separate product.
 The validator rejects a missing or duplicated worker, non-arm64 code, invalid
 versions or signatures, a missing hardened-runtime flag, mismatched signing
 teams, missing app capabilities, or any stale broad capability on either
-executable.
+executable. Archive mode also rejects missing or mismatched release symbols.
 
 ## Developer ID and notarization
 

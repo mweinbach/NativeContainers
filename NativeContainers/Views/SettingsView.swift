@@ -38,6 +38,10 @@ struct SettingsView: View {
         model: model.makePerformanceBenchmarkModel()
       )
 
+      FieldDiagnosticSettingsSection(
+        model: model.makeFieldDiagnosticModel()
+      )
+
       DockerCompatibilitySettingsSection(appModel: model)
 
       RegistrySettingsSection(appModel: model)

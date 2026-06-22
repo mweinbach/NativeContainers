@@ -1659,3 +1659,32 @@ public release additionally requires an externally provisioned Developer ID
 Application identity, successful notarization, Gatekeeper acceptance, and a
 stapled ticket. Updater, migration, and crash-diagnostic policy remain separate
 roadmap work.
+
+## ADR-060: Retain MetricKit reports locally behind an explicit privacy boundary
+
+**Status:** Accepted — 2026-06-21
+
+NativeContainers uses Apple's MetricKit delivery surface instead of installing
+a crash handler, injecting another exception runtime, or sending telemetry to
+a third party. One adapter subscribes only in the normal app process and maps
+MetricKit callbacks into framework-free envelopes. Hosted tests and Xcode
+Previews receive an unavailable service so system report collection cannot
+alter or delay those process lifecycles.
+
+The app retains Apple's exact JSON because stack and diagnostic detail is the
+useful artifact, but treats it as private local data. A dedicated actor writes
+only to a backup-excluded mode-0700 root with mode-0600 records, validates
+ownership, file type, link count, schema, digest, counts, and JSON before use,
+and enforces per-payload, aggregate-byte, record-count, and directory-scan
+limits. Corrupt or unsafe records are ignored and surfaced; symbolic roots fail
+without changing their targets. The UI displays metadata and category totals,
+and raw JSON leaves the private store only through an explicit user-selected
+export. Deletion is likewise explicit. There is no background upload endpoint.
+
+The adapter relies on subscriber callbacks rather than reading MetricKit's
+session-only `pastPayloads` collections before their documented availability
+point. The macOS product reports crash, hang, CPU-exception, disk-write, and
+daily metric payloads; it does not pretend the SDK's unavailable-on-macOS
+app-launch diagnostic array is present. Release symbolication is paired with
+collection at the packaging boundary: every archive must contain app and
+worker dSYMs matching the signed executable UUIDs.

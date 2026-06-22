@@ -158,6 +158,13 @@
 		1F99F1B72FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B62FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift */; };
 		1F99F1B92FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1B82FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift */; };
 		1F99F1BB2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1BA2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift */; };
+		1F99F1BF2FE8CD5F00DF0752 /* FieldDiagnosticModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1BE2FE8CD5F00DF0752 /* FieldDiagnosticModels.swift */; };
+		1F99F1C12FE8CD8300DF0752 /* FieldDiagnosticStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1C02FE8CD8300DF0752 /* FieldDiagnosticStore.swift */; };
+		1F99F1C32FE8CD9A00DF0752 /* MetricKitFieldDiagnosticService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1C22FE8CD9A00DF0752 /* MetricKitFieldDiagnosticService.swift */; };
+		1F99F1C52FE8CDAC00DF0752 /* FieldDiagnosticModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1C42FE8CDAC00DF0752 /* FieldDiagnosticModel.swift */; };
+		1F99F1C72FE8CDBE00DF0752 /* FieldDiagnosticSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1C62FE8CDBE00DF0752 /* FieldDiagnosticSettingsSection.swift */; };
+		1F99F1C92FE8CE2E00DF0752 /* FieldDiagnosticStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1C82FE8CE2E00DF0752 /* FieldDiagnosticStoreTests.swift */; };
+		1F99F1CB2FE8CE4200DF0752 /* FieldDiagnosticServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F99F1CA2FE8CE4200DF0752 /* FieldDiagnosticServiceTests.swift */; };
 		1F9D2AC92FE753880076F5B9 /* ResourceManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */; };
 		1F9D2ACB2FE753F70076F5B9 /* InfrastructureManagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */; };
 		1F9D2ACD2FE7545D0076F5B9 /* NetworksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */; };
@@ -745,6 +752,13 @@
 		1F99F1B62FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkModel.swift; sourceTree = "<group>"; };
 		1F99F1B82FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkSettingsSection.swift; sourceTree = "<group>"; };
 		1F99F1BA2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceBenchmarkServiceTests.swift; sourceTree = "<group>"; };
+		1F99F1BE2FE8CD5F00DF0752 /* FieldDiagnosticModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldDiagnosticModels.swift; sourceTree = "<group>"; };
+		1F99F1C02FE8CD8300DF0752 /* FieldDiagnosticStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldDiagnosticStore.swift; sourceTree = "<group>"; };
+		1F99F1C22FE8CD9A00DF0752 /* MetricKitFieldDiagnosticService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricKitFieldDiagnosticService.swift; sourceTree = "<group>"; };
+		1F99F1C42FE8CDAC00DF0752 /* FieldDiagnosticModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldDiagnosticModel.swift; sourceTree = "<group>"; };
+		1F99F1C62FE8CDBE00DF0752 /* FieldDiagnosticSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldDiagnosticSettingsSection.swift; sourceTree = "<group>"; };
+		1F99F1C82FE8CE2E00DF0752 /* FieldDiagnosticStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldDiagnosticStoreTests.swift; sourceTree = "<group>"; };
+		1F99F1CA2FE8CE4200DF0752 /* FieldDiagnosticServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldDiagnosticServiceTests.swift; sourceTree = "<group>"; };
 		1F9D2AC82FE753880076F5B9 /* ResourceManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACA2FE753F70076F5B9 /* InfrastructureManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfrastructureManagementModels.swift; sourceTree = "<group>"; };
 		1F9D2ACC2FE7545D0076F5B9 /* NetworksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworksView.swift; sourceTree = "<group>"; };
@@ -1249,6 +1263,7 @@
 				1F5E64762FE8A2AF00A430FF /* MacVirtualMachineUSBControl.swift */,
 				1F5E64842FE8A67000A430FF /* WorkloadResourceConstraintNotice.swift */,
 				1F99F1B82FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift */,
+				1F99F1C62FE8CDBE00DF0752 /* FieldDiagnosticSettingsSection.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1309,6 +1324,7 @@
 				1F5E64642FE8A04800A430FF /* MacVirtualMachineUSBModels.swift */,
 				1F5E647A2FE8A5F900A430FF /* WorkloadResourceDefaults.swift */,
 				1F99F1B02FE8C47E00DF0752 /* PerformanceBenchmarkModels.swift */,
+				1F99F1BE2FE8CD5F00DF0752 /* FieldDiagnosticModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1345,6 +1361,24 @@
 				1F99F1B42FE8C4A800DF0752 /* PerformanceBenchmarkScenarios.swift */,
 			);
 			path = Performance;
+			sourceTree = "<group>";
+		};
+		1F99F1BC2FE8CD5500DF0752 /* Diagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				1F99F1C02FE8CD8300DF0752 /* FieldDiagnosticStore.swift */,
+				1F99F1C22FE8CD9A00DF0752 /* MetricKitFieldDiagnosticService.swift */,
+			);
+			path = Diagnostics;
+			sourceTree = "<group>";
+		};
+		1F99F1BD2FE8CD5500DF0752 /* Diagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				1F99F1C82FE8CE2E00DF0752 /* FieldDiagnosticStoreTests.swift */,
+				1F99F1CA2FE8CE4200DF0752 /* FieldDiagnosticServiceTests.swift */,
+			);
+			path = Diagnostics;
 			sourceTree = "<group>";
 		};
 		1FEC47132FE834A200DC60B2 /* Compatibility */ = {
@@ -1993,6 +2027,7 @@
 				1FEC47372FE8354D00DC60B2 /* Storage */,
 				1FEC47382FE8354D00DC60B2 /* Support */,
 				1F99F1AE2FE8C47400DF0752 /* Performance */,
+				1F99F1BD2FE8CD5500DF0752 /* Diagnostics */,
 			);
 			path = NativeContainersTests;
 			sourceTree = "<group>";
@@ -2009,6 +2044,7 @@
 				1FEC471F2FE834A200DC60B2 /* Storage */,
 				1FEC47202FE834A200DC60B2 /* Support */,
 				1F99F1AF2FE8C47400DF0752 /* Performance */,
+				1F99F1BC2FE8CD5500DF0752 /* Diagnostics */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -2087,6 +2123,7 @@
 				1F5E64882FE8A7E700A430FF /* Composition */,
 				1F5E64912FE8A97200A430FF /* Commands */,
 				1F99F1B62FE8C4B200DF0752 /* PerformanceBenchmarkModel.swift */,
+				1F99F1C42FE8CDAC00DF0752 /* FieldDiagnosticModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2295,6 +2332,7 @@
 				1F9D2B332FE7755D0076F5B9 /* ImageBuildSecretServiceTests.swift in Sources */,
 				1F99F1BB2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift in Sources */,
 				1F9D2CA22FE803130076F5B9 /* StorageReclamationClientTests.swift in Sources */,
+				1F99F1CB2FE8CE4200DF0752 /* FieldDiagnosticServiceTests.swift in Sources */,
 				18E0B550FB9D7772C2D45292 /* ContainerBuildWorkerProcessTests.swift in Sources */,
 				1F5E640F2FE8876500A430FF /* LinuxVirtualMachineLibraryTests.swift in Sources */,
 				1F9D2C022FE7CA180076F5B9 /* AppleRuntimeInventoryServiceTests.swift in Sources */,
@@ -2325,6 +2363,7 @@
 				1F9D2B622FE796030076F5B9 /* AppleLinuxMachineInventoryServiceTests.swift in Sources */,
 				1F9D2C312FE7E6DA0076F5B9 /* HostProcessServiceTests.swift in Sources */,
 				1F5E63CD2FE8765C00A430FF /* ContainerHostDirectoryServiceTests.swift in Sources */,
+				1F99F1C92FE8CE2E00DF0752 /* FieldDiagnosticStoreTests.swift in Sources */,
 				1F9D2B0F2FE769CE0076F5B9 /* ApplePublishedSocketWorkspaceTests.swift in Sources */,
 				1FEC47422FE8393A00DC60B2 /* VirtualMachineDiskImageRewriteServiceTests.swift in Sources */,
 				1F5E645B2FE89BD800A430FF /* AppleMacVirtualMachineDiskSnapshotLayerStoreTests.swift in Sources */,
@@ -2563,6 +2602,7 @@
 				1F5E63D72FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift in Sources */,
 				1F9D2BBC2FE7AFE80076F5B9 /* MacVirtualMachineSavedStateService.swift in Sources */,
 				1F9D2B1F2FE7705A0076F5B9 /* ContainerBuilderManaging.swift in Sources */,
+				1F99F1C72FE8CDBE00DF0752 /* FieldDiagnosticSettingsSection.swift in Sources */,
 				1F9D2C1A2FE7D2EE0076F5B9 /* DockerComposeClientInstallService.swift in Sources */,
 				1F5E64812FE8A60300A430FF /* HostResourceDefaultService.swift in Sources */,
 				1F9D2BFC2FE7C81B0076F5B9 /* ComposeObservabilityModels.swift in Sources */,
@@ -2693,6 +2733,7 @@
 				1F5E644D2FE8988100A430FF /* MacGuestProvisioningFormModel.swift in Sources */,
 				2CEB095A2F3E92AB8DD58DF8 /* RegistryManaging.swift in Sources */,
 				1F9D2BB42FE7AE290076F5B9 /* MacVirtualMachineSavedStateModels.swift in Sources */,
+				1F99F1C32FE8CD9A00DF0752 /* MetricKitFieldDiagnosticService.swift in Sources */,
 				1F9D2CB62FE806B60076F5B9 /* VirtualMachineStorageReclamationReviewSheet.swift in Sources */,
 				1F9D2B032FE768C60076F5B9 /* ContainerAttachmentModels.swift in Sources */,
 				1F9D2B802FE7A0C20076F5B9 /* MacVirtualMachineBundleResolver.swift in Sources */,
@@ -2712,6 +2753,7 @@
 				1F9D2AF72FE765700076F5B9 /* AppleContainerCreationService.swift in Sources */,
 				BEF88012C7F13A21B4B2C57E /* RestoreImageDownloadService.swift in Sources */,
 				1F9D2B8C2FE7A15F0076F5B9 /* MacRestoreImagePreparationView.swift in Sources */,
+				1F99F1C52FE8CDAC00DF0752 /* FieldDiagnosticModel.swift in Sources */,
 				1F5E63A32FE860BF00A430FF /* ContainerShellModels.swift in Sources */,
 				1F5E644F2FE8988A00A430FF /* MacGuestProvisioningView.swift in Sources */,
 				1F9D2B482FE78A460076F5B9 /* ImageBuildOutputService.swift in Sources */,
@@ -2723,6 +2765,7 @@
 				1F5E63DF2FE87C0F00A430FF /* MacVirtualMachineAudioModel.swift in Sources */,
 				1FEC47582FE849FA00DC60B2 /* LaunchAtLoginService.swift in Sources */,
 				1F9D2C612FE7F2C90076F5B9 /* ComposePostconditionVerifier.swift in Sources */,
+				1F99F1C12FE8CD8300DF0752 /* FieldDiagnosticStore.swift in Sources */,
 				1F5E641D2FE88A0500A430FF /* LinuxVirtualMachineRuntimeManaging.swift in Sources */,
 				1F9D2B5A2FE792540076F5B9 /* LinuxMachineCreationView.swift in Sources */,
 				1F5E63AF2FE86EC800A430FF /* TerminalWorkspaceModel.swift in Sources */,
@@ -2744,6 +2787,7 @@
 				1F9D2C922FE800AA0076F5B9 /* StorageReclamationService.swift in Sources */,
 				9D0A93C7B104FECF0AC7E446 /* SettingsView.swift in Sources */,
 				1F5E642B2FE88AEB00A430FF /* LinuxVirtualMachineCreationService.swift in Sources */,
+				1F99F1BF2FE8CD5F00DF0752 /* FieldDiagnosticModels.swift in Sources */,
 				1F5E63C92FE8756A00A430FF /* AppleContainerSSHAgentService.swift in Sources */,
 				1F9D2B7E2FE7A0B20076F5B9 /* VirtualMachineInstallationModels.swift in Sources */,
 				1FEC47522FE842C800DC60B2 /* ComposeContainerAttachmentVerifier.swift in Sources */,

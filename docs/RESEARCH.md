@@ -738,6 +738,34 @@ Primary sources:
   current `apple/container` application does not yet invoke it. That Linux path
   remains separate from macOS VM ASIF migration.
 
+## MetricKit and release-symbol findings
+
+Primary sources:
+
+- [`MXMetricManager`](https://developer.apple.com/documentation/metrickit/mxmetricmanager)
+- [`MXMetricManagerSubscriber`](https://developer.apple.com/documentation/metrickit/mxmetricmanagersubscriber)
+- [`MXDiagnosticPayload`](https://developer.apple.com/documentation/metrickit/mxdiagnosticpayload)
+- [`MXMetricPayload`](https://developer.apple.com/documentation/metrickit/mxmetricpayload)
+
+- Apple documents `MXMetricManager.add(_:)` and report callbacks as safe during
+  app launch. Diagnostic reports arrive when available; macOS daily metric
+  delivery begins on macOS 26 and occurs at most once per day per source.
+- Registered callbacks include previously undelivered reports. The
+  `pastPayloads` and `pastDiagnosticPayloads` properties are session-only and
+  documented for access after subscriber registration and an initial callback,
+  so the app does not poll them during startup.
+- Both payload classes expose exact JSON representations. NativeContainers
+  retains those bytes privately so Apple's stack/diagnostic schema remains
+  intact, but derives only bounded category counts for ordinary UI display and
+  never uploads a report automatically.
+- The installed SDK exposes crash, hang, CPU-exception, and disk-write arrays
+  on macOS. Although the documentation groups app-launch diagnostics beside
+  responsiveness diagnostics, the macOS compiler marks
+  `appLaunchDiagnostics` unavailable; the product does not claim it.
+- Symbol collection is an archive responsibility rather than a runtime
+  MetricKit responsibility. The local artifact gate now compares `dwarfdump`
+  UUIDs for both the app and embedded worker against their archived dSYMs.
+
 ## Public-API boundaries
 
 - No public Linux GPU/Metal passthrough.

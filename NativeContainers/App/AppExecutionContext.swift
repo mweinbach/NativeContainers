@@ -13,6 +13,10 @@ struct AppExecutionContext: Sendable {
     !isRunningTests && !isRunningPreviews
   }
 
+  var allowsSystemReportCollection: Bool {
+    !isRunningTests && !isRunningPreviews
+  }
+
   var supportsMenuBarExtra: Bool {
     operatingSystemVersion.majorVersion <= Self.latestMenuBarExtraCompatibleMajorVersion
   }

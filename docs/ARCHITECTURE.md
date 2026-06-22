@@ -696,6 +696,31 @@ snapshot stack exists. DiskImageKit exposes stacking but no public merge or
 flatten operation, so arbitrary deletion is prohibited; restoring an earlier
 checkpoint is the bounded reclamation path.
 
+### Field-diagnostics lane
+
+The normal app registers one `MXMetricManagerSubscriber` at launch behind a
+`FieldDiagnosticManaging` application port. `AppExecutionContext` suppresses
+that system subscription in hosted tests and Xcode Previews, where the process
+is not a real MetricKit delivery host. The framework adapter converts callback
+objects immediately into framework-free payload envelopes; the rest of the app
+does not import MetricKit.
+
+`FieldDiagnosticStore` owns raw JSON persistence as a separate actor. Its root
+is mode 0700, records are mode 0600 and backup-excluded, and symbolic roots,
+symbolic records, hard links, corrupt envelopes, digest drift, unbounded
+category counts, oversized payloads, and excessive directory scans fail
+closed. Deduplication uses a digest over payload kind, reporting interval,
+bounded category counts, and exact JSON. Retention is capped at 30 payloads and
+20 MiB, and the store exposes only metadata until the user explicitly exports
+one report through the system file exporter. No automatic upload path exists.
+
+The Settings model observes store updates, summarizes the macOS-supported
+crash, hang, CPU-exception, and disk-write categories plus daily metrics, and
+supports explicit refresh, export, and destructive local deletion. Release
+symbol ownership remains outside the runtime app: the archive validator
+requires app and build-worker dSYMs whose UUIDs match the corresponding signed
+executables.
+
 ### UI lane
 
 The SwiftUI shell uses a `NavigationSplitView` with separate screens for:

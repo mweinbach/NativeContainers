@@ -10,6 +10,7 @@ struct AppExecutionContextTests {
     #expect(!standard.isRunningTests)
     #expect(!standard.isRunningPreviews)
     #expect(standard.allowsPersistentSystemScenes)
+    #expect(standard.allowsSystemReportCollection)
     #expect(standard.allowsMenuBarExtra)
 
     let test = makeContext(
@@ -18,6 +19,7 @@ struct AppExecutionContextTests {
     )
     #expect(test.isRunningTests)
     #expect(!test.allowsPersistentSystemScenes)
+    #expect(!test.allowsSystemReportCollection)
     #expect(!test.allowsMenuBarExtra)
 
     let preview = makeContext(
@@ -26,6 +28,7 @@ struct AppExecutionContextTests {
     )
     #expect(preview.isRunningPreviews)
     #expect(!preview.allowsPersistentSystemScenes)
+    #expect(!preview.allowsSystemReportCollection)
     #expect(!preview.allowsMenuBarExtra)
   }
 

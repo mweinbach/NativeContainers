@@ -13,7 +13,7 @@ Updated: 2026-06-21.
   worker, both strictly signed by team `6UHAW5UAT4` with hardened runtime. The
   archive validator confirms that the app carries only microphone input and
   virtualization while the worker carries no app capability.
-- The current full app-hosted Xcode run contains 942 expanded outcomes: all 921
+- The current full app-hosted Xcode run contains 952 expanded outcomes: all 931
   deterministic outcomes passed, with 21 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
   tests. Existing opt-in tests cover Apple runtime
@@ -1210,6 +1210,34 @@ Updated: 2026-06-21.
   is Apple Development. The signing keychain currently exposes no Developer ID
   Application identity, so public signing, notarization, and stapling are not
   claimed. The repeatable operator flow is in `docs/DISTRIBUTION.md`.
+
+## Field-diagnostics checkpoint
+
+- The normal app now registers one launch-safe `MXMetricManagerSubscriber` and
+  captures Apple's exact diagnostic and daily-metric JSON without installing a
+  crash handler or introducing an upload path. Xcode's current MetricKit
+  documentation confirms immediate macOS diagnostic delivery, macOS 26 daily
+  metrics, previously undelivered reports, and launch-safe subscription. Hosted
+  tests and Preview processes receive an unavailable service instead.
+- A dedicated actor retains at most 30 payloads and 20 MiB in a backup-excluded
+  mode-0700 root with mode-0600 records. It rejects symbolic roots and records,
+  hard links, foreign ownership, unsafe permissions, invalid JSON, digest or
+  identifier drift, oversized payloads, unbounded counts, and excessive scans.
+  Settings shows bounded metadata and category totals; raw JSON leaves the
+  store only through explicit export, and deletion requires confirmation.
+- The archive validator now requires matching app and embedded-worker dSYMs;
+  the latest local archive passes the UUID, layout, signature, hardened-runtime,
+  team, and constrained-entitlement gates. Build-for-testing succeeds, source
+  diagnostics report no issues, and all 10
+  focused collection/store/model tests pass. The final full Xcode plan passes
+  952 outcomes: 931 deterministic tests passed, 21 explicit live gates skipped,
+  and no outcome failed or remained unrun.
+- The normal app launched through Xcode in 4.84 seconds as PID 25881 and Xcode
+  stopped that exact process. Console errors were limited to the existing
+  macOS 27 beta CoreSpotlight/SetStore service failure. The field-diagnostics
+  canvas preview itself twice hit Xcode's 30-second app-launch timeout, so a
+  rendered-preview claim remains intentionally open despite the successful
+  build and normal launch.
 
 ## Remaining live verification gap
 

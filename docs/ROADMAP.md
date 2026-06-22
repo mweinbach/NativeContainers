@@ -248,7 +248,10 @@ must leave a usable, test-backed product slice.
         ticket stapling, and strict Gatekeeper validation.
   - [ ] Signed updater with rollback and version-policy tests.
   - [ ] User-data migration and rollback strategy.
-  - [ ] Privacy-reviewed crash diagnostics and release-symbol handling.
+  - [x] Privacy-reviewed local MetricKit capture for crash, hang, CPU,
+        disk-write, and daily metric payloads, with bounded private retention,
+        explicit JSON export/deletion, hosted-process suppression, and matching
+        app/build-worker dSYM enforcement in the archive gate.
 - [ ] Complete performance benchmark coverage.
   - [x] User-initiated local baselines for warm Apple inventory, private
         temporary-file write/read I/O, and Network.framework localhost TCP,
