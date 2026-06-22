@@ -90,6 +90,7 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
   private let stateReader: any ContainerStartupBenchmarkStateReading
   private let imageReference: String
   private let expectedImageDigest: String
+  private let attachments: ContainerAttachmentSelection
   private let makeContainerID: @Sendable () -> String
   private var preparedContainer: PreparedContainer?
 
@@ -99,6 +100,7 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
       AppleContainerStartupBenchmarkStateReader(),
     imageReference: String = "docker.io/library/alpine:3.21",
     expectedImageDigest: String,
+    attachments: ContainerAttachmentSelection = .empty,
     makeContainerID: @escaping @Sendable () -> String = {
       "nativecontainers-perf-\(UUID().uuidString.lowercased().prefix(8))"
     }
@@ -107,6 +109,7 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
     self.stateReader = stateReader
     self.imageReference = imageReference
     self.expectedImageDigest = expectedImageDigest
+    self.attachments = attachments
     self.makeContainerID = makeContainerID
   }
 
@@ -129,6 +132,7 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
       cpuCount: 1,
       memoryBytes: 256 * ContainerCreationRequest.bytesPerMiB,
       arguments: ["/bin/sleep", "3600"],
+      attachments: attachments,
       startAfterCreation: false,
       removeWhenStopped: false
     )
@@ -144,22 +148,47 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
     }
   }
 
+  func prepareMeasurement() async throws {
+    try await validateCurrentContainer(expectedState: .stopped)
+  }
+
   func perform() async throws -> Int64? {
     guard let preparedContainer, preparedContainer.didCreate else {
       throw ColdContainerStartupBenchmarkError.invalidIterationState
     }
 
     try await containers.startContainer(id: preparedContainer.id)
+    try await validateCurrentContainer(expectedState: .running)
+    return nil
+  }
+
+  func currentContainerID() throws -> String {
+    guard let preparedContainer, preparedContainer.didCreate else {
+      throw ColdContainerStartupBenchmarkError.invalidIterationState
+    }
+    return preparedContainer.id
+  }
+
+  func validateCurrentContainer(expectedState: RuntimeState) async throws {
+    guard let preparedContainer, preparedContainer.didCreate else {
+      throw ColdContainerStartupBenchmarkError.invalidIterationState
+    }
     let observation = try await requireReviewedObservation(
       id: preparedContainer.id,
       operationID: preparedContainer.operationID
     )
-    guard observation.state == .running, observation.startedAt != nil else {
+    guard observation.state == expectedState else {
+      throw ColdContainerStartupBenchmarkError.unexpectedState(
+        id: preparedContainer.id,
+        expected: expectedState,
+        actual: observation.state
+      )
+    }
+    if expectedState == .running, observation.startedAt == nil {
       throw ColdContainerStartupBenchmarkError.startNotConfirmed(
         preparedContainer.id
       )
     }
-    return nil
   }
 
   func cleanUpIteration() async throws {
@@ -304,6 +333,7 @@ enum ColdContainerStartupBenchmarkError: LocalizedError, Equatable, Sendable {
   case startNotConfirmed(String)
   case identityChanged(String)
   case imageIdentityChanged(String)
+  case unexpectedState(id: String, expected: RuntimeState, actual: RuntimeState)
   case replacementPresent(String)
   case stopTimedOut(String)
   case deletionNotConfirmed(String)
@@ -322,6 +352,8 @@ enum ColdContainerStartupBenchmarkError: LocalizedError, Equatable, Sendable {
       "Benchmark container “\(id)” changed after preparation."
     case .imageIdentityChanged(let id):
       "Benchmark container “\(id)” does not use the reviewed image identity."
+    case .unexpectedState(let id, let expected, let actual):
+      "Benchmark container “\(id)” is \(actual.rawValue), not \(expected.rawValue)."
     case .replacementPresent(let id):
       "A replacement named “\(id)” appeared during benchmark cleanup and was not modified."
     case .stopTimedOut(let id):
@@ -332,6 +364,154 @@ enum ColdContainerStartupBenchmarkError: LocalizedError, Equatable, Sendable {
       "Benchmark container “\(id)” required force-cleanup after: \(operation)"
     case .cleanupFailed(let id, let operation, let recovery):
       "Benchmark container “\(id)” cleanup failed after “\(operation)”: \(recovery)"
+    }
+  }
+}
+
+enum ContainerIOPerformanceStorage: Equatable, Sendable {
+  case guestRoot
+  case bindMount
+
+  var kind: PerformanceBenchmarkKind {
+    switch self {
+    case .guestRoot:
+      .guestRootFileIO
+    case .bindMount:
+      .bindMountFileIO
+    }
+  }
+
+  var targetPath: String {
+    switch self {
+    case .guestRoot:
+      "/tmp/nativecontainers-performance.bin"
+    case .bindMount:
+      "/workspace/nativecontainers-performance.bin"
+    }
+  }
+}
+
+actor ContainerIOPerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
+  private static let successMarker = "nativecontainers-io-ok"
+  private static let workload = """
+    set -eu
+    target=$1
+    count=$2
+    cleanup() { rm -f -- "$target"; }
+    trap cleanup EXIT HUP INT TERM
+    dd if=/dev/zero of="$target" bs=1048576 count="$count" conv=fsync 2>/dev/null
+    dd if="$target" of=/dev/null bs=1048576 2>/dev/null
+    printf '%s\\n' nativecontainers-io-ok
+    """
+
+  nonisolated let kind: PerformanceBenchmarkKind
+
+  private let lifecycle: ColdContainerStartupPerformanceBenchmarkScenario
+  private let commands: any ContainerCommandRunning
+  private let storage: ContainerIOPerformanceStorage
+  private let payloadMebibytes: Int
+
+  init(
+    containers: any ContainerCreating & ContainerLifecycleManaging,
+    stateReader: any ContainerStartupBenchmarkStateReading =
+      AppleContainerStartupBenchmarkStateReader(),
+    commands: any ContainerCommandRunning,
+    storage: ContainerIOPerformanceStorage,
+    imageReference: String = "docker.io/library/alpine:3.21",
+    expectedImageDigest: String,
+    attachments: ContainerAttachmentSelection = .empty,
+    payloadMebibytes: Int = 16,
+    makeContainerID: @escaping @Sendable () -> String = {
+      "nativecontainers-io-\(UUID().uuidString.lowercased().prefix(8))"
+    }
+  ) throws {
+    if storage == .bindMount {
+      guard
+        attachments.hostDirectoryMounts.contains(where: {
+          $0.containerPath == "/workspace" && !$0.isReadOnly
+        })
+      else {
+        throw ContainerIOPerformanceBenchmarkError.missingWritableBindMount
+      }
+    }
+
+    kind = storage.kind
+    lifecycle = ColdContainerStartupPerformanceBenchmarkScenario(
+      containers: containers,
+      stateReader: stateReader,
+      imageReference: imageReference,
+      expectedImageDigest: expectedImageDigest,
+      attachments: attachments,
+      makeContainerID: makeContainerID
+    )
+    self.commands = commands
+    self.storage = storage
+    self.payloadMebibytes = min(128, max(1, payloadMebibytes))
+  }
+
+  func prepareIteration() async throws {
+    try await lifecycle.prepareIteration()
+    try await lifecycle.prepareMeasurement()
+    _ = try await lifecycle.perform()
+  }
+
+  func prepareMeasurement() async throws {
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+  }
+
+  func perform() async throws -> Int64? {
+    let id = try await lifecycle.currentContainerID()
+    let result = try await commands.executeCommand(
+      in: id,
+      request: ContainerCommandRequest(
+        executable: "/bin/sh",
+        arguments: [
+          "-c",
+          Self.workload,
+          "nativecontainers-io",
+          storage.targetPath,
+          String(payloadMebibytes),
+        ],
+        timeoutSeconds: 180
+      )
+    )
+    guard !result.outputWasTruncated else {
+      throw ContainerIOPerformanceBenchmarkError.outputWasTruncated
+    }
+    guard result.exitCode == 0 else {
+      throw ContainerIOPerformanceBenchmarkError.commandFailed(result.exitCode)
+    }
+    guard
+      result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        == Self.successMarker
+    else {
+      throw ContainerIOPerformanceBenchmarkError.invalidSuccessMarker
+    }
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+    return Int64(payloadMebibytes) * 2 * 1_048_576
+  }
+
+  func cleanUpIteration() async throws {
+    try await lifecycle.cleanUpIteration()
+  }
+}
+
+enum ContainerIOPerformanceBenchmarkError: LocalizedError, Equatable, Sendable {
+  case missingWritableBindMount
+  case commandFailed(Int32)
+  case outputWasTruncated
+  case invalidSuccessMarker
+
+  var errorDescription: String? {
+    switch self {
+    case .missingWritableBindMount:
+      "The bind-mount benchmark requires a reviewed writable host folder at /workspace."
+    case .commandFailed(let exitCode):
+      "The fixed container I/O workload exited with status \(exitCode)."
+    case .outputWasTruncated:
+      "The fixed container I/O workload exceeded its bounded output limit."
+    case .invalidSuccessMarker:
+      "The fixed container I/O workload did not return its completion marker."
     }
   }
 }

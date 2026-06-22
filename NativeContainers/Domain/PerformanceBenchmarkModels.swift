@@ -5,6 +5,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
   case privateDiskIO
   case loopbackNetwork
   case coldContainerStartup
+  case guestRootFileIO
+  case bindMountFileIO
 
   static let settingsSuiteCases: [Self] = [
     .warmInventory,
@@ -24,6 +26,10 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Loopback TCP"
     case .coldContainerStartup:
       "Cold container startup"
+    case .guestRootFileIO:
+      "Guest root filesystem I/O"
+    case .bindMountFileIO:
+      "VirtioFS bind-mount I/O"
     }
   }
 
@@ -37,6 +43,10 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Transfers data through Network.framework over localhost without using an external network."
     case .coldContainerStartup:
       "Starts a newly created stopped Apple container and confirms its authoritative running state."
+    case .guestRootFileIO:
+      "Writes, synchronizes, and reads a fixed file inside a running container’s writable root filesystem."
+    case .bindMountFileIO:
+      "Writes, synchronizes, and reads a fixed file through a reviewed writable host-folder mount."
     }
   }
 }

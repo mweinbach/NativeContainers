@@ -936,6 +936,25 @@ bind-mount I/O, real builds, external traffic, VM startup, and idle-resource
 sampling remain separate opt-in lanes because they mutate runtime state or
 depend materially on the host environment.
 
+Guest-root and VirtioFS bind-mount I/O share a second explicit live gate. Each
+scenario prepares and starts a fresh identity- and image-pinned container before
+the measurement hook, then executes one fixed noninteractive workload through
+the existing bounded Apple process-XPC command service. The workload writes 16
+MiB with BusyBox `dd conv=fsync`, immediately reads the same bytes to
+`/dev/null`, removes the file through an exit trap, and returns one completion
+marker. The measured interval includes process creation, write, durability
+flush, immediate read, exit, and a final authoritative identity check; it is an
+end-to-end comparison, not a cache-cold block-device claim.
+
+The guest-root target is a fixed `/tmp` path. The bind target is a fixed file
+under `/workspace`, which is backed only by a reviewed writable host-directory
+mount with its security-scoped bookmark and device/inode identity. After one
+warmup and three samples per scenario, the gate requires both exact container
+cleanup and an empty host directory, then emits raw samples, median/P95,
+aggregate throughput, payload size, host/runtime version, and image provenance
+as marker-framed JSON. Neither lane is present in the non-mutating Settings
+suite.
+
 Workspace navigation is a separate focused slice. `WorkspaceRoute` represents
 both top-level destinations and exact resource identities. A pure
 `WorkspaceResourceCatalog` derives searchable entries from the current Apple

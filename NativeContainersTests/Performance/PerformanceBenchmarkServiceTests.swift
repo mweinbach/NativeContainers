@@ -48,6 +48,7 @@ struct PerformanceBenchmarkServiceTests {
 
     #expect(report.generatedAt == generatedAt)
     #expect(await scenario.preparationCount == 4)
+    #expect(await scenario.measurementPreparationCount == 4)
     #expect(await scenario.invocationCount == 4)
     #expect(await scenario.cleanupCount == 4)
     #expect(report.outcomes.count == 1)
@@ -99,9 +100,11 @@ struct PerformanceBenchmarkServiceTests {
     }
     #expect(result.kind == .loopbackNetwork)
     #expect(await failed.preparationCount == 1)
+    #expect(await failed.measurementPreparationCount == 1)
     #expect(await failed.invocationCount == 1)
     #expect(await failed.cleanupCount == 1)
     #expect(await succeeding.preparationCount == 1)
+    #expect(await succeeding.measurementPreparationCount == 1)
     #expect(await succeeding.invocationCount == 1)
     #expect(await succeeding.cleanupCount == 1)
   }
@@ -149,6 +152,7 @@ struct PerformanceBenchmarkServiceTests {
       preparationMessage == FixturePerformanceError.preparation.localizedDescription
     )
     #expect(await preparationFailure.preparationCount == 1)
+    #expect(await preparationFailure.measurementPreparationCount == 0)
     #expect(await preparationFailure.invocationCount == 0)
     #expect(await preparationFailure.cleanupCount == 1)
   }
@@ -176,9 +180,11 @@ struct PerformanceBenchmarkServiceTests {
       _ = try await service.run { _ in }
     }
     #expect(await cleanupFailure.preparationCount == 1)
+    #expect(await cleanupFailure.measurementPreparationCount == 1)
     #expect(await cleanupFailure.invocationCount == 1)
     #expect(await cleanupFailure.cleanupCount == 1)
     #expect(await nextScenario.preparationCount == 0)
+    #expect(await nextScenario.measurementPreparationCount == 0)
     #expect(await nextScenario.invocationCount == 0)
     #expect(await nextScenario.cleanupCount == 0)
   }
@@ -228,6 +234,7 @@ struct PerformanceBenchmarkServiceTests {
       await runtime.calls == [
         "create:nativecontainers-perf-fixture",
         "observe:nativecontainers-perf-fixture",
+        "observe:nativecontainers-perf-fixture",
         "start:nativecontainers-perf-fixture",
         "observe:nativecontainers-perf-fixture",
         "observe:nativecontainers-perf-fixture",
@@ -253,6 +260,7 @@ struct PerformanceBenchmarkServiceTests {
       makeContainerID: { id }
     )
     try await scenario.prepareIteration()
+    try await scenario.prepareMeasurement()
     _ = try await scenario.perform()
     await runtime.replaceCurrentContainer()
     let expected = ColdContainerStartupBenchmarkError.cleanupFailed(
@@ -316,6 +324,127 @@ struct PerformanceBenchmarkServiceTests {
   }
 
   @Test
+  func guestRootIOUsesFixedBoundedWorkloadAndCleansUpContainer() async throws {
+    let id = "nativecontainers-io-fixture"
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let commands = ContainerIOCommandRuntimeDouble()
+    let scenario = try ContainerIOPerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      commands: commands,
+      storage: .guestRoot,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      payloadMebibytes: 8,
+      makeContainerID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [1_000, 2_000])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured guest-root I/O result.")
+      return
+    }
+    #expect(result.kind == .guestRootFileIO)
+    #expect(result.samples.map(\.durationNanoseconds) == [1_000])
+    #expect(result.samples.map(\.processedByteCount) == [16 * 1_048_576])
+    let request = try #require(await commands.requests.first)
+    #expect(request.executable == "/bin/sh")
+    #expect(request.arguments.first == "-c")
+    #expect(request.arguments.dropFirst().first?.contains("conv=fsync") == true)
+    #expect(request.arguments.dropFirst().first?.contains("trap cleanup") == true)
+    #expect(request.arguments.contains("/tmp/nativecontainers-performance.bin"))
+    #expect(request.arguments.last == "8")
+    #expect(request.timeoutSeconds == 180)
+    #expect(await commands.containerIDs == [id])
+    let remaining = try await runtime.listedObservation(forContainerID: id)
+    #expect(remaining == nil)
+  }
+
+  @Test
+  func bindMountIORequiresReviewedWritableWorkspace() async {
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let commands = ContainerIOCommandRuntimeDouble()
+
+    #expect(
+      throws: ContainerIOPerformanceBenchmarkError.missingWritableBindMount
+    ) {
+      _ = try ContainerIOPerformanceBenchmarkScenario(
+        containers: runtime,
+        stateReader: runtime,
+        commands: commands,
+        storage: .bindMount,
+        imageReference: "example.invalid/local:benchmark",
+        expectedImageDigest: "sha256:fixture"
+      )
+    }
+  }
+
+  @Test
+  func bindMountIOCarriesReviewedWritableMountIntoPreparedContainer() async throws {
+    let id = "nativecontainers-io-bind-fixture"
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let commands = ContainerIOCommandRuntimeDouble()
+    let mount = try ContainerHostDirectoryMount(
+      bookmarkData: Data([0x01]),
+      lastKnownPath: "/private/tmp/nativecontainers-bind-fixture",
+      sourceIdentity: ContainerHostDirectorySourceIdentity(device: 1, inode: 2),
+      containerPath: "/workspace",
+      isReadOnly: false
+    )
+    let attachments = try ContainerAttachmentSelection(
+      volumeMounts: [],
+      hostDirectoryMounts: [mount],
+      networks: [],
+      publishedSockets: [],
+      requiredHostAccess: nil
+    )
+    let scenario = try ContainerIOPerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      commands: commands,
+      storage: .bindMount,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      attachments: attachments,
+      payloadMebibytes: 4,
+      makeContainerID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [10, 30])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured bind-mount I/O result.")
+      return
+    }
+    #expect(result.kind == .bindMountFileIO)
+    #expect(result.samples.map(\.processedByteCount) == [8 * 1_048_576])
+    let creationRequest = await runtime.lastRequest
+    #expect(creationRequest?.attachments.hostDirectoryMounts == [mount])
+    let request = try #require(await commands.requests.first)
+    #expect(request.arguments.contains("/workspace/nativecontainers-performance.bin"))
+    #expect(await commands.containerIDs == [id])
+    let remaining = try await runtime.listedObservation(forContainerID: id)
+    #expect(remaining == nil)
+  }
+
+  @Test
   func privateDiskScenarioRemovesItsTemporaryArtifact() async throws {
     let directory = FileManager.default.temporaryDirectory
       .appending(path: "NativeContainers-PerformanceTests-\(UUID().uuidString)")
@@ -353,6 +482,8 @@ struct PerformanceBenchmarkServiceTests {
 struct LiveApplePerformanceBenchmarkTests {
   private static let outputMarker =
     "__NATIVECONTAINERS_COLD_CONTAINER_BENCHMARK__"
+  private static let ioOutputMarker =
+    "__NATIVECONTAINERS_CONTAINER_IO_BENCHMARK__"
 
   @Test(
     .enabled(
@@ -440,6 +571,139 @@ struct LiveApplePerformanceBenchmarkTests {
     print("\(Self.outputMarker)\(json)")
   }
 
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_IO"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_IO=1 with Apple container services running and the selected image already local."
+    )
+  )
+  func measuresGuestRootAndReviewedVirtioFSIOWithoutResidue() async throws {
+    let service = AppleContainerService()
+    let imageReference =
+      ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_IMAGE"
+      ] ?? "docker.io/library/alpine:3.21"
+    let initialInventory = try await service.loadInventory()
+    guard
+      let image = initialInventory.images.first(where: {
+        $0.reference == imageReference
+      })
+    else {
+      throw LivePerformanceBenchmarkError.missingLocalImage(imageReference)
+    }
+
+    let runID = UUID().uuidString.lowercased()
+    let runPrefix = "nativecontainers-io-\(runID.prefix(8))-"
+    let hostRoot = URL(
+      filePath: "/private/tmp/nativecontainers-io-\(runID)",
+      directoryHint: .isDirectory
+    )
+    let bindDirectory = hostRoot.appending(
+      path: "Bind",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: bindDirectory,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+    defer { try? FileManager.default.removeItem(at: hostRoot) }
+
+    let reviewedMount = try service.reviewHostDirectory(
+      ContainerHostDirectoryReviewRequest(
+        sourceURL: bindDirectory,
+        containerPath: "/workspace",
+        isReadOnly: false
+      )
+    )
+    let bindAttachments = try ContainerAttachmentSelection(
+      volumeMounts: [],
+      hostDirectoryMounts: [reviewedMount],
+      networks: [],
+      publishedSockets: [],
+      requiredHostAccess: nil
+    )
+    let guestScenario = try ContainerIOPerformanceBenchmarkScenario(
+      containers: service,
+      commands: service,
+      storage: .guestRoot,
+      imageReference: imageReference,
+      expectedImageDigest: image.digest,
+      makeContainerID: {
+        "\(runPrefix)guest-\(UUID().uuidString.lowercased().prefix(6))"
+      }
+    )
+    let bindScenario = try ContainerIOPerformanceBenchmarkScenario(
+      containers: service,
+      commands: service,
+      storage: .bindMount,
+      imageReference: imageReference,
+      expectedImageDigest: image.digest,
+      attachments: bindAttachments,
+      makeContainerID: {
+        "\(runPrefix)bind-\(UUID().uuidString.lowercased().prefix(6))"
+      }
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [guestScenario, bindScenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 1,
+        measuredIterations: 3
+      )
+    )
+
+    let report: PerformanceBenchmarkReport
+    do {
+      report = try await benchmark.run { _ in }
+    } catch {
+      try await requireNoResidualContainers(prefix: runPrefix, service: service)
+      try requireNoResidualHostArtifacts(in: bindDirectory)
+      throw error
+    }
+    try await requireNoResidualContainers(prefix: runPrefix, service: service)
+    try requireNoResidualHostArtifacts(in: bindDirectory)
+
+    let results = try report.outcomes.map { outcome in
+      switch outcome {
+      case .measured(let result):
+        return LiveContainerIOBenchmarkResult(
+          kind: result.kind.rawValue,
+          samplesNanoseconds: result.samples.map(\.durationNanoseconds),
+          medianMilliseconds: result.medianDurationMilliseconds,
+          p95Milliseconds: result.p95DurationMilliseconds,
+          throughputMebibytesPerSecond: result.throughputMebibytesPerSecond
+        )
+      case .failed(let kind, let message):
+        throw LivePerformanceBenchmarkError.scenarioFailed(
+          kind: kind.rawValue,
+          message: message
+        )
+      }
+    }
+    #expect(results.count == 2)
+
+    let output = LiveContainerIOBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      appleContainerVersion: initialInventory.system.version,
+      imageReference: image.reference,
+      imageDigest: image.digest,
+      payloadMebibytes: 16,
+      results: results
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.ioOutputMarker)\(json)")
+  }
+
   private func requireNoResidualContainers(
     prefix: String,
     service: AppleContainerService
@@ -450,6 +714,18 @@ struct LiveApplePerformanceBenchmarkTests {
       .sorted()
     guard residualIDs.isEmpty else {
       throw LivePerformanceBenchmarkError.residualContainers(residualIDs)
+    }
+  }
+
+  private func requireNoResidualHostArtifacts(in directory: URL) throws {
+    let artifacts = try FileManager.default.contentsOfDirectory(
+      at: directory,
+      includingPropertiesForKeys: nil
+    )
+    guard artifacts.isEmpty else {
+      throw LivePerformanceBenchmarkError.residualHostArtifacts(
+        artifacts.map(\.lastPathComponent).sorted()
+      )
     }
   }
 }
@@ -465,9 +741,29 @@ private struct LiveColdContainerStartupBenchmarkOutput: Encodable {
   let p95Milliseconds: Double
 }
 
+private struct LiveContainerIOBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let appleContainerVersion: String
+  let imageReference: String
+  let imageDigest: String
+  let payloadMebibytes: Int
+  let results: [LiveContainerIOBenchmarkResult]
+}
+
+private struct LiveContainerIOBenchmarkResult: Encodable {
+  let kind: String
+  let samplesNanoseconds: [UInt64]
+  let medianMilliseconds: Double
+  let p95Milliseconds: Double
+  let throughputMebibytesPerSecond: Double?
+}
+
 private enum LivePerformanceBenchmarkError: LocalizedError {
   case missingLocalImage(String)
   case residualContainers([String])
+  case residualHostArtifacts([String])
+  case scenarioFailed(kind: String, message: String)
 
   var errorDescription: String? {
     switch self {
@@ -475,6 +771,10 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
       "Pull “\(reference)” before running the live performance gate; image pulls are excluded from the startup measurement."
     case .residualContainers(let ids):
       "The live performance gate left benchmark containers behind: \(ids.joined(separator: ", "))."
+    case .residualHostArtifacts(let names):
+      "The bind-mount benchmark left host artifacts behind: \(names.joined(separator: ", "))."
+    case .scenarioFailed(let kind, let message):
+      "The live \(kind) benchmark failed: \(message)"
     }
   }
 }
@@ -487,6 +787,7 @@ private actor ScriptedPerformanceScenario: PerformanceBenchmarkScenario {
   private let error: (any Error)?
   private let cleanupError: (any Error)?
   private(set) var preparationCount = 0
+  private(set) var measurementPreparationCount = 0
   private(set) var invocationCount = 0
   private(set) var cleanupCount = 0
 
@@ -517,6 +818,10 @@ private actor ScriptedPerformanceScenario: PerformanceBenchmarkScenario {
       throw error
     }
     return byteCount
+  }
+
+  func prepareMeasurement() async {
+    measurementPreparationCount += 1
   }
 
   func cleanUpIteration() async throws {
@@ -657,6 +962,26 @@ private actor ContainerStartupBenchmarkRuntimeDouble:
     guard currentID == id else {
       throw FixturePerformanceError.missingContainer
     }
+  }
+}
+
+private actor ContainerIOCommandRuntimeDouble: ContainerCommandRunning {
+  private(set) var containerIDs: [String] = []
+  private(set) var requests: [ContainerCommandRequest] = []
+
+  func executeCommand(
+    in id: String,
+    request: ContainerCommandRequest
+  ) async throws -> ContainerCommandResult {
+    containerIDs.append(id)
+    requests.append(request)
+    return ContainerCommandResult(
+      exitCode: 0,
+      standardOutput: "nativecontainers-io-ok\n",
+      standardError: "",
+      outputWasTruncated: false,
+      duration: .milliseconds(1)
+    )
   }
 }
 

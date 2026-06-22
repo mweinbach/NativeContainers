@@ -1934,3 +1934,33 @@ three measured fresh containers, and emits a marker-framed JSON record to the
 Xcode test log. It does not set a universal latency threshold: results are
 host-session evidence for regression comparison, not a cross-machine product
 promise.
+
+## ADR-069: Benchmark guest and VirtioFS I/O as fixed end-to-end live workloads
+
+**Status:** Accepted — 2026-06-22
+
+Guest-root and host-folder I/O are separate mutating live scenarios behind both
+`NATIVECONTAINERS_LIVE_PERFORMANCE=1` and
+`NATIVECONTAINERS_LIVE_PERFORMANCE_IO=1`. They are never added to the Settings
+suite. Both require the already-local reviewed image identity and reuse the
+same fresh-container preparation, operation-UUID checks, final measurement
+hook, cancellation-independent cleanup, and suite-abort rules as cold startup.
+
+The workload is deliberately closed: `/bin/sh` runs a service-owned script,
+accepts only a fixed target selected by the scenario and a bounded integer
+payload, writes 16 MiB from `/dev/zero` through BusyBox `dd conv=fsync`, reads
+the file immediately to `/dev/null`, and removes it from an exit trap. Output is
+bounded and must contain exactly one completion marker. The clock surrounds
+Apple process creation, the write and durability flush, immediate read, command
+exit, and final container identity confirmation. Throughput counts 32 MiB of
+processed data per iteration; it is not presented as a cache-cold disk or raw
+device result.
+
+The bind scenario accepts only a reviewed writable host folder mounted at
+`/workspace`. The live gate creates that folder under a disposable
+`/private/tmp` root, preserves the bookmark/device/inode checks of the product
+attachment service, and requires the directory to be empty after all samples.
+One warmup and three measured fresh containers run for guest root and bind
+storage, after which a marker-framed JSON record carries raw timings,
+median/P95, aggregate throughput, payload size, and host/runtime/image
+provenance.

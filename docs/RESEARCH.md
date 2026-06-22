@@ -69,6 +69,12 @@ Verified architecture:
   project overview describes sub-second starts as a design target, not a
   universal threshold, so NativeContainers records per-host samples rather
   than asserting that marketing-level bound on every machine.
+- Alpine's BusyBox workload surface is sufficient for a closed portable I/O
+  probe: the official BusyBox command reference documents `dd` with
+  `conv=fsync` as a physical write before completion and `rm --` for an
+  option-safe fixed target. The benchmark therefore avoids GNU-only progress
+  flags, redirects `dd` diagnostics into the bounded command stream, and does
+  not mistake the immediate follow-up read for a cache-cold device result.
 - The installed 1.0.0 `MachineClient.setConfig(id:bootConfig:)` and matching
   server route persist a replacement `MachineConfig` for the next boot. The
   supported mutable CLI surface is exactly CPU count, memory, and home-mount

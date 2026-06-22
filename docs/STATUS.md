@@ -1203,6 +1203,17 @@ Updated: 2026-06-22.
   cleanup boundaries, cancellation/failure cleanup, and suite abort before any
   later lane after a cleanup fault. This exact head is unclaimed because Xcode
   MCP currently fails at `XcodeListWindows` with `Transport closed`.
+- A second opt-in I/O gate now compares a fresh container's writable root with
+  the product's reviewed writable VirtioFS host-folder path. Both lanes use the
+  bounded Apple process-XPC command service and a fixed 16-MiB BusyBox workload:
+  sequential write with `conv=fsync`, immediate read, exit-trap deletion, and
+  one completion marker. The measured interval is end-to-end command latency,
+  not a cache-cold raw-device claim. One warmup and three samples per lane emit
+  raw timings, median/P95, aggregate throughput, payload, host/runtime version,
+  and exact image provenance. Deterministic coverage pins the fixed paths,
+  writable reviewed mount, processed-byte accounting, and residual cleanup;
+  the live gate additionally requires no run-prefixed container and no host
+  artifact. This exact head also awaits Xcode MCP build/test/live execution.
 
 ## Distribution-readiness checkpoint
 

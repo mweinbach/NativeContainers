@@ -14,12 +14,14 @@ protocol PerformanceBenchmarkScenario: Sendable {
   var kind: PerformanceBenchmarkKind { get }
 
   func prepareIteration() async throws
+  func prepareMeasurement() async throws
   func perform() async throws -> Int64?
   func cleanUpIteration() async throws
 }
 
 extension PerformanceBenchmarkScenario {
   func prepareIteration() async throws {}
+  func prepareMeasurement() async throws {}
   func cleanUpIteration() async throws {}
 }
 
@@ -131,6 +133,8 @@ struct PerformanceBenchmarkService: PerformanceBenchmarking {
     var operationResult: Result<PerformanceBenchmarkSample?, any Error>
     do {
       try await scenario.prepareIteration()
+      try Task.checkCancellation()
+      try await scenario.prepareMeasurement()
       try Task.checkCancellation()
 
       let startedAt = recordsMeasurement ? clock.nowNanoseconds() : nil

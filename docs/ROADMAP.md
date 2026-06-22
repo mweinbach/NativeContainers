@@ -289,8 +289,12 @@ must leave a usable, test-backed product slice.
         interval, authoritative running confirmation, one warmup plus three
         measured samples, operation-identity-pinned cleanup, provenance JSON,
         and residual-container rejection.
-  - [ ] Cold VM startup, guest and bind-mount I/O, real image-build,
-        external-network, and idle-resource lanes behind explicit live gates.
+  - [x] Fixed guest-root and reviewed writable VirtioFS bind-mount I/O behind a
+        second explicit live gate, with write/fsync/immediate-read measurement,
+        bounded output, exact container cleanup, empty host-folder postcondition,
+        and provenance JSON.
+  - [ ] Cold VM startup, real image-build, external-network, and idle-resource
+        lanes behind explicit live gates.
 
 ## Public-API constraint log
 
