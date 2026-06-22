@@ -15,6 +15,8 @@ Last updated: 2026-06-22.
 Primary sources:
 
 - [`apple/container` 1.0.0](https://github.com/apple/container/tree/1.0.0)
+- [`apple/container` 1.0.0 machine snapshot](https://github.com/apple/container/blob/1.0.0/Sources/Services/MachineAPIService/Client/MachineSnapshot.swift)
+- [`apple/container` 1.0.0 image fetch](https://github.com/apple/container/blob/1.0.0/Sources/Services/ContainerAPIService/Client/ClientImage.swift)
 - [`apple/container` 1.0.0 how-to](https://github.com/apple/container/blob/1.0.0/docs/how-to.md)
 - [`apple/container` API docs](https://apple.github.io/container/documentation/)
 - [`apple/containerization` 0.33.3](https://github.com/apple/containerization/tree/0.33.3)
@@ -83,6 +85,15 @@ Verified architecture:
   embedded worker path with `.disabled` cache, `pullLatest == false`, one
   current platform, and a reviewed OCI export. Context review remains outside
   the clock; BuildKit execution and output publication remain inside it.
+- Apple 1.0 introduced persistent `container machine` Linux environments. Its
+  exact `ClientImage.fetch` first resolves an existing local reference and
+  requested platform, pulling only for a not-found result, so the machine gate
+  preflights both the exact local reference and arm64 variant. The exact
+  `MachineSnapshot` carries image configuration, status, creation/start dates,
+  backing container identity, and the initialized flag. NativeContainers uses
+  those fields to keep image unpack and machine creation outside the clock,
+  measure production boot plus first-user provisioning, and require exact
+  running/initialized readiness before stopping and deleting the same machine.
 - The installed 1.0.0 `MachineClient.setConfig(id:bootConfig:)` and matching
   server route persist a replacement `MachineConfig` for the next boot. The
   supported mutable CLI surface is exactly CPU count, memory, and home-mount

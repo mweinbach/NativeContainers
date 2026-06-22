@@ -1228,6 +1228,19 @@ Updated: 2026-06-22.
   context, app-private artifact, shared worker-export, or image-store residue.
   This exact head awaits Xcode MCP build/test/live execution because the bridge
   remains unavailable.
+- A fourth opt-in gate now measures a fresh Apple persistent Linux machine from
+  production `startMachine` through first-user provisioning and authoritative
+  running/initialized readiness. Local arm64 image presence, image index digest,
+  stable machine creation identity, platform, stopped preparation, and a nil
+  pre-start timestamp are checked outside the clock; final digest/identity,
+  running state, initialization, and start timestamp are checked inside it.
+  Graceful stop, authorized KILL fallback, exact deletion, and run-prefix
+  absence stay outside the interval. Deterministic coverage proves timing
+  boundaries, fixed no-home configuration, digest rejection with cleanup,
+  force-stop recovery, and same-name replacement protection. One warmup plus
+  three fresh-machine samples emit raw timing, median/P95, host/runtime/image,
+  platform, CPU, memory, and provisioning provenance. This exact head awaits
+  Xcode MCP build/test/live execution because the bridge remains unavailable.
 
 ## Distribution-readiness checkpoint
 

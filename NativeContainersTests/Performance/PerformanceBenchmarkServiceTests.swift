@@ -326,6 +326,152 @@ struct PerformanceBenchmarkServiceTests {
   }
 
   @Test
+  func coldLinuxMachineStartupTimesReadinessAndDeletesPreparedMachine() async throws {
+    let id = "nativecontainers-vm-fixture"
+    let runtime = LinuxMachineStartupBenchmarkRuntimeDouble()
+    let scenario = ColdLinuxMachineStartupPerformanceBenchmarkScenario(
+      machines: runtime,
+      stateReader: runtime,
+      imageReference: "example.invalid/local:machine",
+      expectedImageDigest: "sha256:machine-fixture",
+      makeMachineID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [1_000, 9_000])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured cold Linux-machine startup result.")
+      return
+    }
+    #expect(result.kind == .coldLinuxMachineStartup)
+    #expect(result.samples.map(\.durationNanoseconds) == [8_000])
+    let request = await runtime.lastRequest
+    #expect(request?.startAfterCreation == false)
+    #expect(request?.architecture == .arm64)
+    #expect(request?.cpuCount == 1)
+    #expect(request?.memoryBytes == LinuxMachineCreationRequest.minimumMemoryBytes)
+    #expect(request?.homeMount == .none)
+    #expect(await runtime.currentMachine() == nil)
+    #expect(
+      await runtime.calls == [
+        "create:\(id)",
+        "snapshot:\(id)",
+        "snapshot:\(id)",
+        "start:\(id)",
+        "snapshot:\(id)",
+        "snapshot:\(id)",
+        "stop:\(id)",
+        "snapshot:\(id)",
+        "delete:\(id)",
+        "snapshot:\(id)",
+      ]
+    )
+  }
+
+  @Test
+  func coldLinuxMachineCleanupNeverMutatesSameNameReplacement() async throws {
+    let id = "nativecontainers-vm-replacement"
+    let runtime = LinuxMachineStartupBenchmarkRuntimeDouble()
+    let scenario = ColdLinuxMachineStartupPerformanceBenchmarkScenario(
+      machines: runtime,
+      stateReader: runtime,
+      imageReference: "example.invalid/local:machine",
+      expectedImageDigest: "sha256:machine-fixture",
+      makeMachineID: { id }
+    )
+    try await scenario.prepareIteration()
+    try await scenario.prepareMeasurement()
+    _ = try await scenario.perform()
+    await runtime.replaceCurrentMachine()
+
+    await #expect(
+      throws: ColdLinuxMachineStartupBenchmarkError.identityChanged(id)
+    ) {
+      try await scenario.cleanUpIteration()
+    }
+
+    #expect(await runtime.currentMachine()?.state == .running)
+    let calls = await runtime.calls
+    #expect(!calls.contains("stop:\(id)"))
+    #expect(!calls.contains("force-stop:\(id)"))
+    #expect(!calls.contains("delete:\(id)"))
+  }
+
+  @Test
+  func coldLinuxMachineRejectsUnexpectedDigestAndStillCleansUp() async throws {
+    let id = "nativecontainers-vm-digest-drift"
+    let runtime = LinuxMachineStartupBenchmarkRuntimeDouble(
+      imageDigest: "sha256:unexpected"
+    )
+    let scenario = ColdLinuxMachineStartupPerformanceBenchmarkScenario(
+      machines: runtime,
+      stateReader: runtime,
+      imageReference: "example.invalid/local:machine",
+      expectedImageDigest: "sha256:machine-fixture",
+      makeMachineID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      )
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .failed(let kind, let message) = report.outcomes[0] else {
+      Issue.record("Expected machine image drift to reject the benchmark.")
+      return
+    }
+    #expect(kind == .coldLinuxMachineStartup)
+    #expect(
+      message
+        == ColdLinuxMachineStartupBenchmarkError.imageIdentityChanged(id)
+        .localizedDescription
+    )
+    #expect(await runtime.currentMachine() == nil)
+  }
+
+  @Test
+  func coldLinuxMachineCleanupFallsBackToAuthorizedForceStop() async throws {
+    let id = "nativecontainers-vm-force-cleanup"
+    let runtime = LinuxMachineStartupBenchmarkRuntimeDouble(stopFails: true)
+    let scenario = ColdLinuxMachineStartupPerformanceBenchmarkScenario(
+      machines: runtime,
+      stateReader: runtime,
+      imageReference: "example.invalid/local:machine",
+      expectedImageDigest: "sha256:machine-fixture",
+      makeMachineID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [10, 20])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured = report.outcomes[0] else {
+      Issue.record("Expected force-cleanup recovery to preserve the sample.")
+      return
+    }
+    #expect(await runtime.calls.contains("force-stop:\(id)"))
+    #expect(await runtime.currentMachine() == nil)
+  }
+
+  @Test
   func guestRootIOUsesFixedBoundedWorkloadAndCleansUpContainer() async throws {
     let id = "nativecontainers-io-fixture"
     let runtime = ContainerStartupBenchmarkRuntimeDouble()
@@ -626,6 +772,8 @@ struct LiveApplePerformanceBenchmarkTests {
     "__NATIVECONTAINERS_CONTAINER_IO_BENCHMARK__"
   private static let buildOutputMarker =
     "__NATIVECONTAINERS_IMAGE_BUILD_BENCHMARK__"
+  private static let machineOutputMarker =
+    "__NATIVECONTAINERS_COLD_LINUX_MACHINE_BENCHMARK__"
 
   @Test(
     .enabled(
@@ -711,6 +859,131 @@ struct LiveApplePerformanceBenchmarkTests {
     let encoded = try encoder.encode(output)
     let json = try #require(String(data: encoded, encoding: .utf8))
     print("\(Self.outputMarker)\(json)")
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_MACHINE"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_MACHINE=1 with Apple container services running and the selected machine image already local."
+    )
+  )
+  func measuresColdLinuxMachineThroughFirstUserReadinessWithoutResidue() async throws {
+    let containerService = AppleContainerService()
+    let imageReference =
+      ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_MACHINE_IMAGE"
+      ]
+      ?? ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_IMAGE"
+      ]
+      ?? "docker.io/library/alpine:3.22"
+    let initialInventory = try await containerService.loadInventory()
+    guard
+      let image = initialInventory.images.first(where: {
+        $0.reference == imageReference
+      })
+    else {
+      throw LivePerformanceBenchmarkError.missingLocalImage(imageReference)
+    }
+    let inspection = try await containerService.inspectImage(
+      reference: imageReference
+    )
+    guard
+      inspection.variants.contains(where: {
+        $0.os == "linux" && $0.architecture == "arm64"
+      })
+    else {
+      throw LivePerformanceBenchmarkError.missingLocalImagePlatform(
+        reference: imageReference,
+        platform: "linux/arm64"
+      )
+    }
+
+    let runtime = AppleMachineRuntimeClient()
+    let machineService = AppleMachineManagementService(
+      runtime: runtime
+    )
+    let runPrefix =
+      "nativecontainers-vm-\(UUID().uuidString.lowercased().prefix(8))-"
+    let scenario = ColdLinuxMachineStartupPerformanceBenchmarkScenario(
+      machines: machineService,
+      stateReader: runtime,
+      imageReference: image.reference,
+      expectedImageDigest: image.digest,
+      makeMachineID: {
+        "\(runPrefix)\(UUID().uuidString.lowercased().prefix(8))"
+      }
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 1,
+        measuredIterations: 3
+      )
+    )
+
+    let report: PerformanceBenchmarkReport
+    do {
+      report = try await benchmark.run { _ in }
+    } catch {
+      try await requireNoResidualMachines(
+        prefix: runPrefix,
+        service: containerService
+      )
+      throw error
+    }
+    try await requireNoResidualMachines(
+      prefix: runPrefix,
+      service: containerService
+    )
+
+    guard
+      let outcome = report.outcomes.first,
+      case .measured(let result) = outcome
+    else {
+      if let outcome = report.outcomes.first,
+        case .failed(let kind, let message) = outcome
+      {
+        throw LivePerformanceBenchmarkError.scenarioFailed(
+          kind: kind.rawValue,
+          message: message
+        )
+      }
+      throw LivePerformanceBenchmarkError.missingScenarioResult(
+        PerformanceBenchmarkKind.coldLinuxMachineStartup.rawValue
+      )
+    }
+    #expect(result.kind == .coldLinuxMachineStartup)
+    #expect(result.samples.count == 3)
+    #expect(result.samples.allSatisfy { $0.durationNanoseconds > 0 })
+
+    let output = LiveColdLinuxMachineStartupBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      appleContainerVersion: initialInventory.system.version,
+      imageReference: image.reference,
+      imageDigest: image.digest,
+      platform: "linux/arm64",
+      cpuCount: 1,
+      memoryMebibytes:
+        LinuxMachineCreationRequest.minimumMemoryBytes
+        / LinuxMachineCreationRequest.bytesPerMiB,
+      includesFirstUserProvisioning: true,
+      samplesNanoseconds: result.samples.map(\.durationNanoseconds),
+      medianMilliseconds: result.medianDurationMilliseconds,
+      p95Milliseconds: result.p95DurationMilliseconds
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.machineOutputMarker)\(json)")
   }
 
   @Test(
@@ -976,6 +1249,19 @@ struct LiveApplePerformanceBenchmarkTests {
     }
   }
 
+  private func requireNoResidualMachines(
+    prefix: String,
+    service: AppleContainerService
+  ) async throws {
+    let residualIDs = try await service.loadInventory().machines
+      .map(\.id)
+      .filter { $0.hasPrefix(prefix) }
+      .sorted()
+    guard residualIDs.isEmpty else {
+      throw LivePerformanceBenchmarkError.residualMachines(residualIDs)
+    }
+  }
+
   private func requireNoResidualHostArtifacts(in directory: URL) throws {
     let artifacts = try FileManager.default.contentsOfDirectory(
       at: directory,
@@ -1051,6 +1337,21 @@ private struct LiveColdContainerStartupBenchmarkOutput: Encodable {
   let p95Milliseconds: Double
 }
 
+private struct LiveColdLinuxMachineStartupBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let appleContainerVersion: String
+  let imageReference: String
+  let imageDigest: String
+  let platform: String
+  let cpuCount: Int
+  let memoryMebibytes: UInt64
+  let includesFirstUserProvisioning: Bool
+  let samplesNanoseconds: [UInt64]
+  let medianMilliseconds: Double
+  let p95Milliseconds: Double
+}
+
 private struct LiveContainerIOBenchmarkOutput: Encodable {
   let generatedAt: Date
   let hostOperatingSystem: String
@@ -1085,7 +1386,9 @@ private struct LiveImageBuildBenchmarkOutput: Encodable {
 
 private enum LivePerformanceBenchmarkError: LocalizedError {
   case missingLocalImage(String)
+  case missingLocalImagePlatform(reference: String, platform: String)
   case residualContainers([String])
+  case residualMachines([String])
   case residualHostArtifacts([String])
   case residualBuildArtifacts([String])
   case residualBuildImages([String])
@@ -1096,8 +1399,12 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
     switch self {
     case .missingLocalImage(let reference):
       "Pull “\(reference)” before running the live performance gate; image pulls are excluded from the startup measurement."
+    case .missingLocalImagePlatform(let reference, let platform):
+      "Pull the \(platform) variant of “\(reference)” before running the live performance gate."
     case .residualContainers(let ids):
       "The live performance gate left benchmark containers behind: \(ids.joined(separator: ", "))."
+    case .residualMachines(let ids):
+      "The live performance gate left benchmark Linux machines behind: \(ids.joined(separator: ", "))."
     case .residualHostArtifacts(let names):
       "The bind-mount benchmark left host artifacts behind: \(names.joined(separator: ", "))."
     case .residualBuildArtifacts(let paths):
@@ -1575,6 +1882,149 @@ private actor ContainerStartupBenchmarkRuntimeDouble:
     guard currentID == id else {
       throw FixturePerformanceError.missingContainer
     }
+  }
+}
+
+private actor LinuxMachineStartupBenchmarkRuntimeDouble:
+  MachineCreating,
+  MachineLifecycleManaging,
+  LinuxMachineStartupBenchmarkStateReading
+{
+  private(set) var calls: [String] = []
+  private(set) var lastRequest: LinuxMachineCreationRequest?
+
+  private let imageDigest: String
+  private let stopFails: Bool
+  private var current: LinuxMachineRuntimeSnapshot?
+
+  init(
+    imageDigest: String = "sha256:machine-fixture",
+    stopFails: Bool = false
+  ) {
+    self.imageDigest = imageDigest
+    self.stopFails = stopFails
+  }
+
+  func createMachine(
+    request: LinuxMachineCreationRequest,
+    progress: @escaping ContainerProgressHandler
+  ) async throws -> LinuxMachineCreationResult {
+    calls.append("create:\(request.name)")
+    lastRequest = request
+    let identity = LinuxMachineIdentity(
+      id: request.name,
+      imageReference: request.imageReference,
+      platform: "linux/arm64",
+      createdAt: Date(timeIntervalSince1970: 1_000)
+    )
+    current = LinuxMachineRuntimeSnapshot(
+      identity: identity,
+      state: .stopped,
+      backingContainerID: nil,
+      isInitialized: false,
+      imageDigest: imageDigest,
+      startedAt: nil
+    )
+    return LinuxMachineCreationResult(
+      identity: identity,
+      state: .stopped,
+      isInitialized: false
+    )
+  }
+
+  func startMachine(_ target: LinuxMachineIdentity) async throws {
+    try requireCurrent(target)
+    calls.append("start:\(target.id)")
+    current = LinuxMachineRuntimeSnapshot(
+      identity: target,
+      state: .running,
+      backingContainerID: "backing-\(target.id)",
+      isInitialized: true,
+      imageDigest: imageDigest,
+      startedAt: Date(timeIntervalSince1970: 2_000)
+    )
+  }
+
+  func stopMachine(_ target: LinuxMachineIdentity) async throws {
+    let snapshot = try requireCurrent(target)
+    calls.append("stop:\(target.id)")
+    if stopFails {
+      throw FixturePerformanceError.expected
+    }
+    current = LinuxMachineRuntimeSnapshot(
+      identity: target,
+      state: .stopped,
+      backingContainerID: snapshot.backingContainerID,
+      isInitialized: snapshot.isInitialized,
+      imageDigest: snapshot.imageDigest,
+      startedAt: snapshot.startedAt
+    )
+  }
+
+  func forceStopMachine(
+    _ target: LinuxMachineIdentity,
+    authorization: LinuxMachineForceStopAuthorization
+  ) async throws {
+    let snapshot = try requireCurrent(target)
+    guard authorization == .confirmed(for: target) else {
+      throw FixturePerformanceError.expected
+    }
+    calls.append("force-stop:\(target.id)")
+    current = LinuxMachineRuntimeSnapshot(
+      identity: target,
+      state: .stopped,
+      backingContainerID: snapshot.backingContainerID,
+      isInitialized: snapshot.isInitialized,
+      imageDigest: snapshot.imageDigest,
+      startedAt: snapshot.startedAt
+    )
+  }
+
+  func deleteMachine(_ target: LinuxMachineIdentity) async throws {
+    let snapshot = try requireCurrent(target)
+    guard snapshot.state == .stopped else {
+      throw FixturePerformanceError.expected
+    }
+    calls.append("delete:\(target.id)")
+    current = nil
+  }
+
+  func snapshot(id: String) async throws -> LinuxMachineRuntimeSnapshot? {
+    calls.append("snapshot:\(id)")
+    guard current?.identity.id == id else { return nil }
+    return current
+  }
+
+  func currentMachine() -> LinuxMachineRuntimeSnapshot? {
+    current
+  }
+
+  func replaceCurrentMachine() {
+    guard let current else { return }
+    let replacement = LinuxMachineIdentity(
+      id: current.identity.id,
+      imageReference: current.identity.imageReference,
+      platform: current.identity.platform,
+      createdAt: Date(timeIntervalSince1970: 3_000)
+    )
+    self.current = LinuxMachineRuntimeSnapshot(
+      identity: replacement,
+      state: .running,
+      backingContainerID: "replacement-\(replacement.id)",
+      isInitialized: true,
+      imageDigest: current.imageDigest,
+      startedAt: Date(timeIntervalSince1970: 3_000)
+    )
+  }
+
+  @discardableResult
+  private func requireCurrent(
+    _ target: LinuxMachineIdentity
+  ) throws -> LinuxMachineRuntimeSnapshot {
+    guard let current, current.identity == target else {
+      throw FixturePerformanceError.missingContainer
+    }
+    return current
   }
 }
 

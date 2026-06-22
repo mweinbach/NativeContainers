@@ -1998,3 +1998,37 @@ One warmup and three measurements produce marker-framed JSON containing raw
 timings, median/P95, host and Apple runtime versions, exact base provenance,
 payload size, cache policy, and output kind. Builder warmth and host load remain
 session variables, so no universal latency threshold is asserted.
+
+## ADR-071: Measure cold Apple Linux-machine startup through first-user readiness
+
+**Status:** Accepted — 2026-06-22
+
+Apple's persistent `container machine` environment is the Linux VM startup lane
+for performance coverage. It is gated by both
+`NATIVECONTAINERS_LIVE_PERFORMANCE=1` and
+`NATIVECONTAINERS_LIVE_PERFORMANCE_MACHINE=1`, and it is never part of the
+non-mutating Settings suite. The gate requires the selected reference and its
+arm64 variant to be present locally, then records the exact image index digest.
+Each iteration creates a unique stopped machine with one CPU, minimum memory,
+and no home-directory mount. Image resolution/unpack and persistent-machine
+creation remain setup, not startup time.
+
+The clock surrounds the production `startMachine` contract. That service boots
+the lightweight VM, performs the one-time host-user setup when the fresh
+machine is not initialized, and returns only after its own exact-identity
+snapshot is running and initialized. The benchmark then performs one additional
+snapshot inside the interval and requires the reviewed creation timestamp,
+image reference/digest, platform, running state, initialization flag, and start
+timestamp. The metric is therefore first usable machine readiness; it is not a
+bare hypervisor start or a warm restart. Apple 1.0 lifecycle routes do not
+expose an atomic conditional-start token, so the narrow final
+validation-to-start race is recorded rather than claimed away.
+
+Cleanup runs outside the clock even under cancellation. It revalidates the
+stable creation identity, attempts graceful stop, uses the existing explicitly
+authorized backing-container KILL path only when needed, deletes the stopped
+machine and persistent storage, and confirms absence. A same-name replacement
+fails the suite and is left untouched. One warmup plus three fresh-machine
+samples emit raw timing, median/P95, host/runtime/image provenance, CPU, memory,
+platform, and the provisioning boundary. This decision does not claim coverage
+for an IPSW-installed macOS GUI VM; that remains its own fixture-dependent lane.

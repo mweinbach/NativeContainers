@@ -8,6 +8,7 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
   case guestRootFileIO
   case bindMountFileIO
   case imageBuild
+  case coldLinuxMachineStartup
 
   static let settingsSuiteCases: [Self] = [
     .warmInventory,
@@ -33,6 +34,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "VirtioFS bind-mount I/O"
     case .imageBuild:
       "No-cache OCI image build"
+    case .coldLinuxMachineStartup:
+      "Cold Linux machine startup"
     }
   }
 
@@ -52,6 +55,8 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Writes, synchronizes, and reads a fixed file through a reviewed writable host-folder mount."
     case .imageBuild:
       "Builds a fixed local context without cache or registry refresh and exports a reviewed OCI archive."
+    case .coldLinuxMachineStartup:
+      "Starts a newly created stopped Apple Linux machine through first-user provisioning and confirmed readiness."
     }
   }
 }

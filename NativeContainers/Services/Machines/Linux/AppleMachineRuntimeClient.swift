@@ -10,6 +10,24 @@ struct LinuxMachineRuntimeSnapshot: Equatable, Sendable {
   let state: RuntimeState
   let backingContainerID: String?
   let isInitialized: Bool
+  let imageDigest: String?
+  let startedAt: Date?
+
+  init(
+    identity: LinuxMachineIdentity,
+    state: RuntimeState,
+    backingContainerID: String?,
+    isInitialized: Bool,
+    imageDigest: String? = nil,
+    startedAt: Date? = nil
+  ) {
+    self.identity = identity
+    self.state = state
+    self.backingContainerID = backingContainerID
+    self.isInitialized = isInitialized
+    self.imageDigest = imageDigest
+    self.startedAt = startedAt
+  }
 }
 
 protocol LinuxMachineRuntime: Sendable {
@@ -150,7 +168,9 @@ actor AppleMachineRuntimeClient: LinuxMachineRuntime {
       identity: AppleLinuxMachineSnapshotMapper.identity(from: machine),
       state: AppleLinuxMachineSnapshotMapper.state(from: machine),
       backingContainerID: machine.containerId,
-      isInitialized: machine.initialized
+      isInitialized: machine.initialized,
+      imageDigest: machine.configuration.image.digest,
+      startedAt: machine.startedDate
     )
   }
 }

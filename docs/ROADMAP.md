@@ -296,8 +296,11 @@ must leave a usable, test-backed product slice.
   - [x] Fixed no-cache Apple image build behind a third explicit live gate,
         with digest-pinned local input, reviewed OCI export, setup/cleanup
         outside the interval, raw-sample provenance, and artifact rejection.
-  - [ ] Cold VM startup, external-network, and idle-resource lanes behind
-        explicit live gates.
+  - [x] Cold Apple persistent Linux-machine startup through first-user readiness
+        behind a fourth explicit live gate, with fresh stopped machines,
+        digest/creation identity pinning, exact cleanup, and provenance JSON.
+  - [ ] IPSW-backed macOS GUI-VM cold startup, external-network, and
+        idle-resource lanes behind explicit live gates.
 
 ## Public-API constraint log
 

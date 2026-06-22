@@ -976,6 +976,25 @@ Marker-framed JSON records raw samples, median/P95, host/runtime version, exact
 base reference/digest, payload size, cache policy, and output kind. This
 mutating lane is also excluded from Settings.
 
+Cold persistent Linux-machine readiness is a fourth explicit live gate. The
+gate requires an already-local arm64 image and freezes its reference and index
+digest before work begins. Every iteration creates a fresh stopped Apple
+machine with one CPU, the minimum supported memory, no host-home mount, and a
+stable creation timestamp. Image lookup/unpack, persistent disk creation, and
+the final stopped-state check all happen before the clock.
+
+The measured interval calls the production machine lifecycle service. It
+includes the Apple VM boot, first-boot host-user provisioning, the service's
+own readiness reconciliation, and one final exact snapshot requiring the same
+creation identity and image digest, `running`, `initialized`, and a start
+timestamp. Cleanup is cancellation-independent and outside the interval: the
+same creation identity is revalidated before graceful stop, authorized KILL
+fallback, and deletion, and a same-name replacement is never modified. One
+warmup plus three fresh-machine samples emit marker-framed JSON with raw
+timings, median/P95, host/runtime version, image provenance, platform, CPU,
+memory, and the provisioning boundary. An empty run-prefix inventory is a hard
+postcondition. IPSW-backed macOS GUI-VM startup remains a separate live lane.
+
 Workspace navigation is a separate focused slice. `WorkspaceRoute` represents
 both top-level destinations and exact resource identities. A pure
 `WorkspaceResourceCatalog` derives searchable entries from the current Apple

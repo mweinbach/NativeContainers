@@ -47,6 +47,8 @@ struct AppleMachineRuntimeClientTests {
 
     #expect(created.identity.id == "dev")
     #expect(created.state == .stopped)
+    #expect(created.imageDigest == stopped.configuration.image.digest)
+    #expect(created.startedAt == nil)
     #expect(await preparation.requestNames == ["dev"])
     #expect(await transport.createdIDs == ["dev"])
     #expect(

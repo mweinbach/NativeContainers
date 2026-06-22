@@ -368,6 +368,326 @@ enum ColdContainerStartupBenchmarkError: LocalizedError, Equatable, Sendable {
   }
 }
 
+protocol LinuxMachineStartupBenchmarkStateReading: Sendable {
+  func snapshot(id: String) async throws -> LinuxMachineRuntimeSnapshot?
+}
+
+extension AppleMachineRuntimeClient: LinuxMachineStartupBenchmarkStateReading {}
+
+actor ColdLinuxMachineStartupPerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  nonisolated let kind = PerformanceBenchmarkKind.coldLinuxMachineStartup
+
+  private struct PreparedMachine: Sendable {
+    let id: String
+    var identity: LinuxMachineIdentity?
+  }
+
+  private let machines: any MachineCreating & MachineLifecycleManaging
+  private let stateReader: any LinuxMachineStartupBenchmarkStateReading
+  private let imageReference: String
+  private let expectedImageDigest: String
+  private let expectedPlatform: String
+  private let makeMachineID: @Sendable () -> String
+  private var preparedMachine: PreparedMachine?
+
+  init(
+    machines: any MachineCreating & MachineLifecycleManaging,
+    stateReader: any LinuxMachineStartupBenchmarkStateReading,
+    imageReference: String = "docker.io/library/alpine:3.22",
+    expectedImageDigest: String,
+    expectedPlatform: String = "linux/arm64",
+    makeMachineID: @escaping @Sendable () -> String = {
+      "nativecontainers-vm-\(UUID().uuidString.lowercased())"
+    }
+  ) {
+    self.machines = machines
+    self.stateReader = stateReader
+    self.imageReference = imageReference
+    self.expectedImageDigest = expectedImageDigest
+    self.expectedPlatform = expectedPlatform
+    self.makeMachineID = makeMachineID
+  }
+
+  func prepareIteration() async throws {
+    guard preparedMachine == nil else {
+      throw ColdLinuxMachineStartupBenchmarkError.invalidIterationState
+    }
+
+    let id = makeMachineID()
+    preparedMachine = PreparedMachine(id: id, identity: nil)
+    let request = try LinuxMachineCreationRequest(
+      name: id,
+      imageReference: imageReference,
+      architecture: .arm64,
+      cpuCount: 1,
+      memoryBytes: LinuxMachineCreationRequest.minimumMemoryBytes,
+      homeMount: .none,
+      startAfterCreation: false
+    )
+
+    do {
+      let result = try await machines.createMachine(request: request) { _ in }
+      preparedMachine?.identity = result.identity
+      try validateIdentity(result.identity, expectedID: id)
+      guard result.state == .stopped, !result.isInitialized else {
+        throw ColdLinuxMachineStartupBenchmarkError.machineWasNotPrepared(id)
+      }
+      let snapshot = try await requireReviewedSnapshot(result.identity)
+      guard
+        snapshot.state == .stopped,
+        !snapshot.isInitialized,
+        snapshot.startedAt == nil
+      else {
+        throw ColdLinuxMachineStartupBenchmarkError.machineWasNotPrepared(id)
+      }
+    } catch {
+      if let partial = error as? LinuxMachinePartialCompletionError {
+        preparedMachine?.identity = partial.result.identity
+      } else if preparedMachine?.identity == nil {
+        await adoptReviewedMachineIfPresent(id: id)
+      }
+      throw error
+    }
+  }
+
+  func prepareMeasurement() async throws {
+    let identity = try currentIdentity()
+    let snapshot = try await requireReviewedSnapshot(identity)
+    guard
+      snapshot.state == .stopped,
+      !snapshot.isInitialized,
+      snapshot.startedAt == nil
+    else {
+      throw ColdLinuxMachineStartupBenchmarkError.machineWasNotPrepared(
+        identity.id
+      )
+    }
+  }
+
+  func perform() async throws -> Int64? {
+    let identity = try currentIdentity()
+    try await machines.startMachine(identity)
+    let snapshot = try await requireReviewedSnapshot(identity)
+    guard
+      snapshot.state == .running,
+      snapshot.isInitialized,
+      snapshot.startedAt != nil
+    else {
+      throw ColdLinuxMachineStartupBenchmarkError.startupNotConfirmed(
+        identity.id
+      )
+    }
+    return nil
+  }
+
+  func cleanUpIteration() async throws {
+    guard let preparedMachine else { return }
+    self.preparedMachine = nil
+
+    do {
+      let identity: LinuxMachineIdentity
+      if let preparedIdentity = preparedMachine.identity {
+        identity = preparedIdentity
+      } else {
+        guard
+          let current = try await stateReader.snapshot(id: preparedMachine.id)
+        else {
+          return
+        }
+        try validateReviewedSnapshot(
+          current,
+          expectedID: preparedMachine.id
+        )
+        identity = current.identity
+      }
+
+      guard
+        var current = try await ownedSnapshotIfPresent(identity)
+      else {
+        return
+      }
+      if current.state != .stopped {
+        do {
+          try await machines.stopMachine(identity)
+        } catch {
+          current = try await requireOwnedSnapshot(identity)
+          if current.state != .stopped {
+            try await machines.forceStopMachine(
+              identity,
+              authorization: .confirmed(for: identity)
+            )
+          }
+        }
+        current = try await requireOwnedSnapshot(identity)
+        guard current.state == .stopped else {
+          throw ColdLinuxMachineStartupBenchmarkError.stopNotConfirmed(
+            identity.id
+          )
+        }
+      }
+
+      do {
+        try await machines.deleteMachine(identity)
+      } catch {
+        guard let remaining = try await stateReader.snapshot(id: identity.id)
+        else {
+          return
+        }
+        guard remaining.identity == identity else {
+          throw ColdLinuxMachineStartupBenchmarkError.replacementPresent(
+            identity.id
+          )
+        }
+        throw error
+      }
+      guard let remaining = try await stateReader.snapshot(id: identity.id)
+      else {
+        return
+      }
+      guard remaining.identity == identity else {
+        throw ColdLinuxMachineStartupBenchmarkError.replacementPresent(
+          identity.id
+        )
+      }
+      throw ColdLinuxMachineStartupBenchmarkError.deletionNotConfirmed(
+        identity.id
+      )
+    } catch let error as ColdLinuxMachineStartupBenchmarkError {
+      throw error
+    } catch {
+      throw ColdLinuxMachineStartupBenchmarkError.cleanupFailed(
+        id: preparedMachine.id,
+        operation: error.localizedDescription
+      )
+    }
+  }
+
+  private func currentIdentity() throws -> LinuxMachineIdentity {
+    guard let identity = preparedMachine?.identity else {
+      throw ColdLinuxMachineStartupBenchmarkError.invalidIterationState
+    }
+    return identity
+  }
+
+  private func adoptReviewedMachineIfPresent(id: String) async {
+    do {
+      guard let snapshot = try await stateReader.snapshot(id: id) else {
+        return
+      }
+      try validateReviewedSnapshot(snapshot, expectedID: id)
+      preparedMachine?.identity = snapshot.identity
+    } catch {
+      return
+    }
+  }
+
+  private func ownedSnapshotIfPresent(
+    _ identity: LinuxMachineIdentity
+  ) async throws -> LinuxMachineRuntimeSnapshot? {
+    guard let snapshot = try await stateReader.snapshot(id: identity.id) else {
+      return nil
+    }
+    guard snapshot.identity == identity else {
+      throw ColdLinuxMachineStartupBenchmarkError.identityChanged(identity.id)
+    }
+    return snapshot
+  }
+
+  private func requireOwnedSnapshot(
+    _ identity: LinuxMachineIdentity
+  ) async throws -> LinuxMachineRuntimeSnapshot {
+    guard let snapshot = try await ownedSnapshotIfPresent(identity) else {
+      throw ColdLinuxMachineStartupBenchmarkError.machineMissing(identity.id)
+    }
+    return snapshot
+  }
+
+  private func requireReviewedSnapshot(
+    _ identity: LinuxMachineIdentity
+  ) async throws -> LinuxMachineRuntimeSnapshot {
+    let snapshot = try await requireOwnedSnapshot(identity)
+    try validateReviewedSnapshot(snapshot, expectedID: identity.id)
+    return snapshot
+  }
+
+  private func validateIdentity(
+    _ identity: LinuxMachineIdentity,
+    expectedID: String
+  ) throws {
+    guard identity.hasStableCreationIdentity else {
+      throw ColdLinuxMachineStartupBenchmarkError.unstableIdentity(expectedID)
+    }
+    guard
+      identity.id == expectedID,
+      identity.imageReference == imageReference,
+      identity.platform == expectedPlatform
+    else {
+      throw ColdLinuxMachineStartupBenchmarkError.imageIdentityChanged(
+        expectedID
+      )
+    }
+  }
+
+  private func validateReviewedSnapshot(
+    _ snapshot: LinuxMachineRuntimeSnapshot,
+    expectedID: String
+  ) throws {
+    try validateIdentity(snapshot.identity, expectedID: expectedID)
+    guard snapshot.imageDigest == expectedImageDigest else {
+      throw ColdLinuxMachineStartupBenchmarkError.imageIdentityChanged(
+        expectedID
+      )
+    }
+  }
+}
+
+enum ColdLinuxMachineStartupBenchmarkError:
+  LocalizedError,
+  Equatable,
+  Sendable
+{
+  case invalidIterationState
+  case machineWasNotPrepared(String)
+  case unstableIdentity(String)
+  case machineMissing(String)
+  case identityChanged(String)
+  case imageIdentityChanged(String)
+  case startupNotConfirmed(String)
+  case stopNotConfirmed(String)
+  case replacementPresent(String)
+  case deletionNotConfirmed(String)
+  case cleanupFailed(id: String, operation: String)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidIterationState:
+      "The cold Linux-machine benchmark iteration is not in a valid state."
+    case .machineWasNotPrepared(let id):
+      "Benchmark Linux machine “\(id)” was not prepared in a fresh stopped state."
+    case .unstableIdentity(let id):
+      "Benchmark Linux machine “\(id)” has no stable creation identity."
+    case .machineMissing(let id):
+      "Benchmark Linux machine “\(id)” is missing."
+    case .identityChanged(let id):
+      "Benchmark Linux machine “\(id)” changed after preparation."
+    case .imageIdentityChanged(let id):
+      "Benchmark Linux machine “\(id)” does not use the reviewed image identity."
+    case .startupNotConfirmed(let id):
+      "Benchmark Linux machine “\(id)” did not reach initialized running readiness."
+    case .stopNotConfirmed(let id):
+      "Benchmark Linux machine “\(id)” did not confirm its stopped state."
+    case .replacementPresent(let id):
+      "A replacement Linux machine named “\(id)” appeared during benchmark cleanup and was not modified."
+    case .deletionNotConfirmed(let id):
+      "Benchmark Linux machine “\(id)” remained after cleanup."
+    case .cleanupFailed(let id, let operation):
+      "Benchmark Linux machine “\(id)” cleanup failed: \(operation)"
+    }
+  }
+}
+
 enum ContainerIOPerformanceStorage: Equatable, Sendable {
   case guestRoot
   case bindMount
