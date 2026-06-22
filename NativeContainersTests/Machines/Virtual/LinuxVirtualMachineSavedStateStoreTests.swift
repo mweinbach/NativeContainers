@@ -62,6 +62,34 @@ struct LinuxVirtualMachineSavedStateStoreTests {
   }
 
   @Test
+  func snapshotLayerMutationChangesLinuxConfigurationFingerprint() throws {
+    let fixture = try LinuxSavedStateStoreFixture()
+    defer { fixture.remove() }
+    let mutation = try VirtualMachineDiskSnapshotConfiguration.empty
+      .creatingSnapshot(named: "Checkpoint")
+    let layerURL = fixture.root.appending(
+      path: mutation.createdLayer.relativePath
+    )
+    try FileManager.default.createDirectory(
+      at: layerURL.deletingLastPathComponent(),
+      withIntermediateDirectories: false
+    )
+    try Data("overlay".utf8).write(to: layerURL)
+    var manifest = fixture.machine.manifest
+    manifest.linuxDiskSnapshotConfiguration = mutation.configuration
+    let machine = fixture.machine.replacing(
+      manifest: manifest,
+      diskSnapshotLayerURLs: [layerURL]
+    )
+    let fingerprinter = LinuxVirtualMachineConfigurationFingerprinter()
+    let baseline = try fingerprinter.fingerprint(for: machine)
+
+    try append(0x01, to: layerURL)
+
+    #expect(try fingerprinter.fingerprint(for: machine) != baseline)
+  }
+
+  @Test
   func fingerprintIgnoresDisplayNameAndTracksLinuxTopology() throws {
     let fixture = try LinuxSavedStateStoreFixture()
     defer { fixture.remove() }
@@ -204,12 +232,15 @@ private struct LinuxSavedStateStoreFixture {
 
 extension ResolvedLinuxVirtualMachine {
   fileprivate func replacing(
-    manifest: VirtualMachineManifest
+    manifest: VirtualMachineManifest,
+    diskSnapshotLayerURLs: [URL]? = nil
   ) -> ResolvedLinuxVirtualMachine {
     ResolvedLinuxVirtualMachine(
       manifest: manifest,
       bundleURL: bundleURL,
       diskImageURL: diskImageURL,
+      diskSnapshotLayerURLs:
+        diskSnapshotLayerURLs ?? self.diskSnapshotLayerURLs,
       efiVariableStoreURL: efiVariableStoreURL,
       machineIdentifierURL: machineIdentifierURL,
       installationMediaURL: installationMediaURL,

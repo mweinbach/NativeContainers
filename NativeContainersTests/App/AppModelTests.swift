@@ -171,13 +171,22 @@ struct AppModelTests {
   }
 
   @Test
-  func macVirtualMachineDiskSnapshotsUseAStableAppScopedModel() throws {
+  func virtualMachineDiskSnapshotsUseAStableAppScopedModelPerGuest() throws {
     let model = AppModel.previewVirtualMachines
-    let machine = try #require(model.virtualMachines.first)
+    let mac = try #require(model.virtualMachines.first { $0.guest == .macOS })
+    let linux = try #require(model.virtualMachines.first { $0.guest == .linux })
 
     #expect(
-      model.makeMacVirtualMachineDiskSnapshotModel(for: machine)
-        === model.makeMacVirtualMachineDiskSnapshotModel(for: machine)
+      model.makeMacVirtualMachineDiskSnapshotModel(for: mac)
+        === model.makeMacVirtualMachineDiskSnapshotModel(for: mac)
+    )
+    #expect(
+      model.makeLinuxVirtualMachineDiskSnapshotModel(for: linux)
+        === model.makeLinuxVirtualMachineDiskSnapshotModel(for: linux)
+    )
+    #expect(
+      model.makeMacVirtualMachineDiskSnapshotModel(for: mac)
+        !== model.makeLinuxVirtualMachineDiskSnapshotModel(for: linux)
     )
   }
 

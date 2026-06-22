@@ -1447,12 +1447,13 @@ requires a separate explicit confirmation. Disk, kernel, Rosetta, and nested
 virtualization controls remain absent until the pinned runtime genuinely
 exposes them.
 
-## ADR-052: Model macOS disk snapshots as a bounded linear overlay service
+## ADR-052: Model GUI VM disk snapshots as a bounded linear overlay service
 
-**Status:** Accepted — 2026-06-21
+**Status:** Accepted 2026-06-21; generalized across GUI guests 2026-06-22
 
-NativeContainers persists macOS disk checkpoints as a revisioned linear
-history rather than exposing DiskImageKit objects to the VM library or SwiftUI.
+NativeContainers persists macOS and GUI Linux disk checkpoints as guest-scoped
+revisioned linear histories rather than exposing DiskImageKit objects to the VM
+library or SwiftUI.
 Each named checkpoint captures a prefix of canonical bundle-local ASIF overlay
 layers, and one additional top layer receives subsequent guest writes. The
 history is bounded to eight checkpoints. DiskImageKit exposes stack and overlay
@@ -1460,19 +1461,21 @@ creation but no public merge or flatten primitive, so arbitrary middle-layer
 deletion is not offered. Restoring a checkpoint keeps its required prefix,
 creates a fresh writable top layer, and prunes every newer checkpoint.
 
-Creation and restore acquire the ordinary macOS runtime lease, require the VM
-to be stopped with no saved state, recover only recognized app-owned staging or
-unreferenced canonical files, and create the new overlay before one
+Creation and restore share one transaction engine but acquire the matching
+guest runtime lease, require the VM to be stopped with no saved state, recover
+only recognized app-owned staging or unreferenced canonical files, and create
+the new overlay before one
 compare-and-swap-style manifest commit. A failed commit removes the new layer.
 After a successful restore, retired-layer deletion is best effort and any
 failure is reported as committed cleanup pending; the next snapshot operation
 reconciles that residue without rolling back the authoritative manifest.
 
-The resolver and runtime consume the ordered stack through a focused disk-image
-service: the base and historical overlays are read-only and only the newest
-overlay is read-write. Saved-state fingerprints cover the manifest topology and
-stable identity of every layer. Same-host clone and portable package workflows
-retain the complete bundle-local stack and reject missing, symbolic, extra, or
+Each resolver and runtime consume the ordered stack through one focused
+disk-image service: the base and historical overlays are read-only and only the
+newest overlay is read-write. macOS and Linux saved-state fingerprints cover
+the manifest topology and stable identity of every layer. Same-host clone and
+portable package workflows retain the complete bundle-local stack and reject
+missing, symbolic, extra, or
 partial snapshot artifacts. RAW-to-ASIF conversion and standalone-ASIF rewrite
 are rejected once snapshot history exists because replacing only the base would
 invalidate parent lineage. SwiftUI receives a stable observable snapshot model
@@ -2406,9 +2409,9 @@ setting. NativeContainers exposes one guest-neutral grow service for stopped
 macOS and GUI Linux VMs on macOS 27. It takes the existing guest-specific
 runtime lease, rejects saved state, compares the manifest with live DiskImageKit
 geometry, and seals the exact app-owned single-link regular file before
-mutation. Standalone RAW and ASIF images open explicitly read-write. A macOS
-snapshot stack opens every non-active layer read-only and mutates only the
-active overlay after exact ordered stack validation. Cache layers, shrink,
+mutation. Standalone RAW and ASIF images open explicitly read-write. A macOS or
+GUI Linux snapshot stack opens every non-active layer read-only and mutates only
+the active overlay after exact ordered stack validation. Cache layers, shrink,
 misalignment, and an implicit read-only fallback fail closed.
 
 Growth is an in-place image mutation, so rollback by shrinking is unsafe. A

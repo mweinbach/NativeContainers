@@ -869,8 +869,8 @@ compute-setting edit or a reuse of disk replacement. The resize service takes
 the guest's generation-pinned stopped runtime lease, rejects saved state,
 requires manifest capacity to match live DiskImageKit geometry, and seals the
 exact regular file that will change. Standalone RAW/ASIF images open explicitly
-read-write. For a macOS snapshot stack, the base and historical overlays open
-read-only and only the active top overlay opens read-write; the assembled stack
+read-write. For either guest's snapshot stack, the base and historical overlays
+open read-only and only the active top overlay opens read-write; the assembled stack
 must reproduce the exact ordered overlay URLs before `truncate(blockCount:)`
 can grow it. Shrink, block misalignment, cache layers, and automatic open-mode
 fallback are rejected.
@@ -889,11 +889,12 @@ ownership or invalid artifacts without guessing. SwiftUI exposes whole-GiB
 grow-only controls and explicitly leaves guest partition/filesystem expansion
 to the guest.
 
-macOS disk snapshots use a separate service boundary from replacement and
-saved-state checkpoints. A revisioned manifest value records a bounded linear
+GUI VM disk snapshots use a shared service boundary with guest-specific runtime
+and persistence adapters, separate from replacement and saved-state
+checkpoints. A guest-scoped revisioned manifest value records a bounded linear
 history of named checkpoints and canonical `Snapshots/<UUID>.asif` layers. The
-snapshot service acquires the normal stopped-VM runtime lease, rejects any
-saved state, recovers only recognized unreferenced private artifacts, creates a
+snapshot service acquires the guest's normal stopped-VM runtime lease, rejects
+any saved state, recovers only recognized unreferenced private artifacts, creates a
 DiskImageKit overlay through a hidden partial, and commits the new manifest only
 after promotion. Commit failure removes the unreferenced layer; restore commits
 the retained prefix plus a fresh writable layer before best-effort retirement
@@ -904,15 +905,16 @@ disk growth: the historical prefix can remain unchanged while the new writable
 top preserves the VM's larger block device. A later operation safely retries
 any post-commit residue.
 
-The bundle resolver maps every persisted layer in manifest order. Runtime disk
-attachment opens the base and frozen layers read-only and only the top overlay
+Each guest bundle resolver maps every persisted layer in manifest order.
+Runtime disk attachment opens the base and frozen layers read-only and only the top overlay
 read-write. The configuration descriptor and saved-state fingerprint include
-the snapshot revision, ordered paths, and each layer's stable file identity, so
+the snapshot revision, ordered paths, and each layer's stable file identity for
+both macOS and Linux, so
 an older memory checkpoint cannot resume against changed disk history. Clone,
 export, and import copy the bundle-local stack, while staged-bundle validation
 requires the snapshot directory to contain exactly the referenced regular
-files. Disk conversion and standalone-ASIF rewrite remain disabled while a
-snapshot stack exists. DiskImageKit exposes stacking but no public merge or
+files. macOS disk conversion and standalone-ASIF rewrite remain disabled while
+a snapshot stack exists. DiskImageKit exposes stacking but no public merge or
 flatten operation, so arbitrary deletion is prohibited; restoring an earlier
 checkpoint is the bounded reclamation path.
 

@@ -235,6 +235,56 @@ struct VirtualMachineCloneServiceTests {
   }
 
   @Test
+  func clonesLinuxSnapshotHistoryAndResolvesCopiedOverlayStack() async throws {
+    guard #available(macOS 27.0, *) else { return }
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let library = VirtualMachineLibrary(rootURL: root)
+    var source = try await makeStoppedLinuxMachine(
+      library: library,
+      root: root,
+      name: "Snapshot Linux"
+    )
+    let sourceBundle = bundleURL(root: root, id: source.id)
+    let mutation = try VirtualMachineDiskSnapshotConfiguration.empty
+      .creatingSnapshot(named: "Configured")
+    let sourceLayerURL = try AppleVirtualMachineDiskSnapshotLayerStore()
+      .createLayer(
+        mutation.createdLayer,
+        baseURL: sourceBundle.appending(path: source.diskImagePath),
+        retainedLayerURLs: [],
+        targetLogicalBytes: source.resources.diskBytes,
+        in: sourceBundle
+      )
+    source.linuxDiskSnapshotConfiguration = mutation.configuration
+    try write(source, to: sourceBundle)
+
+    let clone = try await VirtualMachineCloneService(store: library)
+      .cloneVirtualMachine(id: source.id, name: "Snapshot Linux Copy")
+    let cloneBundle = bundleURL(root: root, id: clone.id)
+    let resolved = try LinuxVirtualMachineBundleResolver(rootURL: root)
+      .resolve(clone)
+
+    #expect(
+      clone.linuxDiskSnapshotConfiguration
+        == source.linuxDiskSnapshotConfiguration
+    )
+    #expect(resolved.diskSnapshotLayerURLs.count == 1)
+    #expect(
+      resolved.diskSnapshotLayerURLs[0]
+        == cloneBundle.appending(path: mutation.createdLayer.relativePath)
+    )
+    #expect(FileManager.default.fileExists(atPath: sourceLayerURL.path))
+    #expect(
+      FileManager.default.fileExists(
+        atPath: resolved.diskSnapshotLayerURLs[0].path
+      )
+    )
+    try expectNoCloneStagingBundles(in: root)
+  }
+
+  @Test
   func copyFailureAbortsTransactionAndReleasesLibraryLocks() async throws {
     let root = temporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }

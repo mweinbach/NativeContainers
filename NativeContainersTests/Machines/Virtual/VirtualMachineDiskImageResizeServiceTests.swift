@@ -33,6 +33,42 @@ struct VirtualMachineDiskImageResizeServiceTests {
   }
 
   @Test
+  func growsLinuxSnapshotStackByExtendingOnlyTheWritableTopLayer()
+    async throws
+  {
+    guard #available(macOS 27.0, *) else { return }
+    let fixture = try DiskResizeServiceFixture(
+      guest: .linux,
+      usesSnapshotStack: true
+    )
+    defer { fixture.remove() }
+    let layerURL = try #require(fixture.layerURLs.last)
+    let baseIdentity = try fixture.artifactInspector.inspect(
+      at: fixture.diskURL
+    )
+
+    let result = try await fixture.service.grow(
+      machineID: fixture.manifest.id,
+      guest: .linux,
+      to: fixture.targetBytes
+    )
+
+    #expect(result.manifest.resources.diskBytes == fixture.targetBytes)
+    #expect(
+      try fixture.extender.descriptor(for: fixture.resizeSource)
+        .logicalBytes == fixture.targetBytes
+    )
+    #expect(
+      try fixture.artifactInspector.inspect(at: fixture.diskURL)
+        == baseIdentity
+    )
+    #expect(
+      try fixture.artifactInspector.inspect(at: layerURL).logicalBytes > 0
+    )
+    #expect(try fixture.journals.load(in: fixture.bundleURL) == nil)
+  }
+
+  @Test
   func growsMacOSASIFDiskThroughTheSameTransaction() async throws {
     guard #available(macOS 27.0, *) else { return }
     let fixture = try DiskResizeServiceFixture(guest: .macOS)
@@ -168,6 +204,7 @@ private actor DiskResizeServiceStore:
   private var manifest: VirtualMachineManifest
   private let bundleURL: URL
   private let diskURL: URL
+  private let diskSnapshotLayerURLs: [URL]
   private let auxiliaryStorageURL: URL
   private let hardwareModelURL: URL
   private let machineIdentifierURL: URL
@@ -177,6 +214,7 @@ private actor DiskResizeServiceStore:
     manifest: VirtualMachineManifest,
     bundleURL: URL,
     diskURL: URL,
+    diskSnapshotLayerURLs: [URL] = [],
     auxiliaryStorageURL: URL,
     hardwareModelURL: URL,
     machineIdentifierURL: URL,
@@ -185,6 +223,7 @@ private actor DiskResizeServiceStore:
     self.manifest = manifest
     self.bundleURL = bundleURL
     self.diskURL = diskURL
+    self.diskSnapshotLayerURLs = diskSnapshotLayerURLs
     self.auxiliaryStorageURL = auxiliaryStorageURL
     self.hardwareModelURL = hardwareModelURL
     self.machineIdentifierURL = machineIdentifierURL
@@ -216,6 +255,7 @@ private actor DiskResizeServiceStore:
         manifest: manifest,
         bundleURL: bundleURL,
         diskImageURL: diskURL,
+        diskSnapshotLayerURLs: diskSnapshotLayerURLs,
         auxiliaryStorageURL: auxiliaryStorageURL,
         hardwareModelURL: hardwareModelURL,
         machineIdentifierURL: machineIdentifierURL
@@ -239,6 +279,7 @@ private actor DiskResizeServiceStore:
         manifest: manifest,
         bundleURL: bundleURL,
         diskImageURL: diskURL,
+        diskSnapshotLayerURLs: diskSnapshotLayerURLs,
         efiVariableStoreURL: efiVariableStoreURL,
         machineIdentifierURL: machineIdentifierURL,
         installationMediaURL: nil
@@ -295,6 +336,7 @@ private struct DiskResizeServiceFixture {
   let targetBytes = 9 * VirtualMachineResources.bytesPerGiB
   let bundleURL: URL
   let diskURL: URL
+  let layerURLs: [URL]
   let manifest: VirtualMachineManifest
   let store: DiskResizeServiceStore
   let savedStates = ResizeSavedStateInspector()
@@ -306,12 +348,15 @@ private struct DiskResizeServiceFixture {
   var resizeSource: VirtualMachineDiskImageResizeSource {
     VirtualMachineDiskImageResizeSource(
       baseURL: diskURL,
-      layerURLs: [],
+      layerURLs: layerURLs,
       expectedFormat: manifest.effectiveDiskImageFormat
     )
   }
 
-  init(guest: VirtualMachineGuest) throws {
+  init(
+    guest: VirtualMachineGuest,
+    usesSnapshotStack: Bool = false
+  ) throws {
     bundleURL = FileManager.default.temporaryDirectory.appending(
       path: "NativeContainers-DiskResizeService-\(UUID().uuidString)",
       directoryHint: .isDirectory
@@ -365,6 +410,29 @@ private struct DiskResizeServiceFixture {
           macAddress: "02:00:00:00:00:01"
         )
     }
+    var createdLayerURLs: [URL] = []
+    if usesSnapshotStack {
+      let mutation = try VirtualMachineDiskSnapshotConfiguration.empty
+        .creatingSnapshot(named: "Before Growth")
+      let layerURL = try AppleVirtualMachineDiskSnapshotLayerStore()
+        .createLayer(
+          mutation.createdLayer,
+          baseURL: diskURL,
+          retainedLayerURLs: [],
+          targetLogicalBytes: sourceBytes,
+          in: bundleURL
+        )
+      switch guest {
+      case .macOS:
+        createdManifest.macOSDiskSnapshotConfiguration =
+          mutation.configuration
+      case .linux:
+        createdManifest.linuxDiskSnapshotConfiguration =
+          mutation.configuration
+      }
+      createdLayerURLs = [layerURL]
+    }
+    layerURLs = createdLayerURLs
     manifest = createdManifest
 
     let auxiliaryStorageURL = bundleURL.appending(path: "AuxiliaryStorage")
@@ -384,6 +452,7 @@ private struct DiskResizeServiceFixture {
       manifest: createdManifest,
       bundleURL: bundleURL,
       diskURL: diskURL,
+      diskSnapshotLayerURLs: createdLayerURLs,
       auxiliaryStorageURL: auxiliaryStorageURL,
       hardwareModelURL: hardwareModelURL,
       machineIdentifierURL: machineIdentifierURL,
@@ -407,7 +476,9 @@ private struct DiskResizeServiceFixture {
       machineID: manifest.id,
       guest: manifest.guest,
       diskImagePath: manifest.diskImagePath,
-      resizeArtifactPath: manifest.diskImagePath,
+      resizeArtifactPath:
+        manifest.effectiveDiskSnapshotConfiguration.layers.last?.relativePath
+        ?? manifest.diskImagePath,
       diskImageFormat: manifest.effectiveDiskImageFormat,
       sourceIdentity: sourceIdentity,
       sourceLogicalBytes: sourceBytes,

@@ -96,6 +96,28 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
   }
 
   @Test
+  func routesLinuxBootDiskThroughTheSharedDiskImageService() async throws {
+    let fixture = try LinuxConfigurationFixture()
+    defer { fixture.remove() }
+    let prepared = try await fixture.prepare()
+    let machine = try LinuxVirtualMachineBundleResolver(
+      rootURL: fixture.root
+    ).resolve(prepared)
+    let diskImages = LinuxConfigurationDiskImageService()
+
+    let configuration = try AppleLinuxVirtualMachineConfigurationFactory(
+      diskImageService: diskImages
+    ).makeConfiguration(for: machine)
+
+    #expect(diskImages.linuxAttachmentCount == 1)
+    let disk = try #require(
+      configuration.storageDevices.first
+        as? VZVirtioBlockDeviceConfiguration
+    )
+    #expect(disk.attachment === diskImages.lastAttachment)
+  }
+
+  @Test
   func omitsSpiceConsoleWhenClipboardSharingIsDisabled() async throws {
     let fixture = try LinuxConfigurationFixture()
     defer { fixture.remove() }
@@ -225,6 +247,57 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
     ) {
       try LinuxVirtualMachineBundleResolver(rootURL: fixture.root).resolve(prepared)
     }
+  }
+}
+
+@MainActor
+private final class LinuxConfigurationDiskImageService:
+  AppleVirtualMachineDiskImageServicing
+{
+  private(set) var linuxAttachmentCount = 0
+  private(set) var lastAttachment: VZStorageDeviceAttachment?
+
+  func descriptor(
+    for machine: ResolvedMacVirtualMachine
+  ) -> VirtualMachineDiskImageDescriptor {
+    descriptor(for: machine.manifest)
+  }
+
+  func descriptor(
+    for machine: ResolvedLinuxVirtualMachine
+  ) -> VirtualMachineDiskImageDescriptor {
+    descriptor(for: machine.manifest)
+  }
+
+  func makeWritableAttachment(
+    for machine: ResolvedMacVirtualMachine
+  ) throws -> VZStorageDeviceAttachment {
+    try makeAttachment(at: machine.diskImageURL)
+  }
+
+  func makeWritableAttachment(
+    for machine: ResolvedLinuxVirtualMachine
+  ) throws -> VZStorageDeviceAttachment {
+    linuxAttachmentCount += 1
+    let attachment = try makeAttachment(at: machine.diskImageURL)
+    lastAttachment = attachment
+    return attachment
+  }
+
+  private func descriptor(
+    for manifest: VirtualMachineManifest
+  ) -> VirtualMachineDiskImageDescriptor {
+    VirtualMachineDiskImageDescriptor(
+      format: manifest.effectiveDiskImageFormat,
+      logicalBytes: manifest.resources.diskBytes,
+      blockSizeBytes: VirtualMachineDiskImageDescriptor.rawBlockSizeBytes
+    )
+  }
+
+  private func makeAttachment(
+    at url: URL
+  ) throws -> VZStorageDeviceAttachment {
+    try VZDiskImageStorageDeviceAttachment(url: url, readOnly: false)
   }
 }
 

@@ -63,14 +63,14 @@ keeps uncertain exits quarantined, and pending replacement journals block runtim
 discard, clone, and transfer paths until recovery is safe. Standalone ASIF disks
 can also be rewritten out of place; the manifest switches only when the verified
 candidate has a smaller measured allocation, without claiming guaranteed
-compaction or APFS free-space recovery. Stopped macOS VMs can also keep up to
-eight named, bundle-local disk checkpoints through native DiskImageKit overlay
-stacks. Creating or restoring a checkpoint is saved-state-free and
-lease-serialized; restore prunes newer history, and the runtime opens only the
-top layer writable. Stopped macOS and GUI Linux VMs can grow their virtual disk
-through a shared, crash-recoverable DiskImageKit transaction. Growth is
+compaction or APFS free-space recovery. Stopped macOS and GUI Linux VMs can
+also keep up to eight named, bundle-local disk checkpoints through native
+DiskImageKit overlay stacks. Creating or restoring a checkpoint is
+saved-state-free and lease-serialized; restore prunes newer history, and each
+runtime opens only the top layer writable. Both guest families can grow their
+virtual disk through a shared, crash-recoverable DiskImageKit transaction. Growth is
 forward-only, blocks saved state and competing runtime/transfer operations,
-and preserves the larger capacity when an older macOS disk checkpoint is
+and preserves the larger capacity when an older disk checkpoint is
 restored. The guest partition and file system still require an in-guest expand;
 NativeContainers does not claim guest-aware shrink or automatic partitioning.
 Persistent Linux machines now have native

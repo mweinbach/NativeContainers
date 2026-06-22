@@ -155,6 +155,10 @@ must leave a usable, test-backed product slice.
       forward-only phase journal, exact artifact/lease validation, startup
       recovery, saved-state exclusion, and explicit guest partition/filesystem
       follow-up guidance.
+- [x] Bounded stopped-only GUI Linux disk snapshots through the shared
+      DiskImageKit overlay transaction, including saved-state invalidation,
+      active-layer-only writes and growth, native controls, and complete
+      clone/export/import retention.
 - [x] Stopped-only GUI Linux renaming through a generation-pinned metadata
       service that preserves bundle, machine, network, and storage identity.
 - [x] Persistent GUI Linux VirtioFS shared folders through security-scoped
@@ -277,8 +281,8 @@ must leave a usable, test-backed product slice.
       bytes, hidden-partial attribution, and cancellable scans outside ordinary
       inventory refresh.
 - [x] Measured standalone-ASIF rewrite reclamation without a compaction guarantee.
-- [x] Bounded stopped-only macOS disk snapshots through bundle-local
-      DiskImageKit overlay stacks, with transactional manifest commits,
+- [x] Bounded stopped-only macOS and GUI Linux disk snapshots through
+      bundle-local DiskImageKit overlay stacks, with transactional manifest commits,
       restore-to-prune semantics, explicit current-capacity active layers,
       saved-state invalidation, and native controls.
 - [x] Native sidebar/toolbar command groups, Command-1 through Command-9

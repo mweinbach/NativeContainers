@@ -433,6 +433,64 @@ struct VirtualMachineTransferServiceTests {
   }
 
   @Test
+  func linuxPortablePackagePreservesAndImportsSnapshotOverlayStack()
+    async throws
+  {
+    guard #available(macOS 27.0, *) else { return }
+    let fixture = try VirtualMachineTransferFixture()
+    defer { fixture.remove() }
+    var source = try await fixture.makeStoppedLinuxMachine(
+      library: fixture.sourceLibrary,
+      libraryRoot: fixture.sourceLibraryRoot,
+      name: "Portable Snapshot Linux"
+    )
+    let sourceBundle = fixture.bundleURL(
+      root: fixture.sourceLibraryRoot,
+      id: source.id
+    )
+    let mutation = try VirtualMachineDiskSnapshotConfiguration.empty
+      .creatingSnapshot(named: "Portable Checkpoint")
+    _ = try AppleVirtualMachineDiskSnapshotLayerStore().createLayer(
+      mutation.createdLayer,
+      baseURL: sourceBundle.appending(path: source.diskImagePath),
+      retainedLayerURLs: [],
+      targetLogicalBytes: source.resources.diskBytes,
+      in: sourceBundle
+    )
+    source.linuxDiskSnapshotConfiguration = mutation.configuration
+    try fixture.write(source, to: sourceBundle)
+    let package = fixture.root.appending(
+      path: "Portable Snapshot Linux.nativevm",
+      directoryHint: .isDirectory
+    )
+
+    _ = try await fixture.service(library: fixture.sourceLibrary)
+      .exportVirtualMachine(id: source.id, to: package)
+    let packaged = try fixture.readManifest(in: package)
+    let imported = try await fixture.service(library: fixture.importLibrary)
+      .importVirtualMachine(from: package, mode: .preserveIdentity)
+    let resolved = try LinuxVirtualMachineBundleResolver(
+      rootURL: fixture.importLibraryRoot
+    ).resolve(imported)
+
+    #expect(
+      packaged.linuxDiskSnapshotConfiguration
+        == source.linuxDiskSnapshotConfiguration
+    )
+    #expect(
+      imported.linuxDiskSnapshotConfiguration
+        == source.linuxDiskSnapshotConfiguration
+    )
+    #expect(resolved.diskSnapshotLayerURLs.count == 1)
+    #expect(
+      FileManager.default.fileExists(
+        atPath: resolved.diskSnapshotLayerURLs[0].path
+      )
+    )
+    try fixture.expectNoImportPartials()
+  }
+
+  @Test
   func linuxCloneImportCreatesFreshPlatformAndNetworkIdentity() async throws {
     let fixture = try VirtualMachineTransferFixture()
     defer { fixture.remove() }

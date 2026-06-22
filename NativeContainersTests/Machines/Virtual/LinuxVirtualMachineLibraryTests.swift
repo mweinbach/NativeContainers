@@ -408,6 +408,60 @@ struct LinuxVirtualMachineLibraryTests {
     recoveryLease.release()
   }
 
+  @Test
+  func diskSnapshotPersistsAndReloadsResolvedLinuxOverlayStack() async throws {
+    guard #available(macOS 27.0, *) else { return }
+    let fixture = try LinuxLibraryFixture()
+    defer { fixture.remove() }
+    let library = VirtualMachineLibrary(
+      rootURL: fixture.root,
+      linuxPlatformArtifactPreparer: TestLinuxPlatformArtifactPreparer(
+        behavior: .success
+      )
+    )
+    let draft = try await library.createDraft(
+      name: "Snapshot Linux",
+      guest: .linux,
+      resources: fixture.resources
+    )
+    _ = try await library.prepareLinuxVM(
+      id: draft.id,
+      installationMediaURL: fixture.installationMedia
+    )
+    let installationLease = try await library.acquireLinuxRuntime(id: draft.id)
+    _ = try await library.completeLinuxInstallation(
+      lease: installationLease
+    )
+    installationLease.release()
+    let service = LinuxVirtualMachineDiskSnapshotService(
+      linuxLeasingStore: library,
+      linuxPersistence: library,
+      linuxSavedStateService: StaticLinuxSavedStateInspector()
+    )
+
+    let result = try await service.createSnapshot(
+      named: "Before Upgrade",
+      for: draft.id
+    )
+    let reloaded = try #require(
+      try await library.list().first(where: { $0.id == draft.id })
+    )
+    let runtimeLease = try await library.acquireLinuxRuntime(id: draft.id)
+    defer { runtimeLease.release() }
+
+    #expect(result.configuration.revision == 1)
+    #expect(
+      reloaded.linuxDiskSnapshotConfiguration == result.configuration
+    )
+    #expect(runtimeLease.machine.diskSnapshotLayerURLs.count == 1)
+    #expect(
+      runtimeLease.machine.diskSnapshotLayerURLs[0]
+        == fixture.bundleURL(for: draft.id).appending(
+          path: result.configuration.layers[0].relativePath
+        )
+    )
+  }
+
   private func expectNoPartialDirectories(in bundleURL: URL) throws {
     let entries = try FileManager.default.contentsOfDirectory(
       at: bundleURL,

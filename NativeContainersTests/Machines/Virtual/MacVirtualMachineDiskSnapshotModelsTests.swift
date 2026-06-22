@@ -112,9 +112,11 @@ struct MacVirtualMachineDiskSnapshotModelsTests {
     object["layers"] = []
     let corrupted = try JSONSerialization.data(withJSONObject: object)
 
-    #expect(throws: MacVirtualMachineDiskSnapshotError.invalidConfiguration(
-      "snapshot and layer counts must match within the supported limit"
-    )) {
+    #expect(
+      throws: MacVirtualMachineDiskSnapshotError.invalidConfiguration(
+        "snapshot and layer counts must match within the supported limit"
+      )
+    ) {
       _ = try JSONDecoder().decode(
         MacVirtualMachineDiskSnapshotConfiguration.self,
         from: corrupted
@@ -143,6 +145,47 @@ struct MacVirtualMachineDiskSnapshotModelsTests {
       portable.macOSDiskSnapshotConfiguration
         == source.macOSDiskSnapshotConfiguration
     )
+  }
+
+  @Test
+  func linuxCloneAndPortableTransferPreserveGuestSnapshotHistory() throws {
+    var source = try VirtualMachineManifest(
+      name: "Linux Snapshot VM",
+      guest: .linux,
+      installState: .stopped,
+      resources: VirtualMachineResources(
+        cpuCount: 4,
+        memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+        diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+      )
+    )
+    source.linuxConfiguration = LinuxVirtualMachineConfiguration(
+      efiVariableStorePath: "Platform/EFI.nvram",
+      machineIdentifierPath: "Platform/MachineIdentifier.bin",
+      installationMediaPath: nil,
+      macAddress: "02:00:00:00:00:01"
+    )
+    source.linuxDiskSnapshotConfiguration =
+      try VirtualMachineDiskSnapshotConfiguration.empty
+      .creatingSnapshot(named: "Portable Linux").configuration
+
+    let clone = try VirtualMachineManifest(
+      cloning: source,
+      name: "Linux Snapshot Clone",
+      linuxMACAddress: "02:00:00:00:00:02"
+    )
+    let portable = source.portableRepresentation()
+
+    #expect(
+      clone.linuxDiskSnapshotConfiguration
+        == source.linuxDiskSnapshotConfiguration
+    )
+    #expect(
+      portable.linuxDiskSnapshotConfiguration
+        == source.linuxDiskSnapshotConfiguration
+    )
+    #expect(source.effectiveDiskSnapshotConfiguration.hasSnapshots)
+    #expect(clone.macOSDiskSnapshotConfiguration == nil)
   }
 }
 

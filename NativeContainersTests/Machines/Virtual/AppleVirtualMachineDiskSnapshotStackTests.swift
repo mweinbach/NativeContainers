@@ -81,5 +81,75 @@ import Testing
         withExtendedLifetime(attachment) {}
       }
     }
+
+    @Test
+    func linuxDescriptorAndAttachmentUseTheSameOverlayStack() throws {
+      guard #available(macOS 27.0, *) else { return }
+      let rootURL = FileManager.default.temporaryDirectory.appending(
+        path: "NativeContainers-Linux-Disk-Stack-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+      )
+      let bundleURL = rootURL.appending(
+        path: "Machine.nativevm",
+        directoryHint: .isDirectory
+      )
+      try FileManager.default.createDirectory(
+        at: bundleURL,
+        withIntermediateDirectories: true
+      )
+      defer { try? FileManager.default.removeItem(at: rootURL) }
+
+      let baseURL = bundleURL.appending(path: "Disk.img")
+      try Data(count: 4_096).write(to: baseURL)
+      let layerStore = AppleVirtualMachineDiskSnapshotLayerStore()
+      let mutation = try VirtualMachineDiskSnapshotConfiguration.empty
+        .creatingSnapshot(named: "Linux Base")
+      let layerURL = try layerStore.createLayer(
+        mutation.createdLayer,
+        baseURL: baseURL,
+        retainedLayerURLs: [],
+        targetLogicalBytes: 4_096,
+        in: bundleURL
+      )
+
+      var manifest = try VirtualMachineManifest(
+        name: "Linux Stack Test",
+        guest: .linux,
+        installState: .stopped,
+        resources: VirtualMachineResources(
+          cpuCount: 4,
+          memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+          diskBytes: 8 * VirtualMachineResources.bytesPerGiB
+        )
+      )
+      manifest.linuxConfiguration = LinuxVirtualMachineConfiguration(
+        efiVariableStorePath: "Platform/EFI.nvram",
+        machineIdentifierPath: "Platform/MachineIdentifier.bin",
+        installationMediaPath: nil,
+        macAddress: "02:00:00:00:00:01"
+      )
+      manifest.linuxDiskSnapshotConfiguration = mutation.configuration
+      let machine = ResolvedLinuxVirtualMachine(
+        manifest: manifest,
+        bundleURL: bundleURL,
+        diskImageURL: baseURL,
+        diskSnapshotLayerURLs: [layerURL],
+        efiVariableStoreURL: bundleURL.appending(path: "Platform/EFI.nvram"),
+        machineIdentifierURL: bundleURL.appending(
+          path: "Platform/MachineIdentifier.bin"
+        ),
+        installationMediaURL: nil
+      )
+      let service = AppleVirtualMachineDiskImageService()
+
+      let descriptor = try service.descriptor(for: machine)
+      #expect(descriptor.format == .raw)
+      #expect(descriptor.logicalBytes == 4_096)
+      #expect(descriptor.layerType == .overlay)
+
+      let attachment = try service.makeWritableAttachment(for: machine)
+      #expect(attachment is VZDiskImageStorageDeviceAttachment)
+      withExtendedLifetime(attachment) {}
+    }
   }
 #endif

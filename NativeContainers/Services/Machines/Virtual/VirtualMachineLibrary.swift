@@ -794,6 +794,8 @@ actor VirtualMachineLibrary:
       lease.machine.manifest.diskImagePath == manifest.diskImagePath,
       lease.machine.manifest.effectiveDiskImageFormat
         == manifest.effectiveDiskImageFormat,
+      lease.machine.manifest.effectiveMacOSDiskSnapshotConfiguration
+        == manifest.effectiveMacOSDiskSnapshotConfiguration,
       lease.machine.manifest.resources.diskBytes
         == manifest.resources.diskBytes,
       manifest.resources.diskBytes == commit.sourceLogicalBytes
@@ -853,6 +855,8 @@ actor VirtualMachineLibrary:
       lease.machine.manifest.diskImagePath == manifest.diskImagePath,
       lease.machine.manifest.effectiveDiskImageFormat
         == manifest.effectiveDiskImageFormat,
+      lease.machine.manifest.effectiveLinuxDiskSnapshotConfiguration
+        == manifest.effectiveLinuxDiskSnapshotConfiguration,
       lease.machine.manifest.resources.diskBytes
         == manifest.resources.diskBytes,
       manifest.resources.diskBytes == commit.sourceLogicalBytes

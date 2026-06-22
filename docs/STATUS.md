@@ -1650,8 +1650,8 @@ Updated: 2026-06-22.
   rejects saved state and shrink, revalidates live block geometry against the
   manifest, seals the exact app-owned file, and holds the guest-specific
   runtime lease through a compare-and-swap-style manifest commit. Standalone
-  RAW/ASIF images open explicitly read-write; a macOS snapshot stack opens only
-  its active overlay read-write after exact ordered stack validation.
+  RAW/ASIF images open explicitly read-write; either guest's snapshot stack
+  opens only its active overlay read-write after exact ordered stack validation.
 - A mode-0600 `.DiskImageResize.json` journal advances only through `planned`,
   `imageExtended`, and `manifestUpdated`. The image and journal are fully
   synchronized, recovery recognizes extension-before-phase and
@@ -1716,11 +1716,50 @@ Updated: 2026-06-22.
   report requested targets separately from host memory measurements and must
   not infer full reclamation from a successful property assignment.
 
+## Cross-guest VM disk snapshot checkpoint
+
+- The bounded DiskImageKit snapshot lane now serves stopped macOS and GUI Linux
+  VMs through one domain, observable model, layer store, transaction engine, and
+  SwiftUI section. Small guest adapters acquire the matching generation-pinned
+  runtime lease, inspect the matching saved-state store, and compare-and-swap
+  the guest-scoped manifest value. Linux installer state is rejected until the
+  VM is fully installed.
+- Linux bundle resolution now validates the ordered canonical overlay paths,
+  and the Linux Virtualization configuration uses the same DiskImage-backed VZ
+  attachment as macOS. The base and frozen layers open read-only; only the top
+  overlay receives writes. Linux configuration descriptors and saved-state
+  fingerprints include the snapshot revision, paths, and stable identity of
+  every layer, invalidating incompatible suspended memory state.
+- Active-overlay disk growth, same-host clone, portable export/import, and exact
+  staged-bundle validation now preserve Linux snapshot history. Unknown, extra,
+  missing, linked, or guest-incompatible artifacts fail closed; recognized
+  post-commit residue remains recoverable by the next snapshot transaction.
+- The Linux configuration screen exposes the same create/restore-to-prune
+  controls, progress, saved-state discard action, eight-checkpoint bound, and
+  maintenance mutual exclusion as macOS. Disk snapshots remain stopped-only;
+  no live, merge, flatten, arbitrary-delete, or automatic guest-filesystem
+  behavior is claimed.
+- Xcode DocumentationSearch confirmed that `VZDiskImageStorageDeviceAttachment`
+  accepts single and stacked DiskImageKit images and that an explicit overlay
+  block count controls stack capacity. Build-for-testing passes. The focused
+  Linux adapter, app routing, and cross-layer regressions pass 14/14, including
+  real overlay attachment, persistence, fingerprint invalidation, active-layer
+  growth, clone, and portable import. The complete Xcode plan reports 1,125
+  outcomes: 1,096 passed, zero failed or unrun, and 29 explicitly gated
+  live/destructive checks skipped. The warning-level build log is empty. Xcode
+  launched PID 17580 and stopped that exact process; its only error logs were
+  the two existing Core Spotlight `SetStoreUpdateService` donation failures.
+  The shared snapshot-section preview compiled but hit the existing 30-second
+  `NativeContainers.app` canvas launch timeout, so no rendered-image claim is
+  inferred. Live guest-write and restore behavior still need the disposable
+  installed-guest pass.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
 verified. Installing and rebooting a reviewed Linux distribution through the
-new GUI workflow, then suspending/restoring it, cloning it,
+new GUI workflow, then creating/restoring disk snapshots, suspending/restoring
+it, cloning it,
 exporting/restoring a portable copy, growing its disk and expanding the Linux
 partition/filesystem, and verifying shared/host-only packet flow plus a shared
 folder still need a disposable ISO smoke pass. Installing, booting,
@@ -1733,7 +1772,9 @@ disposable installed guest are available for that destructive integration pass.
 1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
    change CPU/memory, grow the virtual disk, expand the guest partition and file
-   system, and verify the next boot; suspend and restore the installed session,
+   system, and verify the next boot; create a named disk checkpoint, mutate
+   guest storage, restore it, and verify both data rollback and retained virtual
+   capacity; suspend and restore the installed session,
    request a lower memory target under guest load, restore the full target,
    record host observations without treating the request as guaranteed
    reclamation, verify shared and host-only vmnet connectivity, clone and
