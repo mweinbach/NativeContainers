@@ -345,7 +345,7 @@ struct LiveAppleKubernetesSmokeTests {
 
     do {
       try await session.sendInput(
-        Data("printf 'nativecontainers-k3s-terminal\\n'; exit\\n".utf8)
+        Data("printf 'nativecontainers-k3s-terminal\\n'; exit\n".utf8)
       )
       let exitCode = try await waitForTerminalExit(session)
       let streamedOutput = await outputTask.value

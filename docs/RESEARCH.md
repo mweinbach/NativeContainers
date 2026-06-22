@@ -913,6 +913,17 @@ Primary sources:
   survived an application-owned stop/start and deleted the exact machine. The
   follow-up lane passed in 114.549 seconds; Apple CLI inventory and
   temporary-directory inspection found no cluster or credential residue.
+- The expanded 2026-06-22 Xcode lane also exercised the reviewed mutation and
+  terminal contracts against a real cluster: scale to two Ready replicas,
+  resourceVersion-locked restart, UID-checked logs, interactive explicit-
+  container exec, UID/resourceVersion-preconditioned foreground deletion, and
+  application-owned stop/start/delete. The first terminal attempt exposed a
+  test-input defect rather than a product transport defect: the Swift literal
+  sent the two characters `\\n` after `exit`, so the guest shell correctly kept
+  waiting. Sending an actual newline made the exact selected test pass 1/1 in
+  220.603 seconds with no runtime warnings. Apple CLI inventory and temporary-
+  directory inspection again found no disposable machine, kubeconfig, or
+  descriptor residue.
 
 ## Public-API boundaries
 

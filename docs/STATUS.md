@@ -1318,28 +1318,30 @@ Updated: 2026-06-22.
   command revalidates all reviewed state, sends Kubernetes' server-enforced
   resource-version and current-replica preconditions, then requires the same
   UID, a new version, and the target count. Deterministic service/model coverage
-  and a real two-replica live-smoke extension are present, but this exact head
-  remains unclaimed until the Xcode MCP transport reconnects and runs them.
+  is present, and the selected live smoke scaled a real Deployment to two Ready
+  replicas while retaining its UID and advancing its resourceVersion.
 - Deployment, StatefulSet, and DaemonSet rows now expose a reviewed restart
   action; Jobs remain excluded. The service avoids stock `kubectl rollout
   restart` and its last-write-wins patch. It verifies the full reviewed
   identity, changes only the standard Pod-template restart annotation inside
   the guest, performs a resourceVersion-bearing full replace, and confirms the
   same UID, new version, and annotation. The complete workload object never
-  crosses to the host. Deterministic service/model coverage and a Deployment
-  live-smoke extension are present, but this exact head remains unclaimed until
-  Xcode MCP reconnects and runs them.
+  crosses to the host. Deterministic service/model coverage is present, and the
+  same live smoke completed a real Deployment rollout and observed the expected
+  restart annotation on the retained UID.
 - Every workload row now exposes a destructive deletion review that requires
   the exact workload name and adds a critical warning for system namespaces.
   A fixed kind-specific API path receives a raw Kubernetes DeleteOptions body
   with server-enforced UID/resourceVersion preconditions and foreground
   propagation; force deletion and grace-period overrides are absent. A bounded
   identity poll distinguishes completed deletion, pending finalizers, and an
-  untouched same-name replacement. Deterministic service/model coverage and a
-  gated Deployment live-smoke extension are present, but this exact head
-  remains unclaimed until Xcode MCP reconnects and runs them.
+  untouched same-name replacement. Deterministic service/model coverage is
+  present, and the same live smoke removed the reviewed Deployment through this
+  preconditioned foreground path and confirmed its UID was absent afterward.
 - The current Xcode MCP probe fails at `XcodeListWindows` with `Transport
-  closed`. No shell build or test command substitutes for that required path.
+  closed`. The selected live verification therefore used Xcode's native Test
+  action through UI automation after resetting a stale test coordinator; no
+  shell build or test command substituted for Xcode.
 - An opt-in Xcode smoke passed the complete destructive lane on Apple container
   1.0.0: it created a unique two-core/2-GiB Alpine machine, installed the pinned
   K3s release, exported a host-usable kubeconfig, created a namespace,
@@ -1351,8 +1353,24 @@ Updated: 2026-06-22.
   114.549 seconds after the log integration; independent CLI inventory found no
   remaining Apple machines afterward, and no temporary kubeconfig directory
   remained.
-- Xcode build-for-testing succeeds with zero warnings. The final default plan
-  passes all 975 outcomes: 953 deterministic tests passed, 22 explicit live
+- The expanded selected Xcode smoke passed 1/1 in 220.603 seconds on My Mac with
+  zero failures, skips, expected failures, or runtime warnings. It installed the
+  pinned K3s release, loaded inventory and UID-checked logs, scaled the real
+  Deployment to two Ready replicas, completed an optimistic restart, opened an
+  identity-pinned Pod terminal and exited it cleanly, deleted the workload with
+  UID/resourceVersion preconditions, deleted the namespace, then stopped,
+  restarted, rechecked, and deleted the exact Apple machine. Independent Apple
+  CLI inventory found only the pre-existing stopped BuildKit helper afterward,
+  and temporary-directory inspection found no smoke residue.
+- The most recent complete deterministic Xcode checkpoint containing all three
+  workload mutation implementations is `c7e04e9`: all 985 outcomes completed,
+  with 963 deterministic tests passing, 22 explicit live gates skipped, and no
+  failures or unrun outcomes. Later benchmark-only commits do not alter the
+  Kubernetes production paths, but their exact-head full plan remains tracked
+  separately under the performance checkpoint.
+- At the earlier Pod-log checkpoint, Xcode build-for-testing succeeded with zero
+  warnings. That default plan passed all 975 outcomes: 953 deterministic tests
+  passed, 22 explicit live
   gates skipped, and no outcome failed or remained unrun. The normal app
   launched in 3.852 seconds as PID 60426 and Xcode stopped that exact process;
   its only console errors were the existing macOS 27 beta
