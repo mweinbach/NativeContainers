@@ -1178,6 +1178,11 @@ Updated: 2026-06-21.
   passed, 21 explicit live gates skipped, and no outcome failed or remained
   unrun. Build-for-testing succeeds in 15.985 seconds, and both the build log
   and Issue Navigator contain zero warnings or errors.
+- The final normal Xcode launch ran as PID 20767 and sampled at 1.0-1.8% CPU
+  across five idle checks, with no recurrence of the macOS 27 menu-scene loop.
+  Xcode stopped that exact process. The preview-owned PID 11613 accepted TERM;
+  no NativeContainers or Preview process remained. Console errors were limited
+  to the existing macOS 27 beta CoreSpotlight/SetStore service failure.
 
 ## Remaining live verification gap
 
