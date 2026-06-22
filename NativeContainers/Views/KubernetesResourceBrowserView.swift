@@ -50,6 +50,7 @@ struct KubernetesResourceBrowserView: View {
 
   @Environment(\.dismiss) private var dismiss
   @State private var browser = KubernetesResourceBrowserModel()
+  @State private var selectedPod: KubernetesPodRecord?
 
   var body: some View {
     @Bindable var browser = browser
@@ -80,6 +81,9 @@ struct KubernetesResourceBrowserView: View {
             Task {
               await refreshResources()
             }
+          },
+          onViewPodLogs: { pod in
+            selectedPod = pod
           }
         )
       }
@@ -108,6 +112,9 @@ struct KubernetesResourceBrowserView: View {
     .frame(minWidth: 760, minHeight: 560)
     .task {
       await refreshResources()
+    }
+    .sheet(item: $selectedPod) { pod in
+      KubernetesPodLogsView(clusterModel: model, pod: pod)
     }
   }
 
@@ -224,6 +231,7 @@ private struct KubernetesResourceBrowserContent: View {
   let errorMessage: String?
   let hasSearchText: Bool
   let onRetry: () -> Void
+  let onViewPodLogs: (KubernetesPodRecord) -> Void
 
   var body: some View {
     VStack(spacing: 0) {
@@ -248,7 +256,8 @@ private struct KubernetesResourceBrowserContent: View {
         case .pods:
           KubernetesPodList(
             pods: pods,
-            hasSearchText: hasSearchText
+            hasSearchText: hasSearchText,
+            onViewLogs: onViewPodLogs
           )
         case .services:
           KubernetesServiceList(
@@ -407,6 +416,7 @@ private struct KubernetesWorkloadRow: View {
 private struct KubernetesPodList: View {
   let pods: [KubernetesPodRecord]
   let hasSearchText: Bool
+  let onViewLogs: (KubernetesPodRecord) -> Void
 
   var body: some View {
     if pods.isEmpty {
@@ -427,7 +437,10 @@ private struct KubernetesPodList: View {
           readyContainerCount: pod.readyContainerCount,
           containerCount: pod.containerCount,
           restartCount: pod.restartCount,
-          nodeName: pod.nodeName
+          nodeName: pod.nodeName,
+          onViewLogs: {
+            onViewLogs(pod)
+          }
         )
       }
       .listStyle(.inset)
@@ -443,6 +456,7 @@ private struct KubernetesPodRow: View {
   let containerCount: Int
   let restartCount: Int
   let nodeName: String?
+  let onViewLogs: () -> Void
 
   var body: some View {
     HStack(spacing: 12) {
@@ -482,6 +496,10 @@ private struct KubernetesPodRow: View {
             .textSelection(.enabled)
         }
       }
+
+      Button("View Logs", systemImage: "doc.plaintext", action: onViewLogs)
+        .buttonStyle(.borderless)
+        .disabled(containerCount == 0)
     }
     .padding(.vertical, 4)
   }

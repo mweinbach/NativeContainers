@@ -672,6 +672,17 @@ private struct PreviewKubernetesClusterService: KubernetesClusterManaging {
     .preview
   }
 
+  func loadPodLogs(
+    _ request: KubernetesPodLogRequest
+  ) async throws -> KubernetesPodLogSnapshot {
+    KubernetesPodLogSnapshot(
+      request: request,
+      text: "2026-06-22T13:30:00Z preview log output\n",
+      capturedAt: Date(),
+      isTruncated: false
+    )
+  }
+
   func provision(
     _ request: KubernetesClusterProvisionRequest,
     progress: @escaping KubernetesClusterProgressHandler
@@ -742,29 +753,32 @@ extension KubernetesResourceInventory {
     ],
     pods: [
       KubernetesPodRecord(
+        uid: "11111111-1111-4111-8111-111111111111",
         namespace: "default",
         name: "api-7f8d9b6c4d-x2mqp",
         phase: .running,
         readyContainerCount: 1,
-        containerCount: 1,
+        containerNames: ["api"],
         restartCount: 0,
         nodeName: "nativecontainers-kubernetes"
       ),
       KubernetesPodRecord(
+        uid: "22222222-2222-4222-8222-222222222222",
         namespace: "data",
         name: "postgres-0",
         phase: .running,
         readyContainerCount: 1,
-        containerCount: 1,
+        containerNames: ["postgres"],
         restartCount: 1,
         nodeName: "nativecontainers-kubernetes"
       ),
       KubernetesPodRecord(
+        uid: "33333333-3333-4333-8333-333333333333",
         namespace: "kube-system",
         name: "metrics-server-6f4c6675d5-hm8tz",
         phase: .running,
         readyContainerCount: 1,
-        containerCount: 1,
+        containerNames: ["metrics-server"],
         restartCount: 0,
         nodeName: "nativecontainers-kubernetes"
       ),

@@ -50,7 +50,11 @@ struct KubernetesResourceInventoryParserTests {
           {
             "items": [
               {
-                "metadata": {"namespace": "kube-system", "name": "coredns"},
+                "metadata": {
+                  "uid": "11111111-1111-4111-8111-111111111111",
+                  "namespace": "kube-system",
+                  "name": "coredns"
+                },
                 "spec": {
                   "nodeName": "nativecontainers-kubernetes",
                   "containers": [{"name": "coredns"}]
@@ -61,7 +65,11 @@ struct KubernetesResourceInventoryParserTests {
                 }
               },
               {
-                "metadata": {"namespace": "default", "name": "web-abc"},
+                "metadata": {
+                  "uid": "22222222-2222-4222-8222-222222222222",
+                  "namespace": "default",
+                  "name": "web-abc"
+                },
                 "spec": {
                   "nodeName": "nativecontainers-kubernetes",
                   "containers": [{"name": "web"}, {"name": "sidecar"}]
@@ -129,10 +137,20 @@ struct KubernetesResourceInventoryParserTests {
     #expect(inventory.workloads[1].desiredCount == 3)
     #expect(inventory.workloads[1].readyCount == 2)
     #expect(inventory.workloads[0].readyCount == 1)
-    #expect(inventory.pods.map(\.id) == ["default/web-abc", "kube-system/coredns"])
+    #expect(
+      inventory.pods.map { "\($0.namespace)/\($0.name)" }
+        == ["default/web-abc", "kube-system/coredns"]
+    )
+    #expect(
+      inventory.pods.map(\.id) == [
+        "22222222-2222-4222-8222-222222222222",
+        "11111111-1111-4111-8111-111111111111",
+      ]
+    )
     #expect(inventory.pods[0].phase == .pending)
     #expect(inventory.pods[0].readyContainerCount == 1)
     #expect(inventory.pods[0].containerCount == 2)
+    #expect(inventory.pods[0].containerNames == ["web", "sidecar"])
     #expect(inventory.pods[0].restartCount == 2)
     #expect(inventory.services.map(\.id) == ["default/web", "kube-system/kube-dns"])
     #expect(inventory.services[0].ports.first?.targetPort == "http")
@@ -144,20 +162,54 @@ struct KubernetesResourceInventoryParserTests {
   func rejectsDuplicateStableResourceIdentity() {
     let duplicatePod = """
       {
-        "metadata": {"namespace": "default", "name": "duplicate"},
+        "metadata": {
+          "uid": "33333333-3333-4333-8333-333333333333",
+          "namespace": "default",
+          "name": "duplicate"
+        },
         "spec": {"containers": []},
         "status": {"phase": "Pending", "containerStatuses": []}
       }
       """
+    let replacementPod = duplicatePod.replacingOccurrences(
+      of: "33333333-3333-4333-8333-333333333333",
+      with: "55555555-5555-4555-8555-555555555555"
+    )
     let output = inventoryOutput(
       workloads: #"{"items":[]}"#,
-      pods: "{\"items\":[\(duplicatePod),\(duplicatePod)]}",
+      pods: "{\"items\":[\(duplicatePod),\(replacementPod)]}",
       services: #"{"items":[]}"#
     )
 
     #expect(throws: KubernetesClusterError.invalidResourceInventory) {
       _ = try KubernetesResourceInventoryParser().parse(
         output,
+        capturedAt: .distantPast
+      )
+    }
+
+    let invalidContainer = inventoryOutput(
+      workloads: #"{"items":[]}"#,
+      pods: """
+        {
+          "items": [
+            {
+              "metadata": {
+                "uid": "44444444-4444-4444-8444-444444444444",
+                "namespace": "default",
+                "name": "bad-pod"
+              },
+              "spec": {"containers": [{"name": "unsafe;name"}]},
+              "status": {"phase": "Pending", "containerStatuses": []}
+            }
+          ]
+        }
+        """,
+      services: #"{"items":[]}"#
+    )
+    #expect(throws: KubernetesClusterError.invalidResourceInventory) {
+      _ = try KubernetesResourceInventoryParser().parse(
+        invalidContainer,
         capturedAt: .distantPast
       )
     }

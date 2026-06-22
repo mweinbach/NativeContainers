@@ -245,6 +245,9 @@ protocol KubernetesMachineRootCommandRunning: Sendable {
 protocol KubernetesClusterManaging: Sendable {
   func load() async throws -> KubernetesClusterSnapshot
   func loadResourceInventory() async throws -> KubernetesResourceInventory
+  func loadPodLogs(
+    _ request: KubernetesPodLogRequest
+  ) async throws -> KubernetesPodLogSnapshot
   func provision(
     _ request: KubernetesClusterProvisionRequest,
     progress: @escaping KubernetesClusterProgressHandler
@@ -266,6 +269,12 @@ struct UnavailableKubernetesClusterService: KubernetesClusterManaging {
   }
 
   func loadResourceInventory() async throws -> KubernetesResourceInventory {
+    throw KubernetesClusterError.unavailable
+  }
+
+  func loadPodLogs(
+    _ request: KubernetesPodLogRequest
+  ) async throws -> KubernetesPodLogSnapshot {
     throw KubernetesClusterError.unavailable
   }
 
@@ -323,6 +332,8 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
   case guestOutputTooLarge
   case resourceInventoryTooLarge
   case invalidResourceInventory
+  case invalidKubernetesResourceReference
+  case invalidPodLogSnapshot
   case readinessTimedOut
   case missingIPAddress
   case invalidKubeconfig
@@ -364,6 +375,10 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
       String(localized: "The Kubernetes resource inventory exceeds the safe item limit.")
     case .invalidResourceInventory:
       String(localized: "K3s returned an invalid Kubernetes resource inventory.")
+    case .invalidKubernetesResourceReference:
+      String(localized: "The Kubernetes resource reference is invalid.")
+    case .invalidPodLogSnapshot:
+      String(localized: "K3s returned an invalid Pod log snapshot.")
     case .readinessTimedOut:
       String(localized: "The Kubernetes API did not become ready before the bounded deadline.")
     case .missingIPAddress:

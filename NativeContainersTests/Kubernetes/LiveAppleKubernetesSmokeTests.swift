@@ -150,6 +150,22 @@ struct LiveAppleKubernetesSmokeTests {
         }
       )
 
+      let smokePod = try #require(
+        inventory.pods.first {
+          $0.namespace == namespace && $0.name == "smoke"
+        }
+      )
+      let podLogs = try await graph.cluster.loadPodLogs(
+        KubernetesPodLogRequest(
+          podUID: smokePod.uid,
+          namespace: namespace,
+          podName: "smoke",
+          containerName: "smoke"
+        )
+      )
+      #expect(podLogs.text.contains("nativecontainers-k3s-live"))
+      #expect(!podLogs.isTruncated)
+
       _ = try await graph.kubectl(
         kubeconfigURL: kubeconfigURL,
         arguments: [

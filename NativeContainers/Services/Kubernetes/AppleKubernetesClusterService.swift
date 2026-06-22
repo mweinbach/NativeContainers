@@ -64,6 +64,9 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
   }
 
   private static let maximumKubeconfigBytes = 256 * 1_024
+  static let maximumPodLogBytes = 512 * 1_024
+  static let maximumPodLogLines = 2_000
+  static let podLogIdentityMarker = "__NATIVECONTAINERS_K3S_POD_LOG_UID__"
   private static let versionMarker = "__NATIVECONTAINERS_K3S_VERSION__"
   private static let nodesMarker = "__NATIVECONTAINERS_K3S_NODES__"
   private static let podsMarker = "__NATIVECONTAINERS_K3S_PODS__"
@@ -151,14 +154,7 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
   }
 
   func loadResourceInventory() async throws -> KubernetesResourceInventory {
-    let descriptor = try await requireDescriptor()
-    guard descriptor.phase == .ready else {
-      throw KubernetesClusterError.setupNotRetryable
-    }
-    let machine = try await requireExactMachine(descriptor)
-    guard machine.state.isRunning else {
-      throw KubernetesClusterError.machineNotRunning(machine.id)
-    }
+    let descriptor = try await requireReadyRunningDescriptor()
 
     let result = try await rootCommands.executeRootCommand(
       KubernetesResourceInventoryParser.inventoryCommand,
@@ -172,6 +168,36 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     return try KubernetesResourceInventoryParser().parse(
       result.standardOutput,
       capturedAt: now()
+    )
+  }
+
+  func loadPodLogs(
+    _ request: KubernetesPodLogRequest
+  ) async throws -> KubernetesPodLogSnapshot {
+    let command = try Self.podLogCommand(request)
+    let descriptor = try await requireReadyRunningDescriptor()
+    let result = try await rootCommands.executeRootCommand(
+      command,
+      in: descriptor.machine,
+      timeoutSeconds: 75
+    )
+    try validate(result, operation: String(localized: "Reading Pod logs"))
+
+    let validatedOutput = try Self.validatedPodLogOutput(
+      result.standardOutput,
+      request: request
+    )
+    let output = Data(validatedOutput.utf8)
+    let isTruncated = output.count > Self.maximumPodLogBytes
+    let boundedOutput =
+      isTruncated
+      ? Data(output.suffix(Self.maximumPodLogBytes))
+      : output
+    return KubernetesPodLogSnapshot(
+      request: request,
+      text: String(decoding: boundedOutput, as: UTF8.self),
+      capturedAt: now(),
+      isTruncated: isTruncated
     )
   }
 
@@ -530,6 +556,20 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     return descriptor
   }
 
+  private func requireReadyRunningDescriptor() async throws
+    -> KubernetesClusterDescriptor
+  {
+    let descriptor = try await requireDescriptor()
+    guard descriptor.phase == .ready else {
+      throw KubernetesClusterError.setupNotRetryable
+    }
+    let machine = try await requireExactMachine(descriptor)
+    guard machine.state.isRunning else {
+      throw KubernetesClusterError.machineNotRunning(machine.id)
+    }
+    return descriptor
+  }
+
   private func requireExactMachine(
     _ descriptor: KubernetesClusterDescriptor
   ) async throws -> LinuxMachineRecord {
@@ -556,6 +596,46 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
         detail: Self.sanitizedFailureDetail(result)
       )
     }
+  }
+
+  private static func podLogCommand(
+    _ request: KubernetesPodLogRequest
+  ) throws -> String {
+    guard
+      KubernetesResourceReferenceValidator.isPodUID(request.podUID),
+      KubernetesResourceReferenceValidator.isNamespace(request.namespace),
+      KubernetesResourceReferenceValidator.isResourceName(request.podName),
+      KubernetesResourceReferenceValidator.isContainerName(request.containerName)
+    else {
+      throw KubernetesClusterError.invalidKubernetesResourceReference
+    }
+
+    return """
+      set -eu
+      pod_uid=$(/usr/local/bin/k3s kubectl get pod --namespace=\(request.namespace) --output=jsonpath='{.metadata.uid}' --request-timeout=5s \(request.podName))
+      if [ "$pod_uid" != '\(request.podUID)' ]; then
+        echo 'The selected Pod identity changed.' >&2
+        exit 66
+      fi
+      /usr/local/bin/k3s kubectl logs --namespace=\(request.namespace) --container=\(request.containerName) --timestamps=true --tail=\(maximumPodLogLines) --limit-bytes=\(maximumPodLogBytes + 1) --pod-running-timeout=15s --request-timeout=60s \(request.podName)
+      pod_uid=$(/usr/local/bin/k3s kubectl get pod --namespace=\(request.namespace) --output=jsonpath='{.metadata.uid}' --request-timeout=5s \(request.podName))
+      if [ "$pod_uid" != '\(request.podUID)' ]; then
+        echo 'The selected Pod identity changed.' >&2
+        exit 66
+      fi
+      printf '\n\(podLogIdentityMarker)%s\n' "$pod_uid"
+      """
+  }
+
+  private static func validatedPodLogOutput(
+    _ output: String,
+    request: KubernetesPodLogRequest
+  ) throws -> String {
+    let identitySuffix = "\n\(podLogIdentityMarker)\(request.podUID)\n"
+    guard output.hasSuffix(identitySuffix) else {
+      throw KubernetesClusterError.invalidPodLogSnapshot
+    }
+    return String(output.dropLast(identitySuffix.count))
   }
 
   private func snapshot(

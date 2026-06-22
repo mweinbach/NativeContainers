@@ -245,6 +245,9 @@ must leave a usable, test-backed product slice.
   - [x] Bounded, read-only workloads/pods/services inventory with guest-side
         field projection, duplicate-safe stable identity, native search, and no
         kubeconfig export or Kubernetes secret material in the browser model.
+  - [x] Explicit-container Pod log snapshots with API-UID revalidation,
+        timestamped 2,000-line/512-KiB bounds, cached search, stale-response
+        rejection, and user-initiated export.
   - [x] Live-provision the gated Alpine machine, verify API reachability and a
         real Deployment, Service, and disposable pod, verify the app-owned
         inventory path, survive a stop/start, then delete the exact machine,

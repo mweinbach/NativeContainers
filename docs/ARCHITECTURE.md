@@ -173,20 +173,31 @@ Status reads bounded version, node, and pod summaries from `k3s kubectl`.
 Resource inventory is a separate explicit read path available only for a Ready
 descriptor whose exact current Apple machine is running. A fixed guest command
 uses `jq` to project Deployment, StatefulSet, DaemonSet, Job, Pod, and Service
-JSON down to identity, counts, phases, nodes, addresses, and ports before the
-payload crosses Apple's process transport. The host parser caps each resource
-family at 500, rejects duplicate natural identities and malformed values, and
-sorts stable records for SwiftUI. Pod environment, annotations, and Kubernetes
-secret payloads are not represented in the projected document or domain model.
+JSON down to identity, counts, phases, nodes, container names, addresses, and
+ports before the payload crosses Apple's process transport. Pod records retain
+the API UID so a same-name replacement is a new SwiftUI identity. The host
+parser caps each resource family at 500, rejects duplicate UIDs or natural
+identities and malformed values, and sorts stable records for SwiftUI. Pod
+environment, annotations, images, and Kubernetes secret payloads are not
+represented in the projected document or domain model.
 
 `KubernetesClusterModel` owns the separately cancellable inventory state and
 clears it across lifecycle or identity changes. The browser is read-only,
 searches cached prepared arrays rather than filtering in `body`, and uses
-stable namespace/kind/name identities for native lists. Kubeconfig is read only
-after an explicit export action, validated and bounded in memory, rewritten
-from guest loopback to the current dedicated machine IP, and handed to the
-system file exporter. NativeContainers never persists the secret document on
-the host.
+stable runtime identities for native lists. Pod rows can load one explicit
+standard container's latest 2,000 lines through the same exact-machine path.
+The service validates the UID, namespace, Pod name, and container name; checks
+that the current Pod UID still matches; and then asks `kubectl logs` for at
+most 512 KiB plus one truncation-detection byte with timestamps. A second UID
+read and service-owned output marker must also match before any log snapshot is
+accepted, so replacement during the name-addressed read fails closed. Search
+uses cached prepared text, container switches discard stale asynchronous
+responses, and export remains user-initiated.
+
+Kubeconfig is read only after an explicit export action, validated and bounded
+in memory, rewritten from guest loopback to the current dedicated machine IP,
+and handed to the system file exporter. NativeContainers never persists the
+secret document on the host.
 
 Container creation attachments cross a separate `ContainerAttachmentManaging`
 facet. The SwiftUI draft freezes complete volume and network configuration

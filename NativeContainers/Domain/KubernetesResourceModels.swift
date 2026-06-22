@@ -76,38 +76,59 @@ enum KubernetesPodPhase: String, CaseIterable, Codable, Equatable, Sendable {
 }
 
 struct KubernetesPodRecord: Identifiable, Equatable, Sendable {
+  let uid: String
   let namespace: String
   let name: String
   let phase: KubernetesPodPhase
   let readyContainerCount: Int
-  let containerCount: Int
+  let containerNames: [String]
   let restartCount: Int
   let nodeName: String?
 
   var id: String {
-    "\(namespace)/\(name)"
+    uid
+  }
+
+  var containerCount: Int {
+    containerNames.count
   }
 
   init(
+    uid: String,
     namespace: String,
     name: String,
     phase: KubernetesPodPhase,
     readyContainerCount: Int,
-    containerCount: Int,
+    containerNames: [String],
     restartCount: Int,
     nodeName: String?
   ) {
+    self.uid = uid
     self.namespace = namespace
     self.name = name
     self.phase = phase
-    self.containerCount = max(0, containerCount)
+    self.containerNames = containerNames
     self.readyContainerCount = max(
       0,
-      min(readyContainerCount, self.containerCount)
+      min(readyContainerCount, containerNames.count)
     )
     self.restartCount = max(0, restartCount)
     self.nodeName = nodeName
   }
+}
+
+struct KubernetesPodLogRequest: Equatable, Sendable {
+  let podUID: String
+  let namespace: String
+  let podName: String
+  let containerName: String
+}
+
+struct KubernetesPodLogSnapshot: Equatable, Sendable {
+  let request: KubernetesPodLogRequest
+  let text: String
+  let capturedAt: Date
+  let isTruncated: Bool
 }
 
 struct KubernetesServicePortRecord: Identifiable, Equatable, Sendable {
@@ -139,4 +160,45 @@ struct KubernetesResourceInventory: Equatable, Sendable {
   let pods: [KubernetesPodRecord]
   let services: [KubernetesServiceRecord]
   let capturedAt: Date
+}
+
+enum KubernetesResourceReferenceValidator {
+  static func isNamespace(_ value: String) -> Bool {
+    isDNSLabel(value)
+  }
+
+  static func isResourceName(_ value: String) -> Bool {
+    guard !value.isEmpty, value.utf8.count <= 253 else { return false }
+    return value.split(separator: ".", omittingEmptySubsequences: false)
+      .allSatisfy { isDNSLabel(String($0)) }
+  }
+
+  static func isContainerName(_ value: String) -> Bool {
+    isDNSLabel(value)
+  }
+
+  static func isPodUID(_ value: String) -> Bool {
+    UUID(uuidString: value) != nil
+  }
+
+  private static func isDNSLabel(_ value: String) -> Bool {
+    let bytes = Array(value.utf8)
+    guard
+      !bytes.isEmpty,
+      bytes.count <= 63,
+      let first = bytes.first,
+      let last = bytes.last,
+      isLowercaseAlphanumeric(first),
+      isLowercaseAlphanumeric(last)
+    else {
+      return false
+    }
+    return bytes.allSatisfy {
+      isLowercaseAlphanumeric($0) || $0 == 45
+    }
+  }
+
+  private static func isLowercaseAlphanumeric(_ byte: UInt8) -> Bool {
+    (97...122).contains(byte) || (48...57).contains(byte)
+  }
 }

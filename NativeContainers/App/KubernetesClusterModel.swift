@@ -179,6 +179,10 @@ final class KubernetesClusterModel {
     errorMessage = nil
   }
 
+  func makePodLogsModel(for pod: KubernetesPodRecord) -> KubernetesPodLogsModel {
+    KubernetesPodLogsModel(service: service, pod: pod)
+  }
+
   private func performMutation(
     _ operation:
       @escaping @MainActor @Sendable (

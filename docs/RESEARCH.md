@@ -772,6 +772,7 @@ Primary sources:
 
 - [Apple container machine](https://github.com/apple/container/blob/main/docs/container-machine.md)
 - [Apple TN3179: Understanding local network privacy](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)
+- [Kubernetes: kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/)
 - [K3s quick start](https://docs.k3s.io/quick-start)
 - [K3s requirements](https://docs.k3s.io/installation/requirements)
 - [K3s installer source](https://github.com/k3s-io/k3s/blob/master/install.sh)
@@ -816,6 +817,15 @@ Primary sources:
   schema fields, caps workloads, pods, and services independently at 500, and
   rejects duplicate stable IDs, missing markers, invalid ports, malformed JSON,
   and transport truncation.
+- The generated `kubectl logs` reference supports explicit container
+  selection, timestamps, recent-line tails, and a byte limit. NativeContainers
+  combines those public flags as a non-following 2,000-line snapshot requested
+  at 512 KiB plus one byte, then retains at most 512 KiB so truncation is
+  observable. The fixed command compares the selected Pod API UID both before
+  and after the log request, appends the post-read UID under a private marker,
+  and accepts output only when that suffix matches. The log subresource itself
+  remains name-addressed, but replacement before or during the read is detected
+  and its output discarded.
 - A 2026-06-22 live pass established an Apple-machine-specific service detail:
   the guest boots under Apple's `vminitd`, not OpenRC or systemd as PID 1. The
   K3s installer can write a valid OpenRC unit, but its ordinary cgroups
@@ -837,10 +847,11 @@ Primary sources:
 - The final opt-in Xcode smoke installed `v1.36.1+k3s1` on Alpine 3.22, reached
   the exported API from host `kubectl`, created a real Deployment and Service,
   ran a standalone Alpine pod to Ready and read its logs, then proved the
-  app-owned inventory saw all three resource types. It survived an
-  application-owned stop/start and deleted the exact machine. The lane passed
-  in 133.753 seconds; follow-up Apple CLI inventory and temporary-directory
-  inspection found no cluster or credential residue.
+  app-owned inventory saw all three resource types. A follow-up exact run also
+  loaded that Pod's UID-checked bounded logs through the app service. It
+  survived an application-owned stop/start and deleted the exact machine;
+  follow-up Apple CLI inventory and temporary-directory inspection found no
+  cluster or credential residue.
 
 ## Public-API boundaries
 

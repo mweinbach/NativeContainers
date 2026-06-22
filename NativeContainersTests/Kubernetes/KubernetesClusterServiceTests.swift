@@ -225,6 +225,114 @@ struct KubernetesClusterServiceTests {
   }
 
   @Test
+  func loadsBoundedLogsForAValidatedPodContainer() async throws {
+    let machine = makeMachine()
+    let runtime = KubernetesMachineRuntimeDouble(machine: machine)
+    let commands = KubernetesRootCommandDouble()
+    let descriptor = KubernetesClusterDescriptor(
+      operationID: UUID(),
+      machine: LinuxMachineIdentity(machine: machine),
+      distribution: .current,
+      phase: .ready,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_100)
+    )
+    let store = InMemoryKubernetesDescriptorStore(descriptor: descriptor)
+    let service = makeService(runtime: runtime, commands: commands, store: store)
+    let request = KubernetesPodLogRequest(
+      podUID: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      podName: "api-abc",
+      containerName: "api"
+    )
+
+    let snapshot = try await service.loadPodLogs(request)
+
+    #expect(snapshot.request == request)
+    #expect(snapshot.text.contains("test log output"))
+    #expect(snapshot.capturedAt == Date(timeIntervalSince1970: 1_700_000_100))
+    #expect(!snapshot.isTruncated)
+    let invocation = try #require(
+      await commands.commands.first(where: { $0.command.contains("kubectl logs") })
+    )
+    #expect(invocation.target == descriptor.machine)
+    #expect(invocation.timeoutSeconds == 75)
+    #expect(invocation.command.contains("--namespace=default"))
+    #expect(invocation.command.contains("--container=api"))
+    #expect(invocation.command.contains("--timestamps=true"))
+    #expect(invocation.command.contains("--tail=2000"))
+    #expect(invocation.command.contains("--limit-bytes=524289"))
+    #expect(invocation.command.contains("--request-timeout=60s"))
+    #expect(invocation.command.contains("get pod"))
+    #expect(invocation.command.contains("{.metadata.uid}"))
+    #expect(invocation.command.contains(request.podUID))
+    #expect(
+      invocation.command.components(separatedBy: "kubectl get pod").count - 1
+        == 2
+    )
+    #expect(
+      invocation.command.components(separatedBy: "--request-timeout=5s").count - 1
+        == 2
+    )
+    #expect(invocation.command.contains(AppleKubernetesClusterService.podLogIdentityMarker))
+
+    await commands.setPodLogOutput(
+      String(
+        repeating: "x",
+        count: AppleKubernetesClusterService.maximumPodLogBytes + 1
+      )
+    )
+    let truncated = try await service.loadPodLogs(request)
+    #expect(truncated.isTruncated)
+    #expect(
+      truncated.text.utf8.count
+        == AppleKubernetesClusterService.maximumPodLogBytes
+    )
+
+    await commands.setPodLogUID("22222222-2222-4222-8222-222222222222")
+    await #expect(throws: KubernetesClusterError.invalidPodLogSnapshot) {
+      _ = try await service.loadPodLogs(request)
+    }
+
+    let unsafeRequests = [
+      KubernetesPodLogRequest(
+        podUID: "$(touch-pwned)",
+        namespace: "default",
+        podName: "api-abc",
+        containerName: "api"
+      ),
+      KubernetesPodLogRequest(
+        podUID: "11111111-1111-4111-8111-111111111111",
+        namespace: "default;touch-pwned",
+        podName: "api-abc",
+        containerName: "api"
+      ),
+      KubernetesPodLogRequest(
+        podUID: "11111111-1111-4111-8111-111111111111",
+        namespace: "default",
+        podName: "api-abc$(touch-pwned)",
+        containerName: "api"
+      ),
+      KubernetesPodLogRequest(
+        podUID: "11111111-1111-4111-8111-111111111111",
+        namespace: "default",
+        podName: "api-abc",
+        containerName: "api --previous"
+      ),
+    ]
+    for unsafeRequest in unsafeRequests {
+      await #expect(
+        throws: KubernetesClusterError.invalidKubernetesResourceReference
+      ) {
+        _ = try await service.loadPodLogs(unsafeRequest)
+      }
+    }
+    #expect(
+      await commands.commands.filter { $0.command.contains("kubectl logs") }.count
+        == 3
+    )
+  }
+
+  @Test
   func failedBootstrapRetainsExactPendingDescriptorForRetry() async throws {
     let machine = makeMachine()
     let runtime = KubernetesMachineRuntimeDouble(machine: machine)
@@ -373,6 +481,81 @@ struct KubernetesClusterModelTests {
   }
 
   @Test
+  func podLogsModelLoadsFiltersAndSwitchesExplicitContainers() async {
+    let pod = KubernetesPodRecord(
+      uid: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      name: "api-abc",
+      phase: .running,
+      readyContainerCount: 2,
+      containerNames: ["api", "metrics"],
+      restartCount: 0,
+      nodeName: "nativecontainers-kubernetes"
+    )
+    let model = KubernetesPodLogsModel(pod: pod) { request in
+      KubernetesPodLogSnapshot(
+        request: request,
+        text: "\(request.containerName) ready\nnoise\n",
+        capturedAt: Date(timeIntervalSince1970: 1_700_000_100),
+        isTruncated: false
+      )
+    }
+
+    await model.refresh()
+
+    #expect(model.snapshot?.request.containerName == "api")
+    #expect(model.visibleText == "api ready\nnoise\n")
+    model.searchText = "ready"
+    #expect(model.visibleText == "api ready")
+    #expect(model.matchCount == 1)
+
+    model.searchText = "   "
+    #expect(!model.hasSearchText)
+    #expect(model.visibleText == "api ready\nnoise\n")
+
+    model.selectedContainerName = "metrics"
+    #expect(model.snapshot == nil)
+    await model.refresh()
+    #expect(model.snapshot?.request.containerName == "metrics")
+    #expect(model.visibleText == "metrics ready\nnoise\n")
+  }
+
+  @Test
+  func podLogsModelDiscardsAStaleContainerResponse() async {
+    let pod = KubernetesPodRecord(
+      uid: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      name: "api-abc",
+      phase: .running,
+      readyContainerCount: 2,
+      containerNames: ["api", "metrics"],
+      restartCount: 0,
+      nodeName: "nativecontainers-kubernetes"
+    )
+    let gate = KubernetesPodLogLoaderGate()
+    let model = KubernetesPodLogsModel(pod: pod) { request in
+      await gate.load(request)
+    }
+
+    let firstRefresh = Task { await model.refresh() }
+    await gate.waitUntilStarted(containerName: "api")
+
+    model.selectedContainerName = "metrics"
+    let secondRefresh = Task { await model.refresh() }
+    await gate.waitUntilStarted(containerName: "metrics")
+    await gate.complete(containerName: "metrics", text: "metrics current\n")
+    await secondRefresh.value
+
+    await gate.complete(containerName: "api", text: "api stale\n")
+    await firstRefresh.value
+
+    #expect(model.snapshot?.request.containerName == "metrics")
+    #expect(model.visibleText == "metrics current\n")
+    #expect(!model.isLoading)
+    #expect(model.errorMessage == nil)
+  }
+
+  @Test
   func failedMutationKeepsTheErrorAndReloadsAuthoritativeState() async {
     let snapshot = readyKubernetesSnapshot()
     let service = KubernetesModelServiceDouble(snapshot: snapshot)
@@ -413,6 +596,53 @@ private actor InMemoryKubernetesDescriptorStore:
   }
 }
 
+private actor KubernetesPodLogLoaderGate {
+  private var startedContainers: Set<String> = []
+  private var startWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+  private var loadContinuations: [String: CheckedContinuation<KubernetesPodLogSnapshot, Never>] =
+    [:]
+
+  func load(_ request: KubernetesPodLogRequest) async -> KubernetesPodLogSnapshot {
+    startedContainers.insert(request.containerName)
+    let waiters = startWaiters.removeValue(forKey: request.containerName) ?? []
+    for waiter in waiters {
+      waiter.resume()
+    }
+
+    return await withCheckedContinuation { continuation in
+      loadContinuations[request.containerName] = continuation
+    }
+  }
+
+  func waitUntilStarted(containerName: String) async {
+    guard !startedContainers.contains(containerName) else { return }
+    await withCheckedContinuation { continuation in
+      startWaiters[containerName, default: []].append(continuation)
+    }
+  }
+
+  func complete(containerName: String, text: String) {
+    guard let continuation = loadContinuations.removeValue(forKey: containerName) else {
+      Issue.record("No pending Pod log load for \(containerName)")
+      return
+    }
+    let request = KubernetesPodLogRequest(
+      podUID: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      podName: "api-abc",
+      containerName: containerName
+    )
+    continuation.resume(
+      returning: KubernetesPodLogSnapshot(
+        request: request,
+        text: text,
+        capturedAt: Date(timeIntervalSince1970: 1_700_000_100),
+        isTruncated: false
+      )
+    )
+  }
+}
+
 private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
   private(set) var loadCount = 0
   private(set) var resourceLoadCount = 0
@@ -433,6 +663,17 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
   func loadResourceInventory() -> KubernetesResourceInventory {
     resourceLoadCount += 1
     return readyResourceInventory()
+  }
+
+  func loadPodLogs(
+    _ request: KubernetesPodLogRequest
+  ) -> KubernetesPodLogSnapshot {
+    KubernetesPodLogSnapshot(
+      request: request,
+      text: "test log output\n",
+      capturedAt: Date(timeIntervalSince1970: 1_700_000_100),
+      isTruncated: false
+    )
   }
 
   func provision(
@@ -622,6 +863,8 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
   private(set) var bootstrapInvocationCount = 0
   private var bootstrapFailures: Int
   private var kubeconfig: String
+  private var podLogOutput: String
+  private var podLogUID: String
 
   init(
     bootstrapFailures: Int = 0,
@@ -644,10 +887,14 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
       user:
         client-certificate-data: Q0VSVA==
         client-key-data: S0VZ
-    """
+    """,
+    podLogOutput: String = "2026-06-22T13:30:00Z test log output\n",
+    podLogUID: String = "11111111-1111-4111-8111-111111111111"
   ) {
     self.bootstrapFailures = bootstrapFailures
     self.kubeconfig = kubeconfig
+    self.podLogOutput = podLogOutput
+    self.podLogUID = podLogUID
   }
 
   func executeRootCommand(
@@ -680,6 +927,12 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
     if command.contains(KubernetesResourceInventoryParser.workloadsMarker) {
       return result(standardOutput: testKubernetesResourceInventoryOutput())
     }
+    if command.contains("kubectl logs") {
+      return result(
+        standardOutput:
+          podLogOutput + "\n\(AppleKubernetesClusterService.podLogIdentityMarker)\(podLogUID)\n"
+      )
+    }
     if command.contains("__NATIVECONTAINERS_K3S_VERSION__") {
       return result(
         standardOutput: """
@@ -702,6 +955,14 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
 
   func setKubeconfig(_ value: String) {
     kubeconfig = value
+  }
+
+  func setPodLogOutput(_ value: String) {
+    podLogOutput = value
+  }
+
+  func setPodLogUID(_ value: String) {
+    podLogUID = value
   }
 
   private func result(
@@ -805,11 +1066,12 @@ private func readyResourceInventory() -> KubernetesResourceInventory {
     ],
     pods: [
       KubernetesPodRecord(
+        uid: "11111111-1111-4111-8111-111111111111",
         namespace: "default",
         name: "api-abc",
         phase: .running,
         readyContainerCount: 1,
-        containerCount: 1,
+        containerNames: ["api"],
         restartCount: 0,
         nodeName: "nativecontainers-kubernetes"
       )
@@ -856,7 +1118,11 @@ private func testKubernetesResourceInventoryOutput() -> String {
   {
     "items": [
       {
-        "metadata": {"namespace": "default", "name": "api-abc"},
+        "metadata": {
+          "uid": "11111111-1111-4111-8111-111111111111",
+          "namespace": "default",
+          "name": "api-abc"
+        },
         "spec": {
           "nodeName": "nativecontainers-kubernetes",
           "containers": [{"name": "api"}]

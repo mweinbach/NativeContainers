@@ -48,13 +48,14 @@ struct KubernetesResourceInventoryParser: Sendable {
           .items[] |
           {
             metadata: {
+              uid: .metadata.uid,
               namespace: .metadata.namespace,
               name: .metadata.name
             },
             spec: {
               nodeName: .spec.nodeName,
               containers: [
-                (.spec.containers // [])[] | {}
+                (.spec.containers // [])[] | {name: .name}
               ]
             },
             status: {
@@ -128,6 +129,7 @@ struct KubernetesResourceInventoryParser: Sendable {
 
       try requireUniqueIDs(workloads)
       try requireUniqueIDs(pods)
+      try requireUniqueKeys(pods) { "\($0.namespace)/\($0.name)" }
       try requireUniqueIDs(services)
 
       return KubernetesResourceInventory(
@@ -216,6 +218,12 @@ struct KubernetesResourceInventoryParser: Sendable {
   ) throws -> KubernetesWorkloadRecord {
     let namespace = try validatedName(item.metadata.namespace, maximumLength: 63)
     let name = try validatedName(item.metadata.name)
+    guard
+      KubernetesResourceReferenceValidator.isNamespace(namespace),
+      KubernetesResourceReferenceValidator.isResourceName(name)
+    else {
+      throw KubernetesClusterError.invalidResourceInventory
+    }
     let kind: KubernetesWorkloadKind
     let desiredCount: Int
     let readyCount: Int
@@ -265,16 +273,34 @@ struct KubernetesResourceInventoryParser: Sendable {
   }
 
   private func parsePod(_ item: PodItem) throws -> KubernetesPodRecord {
+    let uid = try validatedText(item.metadata.uid ?? "", maximumLength: 128)
     let namespace = try validatedName(item.metadata.namespace, maximumLength: 63)
     let name = try validatedName(item.metadata.name)
-    let containerCount = item.spec?.containers?.count ?? 0
-    guard containerCount <= 256 else {
+    guard
+      KubernetesResourceReferenceValidator.isNamespace(namespace),
+      KubernetesResourceReferenceValidator.isResourceName(name),
+      KubernetesResourceReferenceValidator.isPodUID(uid)
+    else {
+      throw KubernetesClusterError.invalidResourceInventory
+    }
+
+    let rawContainers = item.spec?.containers ?? []
+    guard rawContainers.count <= 256 else {
+      throw KubernetesClusterError.invalidResourceInventory
+    }
+    let containerNames = try rawContainers.map {
+      try validatedName($0.name, maximumLength: 63)
+    }
+    guard
+      containerNames.allSatisfy(KubernetesResourceReferenceValidator.isContainerName),
+      Set(containerNames).count == containerNames.count
+    else {
       throw KubernetesClusterError.invalidResourceInventory
     }
 
     let statuses = item.status?.containerStatuses ?? []
     let readyContainerCount = statuses.filter(\.ready).count
-    guard readyContainerCount <= containerCount else {
+    guard readyContainerCount <= containerNames.count else {
       throw KubernetesClusterError.invalidResourceInventory
     }
 
@@ -303,11 +329,12 @@ struct KubernetesResourceInventoryParser: Sendable {
     }
 
     return KubernetesPodRecord(
+      uid: uid,
       namespace: namespace,
       name: name,
       phase: phase,
       readyContainerCount: readyContainerCount,
-      containerCount: containerCount,
+      containerNames: containerNames,
       restartCount: restartCount,
       nodeName: try validatedOptionalText(
         item.spec?.nodeName,
@@ -321,6 +348,12 @@ struct KubernetesResourceInventoryParser: Sendable {
   ) throws -> KubernetesServiceRecord {
     let namespace = try validatedName(item.metadata.namespace, maximumLength: 63)
     let name = try validatedName(item.metadata.name)
+    guard
+      KubernetesResourceReferenceValidator.isNamespace(namespace),
+      KubernetesResourceReferenceValidator.isResourceName(name)
+    else {
+      throw KubernetesClusterError.invalidResourceInventory
+    }
     let serviceType = try validatedText(
       item.spec?.type ?? "ClusterIP",
       maximumLength: 64
@@ -432,6 +465,18 @@ struct KubernetesResourceInventoryParser: Sendable {
     }
   }
 
+  private func requireUniqueKeys<Value, Key: Hashable>(
+    _ values: [Value],
+    key: (Value) -> Key
+  ) throws {
+    var keys = Set<Key>()
+    for value in values {
+      guard keys.insert(key(value)).inserted else {
+        throw KubernetesClusterError.invalidResourceInventory
+      }
+    }
+  }
+
   private static func workloadSort(
     _ lhs: KubernetesWorkloadRecord,
     _ rhs: KubernetesWorkloadRecord
@@ -460,6 +505,7 @@ private struct APIList<Item: Decodable>: Decodable {
 }
 
 private struct ResourceMetadata: Decodable {
+  let uid: String?
   let namespace: String?
   let name: String?
 }
@@ -500,7 +546,9 @@ private struct PodSpec: Decodable {
   let containers: [PodContainer]?
 }
 
-private struct PodContainer: Decodable {}
+private struct PodContainer: Decodable {
+  let name: String?
+}
 
 private struct PodStatus: Decodable {
   let phase: String?

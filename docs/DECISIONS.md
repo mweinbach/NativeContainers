@@ -1750,6 +1750,31 @@ pods, and services is capped at 500 records, nested service ports are capped,
 text and numeric bounds are checked, and duplicate natural identities fail the
 entire refresh. Transport truncation also fails closed. The observable model
 keeps inventory errors separate from cluster lifecycle errors and clears stale
-inventory whenever lifecycle or machine identity changes. Workload mutation,
-logs, and exec remain later reviewed capabilities rather than being smuggled
-into this read-only foundation.
+inventory whenever lifecycle or machine identity changes. Workload mutation
+and exec remain later reviewed capabilities rather than being smuggled into
+this read-only foundation.
+
+## ADR-063: Read Pod logs through an identity-checked bounded snapshot
+
+**Status:** Accepted — 2026-06-22
+
+Pod logs extend the Kubernetes read lane without exporting kubeconfig or
+exposing a generic guest command. The allowlisted inventory adds only each
+standard container name and the Pod API UID. A log request must carry that UID
+plus namespace, Pod name, and one explicit container name; all four values pass
+strict Kubernetes/UUID grammar before they can enter the fixed command.
+
+`AppleKubernetesClusterService` revalidates the exact running Apple machine,
+reads the current Pod UID, compares it with the selected inventory identity,
+and only then requests a non-following timestamped snapshot. It reads the UID
+again after `kubectl logs` and appends a service-owned identity marker; host
+decoding accepts output only when that exact suffix matches. The request is
+limited to the latest 2,000 lines and 512 KiB plus one byte; the host keeps at
+most 512 KiB and reports truncation. The observable sheet model rejects stale
+responses after container switches, caches search output outside SwiftUI
+`body`, and writes a log file only through an explicit system exporter action.
+
+Kubernetes' Pod log subresource is name-addressed and has no conditional UID
+precondition. Bracketing the read with UID checks cannot make the upstream call
+atomic, but it does ensure NativeContainers discards output if replacement
+occurs before or during the read rather than publishing a same-name Pod's logs.
