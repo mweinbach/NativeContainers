@@ -39,7 +39,7 @@ require_literal NativeContainers/Domain/VirtualMachineModels.swift \
   'static let currentSchemaVersion = 1' "VM manifest schema"
 require_literal NativeContainers/Domain/VirtualMachineSharedDirectoryModels.swift \
   'static let currentSchemaVersion = 1' "VM shared-folder schema"
-require_literal NativeContainers/Domain/MacVirtualMachineSavedStateModels.swift \
+require_literal NativeContainers/Domain/VirtualMachineSavedStateModels.swift \
   'static let currentSchemaVersion = 1' "VM saved-state schema"
 require_literal NativeContainers/Domain/KubernetesClusterModels.swift \
   'static let currentSchemaVersion = 1' "Kubernetes descriptor schema"
