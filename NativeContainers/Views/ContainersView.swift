@@ -188,6 +188,7 @@ struct ContainerInspectorView: View {
   @State private var logQuery = ""
   @State private var isShowingExec = false
   @State private var isShowingFileTransfer = false
+  @State private var isShowingFilesystemExport = false
 
   init(container: ContainerRecord, appModel: AppModel) {
     self.container = container
@@ -216,7 +217,8 @@ struct ContainerInspectorView: View {
             )
           },
           onExec: { isShowingExec = true },
-          onCopyFiles: { isShowingFileTransfer = true }
+          onCopyFiles: { isShowingFileTransfer = true },
+          onExportFilesystem: { isShowingFilesystemExport = true }
         )
 
         if let association = appModel.composeTopology.containerAssociationsByID[container.id] {
@@ -273,6 +275,9 @@ struct ContainerInspectorView: View {
     .sheet(isPresented: $isShowingFileTransfer) {
       ContainerFileTransferView(containerID: container.id, appModel: appModel)
     }
+    .sheet(isPresented: $isShowingFilesystemExport) {
+      ContainerFilesystemExportView(container: container, appModel: appModel)
+    }
   }
 }
 
@@ -294,6 +299,7 @@ struct ContainerInspectorHeader: View {
   let onTerminal: () -> Void
   let onExec: () -> Void
   let onCopyFiles: () -> Void
+  let onExportFilesystem: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -350,7 +356,15 @@ struct ContainerInspectorHeader: View {
           }
           .menuStyle(.borderlessButton)
         } else {
-          Button("Copy Files…", systemImage: "doc.on.doc", action: onCopyFiles)
+          Menu("More", systemImage: "ellipsis.circle") {
+            Button("Copy Files…", systemImage: "doc.on.doc", action: onCopyFiles)
+            Button(
+              "Export Filesystem…",
+              systemImage: "archivebox",
+              action: onExportFilesystem
+            )
+          }
+          .menuStyle(.borderlessButton)
           Button("Start", systemImage: "play.fill", action: onStart)
             .buttonStyle(.borderedProminent)
         }

@@ -475,6 +475,9 @@
 		1FBCEA562FE9BFFA00EAC55C /* ContainerFilesystemExportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA552FE9BFFA00EAC55C /* ContainerFilesystemExportModels.swift */; };
 		1FBCEA582FE9C02800EAC55C /* AppleContainerFilesystemExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA572FE9C02800EAC55C /* AppleContainerFilesystemExportService.swift */; };
 		1FBCEA5A2FE9C08B00EAC55C /* AppleContainerFilesystemExportServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA592FE9C08B00EAC55C /* AppleContainerFilesystemExportServiceTests.swift */; };
+		1FBCEA5C2FE9C0F200EAC55C /* ContainerFilesystemExportModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA5B2FE9C0F200EAC55C /* ContainerFilesystemExportModel.swift */; };
+		1FBCEA5E2FE9C11A00EAC55C /* ContainerFilesystemExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA5D2FE9C11A00EAC55C /* ContainerFilesystemExportView.swift */; };
+		1FBCEA602FE9C12C00EAC55C /* ContainerFilesystemExportModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FBCEA5F2FE9C12C00EAC55C /* ContainerFilesystemExportModelTests.swift */; };
 		1FEC46CD2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */; };
 		1FEC46CF2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */; };
 		1FEC46D12FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */; };
@@ -1118,6 +1121,9 @@
 		1FBCEA552FE9BFFA00EAC55C /* ContainerFilesystemExportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerFilesystemExportModels.swift; sourceTree = "<group>"; };
 		1FBCEA572FE9C02800EAC55C /* AppleContainerFilesystemExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleContainerFilesystemExportService.swift; sourceTree = "<group>"; };
 		1FBCEA592FE9C08B00EAC55C /* AppleContainerFilesystemExportServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleContainerFilesystemExportServiceTests.swift; sourceTree = "<group>"; };
+		1FBCEA5B2FE9C0F200EAC55C /* ContainerFilesystemExportModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerFilesystemExportModel.swift; sourceTree = "<group>"; };
+		1FBCEA5D2FE9C11A00EAC55C /* ContainerFilesystemExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerFilesystemExportView.swift; sourceTree = "<group>"; };
+		1FBCEA5F2FE9C12C00EAC55C /* ContainerFilesystemExportModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerFilesystemExportModelTests.swift; sourceTree = "<group>"; };
 		1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageModels.swift; sourceTree = "<group>"; };
 		1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageService.swift; sourceTree = "<group>"; };
 		1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageInspectorTests.swift; sourceTree = "<group>"; };
@@ -1381,6 +1387,7 @@
 				1FBCEA3B2FE9ADD300EAC55C /* LinuxVirtualMachineDiskImageMaintenanceView.swift */,
 				1FBCEA472FE9B3EC00EAC55C /* VirtualMachineMemoryBalloonControl.swift */,
 				1FBCEA4F2FE9BBB100EAC55C /* VirtualMachineConsoleWindow.swift */,
+				1FBCEA5D2FE9C11A00EAC55C /* ContainerFilesystemExportView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1956,6 +1963,7 @@
 				1F5E63CE2FE8766200A430FF /* ContainerSSHAgentServiceTests.swift */,
 				1F5E63D02FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift */,
 				1FBCEA592FE9C08B00EAC55C /* AppleContainerFilesystemExportServiceTests.swift */,
+				1FBCEA5F2FE9C12C00EAC55C /* ContainerFilesystemExportModelTests.swift */,
 			);
 			path = Containers;
 			sourceTree = "<group>";
@@ -2302,6 +2310,7 @@
 				1F64B9602FE8D5D900598A65 /* KubernetesClusterModel.swift */,
 				1FBCEA112FE99D9A00EAC55C /* VirtualMachineComputeModel.swift */,
 				1FBCEA1D2FE9A25B00EAC55C /* VirtualMachineNameModel.swift */,
+				1FBCEA5B2FE9C0F200EAC55C /* ContainerFilesystemExportModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -2595,6 +2604,7 @@
 				1F9D2B962FE7A1B60076F5B9 /* MacVirtualMachineInstallationServiceTests.swift in Sources */,
 				1F9D2C9C2FE802B60076F5B9 /* AppleContainerReclamationServiceTests.swift in Sources */,
 				1FBCEA1A2FE99E8D00EAC55C /* VirtualMachineComputeModelTests.swift in Sources */,
+				1FBCEA602FE9C12C00EAC55C /* ContainerFilesystemExportModelTests.swift in Sources */,
 				1F9D2C512FE7EBF20076F5B9 /* ComposeExecutionWorkspaceTests.swift in Sources */,
 				1F5E64012FE883AF00A430FF /* MacVirtualMachineNetworkServiceTests.swift in Sources */,
 				1F5E63FD2FE883A100A430FF /* AppleMacVirtualMachineNetworkDeviceFactoryTests.swift in Sources */,
@@ -2773,6 +2783,7 @@
 				1F5E64052FE886E500A430FF /* LinuxVirtualMachineModels.swift in Sources */,
 				1F99F1B92FE8C4D600DF0752 /* PerformanceBenchmarkSettingsSection.swift in Sources */,
 				1FEC46D32FE8233300DC60B2 /* DiskutilVirtualMachineDiskImageConverter.swift in Sources */,
+				1FBCEA5C2FE9C0F200EAC55C /* ContainerFilesystemExportModel.swift in Sources */,
 				1FEC473A2FE8388D00DC60B2 /* VirtualMachineDiskImageReplacementModels.swift in Sources */,
 				1F9D2B582FE7923F0076F5B9 /* LinuxMachineCreationDraft.swift in Sources */,
 				1F9D2CB42FE806960076F5B9 /* StorageFormatting.swift in Sources */,
@@ -2916,6 +2927,7 @@
 				1FEC47502FE8425400DC60B2 /* ComposeExecutionOverlayService.swift in Sources */,
 				78D8757B9A4FE8F19E8883AF /* MacPlatformArtifactPreparer.swift in Sources */,
 				1F9D2BA02FE7AA010076F5B9 /* MacVirtualMachineRuntimeModels.swift in Sources */,
+				1FBCEA5E2FE9C11A00EAC55C /* ContainerFilesystemExportView.swift in Sources */,
 				1F9D2BC62FE7B73E0076F5B9 /* ResourceQuickOpenView.swift in Sources */,
 				1F5E646F2FE8A1D300A430FF /* MacVirtualMachineUSBService.swift in Sources */,
 				1F9D2C7E2FE7FAD00076F5B9 /* VirtualMachineTransferViews.swift in Sources */,

@@ -790,6 +790,15 @@ final class AppModel {
     )
   }
 
+  func makeContainerFilesystemExportModel(
+    for container: ContainerRecord
+  ) -> ContainerFilesystemExportModel {
+    ContainerFilesystemExportModel(
+      container: container,
+      exporter: services.containerTools
+    )
+  }
+
   func makeContainerTerminalModel(containerID: String) -> ContainerTerminalModel {
     ContainerTerminalModel(containerID: containerID, service: services.containerTerminal)
   }
