@@ -3,13 +3,14 @@ import Foundation
 
 struct AppleLinuxVirtualMachineRuntimeConfiguration {
   let configuration: VZVirtualMachineConfiguration
+  let saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport
   let sharedDirectoryAccess: LinuxVirtualMachineSharedDirectoryAccess
 }
 
 @MainActor
 struct AppleLinuxVirtualMachineConfigurationFactory {
-  static let defaultDisplayWidth = 1_280
-  static let defaultDisplayHeight = 800
+  nonisolated static let defaultDisplayWidth = 1_280
+  nonisolated static let defaultDisplayHeight = 800
 
   private let sharedDirectoryBookmarkService:
     any LinuxVirtualMachineSharedDirectoryBookmarkResolving
@@ -152,11 +153,23 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
       }
       return AppleLinuxVirtualMachineRuntimeConfiguration(
         configuration: configuration,
+        saveRestoreSupport: saveRestoreSupport(for: configuration),
         sharedDirectoryAccess: sharedDirectoryAccess
       )
     } catch {
       sharedDirectoryAccess.release()
       throw error
+    }
+  }
+
+  private func saveRestoreSupport(
+    for configuration: VZVirtualMachineConfiguration
+  ) -> LinuxVirtualMachineSaveRestoreSupport {
+    do {
+      try configuration.validateSaveRestoreSupport()
+      return .supported
+    } catch {
+      return .unsupported(error.localizedDescription)
     }
   }
 

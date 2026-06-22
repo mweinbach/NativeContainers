@@ -112,6 +112,22 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
   }
 
   @Test
+  func installedLinuxConfigurationSupportsSavingAndRestoringMachineState() async throws {
+    let fixture = try LinuxConfigurationFixture()
+    defer { fixture.remove() }
+    var prepared = try await fixture.prepare()
+    prepared.linuxConfiguration?.installationMediaPath = nil
+    let machine = try LinuxVirtualMachineBundleResolver(
+      rootURL: fixture.root
+    ).resolve(prepared)
+
+    let configuration = try AppleLinuxVirtualMachineConfigurationFactory()
+      .makeConfiguration(for: machine)
+
+    try configuration.validateSaveRestoreSupport()
+  }
+
+  @Test
   func sharedModeUsesTheAppOwnedCrossGuestVmnetNetwork() async throws {
     let fixture = try LinuxConfigurationFixture()
     defer { fixture.remove() }

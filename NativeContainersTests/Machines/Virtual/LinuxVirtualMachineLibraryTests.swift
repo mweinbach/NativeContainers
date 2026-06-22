@@ -158,7 +158,8 @@ struct LinuxVirtualMachineLibraryTests {
     )
     let service = LinuxVirtualMachineNetworkService(
       leasingStore: library,
-      persistence: library
+      persistence: library,
+      savedStateService: StaticLinuxSavedStateInspector()
     )
 
     #expect(try await service.snapshot(id: prepared.id).configuration == .nat)
@@ -174,6 +175,48 @@ struct LinuxVirtualMachineLibraryTests {
         == updated.configuration
     )
     replacementLease.release()
+  }
+
+  @Test
+  func savedStateBlocksLinuxNetworkMutation() async throws {
+    let fixture = try LinuxLibraryFixture()
+    defer { fixture.remove() }
+    let library = VirtualMachineLibrary(
+      rootURL: fixture.root,
+      linuxPlatformArtifactPreparer: TestLinuxPlatformArtifactPreparer(
+        behavior: .success
+      )
+    )
+    let draft = try await library.createDraft(
+      name: "Suspended Network Linux",
+      guest: .linux,
+      resources: fixture.resources
+    )
+    let prepared = try await library.prepareLinuxVM(
+      id: draft.id,
+      installationMediaURL: fixture.installationMedia
+    )
+    let service = LinuxVirtualMachineNetworkService(
+      leasingStore: library,
+      persistence: library,
+      savedStateService: StaticLinuxSavedStateInspector(
+        status: .available(
+          VirtualMachineSavedStateSummary(
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            stateSizeBytes: 4_096
+          )
+        )
+      )
+    )
+
+    await #expect(
+      throws: LinuxVirtualMachineNetworkError.savedStateBlocksChanges(
+        prepared.id
+      )
+    ) {
+      _ = try await service.setAttachment(.shared, for: prepared.id)
+    }
+    #expect(try await service.snapshot(id: prepared.id).configuration == .nat)
   }
 
   @Test
@@ -198,6 +241,7 @@ struct LinuxVirtualMachineLibraryTests {
     let service = LinuxVirtualMachineComputeService(
       leasingStore: library,
       persistence: library,
+      savedStateService: StaticLinuxSavedStateInspector(),
       platformLimits: VirtualMachineComputeLimits(
         minimumCPUCount: 1,
         maximumCPUCount: 12,
@@ -317,6 +361,24 @@ struct LinuxVirtualMachineLibraryTests {
         )
       }
     )
+  }
+}
+
+private struct StaticLinuxSavedStateInspector:
+  LinuxVirtualMachineSavedStateInspecting
+{
+  let status: LinuxVirtualMachineSavedStateStatus
+
+  nonisolated init(
+    status: LinuxVirtualMachineSavedStateStatus = .none
+  ) {
+    self.status = status
+  }
+
+  func inspect(
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) -> LinuxVirtualMachineSavedStateStatus {
+    status
   }
 }
 

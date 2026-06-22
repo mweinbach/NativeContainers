@@ -1608,13 +1608,48 @@ Updated: 2026-06-22.
   existing `PreviewsFoundationHost.TaskTimeoutError`, so no rendered-image
   claim is inferred.
 
+## GUI Linux same-host suspend checkpoint
+
+- Apple's installed Virtualization documentation confirms that saved-state
+  methods live on guest-neutral `VZVirtualMachine`: save requires paused,
+  restore requires stopped and returns paused, and
+  `validateSaveRestoreSupport()` is the exact-configuration authority. A
+  focused Xcode-run check proves the app's installed EFI Linux topology passes
+  that validation.
+- GUI Linux now uses the same actor-isolated, lease-borrowed, crash-recovered
+  transaction core as macOS. Its own fingerprint covers generic machine
+  identity, writable disk and EFI/NVRAM identities, optional installer,
+  compute, stable MAC/network revision, graphics/audio/input/entropy/balloon,
+  SPICE clipboard, and VirtioFS share semantics. Display-name changes remain
+  compatible.
+- Suspend pauses and atomically saves before power-off. A later Start consumes
+  the checkpoint, restores to paused, and resumes. The native runtime and row
+  views expose Suspended, Resume, confirmed Start Fresh/Discard Saved State,
+  incompatibility diagnostics, and configuration-specific unavailability.
+  Installer ejection disables suspend for that live generation until restart
+  because its launched topology changed.
+- Compute, network, and shared-folder changes now reject Linux saved state.
+  Clone/export continue to strip host-local state, while guest-aware storage
+  reclamation routes Linux candidates through Linux runtime leases.
+- Fifty-two focused capability, shared-store regression, Linux transaction,
+  fingerprint, lifecycle, edit-exclusion, and reclamation checks pass. The full
+  Xcode plan reports 1,059 passed, zero failed, and 29 explicitly gated
+  live/destructive checks skipped; build-for-testing succeeds on
+  `NativeContainers` / `My Mac` (arm64, macOS 27.0), and the normal build is
+  warning-free. Xcode launched and stopped PID 95072; its only error logs were
+  the existing Core Spotlight/SetStore donation failures. The existing Linux
+  VM preview still hits Xcode's `NativeContainers.app` 30-second canvas launch
+  timeout, so no rendered-image claim is inferred. A real
+  installed-distribution suspend/restore remains in the disposable guest smoke
+  pass.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
 verified. Installing and rebooting a reviewed Linux distribution through the
-new GUI workflow, then cloning it, exporting/restoring a portable copy, and
-verifying shared/host-only packet flow plus a shared folder still need a
-disposable ISO smoke pass. Installing, booting,
+new GUI workflow, then suspending/restoring it, cloning it,
+exporting/restoring a portable copy, and verifying shared/host-only packet flow
+plus a shared folder still need a disposable ISO smoke pass. Installing, booting,
 saving/restoring, and clone-booting macOS are not claimed as live-verified until
 a local IPSW and disposable installed guest are available for that destructive
 integration pass.
@@ -1623,9 +1658,10 @@ integration pass.
 
 1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
-   change CPU/memory and verify the next boot, verify shared and host-only vmnet
-   connectivity, clone and portable-round-trip it, and exercise both graceful
-   and watchdog force-stop paths.
+   change CPU/memory and verify the next boot, suspend and restore the installed
+   session, verify shared and host-only vmnet connectivity, clone and
+   portable-round-trip it, and exercise both graceful and watchdog force-stop
+   paths.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, CPU/memory reconfiguration, same-host save/restore, and
    fresh-identity clone boot against a local IPSW.

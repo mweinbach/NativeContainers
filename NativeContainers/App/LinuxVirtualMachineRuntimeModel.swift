@@ -11,6 +11,7 @@ final class LinuxVirtualMachineRuntimeModel {
   private let service: any LinuxVirtualMachineRuntimeManaging
   private let didUpdateManifest: @MainActor (VirtualMachineManifest) -> Void
   @ObservationIgnored private var observationTask: Task<Void, Never>?
+  @ObservationIgnored private var hasRefreshedSavedState = false
 
   init(
     machineID: UUID,
@@ -32,15 +33,19 @@ final class LinuxVirtualMachineRuntimeModel {
     actionErrorMessage ?? snapshot.errorMessage
   }
 
-  func observe() {
-    guard observationTask == nil else { return }
-    let updates = service.updates(for: machineID)
-    observationTask = Task { @MainActor [weak self] in
-      for await update in updates {
-        guard !Task.isCancelled, let self else { return }
-        apply(update)
+  func observe() async {
+    if observationTask == nil {
+      let updates = service.updates(for: machineID)
+      observationTask = Task { @MainActor [weak self] in
+        for await update in updates {
+          guard !Task.isCancelled, let self else { return }
+          apply(update)
+        }
       }
     }
+    guard !hasRefreshedSavedState else { return }
+    hasRefreshedSavedState = true
+    await service.refreshSavedState(id: machineID)
   }
 
   private func apply(_ update: LinuxVirtualMachineRuntimeSnapshot) {
@@ -54,6 +59,12 @@ final class LinuxVirtualMachineRuntimeModel {
   func start() async {
     await perform {
       try await service.start(id: machineID)
+    }
+  }
+
+  func startFresh() async {
+    await perform {
+      try await service.startFresh(id: machineID)
     }
   }
 
@@ -71,6 +82,13 @@ final class LinuxVirtualMachineRuntimeModel {
     }
   }
 
+  func suspend() async {
+    guard let target = snapshot.target else { return }
+    await perform {
+      try await service.suspend(target: target)
+    }
+  }
+
   func requestStop() async {
     guard let target = snapshot.target else { return }
     await perform {
@@ -82,6 +100,12 @@ final class LinuxVirtualMachineRuntimeModel {
     guard let target = snapshot.target else { return }
     await perform {
       try await service.forceStop(target: target)
+    }
+  }
+
+  func discardSavedState() async {
+    await perform {
+      try await service.discardSavedState(id: machineID)
     }
   }
 
@@ -100,6 +124,7 @@ final class LinuxVirtualMachineRuntimeModel {
   func stopObserving() {
     observationTask?.cancel()
     observationTask = nil
+    hasRefreshedSavedState = false
   }
 
   private func perform(_ operation: () async throws -> Void) async {

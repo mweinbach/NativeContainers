@@ -7,6 +7,7 @@ struct LinuxVirtualMachineConfigurationView: View {
   let compute: VirtualMachineComputeModel
   let network: LinuxVirtualMachineNetworkModel
   let sharedDirectories: LinuxVirtualMachineSharedDirectoriesModel
+  @State private var isConfirmingDiscardSavedState = false
 
   var body: some View {
     ScrollView {
@@ -18,13 +19,14 @@ struct LinuxVirtualMachineConfigurationView: View {
         VirtualMachineNameSection(
           naming: naming,
           refreshToken: machine.updatedAt,
-          editMessage: configurationEditMessage
+          editMessage: runtimeEditMessage
         )
         VirtualMachineComputeSection(
           compute: compute,
           refreshToken: machine.updatedAt,
-          editMessage: configurationEditMessage,
-          discardSavedState: nil
+          editMessage: topologyEditMessage,
+          discardSavedState: canDiscardSavedState
+            ? { isConfirmingDiscardSavedState = true } : nil
         )
         LinuxVirtualMachineBootSection(
           installState: machine.installState,
@@ -32,8 +34,10 @@ struct LinuxVirtualMachineConfigurationView: View {
           hasLiveInstallationMedia: runtime.snapshot.hasInstallationMedia
         )
         LinuxVirtualMachineNetworkSection(
-          editMessage: configurationEditMessage,
-          network: network
+          editMessage: topologyEditMessage,
+          network: network,
+          discardSavedState: canDiscardSavedState
+            ? { isConfirmingDiscardSavedState = true } : nil
         )
         LinuxVirtualMachineConnectivitySection(
           macAddress: machine.linuxConfiguration?.macAddress,
@@ -42,6 +46,9 @@ struct LinuxVirtualMachineConfigurationView: View {
         LinuxVirtualMachineSharedDirectoriesView(
           runtimeState: runtime.snapshot.state,
           hasActiveRuntime: runtime.snapshot.target != nil,
+          editMessage: topologyEditMessage,
+          discardSavedState: canDiscardSavedState
+            ? { isConfirmingDiscardSavedState = true } : nil,
           sharedDirectories: sharedDirectories
         )
         if let errorMessage =
@@ -66,10 +73,20 @@ struct LinuxVirtualMachineConfigurationView: View {
       .frame(maxWidth: .infinity, alignment: .top)
     }
     .navigationTitle(machine.name)
-    .task { runtime.observe() }
+    .task { await runtime.observe() }
+    .confirmationDialog(
+      "Discard the saved state for \(machine.name)?",
+      isPresented: $isConfirmingDiscardSavedState
+    ) {
+      Button("Discard Saved State", role: .destructive) {
+        Task { await runtime.discardSavedState() }
+      }
+    } message: {
+      Text("The VM remains powered off, but its suspended session cannot be resumed.")
+    }
   }
 
-  private var configurationEditMessage: LocalizedStringResource? {
+  private var runtimeEditMessage: LocalizedStringResource? {
     guard machine.linuxConfiguration != nil,
       machine.installState == .readyToInstall || machine.installState == .stopped
     else {
@@ -83,16 +100,34 @@ struct LinuxVirtualMachineConfigurationView: View {
       return nil
     case .ownedElsewhere:
       return "Another NativeContainers process owns this VM."
-    case .starting, .running, .pausing, .paused, .resuming,
+    case .inspectingSavedState, .starting, .running, .pausing, .paused,
+      .resuming, .saving, .restoring, .discardingSavedState,
       .ejectingInstallationMedia, .stopping:
       return "Wait for this VM to finish changing state."
     }
+  }
+
+  private var topologyEditMessage: LocalizedStringResource? {
+    if let runtimeEditMessage { return runtimeEditMessage }
+    return switch runtime.snapshot.savedStateStatus {
+    case .none:
+      nil
+    case .unknown:
+      "Checking the VM’s saved state…"
+    case .available, .incompatible:
+      "Discard the saved state before changing this VM’s configuration."
+    }
+  }
+
+  private var canDiscardSavedState: Bool {
+    runtime.snapshot.canDiscardSavedState
   }
 }
 
 private struct LinuxVirtualMachineNetworkSection: View {
   let editMessage: LocalizedStringResource?
   let network: LinuxVirtualMachineNetworkModel
+  let discardSavedState: (() -> Void)?
 
   var body: some View {
     VirtualMachineNetworkContent(
@@ -104,7 +139,7 @@ private struct LinuxVirtualMachineNetworkSection: View {
       select: { attachment in
         Task { await network.use(attachment) }
       },
-      discardSavedState: nil
+      discardSavedState: discardSavedState
     )
     .task {
       await network.load()
@@ -256,7 +291,9 @@ struct LinuxVirtualMachineRuntimeStatusIndicator: View {
     case .paused:
       Image(systemName: "pause.circle.fill")
         .foregroundStyle(.yellow)
-    case .starting, .pausing, .resuming, .ejectingInstallationMedia, .stopping:
+    case .inspectingSavedState, .starting, .pausing, .resuming, .saving,
+      .restoring, .discardingSavedState, .ejectingInstallationMedia,
+      .stopping:
       ProgressView()
         .controlSize(.mini)
     case .stopped, .ownedElsewhere:

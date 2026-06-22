@@ -15,11 +15,14 @@ protocol LinuxVirtualMachineRuntimeEngine: Sendable {
 protocol LinuxVirtualMachineRuntimeEngineSession: AnyObject {
   var target: LinuxVirtualMachineRuntimeTarget { get }
   var console: LinuxVirtualMachineConsole? { get }
+  var saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport { get }
   var hasInstallationMedia: Bool { get }
   var canForceStop: Bool { get }
   var eventHandler: LinuxVirtualMachineRuntimeEventHandler? { get set }
 
   func start() async throws
+  func saveState(to url: URL) async throws
+  func restoreState(from url: URL) async throws
   func pause() async throws
   func resume() async throws
   func requestStop() throws
@@ -38,11 +41,15 @@ protocol LinuxVirtualMachineRuntimeManaging: Sendable {
   func updates(for machineID: UUID) -> AsyncStream<LinuxVirtualMachineRuntimeSnapshot>
   func console(for target: LinuxVirtualMachineRuntimeTarget) -> LinuxVirtualMachineConsole?
 
+  func refreshSavedState(id: UUID) async
   func start(id: UUID) async throws
+  func startFresh(id: UUID) async throws
   func pause(target: LinuxVirtualMachineRuntimeTarget) async throws
   func resume(target: LinuxVirtualMachineRuntimeTarget) async throws
+  func suspend(target: LinuxVirtualMachineRuntimeTarget) async throws
   func requestStop(target: LinuxVirtualMachineRuntimeTarget) throws
   func forceStop(target: LinuxVirtualMachineRuntimeTarget) async throws
+  func discardSavedState(id: UUID) async throws
   func ejectInstallationMedia(
     target: LinuxVirtualMachineRuntimeTarget
   ) async throws -> VirtualMachineManifest
@@ -67,7 +74,13 @@ struct UnavailableLinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeM
     nil
   }
 
+  func refreshSavedState(id: UUID) async {}
+
   func start(id: UUID) async throws {
+    throw LinuxVirtualMachineRuntimeError.unavailable
+  }
+
+  func startFresh(id: UUID) async throws {
     throw LinuxVirtualMachineRuntimeError.unavailable
   }
 
@@ -79,11 +92,19 @@ struct UnavailableLinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeM
     throw LinuxVirtualMachineRuntimeError.unavailable
   }
 
+  func suspend(target: LinuxVirtualMachineRuntimeTarget) async throws {
+    throw LinuxVirtualMachineRuntimeError.unavailable
+  }
+
   func requestStop(target: LinuxVirtualMachineRuntimeTarget) throws {
     throw LinuxVirtualMachineRuntimeError.unavailable
   }
 
   func forceStop(target: LinuxVirtualMachineRuntimeTarget) async throws {
+    throw LinuxVirtualMachineRuntimeError.unavailable
+  }
+
+  func discardSavedState(id: UUID) async throws {
     throw LinuxVirtualMachineRuntimeError.unavailable
   }
 

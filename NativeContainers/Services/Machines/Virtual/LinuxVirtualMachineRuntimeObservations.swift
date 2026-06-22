@@ -5,7 +5,10 @@ final class LinuxVirtualMachineRuntimeObservations {
   private let store = VirtualMachineRuntimeObservationStore<
     LinuxVirtualMachineRuntimeSnapshot
   > {
-    LinuxVirtualMachineRuntimeSnapshot(machineID: $0)
+    LinuxVirtualMachineRuntimeSnapshot(
+      machineID: $0,
+      state: .inspectingSavedState
+    )
   }
 
   func snapshot(for machineID: UUID) -> LinuxVirtualMachineRuntimeSnapshot {
@@ -22,6 +25,8 @@ final class LinuxVirtualMachineRuntimeObservations {
     machineID: UUID,
     target: LinuxVirtualMachineRuntimeTarget? = nil,
     state: LinuxVirtualMachineRuntimeState,
+    savedStateStatus: LinuxVirtualMachineSavedStateStatus? = nil,
+    saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport? = nil,
     hasInstallationMedia: Bool? = nil,
     isForceStopQueued: Bool = false,
     isForceStopCompleteAwaitingCleanup: Bool = false,
@@ -34,6 +39,10 @@ final class LinuxVirtualMachineRuntimeObservations {
         revision: current.revision + 1,
         target: target,
         state: state,
+        savedStateStatus:
+          savedStateStatus ?? current.savedStateStatus,
+        saveRestoreSupport:
+          saveRestoreSupport ?? current.saveRestoreSupport,
         hasInstallationMedia:
           hasInstallationMedia ?? current.hasInstallationMedia,
         isForceStopQueued: isForceStopQueued,

@@ -45,16 +45,6 @@ extension PreparedMacVirtualMachine {
   }
 }
 
-enum MacVirtualMachineSaveRestoreSupport: Equatable, Sendable {
-  case unknown
-  case supported
-  case unsupported(String)
-
-  var isSupported: Bool {
-    self == .supported
-  }
-}
-
 enum MacVirtualMachineRuntimeState: Equatable, Sendable {
   case inspectingSavedState
   case stopped

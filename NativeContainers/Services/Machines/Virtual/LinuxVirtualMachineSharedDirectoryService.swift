@@ -45,12 +45,14 @@ actor LinuxVirtualMachineSharedDirectoryService:
 {
   private let leasingStore: any LinuxVirtualMachineRuntimeLeasing
   private let persistence: any LinuxVirtualMachineSharedDirectoryPersisting
+  private let savedStateService: any LinuxVirtualMachineSavedStateInspecting
   private let bookmarkService: any LinuxVirtualMachineSharedDirectoryBookmarkCreating
   private let nameValidator: any LinuxVirtualMachineSharedDirectoryNameValidating
 
   init(
     leasingStore: any LinuxVirtualMachineRuntimeLeasing,
     persistence: any LinuxVirtualMachineSharedDirectoryPersisting,
+    savedStateService: any LinuxVirtualMachineSavedStateInspecting,
     bookmarkService: any LinuxVirtualMachineSharedDirectoryBookmarkCreating =
       LinuxVirtualMachineSharedDirectoryBookmarkService(),
     nameValidator: any LinuxVirtualMachineSharedDirectoryNameValidating =
@@ -58,6 +60,7 @@ actor LinuxVirtualMachineSharedDirectoryService:
   ) {
     self.leasingStore = leasingStore
     self.persistence = persistence
+    self.savedStateService = savedStateService
     self.bookmarkService = bookmarkService
     self.nameValidator = nameValidator
   }
@@ -83,6 +86,8 @@ actor LinuxVirtualMachineSharedDirectoryService:
     let lease = try await leasingStore.acquireLinuxRuntime(id: machineID)
     defer { lease.release() }
 
+    try await requireNoSavedState(for: lease)
+
     return try await persistence.addLinuxSharedDirectory(directory, for: lease)
   }
 
@@ -93,10 +98,23 @@ actor LinuxVirtualMachineSharedDirectoryService:
     let lease = try await leasingStore.acquireLinuxRuntime(id: machineID)
     defer { lease.release() }
 
+    try await requireNoSavedState(for: lease)
+
     return try await persistence.removeLinuxSharedDirectory(
       id: sharedDirectoryID,
       for: lease
     )
+  }
+
+  private func requireNoSavedState(
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws {
+    let status = try await savedStateService.inspect(for: lease)
+    guard status == .none else {
+      throw LinuxVirtualMachineSharedDirectoryError.savedStateBlocksChanges(
+        lease.target.machineID
+      )
+    }
   }
 
   private func requireUniqueName(

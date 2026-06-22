@@ -46,7 +46,7 @@ Stop/Force Stop/internal-cache reset, a transactional app-owned local build
 cache with token-bound promotion and separate status/reset controls, private
 persistent build history, and macOS restore-image preparation, installation,
 generation-safe runtime/console controls, per-VM opt-in host audio input that
-resets on clone/export, host audio output, same-host suspend,
+resets on clone/export, host audio output, same-host suspend for macOS and GUI Linux,
 persistent macOS and GUI Linux VirtioFS shares, stopped-only renaming and
 host-bounded CPU/memory editing, per-VM automatic
 NAT/shared/host-only networking for both guest families, and stopped-only

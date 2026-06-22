@@ -75,6 +75,36 @@ struct LinuxVirtualMachineSharedDirectoryServiceTests {
   }
 
   @Test
+  func savedStateBlocksLinuxSharedDirectoryMutation() async throws {
+    let fixture = try LinuxSharedDirectoryServiceFixture(
+      savedStateStatus: .available(
+        VirtualMachineSavedStateSummary(
+          createdAt: Date(timeIntervalSince1970: 1_000),
+          stateSizeBytes: 8_192
+        )
+      )
+    )
+
+    await #expect(
+      throws: LinuxVirtualMachineSharedDirectoryError.savedStateBlocksChanges(
+        fixture.machine.manifest.id
+      )
+    ) {
+      _ = try await fixture.service.add(
+        to: fixture.machine.manifest.id,
+        request: LinuxVirtualMachineSharedDirectoryRequest(
+          sourceURL: URL(filePath: "/tmp/Projects", directoryHint: .isDirectory),
+          guestName: "Projects",
+          readOnly: false
+        )
+      )
+    }
+
+    #expect(await fixture.persistence.snapshot() == .empty)
+    #expect(fixture.releaseRecorder.count == 1)
+  }
+
+  @Test
   func linuxDeviceUsesStableMountTagForAllDirectories() throws {
     let directories = [
       ResolvedLinuxVirtualMachineSharedDirectory(
@@ -117,7 +147,8 @@ private struct LinuxSharedDirectoryServiceFixture {
   let service: LinuxVirtualMachineSharedDirectoryService
 
   init(
-    initialConfiguration: LinuxVirtualMachineSharedDirectoryConfiguration = .empty
+    initialConfiguration: LinuxVirtualMachineSharedDirectoryConfiguration = .empty,
+    savedStateStatus: LinuxVirtualMachineSavedStateStatus = .none
   ) throws {
     machine = try makeLinuxSharedDirectoryMachine()
     persistence = LinuxSharedDirectoryPersistence(initial: initialConfiguration)
@@ -128,9 +159,29 @@ private struct LinuxSharedDirectoryServiceFixture {
     service = LinuxVirtualMachineSharedDirectoryService(
       leasingStore: store,
       persistence: persistence,
+      savedStateService: LinuxSharedDirectorySavedStateService(
+        status: savedStateStatus
+      ),
       bookmarkService: LinuxSharedDirectoryBookmarker(),
       nameValidator: LinuxSharedDirectoryNameValidator()
     )
+  }
+}
+
+@MainActor
+private final class LinuxSharedDirectorySavedStateService:
+  LinuxVirtualMachineSavedStateInspecting
+{
+  let status: LinuxVirtualMachineSavedStateStatus
+
+  init(status: LinuxVirtualMachineSavedStateStatus) {
+    self.status = status
+  }
+
+  func inspect(
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) -> LinuxVirtualMachineSavedStateStatus {
+    status
   }
 }
 

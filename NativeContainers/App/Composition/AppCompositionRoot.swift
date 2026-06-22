@@ -225,6 +225,12 @@ enum AppCompositionRoot {
     let virtualMachineSavedState = MacVirtualMachineSavedStateService(
       store: virtualMachineSavedStateStore
     )
+    let linuxVirtualMachineSavedStateStore =
+      LinuxVirtualMachineSavedStateStore()
+    let linuxVirtualMachineSavedState =
+      LinuxVirtualMachineSavedStateService(
+        store: linuxVirtualMachineSavedStateStore
+      )
     let virtualMachineDiskImageReplacement =
       VirtualMachineDiskImageReplacementCoordinator(
         store: virtualMachineLibrary,
@@ -240,9 +246,16 @@ enum AppCompositionRoot {
       )
     let virtualMachineStorageReclamation =
       VirtualMachineStorageReclamationService(
-        savedStates: MacVirtualMachineSavedStateReclamationService(
-          leasingStore: virtualMachineLibrary,
-          store: virtualMachineSavedStateStore
+        savedStates: GuestAwareVirtualMachineSavedStateReclamationService(
+          inventory: virtualMachineLibrary,
+          macOS: MacVirtualMachineSavedStateReclamationService(
+            leasingStore: virtualMachineLibrary,
+            store: virtualMachineSavedStateStore
+          ),
+          linux: LinuxVirtualMachineSavedStateReclamationService(
+            leasingStore: virtualMachineLibrary,
+            store: linuxVirtualMachineSavedStateStore
+          )
         ),
         residue: VirtualMachineResidueReclamationService(
           inventory: virtualMachineLibrary
@@ -290,7 +303,8 @@ enum AppCompositionRoot {
       installationStore: virtualMachineLibrary,
       engine: AppleLinuxVirtualMachineRuntimeEngine(
         configurationFactory: linuxVirtualMachineConfigurationFactory
-      )
+      ),
+      savedStateService: linuxVirtualMachineSavedState
     )
     let virtualMachineAudio = MacVirtualMachineAudioService(
       leasingStore: virtualMachineLibrary,
@@ -304,7 +318,8 @@ enum AppCompositionRoot {
     )
     let linuxVirtualMachineNetwork = LinuxVirtualMachineNetworkService(
       leasingStore: virtualMachineLibrary,
-      persistence: virtualMachineLibrary
+      persistence: virtualMachineLibrary,
+      savedStateService: linuxVirtualMachineSavedState
     )
     let virtualMachineCompute = MacVirtualMachineComputeService(
       leasingStore: virtualMachineLibrary,
@@ -315,6 +330,7 @@ enum AppCompositionRoot {
     let linuxVirtualMachineCompute = LinuxVirtualMachineComputeService(
       leasingStore: virtualMachineLibrary,
       persistence: virtualMachineLibrary,
+      savedStateService: linuxVirtualMachineSavedState,
       platformLimits: virtualMachineComputeLimits
     )
     let virtualMachineName = MacVirtualMachineNameService(
@@ -338,7 +354,8 @@ enum AppCompositionRoot {
     let linuxVirtualMachineSharedDirectories =
       LinuxVirtualMachineSharedDirectoryService(
         leasingStore: virtualMachineLibrary,
-        persistence: virtualMachineLibrary
+        persistence: virtualMachineLibrary,
+        savedStateService: linuxVirtualMachineSavedState
       )
     let optionalIntegrations = DemandStartedOptionalIntegrationServices {
       OptionalIntegrationServiceModule.live(

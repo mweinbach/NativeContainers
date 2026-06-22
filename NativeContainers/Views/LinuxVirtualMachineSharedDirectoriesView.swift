@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 struct LinuxVirtualMachineSharedDirectoriesView: View {
   let runtimeState: LinuxVirtualMachineRuntimeState
   let hasActiveRuntime: Bool
+  let editMessage: LocalizedStringResource?
+  let discardSavedState: (() -> Void)?
   let sharedDirectories: LinuxVirtualMachineSharedDirectoriesModel
 
   @State private var isChoosingDirectory = false
@@ -19,6 +21,7 @@ struct LinuxVirtualMachineSharedDirectoriesView: View {
       isWorking: sharedDirectories.isWorking,
       errorMessage: sharedDirectories.errorMessage,
       editBlockMessage: editBlockMessage,
+      discardSavedState: discardSavedState,
       chooseDirectory: { isChoosingDirectory = true },
       remove: {
         directoryToRemove = $0
@@ -79,6 +82,7 @@ struct LinuxVirtualMachineSharedDirectoriesView: View {
   }
 
   private var editBlockMessage: LocalizedStringResource? {
+    if let editMessage { return editMessage }
     if runtimeState == .ownedElsewhere {
       return "This VM is active in another NativeContainers process."
     }
@@ -99,6 +103,7 @@ private struct LinuxVirtualMachineSharedDirectoriesSection: View {
   let isWorking: Bool
   let errorMessage: String?
   let editBlockMessage: LocalizedStringResource?
+  let discardSavedState: (() -> Void)?
   let chooseDirectory: () -> Void
   let remove: (LinuxVirtualMachineSharedDirectorySummary) -> Void
   let dismissError: () -> Void
@@ -107,9 +112,10 @@ private struct LinuxVirtualMachineSharedDirectoriesSection: View {
     GroupBox {
       VStack(alignment: .leading, spacing: 14) {
         if let editBlockMessage {
-          Label(editBlockMessage, systemImage: "lock.fill")
-            .font(.callout)
-            .foregroundStyle(.secondary)
+          VirtualMachineConfigurationEditLockBanner(
+            message: editBlockMessage,
+            discardSavedState: discardSavedState
+          )
         }
         if let errorMessage {
           LinuxVirtualMachineSharedDirectoryErrorBanner(

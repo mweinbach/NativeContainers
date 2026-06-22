@@ -1,18 +1,24 @@
 import Foundation
 
 enum LinuxVirtualMachineRuntimeState: Equatable, Sendable {
+  case inspectingSavedState
   case stopped
   case starting
   case running
   case pausing
   case paused
   case resuming
+  case saving
+  case restoring
+  case discardingSavedState
   case ejectingInstallationMedia
   case stopping
   case ownedElsewhere
 
   var label: LocalizedStringResource {
     switch self {
+    case .inspectingSavedState:
+      "Checking Saved State"
     case .stopped:
       "Stopped"
     case .starting:
@@ -25,6 +31,12 @@ enum LinuxVirtualMachineRuntimeState: Equatable, Sendable {
       "Paused"
     case .resuming:
       "Resuming"
+    case .saving:
+      "Saving"
+    case .restoring:
+      "Restoring"
+    case .discardingSavedState:
+      "Discarding Saved State"
     case .ejectingInstallationMedia:
       "Ejecting Installer"
     case .stopping:
@@ -40,6 +52,8 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   let revision: UInt64
   let target: LinuxVirtualMachineRuntimeTarget?
   let state: LinuxVirtualMachineRuntimeState
+  let savedStateStatus: LinuxVirtualMachineSavedStateStatus
+  let saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport
   let hasInstallationMedia: Bool
   let isForceStopQueued: Bool
   let isForceStopCompleteAwaitingCleanup: Bool
@@ -50,6 +64,8 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
     revision: UInt64 = 0,
     target: LinuxVirtualMachineRuntimeTarget? = nil,
     state: LinuxVirtualMachineRuntimeState = .stopped,
+    savedStateStatus: LinuxVirtualMachineSavedStateStatus = .unknown,
+    saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport = .unknown,
     hasInstallationMedia: Bool = false,
     isForceStopQueued: Bool = false,
     isForceStopCompleteAwaitingCleanup: Bool = false,
@@ -59,6 +75,8 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
     self.revision = revision
     self.target = target
     self.state = state
+    self.savedStateStatus = savedStateStatus
+    self.saveRestoreSupport = saveRestoreSupport
     self.hasInstallationMedia = hasInstallationMedia
     self.isForceStopQueued = isForceStopQueued
     self.isForceStopCompleteAwaitingCleanup = isForceStopCompleteAwaitingCleanup
@@ -66,12 +84,43 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   }
 
   var canStart: Bool {
-    target == nil && (state == .stopped || state == .ownedElsewhere)
+    guard target == nil, state == .stopped || state == .ownedElsewhere else {
+      return false
+    }
+    return switch savedStateStatus {
+    case .unknown, .none, .available:
+      true
+    case .incompatible:
+      false
+    }
   }
 
   var canPause: Bool { state == .running }
   var canResume: Bool { state == .paused }
+  var canSuspend: Bool {
+    guard saveRestoreSupport.isSupported,
+      state == .running || state == .paused
+    else {
+      return false
+    }
+    return switch savedStateStatus {
+    case .unknown, .none:
+      true
+    case .available, .incompatible:
+      false
+    }
+  }
   var canRequestStop: Bool { state == .running || state == .paused }
+  var canStartFresh: Bool {
+    guard target == nil, state == .stopped else { return false }
+    return switch savedStateStatus {
+    case .available, .incompatible:
+      true
+    case .unknown, .none:
+      false
+    }
+  }
+  var canDiscardSavedState: Bool { canStartFresh }
 
   var canEjectInstallationMedia: Bool {
     guard target != nil, hasInstallationMedia else { return false }
@@ -81,10 +130,11 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   var canForceStop: Bool {
     guard target != nil else { return false }
     return switch state {
-    case .starting, .running, .pausing, .paused, .resuming,
-      .ejectingInstallationMedia, .stopping:
+    case .starting, .running, .pausing, .paused, .resuming, .saving,
+      .restoring, .discardingSavedState, .ejectingInstallationMedia,
+      .stopping:
       true
-    case .stopped, .ownedElsewhere:
+    case .inspectingSavedState, .stopped, .ownedElsewhere:
       false
     }
   }
@@ -93,7 +143,9 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
 
   var isTransitioning: Bool {
     switch state {
-    case .starting, .pausing, .resuming, .ejectingInstallationMedia, .stopping:
+    case .inspectingSavedState, .starting, .pausing, .resuming, .saving,
+      .restoring, .discardingSavedState, .ejectingInstallationMedia,
+      .stopping:
       true
     case .stopped, .running, .paused, .ownedElsewhere:
       false
@@ -111,6 +163,7 @@ enum LinuxVirtualMachineRuntimeError: LocalizedError, Equatable, Sendable {
   case invalidState(UUID, LinuxVirtualMachineRuntimeState)
   case staleTarget(LinuxVirtualMachineRuntimeTarget)
   case operationUnavailable(String)
+  case saveRestoreUnsupported(String)
   case installationMediaNotAttached(UUID)
 
   var errorDescription: String? {
@@ -133,6 +186,8 @@ enum LinuxVirtualMachineRuntimeError: LocalizedError, Equatable, Sendable {
       "The requested operation belongs to an expired runtime session for virtual machine \(target.machineID.uuidString)."
     case .operationUnavailable(let operation):
       "Virtualization.framework cannot \(operation) the virtual machine in its current state."
+    case .saveRestoreUnsupported(let reason):
+      "This virtual machine configuration does not support saving and restoring: \(reason)"
     case .installationMediaNotAttached(let identifier):
       "Virtual machine \(identifier.uuidString) does not have attached installation media."
     }

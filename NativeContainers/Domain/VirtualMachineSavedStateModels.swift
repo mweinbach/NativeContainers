@@ -1,43 +1,43 @@
 import Foundation
 
-struct MacVirtualMachineSavedStateSummary: Codable, Equatable, Sendable {
+struct VirtualMachineSavedStateSummary: Codable, Equatable, Sendable {
   let createdAt: Date
   let stateSizeBytes: UInt64
 }
 
-enum MacVirtualMachineSavedStateStatus: Equatable, Sendable {
+enum VirtualMachineSavedStateStatus: Equatable, Sendable {
   case unknown
   case none
-  case available(MacVirtualMachineSavedStateSummary)
+  case available(VirtualMachineSavedStateSummary)
   case incompatible(String)
 
-  var summary: MacVirtualMachineSavedStateSummary? {
+  var summary: VirtualMachineSavedStateSummary? {
     guard case .available(let summary) = self else { return nil }
     return summary
   }
 }
 
-struct MacVirtualMachineSavedStateArtifact: Equatable, Sendable {
+struct VirtualMachineSavedStateArtifact: Equatable, Sendable {
   let stateURL: URL
-  let summary: MacVirtualMachineSavedStateSummary
+  let summary: VirtualMachineSavedStateSummary
   let configurationFingerprint: String
 }
 
-struct MacVirtualMachineSavedStateTransaction: Equatable, Sendable {
+struct VirtualMachineSavedStateTransaction: Equatable, Sendable {
   let operationID: UUID
-  let target: MacVirtualMachineRuntimeTarget
+  let target: VirtualMachineRuntimeTarget
   let stagingDirectoryURL: URL
   let stateURL: URL
 }
 
-struct MacVirtualMachineSavedStateRestoreTransaction: Equatable, Sendable {
+struct VirtualMachineSavedStateRestoreTransaction: Equatable, Sendable {
   let operationID: UUID
-  let target: MacVirtualMachineRuntimeTarget
+  let target: VirtualMachineRuntimeTarget
   let consumingDirectoryURL: URL
-  let artifact: MacVirtualMachineSavedStateArtifact
+  let artifact: VirtualMachineSavedStateArtifact
 }
 
-struct MacVirtualMachineSavedStateMetadata: Codable, Equatable, Sendable {
+struct VirtualMachineSavedStateMetadata: Codable, Equatable, Sendable {
   static let currentSchemaVersion = 1
 
   let schemaVersion: Int
@@ -49,7 +49,7 @@ struct MacVirtualMachineSavedStateMetadata: Codable, Equatable, Sendable {
   let hostOperatingSystemVersion: String
 }
 
-enum MacVirtualMachineSavedStateError: LocalizedError, Equatable, Sendable {
+enum VirtualMachineSavedStateError: LocalizedError, Equatable, Sendable {
   case missing(UUID)
   case incompatible(UUID, String)
   case checkpointAlreadyExists(UUID)
@@ -80,3 +80,21 @@ enum MacVirtualMachineSavedStateError: LocalizedError, Equatable, Sendable {
     }
   }
 }
+
+typealias MacVirtualMachineSavedStateSummary = VirtualMachineSavedStateSummary
+typealias MacVirtualMachineSavedStateStatus = VirtualMachineSavedStateStatus
+typealias MacVirtualMachineSavedStateArtifact = VirtualMachineSavedStateArtifact
+typealias MacVirtualMachineSavedStateTransaction = VirtualMachineSavedStateTransaction
+typealias MacVirtualMachineSavedStateRestoreTransaction =
+  VirtualMachineSavedStateRestoreTransaction
+typealias MacVirtualMachineSavedStateMetadata = VirtualMachineSavedStateMetadata
+typealias MacVirtualMachineSavedStateError = VirtualMachineSavedStateError
+
+typealias LinuxVirtualMachineSavedStateSummary = VirtualMachineSavedStateSummary
+typealias LinuxVirtualMachineSavedStateStatus = VirtualMachineSavedStateStatus
+typealias LinuxVirtualMachineSavedStateArtifact = VirtualMachineSavedStateArtifact
+typealias LinuxVirtualMachineSavedStateTransaction = VirtualMachineSavedStateTransaction
+typealias LinuxVirtualMachineSavedStateRestoreTransaction =
+  VirtualMachineSavedStateRestoreTransaction
+typealias LinuxVirtualMachineSavedStateMetadata = VirtualMachineSavedStateMetadata
+typealias LinuxVirtualMachineSavedStateError = VirtualMachineSavedStateError

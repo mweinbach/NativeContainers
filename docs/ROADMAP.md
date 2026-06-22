@@ -144,6 +144,10 @@ must leave a usable, test-backed product slice.
 - [x] Generation-pinned GUI Linux runtime ownership, start/pause/resume,
       graceful stop with a 30-second automatic force-stop watchdog, explicit
       Force Stop, native console, installer-media ejection, and creation UI.
+- [x] Same-host GUI Linux suspend/restore through Apple's configuration-gated
+      VZ saved-state APIs, with shared transactional storage, Linux topology
+      fingerprinting, single-use restore, explicit Start Fresh/Discard,
+      topology-edit exclusion, and guest-aware storage reclamation.
 - [x] Stopped-only GUI Linux CPU and memory editing within the current host's
       Virtualization.framework limits, with generation-pinned persistence and
       cold-start application while disk capacity remains storage-owned.

@@ -94,6 +94,35 @@ struct VirtualMachineComputeServiceTests {
     #expect(await fixture.linuxLeaseStore.acquireCount == 1)
     #expect(fixture.linuxReleaseRecorder.count == 1)
   }
+
+  @Test
+  func linuxSavedStateBlocksMutationAndReleasesOwnership() async throws {
+    let fixture = try ComputeServiceFixture(
+      savedStateStatus: .available(
+        VirtualMachineSavedStateSummary(
+          createdAt: Date(timeIntervalSince1970: 1_000),
+          stateSizeBytes: 4_096
+        )
+      )
+    )
+
+    await #expect(
+      throws: VirtualMachineComputeError.savedStateBlocksChanges(
+        fixture.linuxMachine.manifest.id
+      )
+    ) {
+      _ = try await fixture.linuxService.setConfiguration(
+        VirtualMachineComputeConfiguration(
+          cpuCount: 2,
+          memoryBytes: 4 * VirtualMachineResources.bytesPerGiB
+        ),
+        for: fixture.linuxMachine.manifest.id
+      )
+    }
+
+    #expect(await fixture.persistence.linuxSetCount == 0)
+    #expect(fixture.linuxReleaseRecorder.count == 1)
+  }
 }
 
 @MainActor
@@ -135,6 +164,7 @@ private struct ComputeServiceFixture {
     linuxService = LinuxVirtualMachineComputeService(
       leasingStore: linuxLeaseStore,
       persistence: persistence,
+      savedStateService: ComputeSavedStateService(status: savedStateStatus),
       platformLimits: limits
     )
   }
@@ -258,7 +288,8 @@ private actor ComputeLinuxLeaseStore: LinuxVirtualMachineRuntimeLeasing {
 
 @MainActor
 private final class ComputeSavedStateService:
-  MacVirtualMachineSavedStateInspecting
+  MacVirtualMachineSavedStateInspecting,
+  LinuxVirtualMachineSavedStateInspecting
 {
   let status: MacVirtualMachineSavedStateStatus
 
@@ -269,6 +300,12 @@ private final class ComputeSavedStateService:
   func inspect(
     for lease: MacVirtualMachineRuntimeLease
   ) -> MacVirtualMachineSavedStateStatus {
+    status
+  }
+
+  func inspect(
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) -> LinuxVirtualMachineSavedStateStatus {
     status
   }
 }

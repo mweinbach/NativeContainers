@@ -12,6 +12,8 @@ struct LinuxVirtualMachineRow: View {
   let discard: () -> Void
 
   @State private var isConfirmingInstallationCompletion = false
+  @State private var isConfirmingStartFresh = false
+  @State private var isConfirmingDiscardSavedState = false
 
   var body: some View {
     HStack(spacing: 14) {
@@ -29,12 +31,12 @@ struct LinuxVirtualMachineRow: View {
               .font(.caption)
               .foregroundStyle(.secondary)
             VirtualMachineResourceSummary(resources: machine.resources)
-            if let errorMessage = runtime.errorMessage {
-              Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+            if let runtimeDiagnostic {
+              Label(runtimeDiagnostic, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.orange)
                 .lineLimit(2)
-                .help(errorMessage)
+                .help(runtimeDiagnostic)
             }
           }
 
@@ -79,7 +81,27 @@ struct LinuxVirtualMachineRow: View {
       isSelected ? Color.accentColor.opacity(0.14) : Color.clear,
       in: RoundedRectangle(cornerRadius: 9)
     )
-    .task { runtime.observe() }
+    .task { await runtime.observe() }
+    .confirmationDialog(
+      "Start \(machine.name) without its saved state?",
+      isPresented: $isConfirmingStartFresh
+    ) {
+      Button("Start Fresh", role: .destructive) {
+        Task { await runtime.startFresh() }
+      }
+    } message: {
+      Text("The suspended session is permanently discarded before Linux starts.")
+    }
+    .confirmationDialog(
+      "Discard the saved state for \(machine.name)?",
+      isPresented: $isConfirmingDiscardSavedState
+    ) {
+      Button("Discard Saved State", role: .destructive) {
+        Task { await runtime.discardSavedState() }
+      }
+    } message: {
+      Text("The VM remains powered off, but its suspended session cannot be resumed.")
+    }
     .confirmationDialog(
       "Finish installing \(machine.name)?",
       isPresented: $isConfirmingInstallationCompletion
@@ -104,15 +126,24 @@ struct LinuxVirtualMachineRow: View {
     case .readyToInstall, .stopped:
       switch runtime.snapshot.state {
       case .stopped, .ownedElsewhere:
-        Button(startTitle) {
-          Task { await runtime.start() }
+        if case .incompatible = runtime.snapshot.savedStateStatus {
+          Button("Start Fresh…") {
+            isConfirmingStartFresh = true
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(!runtime.snapshot.canStartFresh)
+        } else {
+          Button(startTitle) {
+            Task { await runtime.start() }
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(!runtime.snapshot.canStart)
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(!runtime.snapshot.canStart)
       case .running, .paused, .stopping:
         Button("Open", action: open)
           .buttonStyle(.borderedProminent)
-      case .starting, .pausing, .resuming, .ejectingInstallationMedia:
+      case .inspectingSavedState, .starting, .pausing, .resuming, .saving,
+        .restoring, .discardingSavedState, .ejectingInstallationMedia:
         HStack(spacing: 6) {
           ProgressView()
             .controlSize(.small)
@@ -142,6 +173,11 @@ struct LinuxVirtualMachineRow: View {
         Task { await runtime.resume() }
       }
     }
+    if runtime.snapshot.canSuspend {
+      Button("Suspend", systemImage: "moon.zzz.fill") {
+        Task { await runtime.suspend() }
+      }
+    }
     if runtime.snapshot.canRequestStop {
       Button("Shut Down", systemImage: "power") {
         Task { await runtime.requestStop() }
@@ -161,6 +197,19 @@ struct LinuxVirtualMachineRow: View {
       )
       .disabled(runtime.snapshot.isForceStopQueued)
     }
+    if runtime.snapshot.canDiscardSavedState {
+      Divider()
+      Button("Start Fresh…", systemImage: "play.fill") {
+        isConfirmingStartFresh = true
+      }
+      Button(
+        "Discard Saved State…",
+        systemImage: "trash",
+        role: .destructive
+      ) {
+        isConfirmingDiscardSavedState = true
+      }
+    }
   }
 
   private var statusLabel: LocalizedStringResource {
@@ -168,20 +217,56 @@ struct LinuxVirtualMachineRow: View {
     case .draft:
       "Needs installation media"
     case .readyToInstall:
-      runtime.snapshot.target == nil
-        ? "Ready to install • ISO attached"
-        : runtime.snapshot.state.label
+      readyToInstallStateLabel
     case .installing:
       "Installing Linux"
     case .stopped:
-      runtime.snapshot.target == nil ? "Installed" : runtime.snapshot.state.label
+      stoppedStateLabel
     case .failed:
       "Needs attention"
     }
   }
 
   private var startTitle: LocalizedStringResource {
-    runtime.snapshot.state == .ownedElsewhere ? "Retry" : "Start"
+    if runtime.snapshot.state == .ownedElsewhere { return "Retry" }
+    if case .available = runtime.snapshot.savedStateStatus { return "Resume" }
+    return "Start"
+  }
+
+  private var stoppedStateLabel: LocalizedStringResource {
+    guard runtime.snapshot.target == nil else {
+      return runtime.snapshot.state.label
+    }
+    switch runtime.snapshot.savedStateStatus {
+    case .available:
+      return "Suspended"
+    case .incompatible:
+      return "Saved state needs attention"
+    case .unknown, .none:
+      return "Installed"
+    }
+  }
+
+  private var readyToInstallStateLabel: LocalizedStringResource {
+    guard runtime.snapshot.target == nil else {
+      return runtime.snapshot.state.label
+    }
+    switch runtime.snapshot.savedStateStatus {
+    case .available:
+      return "Suspended • ISO attached"
+    case .incompatible:
+      return "Saved state needs attention • ISO attached"
+    case .unknown, .none:
+      return "Ready to install • ISO attached"
+    }
+  }
+
+  private var runtimeDiagnostic: String? {
+    if let errorMessage = runtime.errorMessage { return errorMessage }
+    if case .incompatible(let reason) = runtime.snapshot.savedStateStatus {
+      return reason
+    }
+    return nil
   }
 
   private var forceStopTitle: LocalizedStringResource {

@@ -93,7 +93,7 @@ struct AppleMacVirtualMachineSharedDirectoryDeviceFactory {
 
 @MainActor
 struct AppleLinuxVirtualMachineSharedDirectoryDeviceFactory {
-  static let mountTag = "nativecontainers"
+  nonisolated static let mountTag = "nativecontainers"
 
   private let factory = AppleVirtualMachineSharedDirectoryDeviceFactory()
 

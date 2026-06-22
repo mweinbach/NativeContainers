@@ -733,21 +733,35 @@ returned manifest directly and retains one stable runtime model per VM, so a
 view transition never owns a machine session.
 
 `LinuxVirtualMachineRuntimeService` owns one generation-pinned runtime lease and
-engine session per Linux VM. Start, pause, resume, graceful stop, destructive
-stop, installer ejection, console lookup, and terminal delegate events all
-target that generation. A graceful stop arms a 30-second watchdog; if the guest
-does not exit, the service waits only a bounded interval for the framework's
-destructive-stop capability and then force-stops that same session. Force Stop
-is also an explicit UI action and can queue safely while start, pause, resume,
-or ejection is completing. Delegate stop/error events are authoritative, and
-exactly-once finalization prevents a stale callback from releasing a replacement
-session.
+engine session per Linux VM. Start, pause, resume, same-host suspend/restore,
+graceful stop, destructive stop, installer ejection, console lookup, and
+terminal delegate events all target that generation. A graceful stop arms a
+30-second watchdog; if the guest does not exit, the service waits only a bounded
+interval for the framework's destructive-stop capability and then force-stops
+that same session. Force Stop is also an explicit UI action and can queue safely
+while start, pause, resume, save, restore, or ejection is completing. Delegate
+stop/error events are authoritative, and exactly-once finalization prevents a
+stale callback from releasing a replacement session.
+
+Linux and macOS saved state share one actor-isolated transaction core. It holds
+a borrow on the exact guest runtime lease, fully synchronizes a hidden partial,
+atomically publishes `SavedState`, consumes restore through a tombstone, and
+deletes interrupted save/restore/discard transactions during inspection. Thin
+guest adapters provide their own configuration fingerprints. Linux binds a
+checkpoint to its topology descriptor, generic machine identifier, writable
+disk and EFI/NVRAM identities, optional installer identity, stable MAC,
+network/clipboard/device selections, and shared-folder semantics. Apple's
+`validateSaveRestoreSupport()` remains authoritative for each constructed
+configuration. A successful restore is single-use and returns paused before the
+service resumes it; Start Fresh, live resume after a retained checkpoint, and
+explicit discard retire the checkpoint before writable storage can advance.
 
 Linux shared folders reuse the guest-neutral directory domain, bookmark,
 sidecar-store, observable-model, and VirtioFS-device primitives. A
 `LinuxVirtualMachineSharedDirectoryService` adds only Linux lifecycle policy:
 it acquires the generation-pinned Linux runtime lease and permits persistence
-only while the bundle is ready to install or stopped. Runtime configuration
+only while the bundle is ready to install or stopped and has no saved state.
+Runtime configuration
 resolves every security-scoped bookmark, attaches one
 `VZMultipleDirectoryShare` under the stable `nativecontainers` tag, and retains
 the access lease until that exact engine session closes. SwiftUI renders the

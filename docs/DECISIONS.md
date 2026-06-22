@@ -2326,8 +2326,8 @@ Persistence remains behind each guest's generation-pinned runtime lease. A
 mutation re-reads the exact manifest observed by the lease, validates the
 requested CPU and MiB-aligned memory against current host limits, preserves disk
 capacity, and atomically writes the bundle. Linux permits any value within the
-host bounds while stopped or ready to install. macOS additionally rejects saved
-state because CPU and memory participate in its configuration fingerprint.
+host bounds while stopped or ready to install. Both guests reject saved state
+because CPU and memory participate in their configuration fingerprints.
 
 The macOS restore-image preparation result now retains Apple's minimum
 supported CPU count and memory size in optional manifest fields. Subsequent
@@ -2358,3 +2358,41 @@ runtime lease; persistence revalidates the name observed by that lease and
 atomically updates only `name` and `updatedAt`. macOS saved state remains valid
 because no configuration fingerprint input changes. Active runtime ownership,
 state transitions, and disk maintenance still block the mutation.
+
+## ADR-083: Extend single-use saved state to validated GUI Linux configurations
+
+**Status:** Accepted — 2026-06-22
+
+Virtualization.framework exposes save and restore on guest-neutral
+`VZVirtualMachine`; `VZVirtualMachineConfiguration.validateSaveRestoreSupport()`
+is the authoritative capability gate. The installed documentation specifies
+paused-only save and stopped-only restore, and a focused Xcode-run check proves
+that NativeContainers' installed EFI Linux configuration passes the validation.
+GUI Linux suspend is therefore enabled per constructed configuration instead of
+being rejected by guest family.
+
+macOS and Linux adapters share one actor-isolated transaction store and the
+same `SavedState` format. The store pins the exact runtime lease, synchronizes a
+hidden partial before atomic publication, binds metadata to the host OS and a
+guest-supplied configuration fingerprint, consumes restore through a tombstone,
+and removes interrupted transactions during inspection. Restore remains
+single-use on success or failure so writable storage cannot advance and later
+replay stale memory.
+
+Linux owns a distinct topology descriptor and fingerprint. It covers CPU,
+memory, disk geometry/path/format, generic machine identity, writable disk and
+EFI/NVRAM file identities, optional installer identity, stable MAC and network
+revision, graphics/audio/input/entropy/balloon devices, SPICE clipboard, and
+VirtioFS share revision and source identities. Name is deliberately excluded.
+Compute, network, and shared-folder mutations acquire their existing Linux
+lease and reject any available or incompatible checkpoint. Installer ejection
+marks the live generation unsavable until a cold restart because the detached
+runtime topology no longer matches the immutable launch descriptor.
+
+The Linux runtime mirrors the generation-pinned macOS state machine: Suspend
+pauses, saves, and powers off; Start restores to paused and resumes; live Resume
+discards a retained checkpoint first; Start Fresh and Discard are explicit
+destructive choices; Force Stop can queue while callbacks quiesce. Storage
+reclamation uses a guest-aware router so Linux checkpoints are validated and
+removed only under Linux runtime leases. Saved state remains same-host and is
+stripped from clone and portable-transfer paths.

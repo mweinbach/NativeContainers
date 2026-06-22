@@ -520,6 +520,14 @@ The installed Apple documentation confirms:
   VM, leaves it stopped on failure, and produces a paused VM on success. Neither
   API exposes cancellation, so an accepted callback must quiesce before runtime
   ownership is released.
+- The save/restore methods are defined on guest-neutral `VZVirtualMachine`, not
+  on a macOS-only subtype. Xcode's installed documentation makes
+  `validateSaveRestoreSupport()` the configuration-specific authority. A
+  focused Xcode-run check against NativeContainers' installed EFI Linux
+  configuration (generic platform, EFI/NVRAM, Virtio disk/graphics/audio/input,
+  entropy, balloon, NAT, and optional SPICE console) passes that validation.
+  GUI Linux saved memory is therefore supported when the exact live
+  configuration validates; it is not inferred from guest type alone.
 - Apple's macOS VM sample validates save/restore support separately from normal
   configuration validation and treats the save file as single-use after a
   restore attempt. NativeContainers additionally renames the active checkpoint
@@ -541,10 +549,10 @@ The installed Apple documentation confirms:
   its composition root so participating macOS and GUI Linux VMs share it.
   Apple's attachment is defined on the common Virtualization network-device
   surface rather than a guest platform class. Because those references are
-  recreated after relaunch, custom vmnet modes are cold-start-only; macOS does
-  not advertise suspend/save-restore support in those modes, and Linux does not
-  offer saved memory. Automatic `VZNATNetworkDeviceAttachment` remains the
-  portable default.
+  recreated after relaunch, custom vmnet modes are cold-start-only and suspend
+  remains gated by `validateSaveRestoreSupport()` for the exact macOS or Linux
+  configuration. Automatic `VZNATNetworkDeviceAttachment` remains the portable
+  default.
 - Virtualization.framework exposes guest audio through
   `VZVirtioSoundDeviceConfiguration`. An output stream using
   `VZHostAudioOutputStreamSink` follows the host's current default output

@@ -116,15 +116,18 @@ actor MacVirtualMachineComputeService: MacVirtualMachineComputeManaging {
 actor LinuxVirtualMachineComputeService: LinuxVirtualMachineComputeManaging {
   private let leasingStore: any LinuxVirtualMachineRuntimeLeasing
   private let persistence: any LinuxVirtualMachineComputePersisting
+  private let savedStateService: any LinuxVirtualMachineSavedStateInspecting
   private let platformLimits: VirtualMachineComputeLimits
 
   init(
     leasingStore: any LinuxVirtualMachineRuntimeLeasing,
     persistence: any LinuxVirtualMachineComputePersisting,
+    savedStateService: any LinuxVirtualMachineSavedStateInspecting,
     platformLimits: VirtualMachineComputeLimits
   ) {
     self.leasingStore = leasingStore
     self.persistence = persistence
+    self.savedStateService = savedStateService
     self.platformLimits = platformLimits
   }
 
@@ -139,6 +142,11 @@ actor LinuxVirtualMachineComputeService: LinuxVirtualMachineComputeManaging {
   ) async throws -> VirtualMachineComputeSnapshot {
     let lease = try await leasingStore.acquireLinuxRuntime(id: machineID)
     defer { lease.release() }
+
+    let savedState = try await savedStateService.inspect(for: lease)
+    guard savedState == .none else {
+      throw VirtualMachineComputeError.savedStateBlocksChanges(machineID)
+    }
 
     let state = try await persistence.setLinuxComputeConfiguration(
       configuration,

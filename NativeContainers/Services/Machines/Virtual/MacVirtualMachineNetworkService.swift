@@ -115,13 +115,16 @@ struct UnavailableLinuxVirtualMachineNetworkService:
 actor LinuxVirtualMachineNetworkService: LinuxVirtualMachineNetworkManaging {
   private let leasingStore: any LinuxVirtualMachineRuntimeLeasing
   private let persistence: any LinuxVirtualMachineNetworkConfigurationPersisting
+  private let savedStateService: any LinuxVirtualMachineSavedStateInspecting
 
   init(
     leasingStore: any LinuxVirtualMachineRuntimeLeasing,
-    persistence: any LinuxVirtualMachineNetworkConfigurationPersisting
+    persistence: any LinuxVirtualMachineNetworkConfigurationPersisting,
+    savedStateService: any LinuxVirtualMachineSavedStateInspecting
   ) {
     self.leasingStore = leasingStore
     self.persistence = persistence
+    self.savedStateService = savedStateService
   }
 
   func snapshot(id: UUID) async throws -> LinuxVirtualMachineNetworkSnapshot {
@@ -136,6 +139,11 @@ actor LinuxVirtualMachineNetworkService: LinuxVirtualMachineNetworkManaging {
   ) async throws -> LinuxVirtualMachineNetworkSnapshot {
     let lease = try await leasingStore.acquireLinuxRuntime(id: machineID)
     defer { lease.release() }
+
+    let savedState = try await savedStateService.inspect(for: lease)
+    guard savedState == .none else {
+      throw LinuxVirtualMachineNetworkError.savedStateBlocksChanges(machineID)
+    }
 
     return LinuxVirtualMachineNetworkSnapshot(
       configuration: try await persistence.setLinuxNetworkAttachment(

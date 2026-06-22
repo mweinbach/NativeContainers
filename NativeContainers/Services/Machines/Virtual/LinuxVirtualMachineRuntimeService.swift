@@ -3,9 +3,13 @@ import Foundation
 @MainActor
 final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManaging {
   private enum OperationKind: Equatable {
+    case inspect
+    case discard
     case start
+    case restore
     case pause
     case resume
+    case suspend
     case ejectInstallationMedia
     case forceStop
   }
@@ -13,7 +17,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
   private struct InFlightOperation {
     let token: UUID
     var target: LinuxVirtualMachineRuntimeTarget?
-    let kind: OperationKind
+    var kind: OperationKind
     var forceStopRequested = false
     var forceStopTask: Task<Void, any Error>?
     var forceStopCompleted = false
@@ -28,6 +32,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
   private let leasingStore: any LinuxVirtualMachineRuntimeLeasing
   private let installationStore: any LinuxVirtualMachineInstallationCompleting
   private let engine: any LinuxVirtualMachineRuntimeEngine
+  private let savedStateService: any LinuxVirtualMachineSavedStateManaging
   private let shutdownPolicy: VirtualMachineShutdownPolicy
   private let observations = LinuxVirtualMachineRuntimeObservations()
   private let shutdownFallbacks: VirtualMachineShutdownFallbackRegistry
@@ -38,6 +43,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     leasingStore: any LinuxVirtualMachineRuntimeLeasing,
     installationStore: any LinuxVirtualMachineInstallationCompleting,
     engine: any LinuxVirtualMachineRuntimeEngine,
+    savedStateService: any LinuxVirtualMachineSavedStateManaging,
     shutdownPolicy: VirtualMachineShutdownPolicy = .standard,
     shutdownScheduler: any VirtualMachineShutdownScheduling =
       ContinuousClockVirtualMachineShutdownScheduler()
@@ -45,6 +51,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     self.leasingStore = leasingStore
     self.installationStore = installationStore
     self.engine = engine
+    self.savedStateService = savedStateService
     self.shutdownPolicy = shutdownPolicy
     shutdownFallbacks = VirtualMachineShutdownFallbackRegistry(
       timeout: shutdownPolicy.gracefulStopTimeout,
@@ -71,106 +78,47 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     return record.session.console
   }
 
-  func start(id: UUID) async throws {
-    guard sessions[id] == nil else {
-      throw LinuxVirtualMachineRuntimeError.duplicateSession(id)
-    }
-    guard operations[id] == nil else {
-      throw LinuxVirtualMachineRuntimeError.operationInProgress(id)
-    }
-
+  func refreshSavedState(id: UUID) async {
+    guard sessions[id] == nil, operations[id] == nil else { return }
     let token = UUID()
     operations[id] = InFlightOperation(
       token: token,
       target: nil,
-      kind: .start
+      kind: .inspect
     )
-    publish(machineID: id, state: .starting)
-    var pendingLease: LinuxVirtualMachineRuntimeLease?
-
+    publish(machineID: id, state: .inspectingSavedState)
     do {
       let lease = try await leasingStore.acquireLinuxRuntime(id: id)
-      pendingLease = lease
-      guard isCurrentOperation(token, for: id), sessions[id] == nil else {
-        throw LinuxVirtualMachineRuntimeError.operationInProgress(id)
-      }
-
-      let session = try engine.makeSession(
-        for: lease.machine,
-        target: lease.target
-      )
-      session.eventHandler = { [weak self] event in
-        self?.receive(event, from: lease.target)
-      }
-      sessions[id] = SessionRecord(lease: lease, session: session)
-      pendingLease = nil
-
-      var operation = try requireOperation(token: token, machineID: id)
-      operation.target = lease.target
-      operations[id] = operation
-      publish(
-        machineID: id,
-        target: lease.target,
-        state: .starting,
-        hasInstallationMedia: session.hasInstallationMedia
-      )
-
-      try await session.start()
-      guard isCurrent(lease.target), isCurrentOperation(token, for: id) else {
-        return
-      }
-      if try await finishIfForceStopWasQueued(
-        record: sessions[id]!,
-        target: lease.target,
-        token: token
-      ) {
-        return
-      }
-      if finishDeferredTerminalEvent(target: lease.target, token: token) {
+      defer { lease.release() }
+      let status = try await savedStateService.inspect(for: lease)
+      guard sessions[id] == nil, isCurrentOperation(token, for: id) else {
         return
       }
       operations[id] = nil
       publish(
         machineID: id,
-        target: lease.target,
-        state: .running,
-        hasInstallationMedia: session.hasInstallationMedia
+        state: .stopped,
+        savedStateStatus: status
       )
     } catch {
-      let operationError = error
-      pendingLease?.release()
-      guard isCurrentOperation(token, for: id) else {
-        throw operationError
+      guard sessions[id] == nil, isCurrentOperation(token, for: id) else {
+        return
       }
-      if let record = sessions[id], let target = operations[id]?.target {
-        let forceStopped: Bool
-        do {
-          forceStopped = try await finishIfForceStopWasQueued(
-            record: record,
-            target: target,
-            token: token
-          )
-        } catch {
-          finishFailedLaunch(target: target, token: token, error: error)
-          throw error
-        }
-        if !forceStopped {
-          finishFailedLaunch(
-            target: target,
-            token: token,
-            error: operationError
-          )
-        }
-      } else {
-        operations[id] = nil
-        publish(
-          machineID: id,
-          state: idleState(after: operationError),
-          errorMessage: operationError.localizedDescription
-        )
-      }
-      throw operationError
+      operations[id] = nil
+      publish(
+        machineID: id,
+        state: idleState(after: error),
+        errorMessage: error.localizedDescription
+      )
     }
+  }
+
+  func start(id: UUID) async throws {
+    try await launch(id: id, discardingCheckpoint: false)
+  }
+
+  func startFresh(id: UUID) async throws {
+    try await launch(id: id, discardingCheckpoint: true)
   }
 
   func pause(target: LinuxVirtualMachineRuntimeTarget) async throws {
@@ -219,6 +167,14 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
       kind: .resume
     )
     do {
+      try await savedStateService.discardCheckpoint(for: record.lease)
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: .resuming,
+        savedStateStatus: LinuxVirtualMachineSavedStateStatus.none,
+        hasInstallationMedia: record.session.hasInstallationMedia
+      )
       try await record.session.resume()
       guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
         return
@@ -246,6 +202,113 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         state: .paused,
         operationError: error
       )
+    }
+  }
+
+  func suspend(target: LinuxVirtualMachineRuntimeTarget) async throws {
+    let record = try currentRecord(for: target)
+    let current = snapshot(for: target.machineID)
+    guard current.state == .running || current.state == .paused,
+      record.session.saveRestoreSupport.isSupported
+    else {
+      throw LinuxVirtualMachineRuntimeError.invalidState(
+        target.machineID,
+        current.state
+      )
+    }
+    guard operations[target.machineID] == nil else {
+      throw LinuxVirtualMachineRuntimeError.operationInProgress(
+        target.machineID
+      )
+    }
+
+    let token = UUID()
+    operations[target.machineID] = InFlightOperation(
+      token: token,
+      target: target,
+      kind: .suspend
+    )
+    publish(
+      machineID: target.machineID,
+      target: target,
+      state: .saving,
+      hasInstallationMedia: current.hasInstallationMedia
+    )
+
+    var isPaused = current.state == .paused
+    do {
+      if current.state == .running {
+        try await record.session.pause()
+        isPaused = true
+      }
+      let summary = try await savedStateService.saveCheckpoint(
+        session: record.session,
+        lease: record.lease
+      )
+      guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
+        return
+      }
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: .stopping,
+        savedStateStatus: .available(summary),
+        hasInstallationMedia: current.hasInstallationMedia,
+        isForceStopQueued:
+          operations[target.machineID]?.forceStopRequested == true
+      )
+      if finishDeferredTerminalEvent(target: target, token: token) { return }
+      if try await finishIfForceStopWasQueued(
+        record: record,
+        target: target,
+        token: token
+      ) {
+        return
+      }
+      try await record.session.forceStop()
+      guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
+        return
+      }
+      finishSession(
+        target,
+        savedStateStatus: .available(summary)
+      )
+    } catch {
+      let operationError = error
+      guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
+        throw operationError
+      }
+      if finishDeferredTerminalEvent(target: target, token: token) {
+        throw operationError
+      }
+      let forceStopped: Bool
+      do {
+        forceStopped = try await finishIfForceStopWasQueued(
+          record: record,
+          target: target,
+          token: token
+        )
+      } catch {
+        operations[target.machineID] = nil
+        publish(
+          machineID: target.machineID,
+          target: target,
+          state: isPaused ? .paused : current.state,
+          hasInstallationMedia: current.hasInstallationMedia,
+          errorMessage: error.localizedDescription
+        )
+        throw error
+      }
+      if forceStopped { throw operationError }
+      operations[target.machineID] = nil
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: isPaused ? .paused : current.state,
+        hasInstallationMedia: current.hasInstallationMedia,
+        errorMessage: operationError.localizedDescription
+      )
+      throw operationError
     }
   }
 
@@ -302,6 +365,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         machineID: target.machineID,
         target: target,
         state: current.state,
+        saveRestoreSupport: record.session.saveRestoreSupport,
         hasInstallationMedia: false
       )
       return manifest
@@ -443,6 +507,293 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         state: current.state,
         hasInstallationMedia: current.hasInstallationMedia,
         error: error
+      )
+      throw error
+    }
+  }
+
+  func discardSavedState(id: UUID) async throws {
+    guard sessions[id] == nil, operations[id] == nil else {
+      throw LinuxVirtualMachineRuntimeError.operationInProgress(id)
+    }
+    let token = UUID()
+    operations[id] = InFlightOperation(
+      token: token,
+      target: nil,
+      kind: .discard
+    )
+    publish(machineID: id, state: .discardingSavedState)
+    do {
+      let lease = try await leasingStore.acquireLinuxRuntime(id: id)
+      defer { lease.release() }
+      try await savedStateService.discardCheckpoint(for: lease)
+      guard sessions[id] == nil, isCurrentOperation(token, for: id) else {
+        return
+      }
+      operations[id] = nil
+      publish(
+        machineID: id,
+        state: .stopped,
+        savedStateStatus: LinuxVirtualMachineSavedStateStatus.none
+      )
+    } catch {
+      guard sessions[id] == nil, isCurrentOperation(token, for: id) else {
+        throw error
+      }
+      operations[id] = nil
+      publish(
+        machineID: id,
+        state: .stopped,
+        errorMessage: error.localizedDescription
+      )
+      throw error
+    }
+  }
+
+  private func launch(
+    id: UUID,
+    discardingCheckpoint: Bool
+  ) async throws {
+    guard sessions[id] == nil else {
+      throw LinuxVirtualMachineRuntimeError.duplicateSession(id)
+    }
+    guard operations[id] == nil else {
+      throw LinuxVirtualMachineRuntimeError.operationInProgress(id)
+    }
+
+    let token = UUID()
+    operations[id] = InFlightOperation(
+      token: token,
+      target: nil,
+      kind: .start
+    )
+    publish(machineID: id, state: .starting)
+    var pendingLease: LinuxVirtualMachineRuntimeLease?
+
+    do {
+      let lease = try await leasingStore.acquireLinuxRuntime(id: id)
+      pendingLease = lease
+      guard isCurrentOperation(token, for: id), sessions[id] == nil else {
+        throw LinuxVirtualMachineRuntimeError.operationInProgress(id)
+      }
+
+      if discardingCheckpoint {
+        try await savedStateService.discardCheckpoint(for: lease)
+      }
+      let savedStateStatus = try await savedStateService.inspect(for: lease)
+      if case .incompatible(let reason) = savedStateStatus {
+        throw LinuxVirtualMachineSavedStateError.incompatible(id, reason)
+      }
+
+      let session = try engine.makeSession(
+        for: lease.machine,
+        target: lease.target
+      )
+      if case .available = savedStateStatus,
+        case .unsupported(let reason) = session.saveRestoreSupport
+      {
+        session.close()
+        throw LinuxVirtualMachineSavedStateError.incompatible(id, reason)
+      }
+
+      session.eventHandler = { [weak self] event in
+        self?.receive(event, from: lease.target)
+      }
+      sessions[id] = SessionRecord(lease: lease, session: session)
+      pendingLease = nil
+
+      var operation = try requireOperation(token: token, machineID: id)
+      operation.target = lease.target
+      operation.kind = savedStateStatus.summary == nil ? .start : .restore
+      operations[id] = operation
+      publish(
+        machineID: id,
+        target: lease.target,
+        state: savedStateStatus.summary == nil ? .starting : .restoring,
+        savedStateStatus: savedStateStatus,
+        saveRestoreSupport: session.saveRestoreSupport,
+        hasInstallationMedia: session.hasInstallationMedia
+      )
+
+      if savedStateStatus.summary != nil {
+        try await restoreAndResume(
+          record: sessions[id]!,
+          token: token
+        )
+      } else {
+        try await startCold(
+          record: sessions[id]!,
+          token: token
+        )
+      }
+    } catch {
+      pendingLease?.release()
+      if sessions[id] == nil, isCurrentOperation(token, for: id) {
+        operations[id] = nil
+        let status: LinuxVirtualMachineSavedStateStatus?
+        if case LinuxVirtualMachineSavedStateError.incompatible(_, let reason) = error {
+          status = .incompatible(reason)
+        } else {
+          status = nil
+        }
+        publish(
+          machineID: id,
+          state: idleState(after: error),
+          savedStateStatus: status,
+          errorMessage: error.localizedDescription
+        )
+      }
+      throw error
+    }
+  }
+
+  private func startCold(
+    record: SessionRecord,
+    token: UUID
+  ) async throws {
+    let target = record.lease.target
+    do {
+      try await record.session.start()
+      guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
+        return
+      }
+      if try await finishIfForceStopWasQueued(
+        record: record,
+        target: target,
+        token: token
+      ) {
+        return
+      }
+      if finishDeferredTerminalEvent(target: target, token: token) { return }
+      operations[target.machineID] = nil
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: .running,
+        savedStateStatus: LinuxVirtualMachineSavedStateStatus.none,
+        saveRestoreSupport: record.session.saveRestoreSupport,
+        hasInstallationMedia: record.session.hasInstallationMedia
+      )
+    } catch {
+      let operationError = error
+      let forceStopped: Bool
+      do {
+        forceStopped = try await finishIfForceStopWasQueued(
+          record: record,
+          target: target,
+          token: token
+        )
+      } catch {
+        finishFailedLaunch(target: target, token: token, error: error)
+        throw error
+      }
+      if !forceStopped {
+        finishFailedLaunch(
+          target: target,
+          token: token,
+          error: operationError
+        )
+      }
+      throw operationError
+    }
+  }
+
+  private func restoreAndResume(
+    record: SessionRecord,
+    token: UUID
+  ) async throws {
+    let target = record.lease.target
+    do {
+      _ = try await savedStateService.restoreCheckpoint(
+        session: record.session,
+        lease: record.lease
+      )
+      guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
+        return
+      }
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: .resuming,
+        savedStateStatus: LinuxVirtualMachineSavedStateStatus.none,
+        hasInstallationMedia: record.session.hasInstallationMedia
+      )
+      if finishDeferredTerminalEvent(target: target, token: token) { return }
+      if try await finishIfForceStopWasQueued(
+        record: record,
+        target: target,
+        token: token
+      ) {
+        return
+      }
+      try await record.session.resume()
+      guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
+        return
+      }
+      if try await finishIfForceStopWasQueued(
+        record: record,
+        target: target,
+        token: token
+      ) {
+        return
+      }
+      if finishDeferredTerminalEvent(target: target, token: token) { return }
+      operations[target.machineID] = nil
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: .running,
+        savedStateStatus: LinuxVirtualMachineSavedStateStatus.none,
+        hasInstallationMedia: record.session.hasInstallationMedia
+      )
+    } catch {
+      guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
+        throw error
+      }
+      if snapshot(for: target.machineID).savedStateStatus == .none {
+        let operationError = error
+        let forceStopped: Bool
+        do {
+          forceStopped = try await finishIfForceStopWasQueued(
+            record: record,
+            target: target,
+            token: token
+          )
+        } catch {
+          operations[target.machineID] = nil
+          publish(
+            machineID: target.machineID,
+            target: target,
+            state: .paused,
+            savedStateStatus: LinuxVirtualMachineSavedStateStatus.none,
+            hasInstallationMedia: record.session.hasInstallationMedia,
+            errorMessage: error.localizedDescription
+          )
+          throw error
+        }
+        if !forceStopped {
+          operations[target.machineID] = nil
+          publish(
+            machineID: target.machineID,
+            target: target,
+            state: .paused,
+            savedStateStatus: LinuxVirtualMachineSavedStateStatus.none,
+            hasInstallationMedia: record.session.hasInstallationMedia,
+            errorMessage: operationError.localizedDescription
+          )
+        }
+        throw operationError
+      }
+
+      let status =
+        (try? await savedStateService.inspect(for: record.lease)) ?? .unknown
+      if finishDeferredTerminalEvent(target: target, token: token) {
+        throw error
+      }
+      finishSession(
+        target,
+        savedStateStatus: status,
+        errorMessage: error.localizedDescription
       )
       throw error
     }
@@ -711,6 +1062,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
 
   private func finishSession(
     _ target: LinuxVirtualMachineRuntimeTarget,
+    savedStateStatus: LinuxVirtualMachineSavedStateStatus? = nil,
     errorMessage: String? = nil
   ) {
     guard let record = sessions[target.machineID], record.lease.target == target else {
@@ -726,6 +1078,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     publish(
       machineID: target.machineID,
       state: .stopped,
+      savedStateStatus: savedStateStatus,
       hasInstallationMedia: snapshot(
         for: target.machineID
       ).hasInstallationMedia,
@@ -755,6 +1108,8 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     machineID: UUID,
     target: LinuxVirtualMachineRuntimeTarget? = nil,
     state: LinuxVirtualMachineRuntimeState,
+    savedStateStatus: LinuxVirtualMachineSavedStateStatus? = nil,
+    saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport? = nil,
     hasInstallationMedia: Bool? = nil,
     isForceStopQueued: Bool = false,
     isForceStopCompleteAwaitingCleanup: Bool = false,
@@ -764,6 +1119,8 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
       machineID: machineID,
       target: target,
       state: state,
+      savedStateStatus: savedStateStatus,
+      saveRestoreSupport: saveRestoreSupport,
       hasInstallationMedia: hasInstallationMedia,
       isForceStopQueued: isForceStopQueued,
       isForceStopCompleteAwaitingCleanup:

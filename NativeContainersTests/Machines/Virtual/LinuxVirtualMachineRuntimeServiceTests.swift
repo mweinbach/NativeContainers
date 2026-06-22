@@ -37,6 +37,60 @@ struct LinuxVirtualMachineRuntimeServiceTests {
   }
 
   @Test
+  func suspendSavesStopsAndNextStartRestoresTheLinuxSession() async throws {
+    let fixture = try LinuxRuntimeServiceFixture()
+    try await fixture.service.start(id: fixture.machineID)
+    let firstTarget = try #require(
+      fixture.service.snapshot(for: fixture.machineID).target
+    )
+
+    try await fixture.service.suspend(target: firstTarget)
+
+    var snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.state == .stopped)
+    #expect(snapshot.target == nil)
+    #expect(snapshot.savedStateStatus.summary != nil)
+    #expect(fixture.savedState.saveCount == 1)
+    #expect(fixture.engine.sessions[0].pauseCount == 1)
+    #expect(fixture.engine.sessions[0].saveCount == 1)
+    #expect(fixture.engine.sessions[0].forceStopCount == 1)
+    #expect(fixture.releaseRecorder.count == 1)
+
+    try await fixture.service.start(id: fixture.machineID)
+
+    snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.state == .running)
+    #expect(snapshot.savedStateStatus == .none)
+    #expect(fixture.savedState.restoreCount == 1)
+    #expect(fixture.engine.sessions[1].restoreCount == 1)
+    #expect(fixture.engine.sessions[1].resumeCount == 1)
+    #expect(fixture.engine.sessions[1].didStart == false)
+  }
+
+  @Test
+  func incompatibleLinuxSavedStateRequiresExplicitStartFresh() async throws {
+    let fixture = try LinuxRuntimeServiceFixture()
+    fixture.savedState.status = .incompatible("configuration changed")
+
+    await #expect(throws: LinuxVirtualMachineSavedStateError.self) {
+      try await fixture.service.start(id: fixture.machineID)
+    }
+    var snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(!snapshot.canStart)
+    #expect(snapshot.canStartFresh)
+    #expect(snapshot.savedStateStatus == .incompatible("configuration changed"))
+
+    try await fixture.service.startFresh(id: fixture.machineID)
+
+    snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(snapshot.state == .running)
+    #expect(snapshot.savedStateStatus == .none)
+    #expect(fixture.savedState.discardCount == 1)
+    #expect(fixture.engine.sessions.count == 1)
+    #expect(fixture.engine.sessions[0].didStart)
+  }
+
+  @Test
   func gracefulStopTimeoutAutomaticallyForceStopsHungGuest() async throws {
     let fixture = try LinuxRuntimeServiceFixture()
     try await fixture.service.start(id: fixture.machineID)
@@ -112,6 +166,11 @@ struct LinuxVirtualMachineRuntimeServiceTests {
     #expect(snapshot.state == .running)
     #expect(!snapshot.hasInstallationMedia)
     #expect(!snapshot.canEjectInstallationMedia)
+    #expect(!snapshot.canSuspend)
+    #expect(
+      snapshot.saveRestoreSupport
+        == .unsupported("Restart after installation")
+    )
     #expect(fixture.engine.sessions[0].ejectCount == 1)
     #expect(await fixture.store.completionCount == 1)
   }
@@ -209,6 +268,7 @@ private struct LinuxRuntimeServiceFixture {
   let releaseRecorder = LinuxRuntimeServiceReleaseRecorder()
   let store: LinuxRuntimeServiceStore
   let engine: LinuxRuntimeServiceEngine
+  let savedState: LinuxRuntimeServiceSavedStateService
   let shutdownScheduler: LinuxRuntimeServiceShutdownScheduler
   let service: LinuxVirtualMachineRuntimeService
 
@@ -224,11 +284,13 @@ private struct LinuxRuntimeServiceFixture {
       releaseRecorder: releaseRecorder
     )
     engine = LinuxRuntimeServiceEngine(startWaits: startWaits)
+    savedState = LinuxRuntimeServiceSavedStateService()
     shutdownScheduler = LinuxRuntimeServiceShutdownScheduler()
     service = LinuxVirtualMachineRuntimeService(
       leasingStore: store,
       installationStore: store,
       engine: engine,
+      savedStateService: savedState,
       shutdownPolicy: VirtualMachineShutdownPolicy(
         gracefulStopTimeout: .seconds(1),
         forceStopCapabilityTimeout: forceStopCapabilityTimeout,
@@ -358,7 +420,9 @@ private final class LinuxRuntimeServiceEngine: LinuxVirtualMachineRuntimeEngine 
       guard let self else { return }
       let waiters = firstSessionStartWaiters
       firstSessionStartWaiters.removeAll()
-      waiters.forEach { $0.resume() }
+      for waiter in waiters {
+        waiter.resume()
+      }
     }
     sessions.append(session)
     return session
@@ -378,6 +442,8 @@ private final class LinuxRuntimeServiceSession:
 {
   let target: LinuxVirtualMachineRuntimeTarget
   let console: LinuxVirtualMachineConsole? = nil
+  private(set) var saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport =
+    .supported
   private(set) var hasInstallationMedia: Bool
   var canForceStop = true
   var eventHandler: LinuxVirtualMachineRuntimeEventHandler?
@@ -388,6 +454,8 @@ private final class LinuxRuntimeServiceSession:
   private(set) var forceStopCount = 0
   private(set) var ejectCount = 0
   private(set) var closeCount = 0
+  private(set) var saveCount = 0
+  private(set) var restoreCount = 0
 
   private let startWaits: Bool
   private let didBeginStart: () -> Void
@@ -415,6 +483,14 @@ private final class LinuxRuntimeServiceSession:
     }
   }
 
+  func saveState(to url: URL) async throws {
+    saveCount += 1
+  }
+
+  func restoreState(from url: URL) async throws {
+    restoreCount += 1
+  }
+
   func pause() async throws {
     pauseCount += 1
   }
@@ -439,6 +515,7 @@ private final class LinuxRuntimeServiceSession:
     }
     ejectCount += 1
     hasInstallationMedia = false
+    saveRestoreSupport = .unsupported("Restart after installation")
   }
 
   func close() {
@@ -452,6 +529,61 @@ private final class LinuxRuntimeServiceSession:
 
   func emit(_ event: LinuxVirtualMachineRuntimeEvent) {
     eventHandler?(event)
+  }
+}
+
+@MainActor
+private final class LinuxRuntimeServiceSavedStateService:
+  LinuxVirtualMachineSavedStateManaging
+{
+  var status: LinuxVirtualMachineSavedStateStatus = .none
+  private(set) var saveCount = 0
+  private(set) var restoreCount = 0
+  private(set) var discardCount = 0
+
+  func inspect(
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateStatus {
+    status
+  }
+
+  func saveCheckpoint(
+    session: any LinuxVirtualMachineRuntimeEngineSession,
+    lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateSummary {
+    saveCount += 1
+    try await session.saveState(to: URL(filePath: "/tmp/linux-runtime.vzvmsave"))
+    let summary = LinuxVirtualMachineSavedStateSummary(
+      createdAt: Date(timeIntervalSince1970: 1_000),
+      stateSizeBytes: 4_096
+    )
+    status = .available(summary)
+    return summary
+  }
+
+  func restoreCheckpoint(
+    session: any LinuxVirtualMachineRuntimeEngineSession,
+    lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateSummary {
+    restoreCount += 1
+    let summary =
+      status.summary
+      ?? LinuxVirtualMachineSavedStateSummary(
+        createdAt: Date(timeIntervalSince1970: 1_000),
+        stateSizeBytes: 4_096
+      )
+    try await session.restoreState(
+      from: URL(filePath: "/tmp/linux-runtime.vzvmsave")
+    )
+    status = .none
+    return summary
+  }
+
+  func discardCheckpoint(
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws {
+    discardCount += 1
+    status = .none
   }
 }
 

@@ -2,39 +2,39 @@ import CryptoKit
 import Darwin
 import Foundation
 
-protocol MacVirtualMachineConfigurationFingerprinting: Sendable {
-  func fingerprint(for machine: ResolvedMacVirtualMachine) throws -> String
+protocol LinuxVirtualMachineConfigurationFingerprinting: Sendable {
+  func fingerprint(for machine: ResolvedLinuxVirtualMachine) throws -> String
 }
 
-protocol MacVirtualMachineSavedStateStoring: Sendable {
+protocol LinuxVirtualMachineSavedStateStoring: Sendable {
   func inspect(
-    for lease: MacVirtualMachineRuntimeLease
-  ) async throws -> MacVirtualMachineSavedStateStatus
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateStatus
   func beginSave(
-    for lease: MacVirtualMachineRuntimeLease
-  ) async throws -> MacVirtualMachineSavedStateTransaction
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateTransaction
   func commitSave(
-    _ transaction: MacVirtualMachineSavedStateTransaction,
-    for lease: MacVirtualMachineRuntimeLease
-  ) async throws -> MacVirtualMachineSavedStateSummary
+    _ transaction: LinuxVirtualMachineSavedStateTransaction,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateSummary
   func abortSave(
-    _ transaction: MacVirtualMachineSavedStateTransaction,
-    for lease: MacVirtualMachineRuntimeLease
+    _ transaction: LinuxVirtualMachineSavedStateTransaction,
+    for lease: LinuxVirtualMachineRuntimeLease
   ) async
   func beginRestore(
-    for lease: MacVirtualMachineRuntimeLease
-  ) async throws -> MacVirtualMachineSavedStateRestoreTransaction
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateRestoreTransaction
   func finishRestore(
-    _ transaction: MacVirtualMachineSavedStateRestoreTransaction,
-    for lease: MacVirtualMachineRuntimeLease
+    _ transaction: LinuxVirtualMachineSavedStateRestoreTransaction,
+    for lease: LinuxVirtualMachineRuntimeLease
   ) async throws
-  func discard(for lease: MacVirtualMachineRuntimeLease) async throws
+  func discard(for lease: LinuxVirtualMachineRuntimeLease) async throws
 }
 
-struct MacVirtualMachineConfigurationFingerprinter:
-  MacVirtualMachineConfigurationFingerprinting
+struct LinuxVirtualMachineConfigurationFingerprinter:
+  LinuxVirtualMachineConfigurationFingerprinting
 {
-  private static let runtimeConfigurationVersion = 2
+  private static let runtimeConfigurationVersion = 1
 
   private struct FileIdentity: Codable {
     let device: UInt64
@@ -46,34 +46,34 @@ struct MacVirtualMachineConfigurationFingerprinter:
 
   private struct Payload: Codable {
     let runtimeConfigurationVersion: Int
-    let descriptor: MacVirtualMachineConfigurationDescriptor
-    let hardwareModelSHA256: String
+    let descriptor: LinuxVirtualMachineConfigurationDescriptor
     let machineIdentifierSHA256: String
     let diskIdentity: FileIdentity
-    let diskSnapshotLayerIdentities: [FileIdentity]
-    let auxiliaryStorageIdentity: FileIdentity
+    let efiVariableStoreIdentity: FileIdentity
+    let installationMediaIdentity: FileIdentity?
   }
 
-  private let descriptorService: any MacVirtualMachineConfigurationDescribing
+  private let descriptorService: any LinuxVirtualMachineConfigurationDescribing
 
   init(
-    descriptorService: any MacVirtualMachineConfigurationDescribing =
-      MacVirtualMachineConfigurationDescriptorService()
+    descriptorService: any LinuxVirtualMachineConfigurationDescribing =
+      LinuxVirtualMachineConfigurationDescriptorService()
   ) {
     self.descriptorService = descriptorService
   }
 
-  func fingerprint(for machine: ResolvedMacVirtualMachine) throws -> String {
+  func fingerprint(for machine: ResolvedLinuxVirtualMachine) throws -> String {
     let payload = Payload(
       runtimeConfigurationVersion: Self.runtimeConfigurationVersion,
       descriptor: try descriptorService.descriptor(for: machine),
-      hardwareModelSHA256: try digest(of: machine.hardwareModelURL),
       machineIdentifierSHA256: try digest(of: machine.machineIdentifierURL),
       diskIdentity: try identity(of: machine.diskImageURL),
-      diskSnapshotLayerIdentities: try machine.diskSnapshotLayerURLs.map(
-        identity(of:)
+      efiVariableStoreIdentity: try identity(
+        of: machine.efiVariableStoreURL
       ),
-      auxiliaryStorageIdentity: try identity(of: machine.auxiliaryStorageURL)
+      installationMediaIdentity: try machine.installationMediaURL.map(
+        identity(of:)
+      )
     )
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -89,7 +89,7 @@ struct MacVirtualMachineConfigurationFingerprinter:
     guard Darwin.lstat(url.path(percentEncoded: false), &metadata) == 0,
       metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG)
     else {
-      throw MacVirtualMachineSavedStateError.invalidBundle(
+      throw LinuxVirtualMachineSavedStateError.invalidBundle(
         "the configuration artifact \(url.lastPathComponent) is missing or unsafe"
       )
     }
@@ -103,7 +103,9 @@ struct MacVirtualMachineConfigurationFingerprinter:
   }
 }
 
-struct MacVirtualMachineSavedStateStore: MacVirtualMachineSavedStateStoring {
+struct LinuxVirtualMachineSavedStateStore:
+  LinuxVirtualMachineSavedStateStoring
+{
   static let directoryName = VirtualMachineSavedStateStore.directoryName
   static let stateFilename = VirtualMachineSavedStateStore.stateFilename
   static let metadataFilename = VirtualMachineSavedStateStore.metadataFilename
@@ -113,11 +115,11 @@ struct MacVirtualMachineSavedStateStore: MacVirtualMachineSavedStateStoring {
   static let discardingSuffix = VirtualMachineSavedStateStore.discardingSuffix
 
   private let store: VirtualMachineSavedStateStore
-  private let fingerprinter: any MacVirtualMachineConfigurationFingerprinting
+  private let fingerprinter: any LinuxVirtualMachineConfigurationFingerprinting
 
   init(
-    fingerprinter: any MacVirtualMachineConfigurationFingerprinting =
-      MacVirtualMachineConfigurationFingerprinter(),
+    fingerprinter: any LinuxVirtualMachineConfigurationFingerprinting =
+      LinuxVirtualMachineConfigurationFingerprinter(),
     artifactInspector: any VirtualMachineStorageArtifactInspecting =
       FileVirtualMachineStorageArtifactInspector()
   ) {
@@ -128,63 +130,63 @@ struct MacVirtualMachineSavedStateStore: MacVirtualMachineSavedStateStoring {
   }
 
   func inspect(
-    for lease: MacVirtualMachineRuntimeLease
-  ) async throws -> MacVirtualMachineSavedStateStatus {
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateStatus {
     try await store.inspect(for: context(for: lease))
   }
 
   func beginSave(
-    for lease: MacVirtualMachineRuntimeLease
-  ) async throws -> MacVirtualMachineSavedStateTransaction {
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateTransaction {
     try await store.beginSave(for: context(for: lease))
   }
 
   func commitSave(
-    _ transaction: MacVirtualMachineSavedStateTransaction,
-    for lease: MacVirtualMachineRuntimeLease
-  ) async throws -> MacVirtualMachineSavedStateSummary {
+    _ transaction: LinuxVirtualMachineSavedStateTransaction,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateSummary {
     try await store.commitSave(transaction, for: context(for: lease))
   }
 
   func abortSave(
-    _ transaction: MacVirtualMachineSavedStateTransaction,
-    for lease: MacVirtualMachineRuntimeLease
+    _ transaction: LinuxVirtualMachineSavedStateTransaction,
+    for lease: LinuxVirtualMachineRuntimeLease
   ) async {
     await store.abortSave(transaction, for: context(for: lease))
   }
 
   func beginRestore(
-    for lease: MacVirtualMachineRuntimeLease
-  ) async throws -> MacVirtualMachineSavedStateRestoreTransaction {
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) async throws -> LinuxVirtualMachineSavedStateRestoreTransaction {
     try await store.beginRestore(for: context(for: lease))
   }
 
   func finishRestore(
-    _ transaction: MacVirtualMachineSavedStateRestoreTransaction,
-    for lease: MacVirtualMachineRuntimeLease
+    _ transaction: LinuxVirtualMachineSavedStateRestoreTransaction,
+    for lease: LinuxVirtualMachineRuntimeLease
   ) async throws {
     try await store.finishRestore(transaction, for: context(for: lease))
   }
 
-  func discard(for lease: MacVirtualMachineRuntimeLease) async throws {
+  func discard(for lease: LinuxVirtualMachineRuntimeLease) async throws {
     try await store.discard(for: context(for: lease))
   }
 
   func prepareSavedStateReclamation(
-    for lease: MacVirtualMachineRuntimeLease
+    for lease: LinuxVirtualMachineRuntimeLease
   ) async throws -> VirtualMachineSavedStateReclamationCandidate? {
     try await store.prepareSavedStateReclamation(for: context(for: lease))
   }
 
   func reclaimSavedState(
     _ candidate: VirtualMachineSavedStateReclamationCandidate,
-    for lease: MacVirtualMachineRuntimeLease
+    for lease: LinuxVirtualMachineRuntimeLease
   ) async throws -> Bool {
     try await store.reclaimSavedState(candidate, for: context(for: lease))
   }
 
   private func context(
-    for lease: MacVirtualMachineRuntimeLease
+    for lease: LinuxVirtualMachineRuntimeLease
   ) -> VirtualMachineSavedStateContext {
     let fingerprinter = fingerprinter
     let machine = lease.machine

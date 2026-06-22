@@ -19,7 +19,19 @@ enum VirtualMachineRuntimeEvent: Equatable, Sendable {
   }
 }
 
+enum VirtualMachineSaveRestoreSupport: Equatable, Sendable {
+  case unknown
+  case supported
+  case unsupported(String)
+
+  var isSupported: Bool {
+    self == .supported
+  }
+}
+
 typealias MacVirtualMachineRuntimeTarget = VirtualMachineRuntimeTarget
 typealias LinuxVirtualMachineRuntimeTarget = VirtualMachineRuntimeTarget
 typealias MacVirtualMachineRuntimeEvent = VirtualMachineRuntimeEvent
 typealias LinuxVirtualMachineRuntimeEvent = VirtualMachineRuntimeEvent
+typealias MacVirtualMachineSaveRestoreSupport = VirtualMachineSaveRestoreSupport
+typealias LinuxVirtualMachineSaveRestoreSupport = VirtualMachineSaveRestoreSupport
