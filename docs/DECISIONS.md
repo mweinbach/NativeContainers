@@ -2489,3 +2489,35 @@ The `VZVirtualMachineView` dismantle path detaches its adaptor, while stop,
 Force Stop, suspend, and saved-state transitions continue through the exact
 generation-pinned runtime service. This preserves long-running guest ownership
 across window closure without maintaining a second console or lifecycle model.
+
+## ADR-087: Export stopped container filesystems through private identity-pinned staging
+
+**Status:** Accepted — 2026-06-22
+
+Apple container 1.0.0 exposes a public root-filesystem export, so
+NativeContainers uses that client directly instead of spawning the CLI or
+copying files out one path at a time. The upstream request is ID-only and the
+server accepts only a stopped container. A domain request therefore freezes the
+container ID plus creation timestamp, and the service requires that exact
+identity to remain stopped immediately before and after Apple's export. A drift
+or unavailable record discards the private result and publishes nothing. This
+narrows the external replacement race without claiming atomicity that Apple's
+route does not provide.
+
+Apple never receives the user's destination. It writes to one UUID-named,
+mode-0700 operation directory under an owner-controlled app staging root while
+NativeContainers holds an advisory lock. Once the XPC request is accepted, its
+detached operation is allowed to settle even if the caller cancels; only then
+does cancellation remove staging. The next export removes recognized unlocked
+residue but preserves every locked operation, covering both ordinary
+cancellation and hard-process-exit recovery.
+
+Publication is create-new-only. The service holds and revalidates the selected
+parent directory descriptor, rejects any existing final entry or symlink,
+validates the staged tar as a nonempty owner-owned single-link regular file,
+copies it into an exclusive hidden sibling while computing SHA-256, flushes it,
+and commits with `RENAME_EXCL` plus parent `fsync`. It reports a retained partial
+completion if only the final directory flush fails. The resulting restricted-
+PAX tar contains the EXT4 root filesystem only; external volumes, bind mounts,
+runtime/VM state, replacement, and an unsupported import path remain explicit
+non-features.

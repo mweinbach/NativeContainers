@@ -90,6 +90,27 @@ This keeps UI tests fast and isolates package source changes.
 The installed Apple services remain the authority for runtime state. The app
 does not create a second database of containers, images, networks, or volumes.
 
+Stopped-container filesystem export crosses a dedicated
+`ContainerFilesystemExporting` facet backed by the pinned public
+`ContainerClient.export(id:archive:)` route. A request freezes the container ID
+and creation timestamp, requires the current record to be stopped both before
+and after Apple's ID-only export, and publishes nothing when that identity or
+state drifts. Apple writes into a mode-0700, advisory-locked private staging
+directory; caller cancellation is observed only after an accepted XPC export
+settles so the server can never continue writing into a directory the app has
+removed. Recognized unlocked residue is recovered on the next operation, while
+an active cross-process lock is preserved.
+
+The user destination never enters Apple's service. NativeContainers pins an
+owner-controlled parent directory descriptor, requires the final `.tar` path to
+be absent, validates the staged result as an owner-owned nonempty single-link
+regular file, copies and hashes it into an exclusive hidden sibling, flushes
+the file, and commits with `RENAME_EXCL` followed by a parent `fsync`. Parent or
+destination drift fails closed and existing entries, including symbolic links,
+are never replaced. The artifact is only the container's EXT4 root filesystem;
+named volumes, bind mounts, process/runtime state, and the per-container VM are
+outside this API and are not implied by the archive.
+
 Image inventory remains cheap: the global refresh reads reference, digest,
 media type, and index-descriptor size only. Selecting an image resolves its OCI
 index, manifests, and configs lazily. Mutations cross a narrower `ImageManaging`

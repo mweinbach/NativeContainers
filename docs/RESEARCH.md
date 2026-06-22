@@ -33,6 +33,24 @@ Verified architecture:
   builds Dockerfiles/Containerfiles through BuildKit, supports volumes,
   networks, statistics, logs, copy, exec, registries, and persistent
   `container machine` Linux environments.
+- The pinned public `ContainerClient.export(id:archive:)` sends only a container
+  ID and destination path over the `containerExport` XPC route. The server
+  rejects every state except `stopped`, opens that container bundle's rootfs
+  block image, and asks `EXT4Reader` to emit an uncompressed restricted-PAX tar
+  with Schily extended attributes. This is a root-filesystem export, not a
+  container/VM snapshot: named volumes, bind mounts, process state, and the
+  backing micro-VM are not part of the archive. Sources:
+  [client route](https://github.com/apple/container/blob/1.0.0/Sources/Services/ContainerAPIService/Client/ContainerClient.swift),
+  [server implementation](https://github.com/apple/container/blob/1.0.0/Sources/Services/ContainerAPIService/Server/Containers/ContainersService.swift),
+  and [EXT4 archive writer](https://github.com/apple/containerization/blob/0.33.3/Sources/ContainerizationEXT4/EXT4Reader%2BExport.swift).
+- The route has no creation-identity or conditional token and writes to a
+  caller-supplied path. The app therefore brackets it with exact ID/creation
+  and stopped-state reads, stages only under its private owner-controlled root,
+  and publishes separately to the reviewed user path. Those checks detect
+  replacement before or during the operation but cannot make Apple's ID-only
+  read atomic against an unrelated external client. The pinned client exposes
+  no inverse rootfs-import route, so NativeContainers does not advertise
+  archive restore.
 - Release 1.0.0 publishes Swift library products including
   `ContainerAPIClient`, `ContainerResource`, `MachineAPIClient`, and related
   service clients. Those are preferable to scraping CLI table output.

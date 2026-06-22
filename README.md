@@ -33,7 +33,9 @@ Foundation work is underway. See:
 - [Current status](docs/STATUS.md)
 
 The current foundation includes native container lifecycle and inspection,
-exec/copy and interactive PTY workflows, safe OCI image management, reviewed
+exec/copy and interactive PTY workflows, stopped-container root-filesystem
+export through Apple's public client with identity-pinned, create-new-only tar
+publication, safe OCI image management, reviewed
 volume/network lifecycle, explicit HTTP/HTTPS opening for published TCP ports,
 reviewed named-volume and ordered-network attachments, private Unix-socket
 publishing, reviewed read-only/read-write host-folder sharing, native
@@ -108,7 +110,8 @@ while restoration resolves the current manifest and never serializes or starts
 a live Virtualization session.
 
 The app is composed from narrow injectable service facets. Inventory, container
-creation and lifecycle, inspection, command tools, terminal sessions, image
+creation and lifecycle, inspection, command tools, stopped-filesystem export,
+terminal sessions, image
 management, infrastructure, attachment resolution, private socket workspace,
 host-directory bookmark/manifest management, SSH-agent validation,
 host-access discovery, build-secret review/consumption, shared-builder

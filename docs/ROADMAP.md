@@ -28,6 +28,9 @@ must leave a usable, test-backed product slice.
 - [x] One-shot CPU, memory, disk, network, block-I/O, and process statistics.
 - [x] Two-second live statistics sampling and bounded in-memory history.
 - [x] Bounded non-interactive exec console and file copy in/out.
+- [x] Stopped-container root-filesystem tar export through Apple's public client,
+      with exact pre/post identity checks, cancellation-safe private staging,
+      create-new descriptor-pinned publication, and SHA-256 receipts.
 - [x] Interactive PTY terminal with resize, input, and signal forwarding.
 - [x] Image pull with byte/item progress.
 - [x] Reviewed platform/transport/concurrency selection for standalone pulls.

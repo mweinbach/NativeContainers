@@ -13,16 +13,19 @@ Updated: 2026-06-22.
   worker, both strictly signed by team `6UHAW5UAT4` with hardened runtime. The
   archive validator confirms that the app carries only microphone input and
   virtualization while the worker carries no app capability.
-- The current full app-hosted Xcode run contains 952 expanded outcomes: all 931
-  deterministic outcomes passed, with 21 destructive or external-service
+- The current full app-hosted Xcode run contains 1,141 expanded outcomes: all
+  1,112 deterministic outcomes passed, with 29 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
   tests. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
   PTY, image behavior, Compose lifecycle, and disposable local-registry paths;
   none run against public services by default.
-- The final app launched through Xcode as PID 60505, idled at 0.7% CPU, and
-  Xcode stopped that exact process. No NativeContainers or build-worker process
-  remained.
+- The final app launched through Xcode as PID 35888. LLDB confirmed its visible
+  main window was titled `Overview`, and Xcode stopped that exact process. Its
+  only error-level logs were the two existing Core Spotlight
+  `SetStoreUpdateService` donation failures. The timed-out Preview host's exact
+  residual PID was terminated through Xcode's debugger, the cleanup run was
+  stopped through Xcode, and no app or build-worker process remained.
 - A native menu-bar control plane shares the app-scoped `AppModel`, inventory,
   lifecycle services, routing, and error state instead of introducing a second
   poller. It reports runtime and machine counts, exposes bounded container
@@ -1784,6 +1787,46 @@ Updated: 2026-06-22.
   inferred. A disposable installed guest is still required to exercise the
   actual graphical display and input in the detached window.
 
+## Stopped container filesystem export checkpoint
+
+- Apple container 1.0.0's public client and pinned source confirm an ID-only
+  `ContainerClient.export(id:archive:)` route. The server requires a stopped
+  container and exports only its EXT4 rootfs as an uncompressed restricted-PAX
+  tar. NativeContainers now exposes that exact capability from the stopped
+  inspector rather than spawning the CLI or approximating it with recursive
+  copy. The review sheet states that named volumes, bind mounts, process state,
+  and VM state are excluded.
+- A request freezes ID plus creation timestamp. The service re-fetches that
+  exact identity and stopped state before and after Apple's route. Apple writes
+  only into one owner-controlled, mode-0700, advisory-locked private operation
+  directory; accepted XPC work settles before caller cancellation may remove
+  it. A later operation removes recognized unlocked residue and preserves
+  cross-process locked work.
+- User publication is independent of the Apple service. It pins and revalidates
+  the selected parent descriptor, rejects every existing file/directory/link,
+  validates the staged archive as owner-owned, regular, single-link, and
+  nonempty, then copies and SHA-256 hashes into an exclusive hidden sibling,
+  flushes it, and commits with `RENAME_EXCL` plus parent `fsync`. Destination,
+  parent, container identity, or state drift leaves the final path untouched.
+- Ten focused request/service tests cover successful bytes/digest/mode,
+  stopped and identity gates, post-export replacement, existing and raced
+  destinations, symlinks and unsafe parents, transport failure, accepted-work
+  cancellation, and lock-aware residue recovery; three observable-model tests
+  cover success, failure, and retained partial completion. The complete Xcode
+  plan reports 1,141 outcomes: 1,112 passed, 29 explicit live/destructive skips,
+  zero failed, and zero unrun. Build-for-testing and the normal
+  `NativeContainers` / `My Mac` build succeed; the latter completed in 3.227
+  seconds with an empty warning log. Changed Swift files pass strict
+  `swift-format`, and both repository contract validators pass.
+- The dedicated export preview compiled, but Xcode's renderer timed out waiting
+  for its app host inside the canvas's 30-second limit, so no rendered-image
+  claim is inferred. Its residual exact process was terminated through Xcode's
+  debugger. The actual app launched through Xcode as PID 35888 with a visible
+  `Overview` window and was stopped through Xcode; a cleanup run was likewise
+  stopped and no app or worker process remained. A disposable real
+  stopped-container export/readback remains behind the live integration gate;
+  deterministic tests do not substitute for that Apple-service smoke.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
@@ -1799,7 +1842,11 @@ disposable installed guest are available for that destructive integration pass.
 
 ## Next implementation slice
 
-1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
+1. Add and run a reversible live Apple-container export smoke: create a unique
+   stopped container with a marker, export it through the production service,
+   inspect the tar for that marker, verify no destination/staging residue on
+   failure, and delete the exact disposable resource.
+2. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
    change CPU/memory, grow the virtual disk, expand the guest partition and file
    system, and verify the next boot; create a named disk checkpoint, mutate
@@ -1810,14 +1857,14 @@ disposable installed guest are available for that destructive integration pass.
    reclamation, verify shared and host-only vmnet connectivity, clone and
    portable-round-trip it, and exercise both graceful and watchdog force-stop
    paths.
-2. Live-verify the implemented macOS installer, lifecycle service, force-stop
+3. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, CPU/memory reconfiguration, disk growth plus APFS
    container expansion, cooperative lower/full runtime memory targets,
    same-host save/restore, and fresh-identity clone boot against a local IPSW.
-3. Live-verify a second reviewed Up that grows a real pinned Socktainer project
+4. Live-verify a second reviewed Up that grows a real pinned Socktainer project
    from a contiguous replica prefix, including stable metadata and exact Apple
    attachment observations. Keep recreation blocked until the pinned bridge
    implements rename and network attachment routes.
-4. Provision a Developer ID Application identity, run Xcode's Developer ID
+5. Provision a Developer ID Application identity, run Xcode's Developer ID
    distribution and notarization flow, then pass the strict stapled-product
    validator before calling the app publicly distributable.
