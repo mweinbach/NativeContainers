@@ -146,6 +146,46 @@ struct TerminalWorkspaceModelTests {
     #expect(!model.supportsPresets)
   }
 
+  @Test
+  func podWorkspaceRoundTripsPinnedIdentityAndDropsPresetReferences() async throws {
+    let identity = KubernetesPodTerminalIdentity(
+      machine: LinuxMachineIdentity(
+        id: "nativecontainers-kubernetes",
+        imageReference: "docker.io/library/alpine:3.22",
+        platform: "linux/arm64",
+        createdAt: Date(timeIntervalSince1970: 42)
+      ),
+      podUID: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      podName: "api-abc",
+      containerName: "api"
+    )
+    let request = TerminalWindowRequest(target: .kubernetesPod(identity))
+    let encodedRequest = try JSONEncoder().encode(request)
+    let decodedRequest = try JSONDecoder().decode(
+      TerminalWindowRequest.self,
+      from: encodedRequest
+    )
+    #expect(decodedRequest == request)
+
+    let descriptor = TerminalTabDescriptor(presetID: UUID())
+    let snapshot = TerminalWorkspaceSnapshot(
+      workspaceID: request.id,
+      tabs: [descriptor],
+      selectedTabID: descriptor.id
+    )
+    let model = makeModel(
+      request: request,
+      store: EphemeralTerminalPresetStore(),
+      recorder: WorkspaceTerminalRecorder()
+    )
+
+    await model.restore(from: try TerminalWorkspaceSnapshotCodec().encode(snapshot))
+
+    #expect(model.tabs.first?.descriptor.presetID == nil)
+    #expect(!model.supportsPresets)
+  }
+
   private func makeWindowRequest() -> TerminalWindowRequest {
     TerminalWindowRequest(
       target: .container(

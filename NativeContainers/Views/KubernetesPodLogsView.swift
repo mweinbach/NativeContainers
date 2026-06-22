@@ -4,16 +4,20 @@ import UniformTypeIdentifiers
 
 struct KubernetesPodLogsView: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.openWindow) private var openWindow
   @State private var model: KubernetesPodLogsModel
   @State private var isExporting = false
   @State private var exportErrorMessage: String?
+  private let terminalMachine: LinuxMachineIdentity?
 
   init(clusterModel: KubernetesClusterModel, pod: KubernetesPodRecord) {
     _model = State(initialValue: clusterModel.makePodLogsModel(for: pod))
+    terminalMachine = clusterModel.snapshot.descriptor?.machine
   }
 
   init(model: KubernetesPodLogsModel) {
     _model = State(initialValue: model)
+    terminalMachine = nil
   }
 
   var body: some View {
@@ -89,6 +93,14 @@ struct KubernetesPodLogsView: View {
           }
         }
         ToolbarItemGroup(placement: .primaryAction) {
+          Button("Open Terminal", systemImage: "terminal") {
+            openPodTerminal()
+          }
+          .disabled(
+            terminalMachine == nil
+              || !model.containerNames.contains(model.selectedContainerName)
+          )
+
           Button("Export Logs", systemImage: "square.and.arrow.up") {
             isExporting = true
           }
@@ -121,6 +133,21 @@ struct KubernetesPodLogsView: View {
         exportErrorMessage = error.localizedDescription
       }
     }
+  }
+
+  private func openPodTerminal() {
+    guard let terminalMachine else { return }
+    let target = KubernetesPodTerminalIdentity(
+      machine: terminalMachine,
+      podUID: model.podUID,
+      namespace: model.namespace,
+      podName: model.podName,
+      containerName: model.selectedContainerName
+    )
+    openWindow(
+      id: "terminal-workspace",
+      value: TerminalWindowRequest(target: .kubernetesPod(target))
+    )
   }
 }
 

@@ -166,6 +166,12 @@ struct LiveAppleKubernetesSmokeTests {
       #expect(podLogs.text.contains("nativecontainers-k3s-live"))
       #expect(!podLogs.isTruncated)
 
+      try await exercisePodTerminal(
+        graph: graph,
+        machine: try #require(snapshot.descriptor?.machine),
+        pod: smokePod
+      )
+
       _ = try await graph.kubectl(
         kubeconfigURL: kubeconfigURL,
         arguments: [
@@ -218,10 +224,82 @@ struct LiveAppleKubernetesSmokeTests {
       throw KubernetesClusterError.ioFailure("secure its live kubeconfig")
     }
   }
+
+  private func exercisePodTerminal(
+    graph: LiveKubernetesServiceGraph,
+    machine: LinuxMachineIdentity,
+    pod: KubernetesPodRecord
+  ) async throws {
+    let session = try await graph.podTerminal.openTerminal(
+      in: KubernetesPodTerminalIdentity(
+        machine: machine,
+        pod: pod,
+        containerName: "smoke"
+      ),
+      request: try ContainerTerminalRequest()
+    )
+    let output = session.output
+    let outputTask = Task { () -> Data in
+      var collected = Data()
+      for await chunk in output {
+        collected.append(chunk)
+      }
+      return collected
+    }
+
+    do {
+      try await session.sendInput(
+        Data("printf 'nativecontainers-k3s-terminal\\n'; exit\\n".utf8)
+      )
+      let exitCode = try await waitForTerminalExit(session)
+      let streamedOutput = await outputTask.value
+      let snapshot = await session.snapshot()
+      await session.close()
+
+      #expect(exitCode == 0)
+      #expect(
+        String(decoding: streamedOutput, as: UTF8.self)
+          .contains("nativecontainers-k3s-terminal")
+      )
+      #expect(
+        String(decoding: snapshot.retainedOutput, as: UTF8.self)
+          .contains("nativecontainers-k3s-terminal")
+      )
+    } catch {
+      outputTask.cancel()
+      await session.close()
+      _ = await outputTask.value
+      throw error
+    }
+  }
+
+  private func waitForTerminalExit(
+    _ session: any ContainerTerminalSession
+  ) async throws -> Int32 {
+    try await withThrowingTaskGroup(of: Int32.self) { group in
+      group.addTask {
+        try await session.wait()
+      }
+      group.addTask {
+        try await Task.sleep(for: .seconds(45))
+        throw LiveKubernetesCommandError(
+          arguments: ["pod-terminal"],
+          exitCode: -1,
+          detail: "The interactive Pod terminal did not exit within 45 seconds."
+        )
+      }
+      defer { group.cancelAll() }
+      guard let exitCode = try await group.next() else {
+        throw CancellationError()
+      }
+      return exitCode
+    }
+  }
 }
 
 private struct LiveKubernetesServiceGraph {
   let cluster: AppleKubernetesClusterService
+  let podTerminal: AppleKubernetesPodTerminalService
   let runtime: AppleMachineRuntimeClient
   let machineService: AppleMachineManagementService
   let rootCommands: AppleKubernetesMachineRootCommandService
@@ -246,6 +324,9 @@ private struct LiveKubernetesServiceGraph {
       lifecycle: machineService,
       machineTransport: machineTransport
     )
+    let machineInventory = AppleLinuxMachineInventoryService(
+      machineTransport: machineTransport
+    )
     rootCommands = AppleKubernetesMachineRootCommandService(
       targetResolver: targetResolver,
       commandExecutor: AppleRuntimeCommandExecutor(
@@ -253,12 +334,22 @@ private struct LiveKubernetesServiceGraph {
       )
     )
     descriptorStore = KubernetesClusterDescriptorStore(rootURL: descriptorRoot)
+    let runningTargetResolver = AppleKubernetesRunningClusterTargetResolver(
+      store: descriptorStore,
+      machineInventory: machineInventory
+    )
+    podTerminal = AppleKubernetesPodTerminalService(
+      runningTargetResolver: runningTargetResolver,
+      rootCommands: rootCommands,
+      machineProcessTargetResolver: targetResolver,
+      sessionLauncher: AppleKubernetesPodTerminalSessionLauncher(
+        processClient: processClient
+      )
+    )
     cluster = AppleKubernetesClusterService(
       machineCreator: machineService,
       machineLifecycle: machineService,
-      machineInventory: AppleLinuxMachineInventoryService(
-        machineTransport: machineTransport
-      ),
+      machineInventory: machineInventory,
       rootCommands: rootCommands,
       store: descriptorStore
     )

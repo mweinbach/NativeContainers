@@ -1277,6 +1277,13 @@ Updated: 2026-06-22.
   is cached, stale responses cannot overwrite a newly selected container, and
   export is explicit. A second UID check and service-owned marker after the
   name-addressed log call make any concurrent same-name replacement fail closed.
+- The same sheet can open an interactive terminal in its selected standard
+  container. The restorable target pins the exact cluster machine, Pod API UID,
+  namespace, Pod name, and container name. A fixed bounded probe discovers only
+  allowlisted shells with UID checks before and after, then a terminal-mode
+  Apple process performs one last UID preflight and enters explicit-container
+  K3s exec with stdin and TTY. Pod presets and arbitrary startup commands are
+  disabled; the remaining upstream name-addressed race is documented.
 - An opt-in Xcode smoke passed the complete destructive lane on Apple container
   1.0.0: it created a unique two-core/2-GiB Alpine machine, installed the pinned
   K3s release, exported a host-usable kubeconfig, created a namespace,
@@ -1284,9 +1291,10 @@ Updated: 2026-06-22.
   verified pod logs, loaded those resources through the app service, then
   loaded the standalone Pod's logs through the UID-checked bounded app path.
   It deleted the namespace, stopped and restarted the cluster, rechecked the
-  API, and deleted the exact machine. A follow-up exact live run passed after
-  the log integration; independent CLI inventory found no remaining Apple
-  machines afterward, and no temporary kubeconfig directory remained.
+  API, and deleted the exact machine. The follow-up exact live run passed in
+  114.549 seconds after the log integration; independent CLI inventory found no
+  remaining Apple machines afterward, and no temporary kubeconfig directory
+  remained.
 - Xcode build-for-testing succeeds with zero warnings. The final default plan
   passes all 975 outcomes: 953 deterministic tests passed, 22 explicit live
   gates skipped, and no outcome failed or remained unrun. The normal app

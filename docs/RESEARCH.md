@@ -773,6 +773,7 @@ Primary sources:
 - [Apple container machine](https://github.com/apple/container/blob/main/docs/container-machine.md)
 - [Apple TN3179: Understanding local network privacy](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)
 - [Kubernetes: kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/)
+- [Kubernetes: kubectl exec](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_exec/)
 - [K3s quick start](https://docs.k3s.io/quick-start)
 - [K3s requirements](https://docs.k3s.io/installation/requirements)
 - [K3s installer source](https://github.com/k3s-io/k3s/blob/master/install.sh)
@@ -826,6 +827,15 @@ Primary sources:
   and accepts output only when that suffix matches. The log subresource itself
   remains name-addressed, but replacement before or during the read is detected
   and its output discarded.
+- The generated `kubectl exec` reference exposes explicit container selection,
+  stdin attachment, TTY allocation, and a bounded Pod-running wait. Pod exec is
+  still name-addressed and exposes no UID precondition. NativeContainers therefore
+  carries the inventory Pod UID in the terminal target, requires the exact Ready
+  cluster machine to be running, and brackets bounded allowlisted shell discovery
+  with UID reads. The terminal child performs one more UID check immediately
+  before a fixed `kubectl exec --stdin=true --tty=true` command. That narrows but
+  cannot eliminate replacement between the final check and the upstream exec;
+  the product does not describe the name-addressed call as atomic.
 - A 2026-06-22 live pass established an Apple-machine-specific service detail:
   the guest boots under Apple's `vminitd`, not OpenRC or systemd as PID 1. The
   K3s installer can write a valid OpenRC unit, but its ordinary cgroups
@@ -849,9 +859,9 @@ Primary sources:
   ran a standalone Alpine pod to Ready and read its logs, then proved the
   app-owned inventory saw all three resource types. A follow-up exact run also
   loaded that Pod's UID-checked bounded logs through the app service. It
-  survived an application-owned stop/start and deleted the exact machine;
-  follow-up Apple CLI inventory and temporary-directory inspection found no
-  cluster or credential residue.
+  survived an application-owned stop/start and deleted the exact machine. The
+  follow-up lane passed in 114.549 seconds; Apple CLI inventory and
+  temporary-directory inspection found no cluster or credential residue.
 
 ## Public-API boundaries
 

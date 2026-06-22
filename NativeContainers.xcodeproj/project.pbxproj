@@ -434,6 +434,8 @@
 		1FB6BA822FE96CE600099F15 /* KubernetesResourceBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA812FE96CE600099F15 /* KubernetesResourceBrowserView.swift */; };
 		1FB6BA842FE96D0800099F15 /* KubernetesResourceInventoryParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA832FE96D0800099F15 /* KubernetesResourceInventoryParserTests.swift */; };
 		1FB6BA862FE9718B00099F15 /* KubernetesPodLogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA852FE9718B00099F15 /* KubernetesPodLogsView.swift */; };
+		1FB6BA882FE975D300099F15 /* AppleKubernetesPodTerminalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA872FE975D300099F15 /* AppleKubernetesPodTerminalService.swift */; };
+		1FB6BA8A2FE9767700099F15 /* KubernetesPodTerminalServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB6BA892FE9767700099F15 /* KubernetesPodTerminalServiceTests.swift */; };
 		1FEC46CD2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */; };
 		1FEC46CF2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */; };
 		1FEC46D12FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */; };
@@ -1036,6 +1038,8 @@
 		1FB6BA812FE96CE600099F15 /* KubernetesResourceBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesResourceBrowserView.swift; sourceTree = "<group>"; };
 		1FB6BA832FE96D0800099F15 /* KubernetesResourceInventoryParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesResourceInventoryParserTests.swift; sourceTree = "<group>"; };
 		1FB6BA852FE9718B00099F15 /* KubernetesPodLogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesPodLogsView.swift; sourceTree = "<group>"; };
+		1FB6BA872FE975D300099F15 /* AppleKubernetesPodTerminalService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleKubernetesPodTerminalService.swift; sourceTree = "<group>"; };
+		1FB6BA892FE9767700099F15 /* KubernetesPodTerminalServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesPodTerminalServiceTests.swift; sourceTree = "<group>"; };
 		1FEC46CC2FE8229E00DC60B2 /* VirtualMachineDiskImageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMachineDiskImageModels.swift; sourceTree = "<group>"; };
 		1FEC46CE2FE822AF00DC60B2 /* AppleVirtualMachineDiskImageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageService.swift; sourceTree = "<group>"; };
 		1FEC46D02FE822D100DC60B2 /* AppleVirtualMachineDiskImageInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVirtualMachineDiskImageInspectorTests.swift; sourceTree = "<group>"; };
@@ -1384,6 +1388,7 @@
 				1F64B95E2FE8D58E00598A65 /* KubernetesClusterServiceTests.swift */,
 				1FB6BA7B2FE8DC7F00099F15 /* LiveAppleKubernetesSmokeTests.swift */,
 				1FB6BA832FE96D0800099F15 /* KubernetesResourceInventoryParserTests.swift */,
+				1FB6BA892FE9767700099F15 /* KubernetesPodTerminalServiceTests.swift */,
 			);
 			path = Kubernetes;
 			sourceTree = "<group>";
@@ -1394,6 +1399,7 @@
 				1F64B9582FE8D4FE00598A65 /* KubernetesClusterDescriptorStore.swift */,
 				1F64B95A2FE8D53000598A65 /* AppleKubernetesClusterService.swift */,
 				1FB6BA7F2FE96CA900099F15 /* KubernetesResourceInventoryParser.swift */,
+				1FB6BA872FE975D300099F15 /* AppleKubernetesPodTerminalService.swift */,
 			);
 			path = Kubernetes;
 			sourceTree = "<group>";
@@ -2515,6 +2521,7 @@
 				1FEC474A2FE83E9100DC60B2 /* VirtualMachineDiskImageReplacementRecoveryTests.swift in Sources */,
 				C2D873B7A226B8884FCBD738 /* SecureRegularFileValidatorTests.swift in Sources */,
 				1F9D2CAE2FE805D90076F5B9 /* VirtualMachineStorageReclamationServiceTests.swift in Sources */,
+				1FB6BA8A2FE9767700099F15 /* KubernetesPodTerminalServiceTests.swift in Sources */,
 				1F9D2B6A2FE797C70076F5B9 /* LiveAppleLinuxMachineSmokeTests.swift in Sources */,
 				28033CCAC546F43031537AAF /* VirtualMachineLibraryTests.swift in Sources */,
 				1F64B95F2FE8D58E00598A65 /* KubernetesClusterServiceTests.swift in Sources */,
@@ -2676,6 +2683,7 @@
 				1F9D2B232FE770E70076F5B9 /* ContainerBuilderManagementModel.swift in Sources */,
 				1F5E647F2FE8A5FF00A430FF /* ProcessInfoHostResourceStateProvider.swift in Sources */,
 				1F5E63932FE8539300A430FF /* AppExecutionContext.swift in Sources */,
+				1FB6BA882FE975D300099F15 /* AppleKubernetesPodTerminalService.swift in Sources */,
 				1F9D2BDC2FE7C30F0076F5B9 /* DockerCompatibilityModels.swift in Sources */,
 				1F9D2AD52FE75CAB0076F5B9 /* AppleContainerCleanupClient.swift in Sources */,
 				73762F62AD06A7F38EA6E1E3 /* ContainerToolsModel.swift in Sources */,

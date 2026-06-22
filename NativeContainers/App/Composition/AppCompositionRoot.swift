@@ -98,14 +98,30 @@ enum AppCompositionRoot {
       commandExecutor: commandExecutor,
       processClient: processClient
     )
+    let kubernetesStore = KubernetesClusterDescriptorStore()
+    let kubernetesRootCommands = AppleKubernetesMachineRootCommandService(
+      targetResolver: machineProcessTargetResolver,
+      commandExecutor: commandExecutor
+    )
+    let kubernetesRunningTargetResolver =
+      AppleKubernetesRunningClusterTargetResolver(
+        store: kubernetesStore,
+        machineInventory: machineInventoryService
+      )
+    let kubernetesPodTerminal = AppleKubernetesPodTerminalService(
+      runningTargetResolver: kubernetesRunningTargetResolver,
+      rootCommands: kubernetesRootCommands,
+      machineProcessTargetResolver: machineProcessTargetResolver,
+      sessionLauncher: AppleKubernetesPodTerminalSessionLauncher(
+        processClient: processClient
+      )
+    )
     let kubernetesService = AppleKubernetesClusterService(
       machineCreator: machineService,
       machineLifecycle: machineService,
       machineInventory: machineInventoryService,
-      rootCommands: AppleKubernetesMachineRootCommandService(
-        targetResolver: machineProcessTargetResolver,
-        commandExecutor: commandExecutor
-      )
+      rootCommands: kubernetesRootCommands,
+      store: kubernetesStore
     )
     let builderManagementService = AppleContainerBuilderManagementService(
       runtimeMutationCoordinator: mutationCoordinator,
@@ -330,7 +346,8 @@ enum AppCompositionRoot {
       terminalTargets: IdentityPinnedTerminalTargetService(
         inventory: inventoryService,
         containerTerminal: terminalService,
-        machineTerminal: machineProcessService
+        machineTerminal: machineProcessService,
+        podTerminal: kubernetesPodTerminal
       ),
       containerAttachments: attachmentService,
       machineCreator: machineService,

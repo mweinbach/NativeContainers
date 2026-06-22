@@ -14,9 +14,50 @@ struct ContainerTerminalTargetIdentity: Codable, Equatable, Hashable, Sendable {
   }
 }
 
+struct KubernetesPodTerminalIdentity: Codable, Equatable, Hashable, Sendable {
+  let machine: LinuxMachineIdentity
+  let podUID: String
+  let namespace: String
+  let podName: String
+  let containerName: String
+
+  init(
+    machine: LinuxMachineIdentity,
+    pod: KubernetesPodRecord,
+    containerName: String
+  ) {
+    self.init(
+      machine: machine,
+      podUID: pod.uid,
+      namespace: pod.namespace,
+      podName: pod.name,
+      containerName: containerName
+    )
+  }
+
+  init(
+    machine: LinuxMachineIdentity,
+    podUID: String,
+    namespace: String,
+    podName: String,
+    containerName: String
+  ) {
+    self.machine = machine
+    self.podUID = podUID
+    self.namespace = namespace
+    self.podName = podName
+    self.containerName = containerName
+  }
+
+  var displayID: String {
+    "\(namespace)/\(podName):\(containerName)"
+  }
+}
+
 enum TerminalTargetIdentity: Codable, Equatable, Hashable, Sendable {
   case container(ContainerTerminalTargetIdentity)
   case linuxMachine(LinuxMachineIdentity)
+  case kubernetesPod(KubernetesPodTerminalIdentity)
 
   var id: String {
     switch self {
@@ -24,6 +65,8 @@ enum TerminalTargetIdentity: Codable, Equatable, Hashable, Sendable {
       identity.id
     case .linuxMachine(let identity):
       identity.id
+    case .kubernetesPod(let identity):
+      identity.displayID
     }
   }
 

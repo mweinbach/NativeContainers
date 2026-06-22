@@ -11,24 +11,28 @@ struct IdentityPinnedTerminalTargetService: TerminalTargetOpening {
   private let inventory: any ContainerInventoryLoading
   private let containerTerminal: any ContainerTerminalOpening
   private let machineTerminal: any MachineTerminalOpening
+  private let podTerminal: any KubernetesPodTerminalOpening
 
   init(
     inventory: any ContainerInventoryLoading,
     containerTerminal: any ContainerTerminalOpening,
-    machineTerminal: any MachineTerminalOpening
+    machineTerminal: any MachineTerminalOpening,
+    podTerminal: any KubernetesPodTerminalOpening =
+      UnavailableKubernetesPodTerminalService()
   ) {
     self.inventory = inventory
     self.containerTerminal = containerTerminal
     self.machineTerminal = machineTerminal
+    self.podTerminal = podTerminal
   }
 
   func openTerminal(
     for target: TerminalTargetIdentity,
     request: ContainerTerminalRequest
   ) async throws -> any ContainerTerminalSession {
-    let currentInventory = try await inventory.loadInventory()
     switch target {
     case .container(let identity):
+      let currentInventory = try await inventory.loadInventory()
       guard
         let current = currentInventory.containers.first(where: { $0.id == identity.id })
       else {
@@ -43,6 +47,7 @@ struct IdentityPinnedTerminalTargetService: TerminalTargetOpening {
       )
 
     case .linuxMachine(let identity):
+      let currentInventory = try await inventory.loadInventory()
       guard
         let current = currentInventory.machines.first(where: { $0.id == identity.id })
       else {
@@ -54,6 +59,12 @@ struct IdentityPinnedTerminalTargetService: TerminalTargetOpening {
       return try await machineTerminal.openTerminal(
         in: identity,
         request: try LinuxMachineTerminalRequest(containerRequest: request)
+      )
+
+    case .kubernetesPod(let identity):
+      return try await podTerminal.openTerminal(
+        in: identity,
+        request: request
       )
     }
   }

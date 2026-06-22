@@ -334,6 +334,10 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
   case invalidResourceInventory
   case invalidKubernetesResourceReference
   case invalidPodLogSnapshot
+  case invalidPodShellDiscovery
+  case podShellUnavailable
+  case podIdentityChanged(String)
+  case unsupportedPodTerminalRequest
   case readinessTimedOut
   case missingIPAddress
   case invalidKubeconfig
@@ -379,6 +383,14 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
       String(localized: "The Kubernetes resource reference is invalid.")
     case .invalidPodLogSnapshot:
       String(localized: "K3s returned an invalid Pod log snapshot.")
+    case .invalidPodShellDiscovery:
+      String(localized: "K3s returned an invalid Pod shell discovery result.")
+    case .podShellUnavailable:
+      String(localized: "The selected container does not have a supported interactive shell.")
+    case .podIdentityChanged(let name):
+      String(localized: "Pod “\(name)” was replaced after it was selected.")
+    case .unsupportedPodTerminalRequest:
+      String(localized: "Kubernetes Pod terminals use the discovered container shell.")
     case .readinessTimedOut:
       String(localized: "The Kubernetes API did not become ready before the bounded deadline.")
     case .missingIPAddress:

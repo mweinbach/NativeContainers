@@ -63,6 +63,8 @@ struct TerminalWorkspaceSessionPane: View {
       String(localized: "container")
     case .linuxMachine:
       String(localized: "Linux machine")
+    case .kubernetesPod:
+      String(localized: "Kubernetes Pod")
     }
   }
 
@@ -72,6 +74,8 @@ struct TerminalWorkspaceSessionPane: View {
       "Opening container terminal…"
     case .linuxMachine:
       "Starting the Linux machine if needed and opening its terminal…"
+    case .kubernetesPod:
+      "Opening a terminal in the selected Kubernetes Pod…"
     }
   }
 }

@@ -28,7 +28,9 @@ struct NativeContainersApp: App {
         ContentUnavailableView(
           "Choose a terminal target",
           systemImage: "terminal",
-          description: Text("Open a container or Linux machine terminal from the main window.")
+          description: Text(
+            "Open a container, Linux machine, or Kubernetes Pod terminal from the main window."
+          )
         )
       }
     }

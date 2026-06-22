@@ -190,9 +190,22 @@ The service validates the UID, namespace, Pod name, and container name; checks
 that the current Pod UID still matches; and then asks `kubectl logs` for at
 most 512 KiB plus one truncation-detection byte with timestamps. A second UID
 read and service-owned output marker must also match before any log snapshot is
-accepted, so replacement during the name-addressed read fails closed. Search
-uses cached prepared text, container switches discard stale asynchronous
-responses, and export remains user-initiated.
+  accepted, so replacement during the name-addressed read fails closed. Search
+  uses cached prepared text, container switches discard stale asynchronous
+  responses, and export remains user-initiated.
+
+The log sheet can open a terminal for the selected standard container. Its
+restorable target carries the exact cluster-machine identity, Pod API UID,
+namespace, Pod name, and container name. The terminal service requires the
+stored Ready descriptor and exact running machine, discovers only a bounded
+allowlist of common shells through the fixed root-command lane, and brackets
+that discovery with Pod UID reads. It then resolves the machine's fresh
+per-boot backing container and starts `/sbin.machine/init -s` as UID 0 with a
+terminal-mode Apple process. The only guest command is a final UID preflight
+followed by explicit-container `k3s kubectl exec` with stdin, TTY, and a bounded
+Pod-running wait. Kubernetes exec remains name-addressed, so replacement in the
+narrow interval after the final UID check cannot be made atomic with the
+current upstream API and is documented rather than hidden.
 
 Kubeconfig is read only after an explicit export action, validated and bounded
 in memory, rewritten from guest loopback to the current dedicated machine IP,
@@ -318,7 +331,7 @@ executable. Persistent Linux machines intentionally bypass this policy and keep
 using Apple’s machine init helper for the configured login shell.
 
 Terminal presentation is another boundary rather than state inside resource
-detail views. Container and Linux-machine actions open a lightweight,
+detail views. Container, Linux-machine, and Kubernetes-Pod actions open a lightweight,
 `Codable`/`Hashable` target in a data-driven SwiftUI `WindowGroup`; the system
 owns detached-window restoration and native macOS window tabbing. Each window
 owns a bounded app-level tab workspace whose `SceneStorage` payload contains
@@ -327,14 +340,17 @@ UUIDs. Live process objects and output never cross restoration. A restored
 window is inert until explicit interaction, preventing relaunch from starting a
 stopped machine or creating a shell unexpectedly.
 
-`IdentityPinnedTerminalTargetService` reloads canonical Apple inventory before
-each tab opens and compares the complete persisted Linux-machine identity or the
-container ID plus creation date. Missing or same-name replacement targets fail
-before process creation. `TerminalPresetStore` is a separate bounded persistence
+`IdentityPinnedTerminalTargetService` reloads canonical Apple inventory for
+container and ordinary Linux-machine tabs and compares the complete persisted
+Linux-machine identity or the container ID plus creation date. Pod targets route
+to the Kubernetes authority, which independently revalidates the cluster
+descriptor, machine, and Pod identity. Missing or same-name replacement targets
+fail before process creation. `TerminalPresetStore` is a separate bounded persistence
 facet backed by the system preferences authority. Its versioned payload stores
 only validated shell selection, login-shell intent, and an absolute guest
 working directory; environment, arbitrary startup commands, terminal output,
-and history are excluded. Views coordinate windows and tab selection but never
+and history are excluded. Pod targets never accept presets or custom startup
+commands. Views coordinate windows and tab selection but never
 call Apple container or machine adapters directly.
 
 Native builds cross a narrower `ImageBuilding` boundary. Review first copies

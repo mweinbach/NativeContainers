@@ -1778,3 +1778,31 @@ Kubernetes' Pod log subresource is name-addressed and has no conditional UID
 precondition. Bracketing the read with UID checks cannot make the upstream call
 atomic, but it does ensure NativeContainers discards output if replacement
 occurs before or during the read rather than publishing a same-name Pod's logs.
+
+## ADR-064: Open Pod terminals through an identity-pinned fixed exec lane
+
+**Status:** Accepted — 2026-06-22
+
+Kubernetes Pod terminals reuse the app's native terminal window, Apple process
+XPC transport, pipe lifecycle, resize/signal handling, and SwiftTerm surface.
+They do not export kubeconfig, invoke a host CLI, expose the cluster machine's
+root shell, or accept terminal presets. The restorable target stores the exact
+cluster-machine identity plus Pod UID, namespace, Pod name, and explicit
+container name. Before process creation, the service requires the private
+descriptor to be Ready and its exact machine to be running.
+
+Shell selection is a service-owned discovery step rather than arbitrary user
+input. One bounded root command tries only a fixed common-shell allowlist inside
+the selected container and reads the Pod UID both before and after the probe.
+The resulting terminal-mode Apple child runs the machine init helper as UID 0,
+performs another UID preflight, and then replaces itself with explicit-container
+`k3s kubectl exec` using stdin, TTY, and a bounded Pod-running wait. Only the
+discovered allowlisted shell can occupy the command position.
+
+Kubernetes exec is name-addressed and provides no conditional Pod-UID token.
+The final UID check therefore cannot prevent replacement in the narrow interval
+before the upstream exec begins, and an interactive stream cannot be bracketed
+with a useful post-read identity decision. NativeContainers fails closed for
+replacement detected during discovery or final preflight and documents the
+remaining upstream race. A general arbitrary-command/non-interactive exec UI
+remains a separate reviewed capability.

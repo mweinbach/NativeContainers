@@ -98,6 +98,36 @@ struct TerminalTargetServiceTests {
     #expect(await machineTerminal.targets.isEmpty)
   }
 
+  @Test
+  func routesKubernetesPodWithoutLoadingGeneralInventory() async throws {
+    let machine = makeMachine(createdAt: Date(timeIntervalSince1970: 10))
+    let identity = KubernetesPodTerminalIdentity(
+      machine: LinuxMachineIdentity(machine: machine),
+      podUID: "11111111-1111-4111-8111-111111111111",
+      namespace: "default",
+      podName: "api-abc",
+      containerName: "api"
+    )
+    let inventory = TerminalInventoryStub()
+    let podTerminal = PodTerminalOpeningRecorder()
+    let service = IdentityPinnedTerminalTargetService(
+      inventory: inventory,
+      containerTerminal: ContainerTerminalOpeningRecorder(),
+      machineTerminal: MachineTerminalOpeningRecorder(),
+      podTerminal: podTerminal
+    )
+    let request = try ContainerTerminalRequest()
+
+    _ = try await service.openTerminal(
+      for: .kubernetesPod(identity),
+      request: request
+    )
+
+    #expect(await inventory.loadCount == 0)
+    #expect(await podTerminal.targets == [identity])
+    #expect(await podTerminal.requests == [request])
+  }
+
   private func makeContainer(createdAt: Date) -> ContainerRecord {
     ContainerRecord(
       id: "dev",
@@ -134,6 +164,7 @@ struct TerminalTargetServiceTests {
 private actor TerminalInventoryStub: ContainerInventoryLoading {
   private let containers: [ContainerRecord]
   private let machines: [LinuxMachineRecord]
+  private(set) var loadCount = 0
 
   init(
     containers: [ContainerRecord] = [],
@@ -144,7 +175,8 @@ private actor TerminalInventoryStub: ContainerInventoryLoading {
   }
 
   func loadInventory() -> ContainerInventory {
-    ContainerInventory(
+    loadCount += 1
+    return ContainerInventory(
       system: ContainerSystemInfo(
         version: "1.0.0",
         build: "test",
@@ -158,6 +190,20 @@ private actor TerminalInventoryStub: ContainerInventoryLoading {
       networks: [],
       machines: machines
     )
+  }
+}
+
+private actor PodTerminalOpeningRecorder: KubernetesPodTerminalOpening {
+  private(set) var targets: [KubernetesPodTerminalIdentity] = []
+  private(set) var requests: [ContainerTerminalRequest] = []
+
+  func openTerminal(
+    in target: KubernetesPodTerminalIdentity,
+    request: ContainerTerminalRequest
+  ) -> any ContainerTerminalSession {
+    targets.append(target)
+    requests.append(request)
+    return TerminalTargetSession()
   }
 }
 

@@ -248,6 +248,9 @@ must leave a usable, test-backed product slice.
   - [x] Explicit-container Pod log snapshots with API-UID revalidation,
         timestamped 2,000-line/512-KiB bounds, cached search, stale-response
         rejection, and user-initiated export.
+  - [x] Explicit-container Pod terminals with exact cluster-machine and Pod API
+        identity, allowlisted shell discovery, Apple process-XPC PTY transport,
+        native terminal windows, and no arbitrary preset injection.
   - [x] Live-provision the gated Alpine machine, verify API reachability and a
         real Deployment, Service, and disposable pod, verify the app-owned
         inventory path, survive a stop/start, then delete the exact machine,
