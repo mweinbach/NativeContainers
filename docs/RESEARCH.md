@@ -857,11 +857,11 @@ Primary sources:
   delete could erase a replacement created after review. The lower-level API
   does expose the missing contract: `DeleteOptions.preconditions` accepts both
   UID and resourceVersion and rejects drift with HTTP 409, while `kubectl
-  delete --raw` accepts a DELETE body from one local file or stdin. A future
-  fixed workload-delete command can therefore send those exact preconditions
-  to a kind-specific API path, require foreground propagation, prohibit force
-  deletion, and reconcile absence versus same-name replacement. That path is
-  researched but not implemented yet.
+  delete --raw` accepts a DELETE body from one local file or stdin.
+  NativeContainers now sends those exact preconditions to a fixed
+  kind-specific API path, requires foreground propagation, prohibits force and
+  grace overrides, and reconciles absence, pending finalizers, or a safe
+  same-name replacement without acting on the replacement.
 - The stock `kubectl rollout restart` reads the latest object and sends a
   strategic-merge patch. Kubernetes documents that patches do not provide
   optimistic-lock failures, so that command cannot preserve the browser's

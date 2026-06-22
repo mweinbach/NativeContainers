@@ -562,6 +562,155 @@ struct KubernetesClusterServiceTests {
   }
 
   @Test
+  func deletesOnlyTheReviewedWorkloadWithForegroundPreconditions() async throws {
+    let machine = makeMachine()
+    let runtime = KubernetesMachineRuntimeDouble(machine: machine)
+    let commands = KubernetesRootCommandDouble()
+    let descriptor = KubernetesClusterDescriptor(
+      operationID: UUID(),
+      machine: LinuxMachineIdentity(machine: machine),
+      distribution: .current,
+      phase: .ready,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_100)
+    )
+    let service = makeService(
+      runtime: runtime,
+      commands: commands,
+      store: InMemoryKubernetesDescriptorStore(descriptor: descriptor)
+    )
+    let workload = try #require(readyResourceInventory().workloads.first)
+    let request = try KubernetesWorkloadDeleteRequest(workload: workload)
+
+    let result = try await service.deleteWorkload(request)
+
+    #expect(result.request == request)
+    #expect(result.outcome == .deleted)
+    #expect(result.capturedAt == Date(timeIntervalSince1970: 1_700_000_100))
+    let invocation = try #require(
+      await commands.commands.first(where: {
+        $0.command.contains("kubectl delete --raw")
+      })
+    )
+    #expect(invocation.target == descriptor.machine)
+    #expect(invocation.timeoutSeconds == 75)
+    #expect(invocation.command.contains("resource='deployment'"))
+    #expect(invocation.command.contains("expected_api_version='apps/v1'"))
+    #expect(invocation.command.contains("expected_kind='Deployment'"))
+    #expect(
+      invocation.command.contains(
+        "api_path='/apis/apps/v1/namespaces/default/deployments/api'"
+      )
+    )
+    #expect(invocation.command.contains("expected_uid='\(workload.uid)'"))
+    #expect(invocation.command.contains("expected_resource_version='101'"))
+    #expect(
+      invocation.command.contains(
+        "preconditions: {uid: $uid, resourceVersion: $resource_version}"
+      )
+    )
+    #expect(invocation.command.contains("propagationPolicy: \"Foreground\""))
+    #expect(invocation.command.contains("--raw=\"$api_path\""))
+    #expect(invocation.command.contains("--filename=-"))
+    #expect(invocation.command.contains("--ignore-not-found=true"))
+    #expect(invocation.command.contains("2>/dev/null"))
+    #expect(!invocation.command.contains("--force"))
+    #expect(!invocation.command.contains("--grace-period"))
+
+    for (kind, resource, apiVersion, kindName, apiPath) in [
+      (
+        KubernetesWorkloadKind.statefulSet,
+        "statefulset",
+        "apps/v1",
+        "StatefulSet",
+        "/apis/apps/v1/namespaces/default/statefulsets/api"
+      ),
+      (
+        KubernetesWorkloadKind.daemonSet,
+        "daemonset",
+        "apps/v1",
+        "DaemonSet",
+        "/apis/apps/v1/namespaces/default/daemonsets/api"
+      ),
+      (
+        KubernetesWorkloadKind.job,
+        "job",
+        "batch/v1",
+        "Job",
+        "/apis/batch/v1/namespaces/default/jobs/api"
+      ),
+    ] {
+      let variant = KubernetesWorkloadRecord(
+        uid: workload.uid,
+        resourceVersion: workload.resourceVersion,
+        namespace: workload.namespace,
+        name: workload.name,
+        kind: kind,
+        desiredCount: workload.desiredCount,
+        readyCount: workload.readyCount,
+        availableCount: workload.availableCount,
+        failedCount: workload.failedCount
+      )
+      _ = try await service.deleteWorkload(
+        KubernetesWorkloadDeleteRequest(workload: variant)
+      )
+      let command = try #require(await commands.commands.last?.command)
+      #expect(command.contains("resource='\(resource)'"))
+      #expect(command.contains("expected_api_version='\(apiVersion)'"))
+      #expect(command.contains("expected_kind='\(kindName)'"))
+      #expect(command.contains("api_path='\(apiPath)'"))
+    }
+
+    await commands.setWorkloadDeleteOutput(
+      "\(AppleKubernetesClusterService.workloadDeleteMarker)\(workload.uid)\treplacementPresent\n"
+    )
+    #expect(try await service.deleteWorkload(request).outcome == .replacementPresent)
+    await commands.setWorkloadDeleteOutput(
+      "\(AppleKubernetesClusterService.workloadDeleteMarker)\(workload.uid)\tpendingFinalizers\n"
+    )
+    #expect(try await service.deleteWorkload(request).outcome == .pendingFinalizers)
+
+    for (exitCode, expectedError) in [
+      (Int32(66), KubernetesClusterError.workloadIdentityChanged(workload.name)),
+      (Int32(67), KubernetesClusterError.workloadDeleteRejected(workload.name)),
+      (Int32(68), KubernetesClusterError.workloadDeleteNotConfirmed(workload.name)),
+      (
+        Int32(69),
+        KubernetesClusterError.workloadDeleteVerificationFailed(workload.name)
+      ),
+    ] {
+      await commands.setWorkloadDeleteExitCode(exitCode)
+      await #expect(throws: expectedError) {
+        _ = try await service.deleteWorkload(request)
+      }
+    }
+    await commands.setWorkloadDeleteExitCode(0)
+    await commands.setWorkloadDeleteOutput("invalid")
+    await #expect(throws: KubernetesClusterError.invalidWorkloadDeleteResult) {
+      _ = try await service.deleteWorkload(request)
+    }
+  }
+
+  @Test
+  func deleteRequestRejectsUnsafeIdentity() throws {
+    let workload = try #require(readyResourceInventory().workloads.first)
+    let unsafe = KubernetesWorkloadRecord(
+      uid: workload.uid,
+      resourceVersion: "101\tunsafe",
+      namespace: workload.namespace,
+      name: workload.name,
+      kind: workload.kind,
+      desiredCount: workload.desiredCount,
+      readyCount: workload.readyCount,
+      availableCount: workload.availableCount,
+      failedCount: workload.failedCount
+    )
+
+    #expect(throws: KubernetesClusterError.invalidWorkloadDeleteRequest) {
+      _ = try KubernetesWorkloadDeleteRequest(workload: unsafe)
+    }
+  }
+
+  @Test
   func failedBootstrapRetainsExactPendingDescriptorForRetry() async throws {
     let machine = makeMachine()
     let runtime = KubernetesMachineRuntimeDouble(machine: machine)
@@ -771,6 +920,34 @@ struct KubernetesClusterModelTests {
   }
 
   @Test
+  func deletesReviewedWorkloadAndReloadsAuthoritativeResources() async {
+    let snapshot = readyKubernetesSnapshot()
+    let service = KubernetesModelServiceDouble(snapshot: snapshot)
+    let model = KubernetesClusterModel(
+      service: service,
+      initialSnapshot: snapshot
+    )
+    await model.loadResources()
+    guard let workload = model.resourceInventory?.workloads.first else {
+      Issue.record("The fixture did not load its workload.")
+      return
+    }
+    await service.setResourceInventory(
+      readyResourceInventory(includesWorkload: false)
+    )
+
+    let deleted = await model.deleteWorkload(workload)
+
+    #expect(deleted)
+    #expect(model.resourceInventory?.workloads.isEmpty == true)
+    #expect(model.resourceErrorMessage == nil)
+    #expect(await service.resourceLoadCount == 2)
+    let request = await service.deleteRequests.first
+    #expect(request?.workloadUID == workload.uid)
+    #expect(request?.resourceVersion == "101")
+  }
+
+  @Test
   func podLogsModelLoadsFiltersAndSwitchesExplicitContainers() async {
     let pod = KubernetesPodRecord(
       uid: "11111111-1111-4111-8111-111111111111",
@@ -942,6 +1119,7 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
   private var stopError: KubernetesClusterError?
   private(set) var scaleRequests: [KubernetesWorkloadScaleRequest] = []
   private(set) var restartRequests: [KubernetesWorkloadRestartRequest] = []
+  private(set) var deleteRequests: [KubernetesWorkloadDeleteRequest] = []
 
   init(snapshot: KubernetesClusterSnapshot) {
     self.snapshot = snapshot
@@ -988,6 +1166,17 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
     return KubernetesWorkloadRestartResult(
       request: request,
       resourceVersion: "102",
+      capturedAt: Date(timeIntervalSince1970: 1_700_000_100)
+    )
+  }
+
+  func deleteWorkload(
+    _ request: KubernetesWorkloadDeleteRequest
+  ) -> KubernetesWorkloadDeleteResult {
+    deleteRequests.append(request)
+    return KubernetesWorkloadDeleteResult(
+      request: request,
+      outcome: .deleted,
       capturedAt: Date(timeIntervalSince1970: 1_700_000_100)
     )
   }
@@ -1191,6 +1380,9 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
   private var workloadRestartExitCode: Int32 = 0
   private var workloadRestartOutput =
     "\(AppleKubernetesClusterService.workloadRestartMarker)aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\t102\t2023-11-14T22:15:00.000Z\n"
+  private var workloadDeleteExitCode: Int32 = 0
+  private var workloadDeleteOutput =
+    "\(AppleKubernetesClusterService.workloadDeleteMarker)aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\tdeleted\n"
 
   init(
     bootstrapFailures: Int = 0,
@@ -1271,6 +1463,12 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
       }
       return result(standardOutput: workloadRestartOutput)
     }
+    if command.contains("kubectl delete --raw") {
+      if workloadDeleteExitCode != 0 {
+        return result(exitCode: workloadDeleteExitCode)
+      }
+      return result(standardOutput: workloadDeleteOutput)
+    }
     if command.contains("__NATIVECONTAINERS_K3S_VERSION__") {
       return result(
         standardOutput: """
@@ -1317,6 +1515,14 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
 
   func setWorkloadRestartOutput(_ value: String) {
     workloadRestartOutput = value
+  }
+
+  func setWorkloadDeleteExitCode(_ value: Int32) {
+    workloadDeleteExitCode = value
+  }
+
+  func setWorkloadDeleteOutput(_ value: String) {
+    workloadDeleteOutput = value
   }
 
   private func result(
@@ -1407,22 +1613,26 @@ private func readyKubernetesSnapshot() -> KubernetesClusterSnapshot {
 
 private func readyResourceInventory(
   desiredCount: Int = 2,
-  resourceVersion: String = "101"
+  resourceVersion: String = "101",
+  includesWorkload: Bool = true
 ) -> KubernetesResourceInventory {
   KubernetesResourceInventory(
-    workloads: [
-      KubernetesWorkloadRecord(
-        uid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        resourceVersion: resourceVersion,
-        namespace: "default",
-        name: "api",
-        kind: .deployment,
-        desiredCount: desiredCount,
-        readyCount: desiredCount,
-        availableCount: desiredCount,
-        failedCount: 0
-      )
-    ],
+    workloads:
+      includesWorkload
+      ? [
+        KubernetesWorkloadRecord(
+          uid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          resourceVersion: resourceVersion,
+          namespace: "default",
+          name: "api",
+          kind: .deployment,
+          desiredCount: desiredCount,
+          readyCount: desiredCount,
+          availableCount: desiredCount,
+          failedCount: 0
+        )
+      ]
+      : [],
     pods: [
       KubernetesPodRecord(
         uid: "11111111-1111-4111-8111-111111111111",

@@ -251,14 +251,14 @@ must leave a usable, test-backed product slice.
   - [x] Explicit-container Pod terminals with exact cluster-machine and Pod API
         identity, allowlisted shell discovery, Apple process-XPC PTY transport,
         native terminal windows, and no arbitrary preset injection.
-  - [ ] Reviewed workload mutation.
+  - [x] Reviewed workload mutation.
     - [x] Project bounded workload UID/resourceVersion and use UID as stable row
           identity without admitting environment, annotation, or secret data.
     - [x] Scale Deployments/StatefulSets only with exact UID, resource-version,
           and current-replica preconditions plus authoritative reconciliation.
     - [x] Restart through a full-object optimistic-locked replace that changes
           only the Pod-template restart annotation and confirms UID/new version.
-    - [ ] Delete through a raw Kubernetes DeleteOptions request with exact
+    - [x] Delete through a raw Kubernetes DeleteOptions request with exact
           UID/resourceVersion, foreground propagation, no force mode, and
           reconciliation that never acts on a same-name replacement.
   - [x] Live-provision the gated Alpine machine, verify API reachability and a

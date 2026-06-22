@@ -242,6 +242,32 @@ struct LiveAppleKubernetesSmokeTests {
         pod: smokePod
       )
 
+      let workloadToDelete = try #require(
+        restartedInventory.workloads.first {
+          $0.uid == scaledWorkload.uid
+        }
+      )
+      let workloadDeleteResult = try await graph.cluster.deleteWorkload(
+        try KubernetesWorkloadDeleteRequest(workload: workloadToDelete)
+      )
+      #expect(workloadDeleteResult.outcome != .replacementPresent)
+      _ = try await graph.kubectl(
+        kubeconfigURL: kubeconfigURL,
+        arguments: [
+          "--namespace", namespace,
+          "wait", "--for=delete",
+          "deployment/inventory", "--timeout=180s",
+        ],
+        timeout: .seconds(210)
+      )
+      let inventoryAfterWorkloadDeletion =
+        try await graph.cluster.loadResourceInventory()
+      #expect(
+        !inventoryAfterWorkloadDeletion.workloads.contains {
+          $0.uid == workloadToDelete.uid
+        }
+      )
+
       _ = try await graph.kubectl(
         kubeconfigURL: kubeconfigURL,
         arguments: [

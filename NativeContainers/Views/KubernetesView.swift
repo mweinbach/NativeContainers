@@ -704,6 +704,16 @@ private struct PreviewKubernetesClusterService: KubernetesClusterManaging {
     )
   }
 
+  func deleteWorkload(
+    _ request: KubernetesWorkloadDeleteRequest
+  ) async throws -> KubernetesWorkloadDeleteResult {
+    KubernetesWorkloadDeleteResult(
+      request: request,
+      outcome: .deleted,
+      capturedAt: Date()
+    )
+  }
+
   func provision(
     _ request: KubernetesClusterProvisionRequest,
     progress: @escaping KubernetesClusterProgressHandler

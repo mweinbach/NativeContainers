@@ -1303,10 +1303,17 @@ Updated: 2026-06-22.
   crosses to the host. Deterministic service/model coverage and a Deployment
   live-smoke extension are present, but this exact head remains unclaimed until
   Xcode MCP reconnects and runs them.
-- Workload deletion remains the final reviewed-mutation gap. Its researched
-  path uses raw Kubernetes DeleteOptions, whose UID/resourceVersion
-  preconditions fail with conflict, together with foreground propagation and
-  no force mode; it is not implemented yet.
+- Every workload row now exposes a destructive deletion review that requires
+  the exact workload name and adds a critical warning for system namespaces.
+  A fixed kind-specific API path receives a raw Kubernetes DeleteOptions body
+  with server-enforced UID/resourceVersion preconditions and foreground
+  propagation; force deletion and grace-period overrides are absent. A bounded
+  identity poll distinguishes completed deletion, pending finalizers, and an
+  untouched same-name replacement. Deterministic service/model coverage and a
+  gated Deployment live-smoke extension are present, but this exact head
+  remains unclaimed until Xcode MCP reconnects and runs them.
+- The current Xcode MCP probe fails at `XcodeListWindows` with `Transport
+  closed`. No shell build or test command substitutes for that required path.
 - An opt-in Xcode smoke passed the complete destructive lane on Apple container
   1.0.0: it created a unique two-core/2-GiB Alpine machine, installed the pinned
   K3s release, exported a host-usable kubeconfig, created a namespace,

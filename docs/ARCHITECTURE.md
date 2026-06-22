@@ -220,6 +220,18 @@ host; replace stderr is suppressed in-guest and mapped to a service-owned
 rejection, while success returns only marker fields. The review warns that
 configured `OnDelete` strategies do not replace existing Pods automatically.
 
+Every workload row also exposes an explicit deletion review. The user must type
+the exact workload name, and system namespaces receive an additional critical
+warning. Deletion never uses the ordinary name-only kubectl path. A fixed,
+kind-specific API URI receives a raw DeleteOptions body containing both the
+reviewed UID and resourceVersion preconditions plus `Foreground` propagation;
+force mode and grace-period overrides are absent. K3s rejects any replacement
+or intervening update before deletion begins. The guest suppresses response
+details, then polls the same endpoint identity to distinguish completed
+deletion, a safe same-name replacement, and work still waiting on finalizers.
+Only that bounded outcome marker reaches the host, and the browser reloads the
+authoritative inventory in every case.
+
 The log sheet can open a terminal for the selected standard container. Its
 restorable target carries the exact cluster-machine identity, Pod API UID,
 namespace, Pod name, and container name. The terminal service requires the

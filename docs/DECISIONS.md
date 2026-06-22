@@ -1871,6 +1871,32 @@ contains one private marker with UID, new resourceVersion, and the restart
 timestamp. Replace stderr is suppressed inside the guest and becomes a generic
 service-owned rejection, so a validating admission response cannot leak object
 details. This avoids adding environment values, annotations, or referenced
-secret material to the host inventory contract. Workload deletion remains a
-separate destructive review using DeleteOptions preconditions and foreground
-propagation.
+secret material to the host inventory contract. Workload deletion uses the
+separate destructive contract in ADR-067.
+
+## ADR-067: Delete workloads only through preconditioned foreground requests
+
+**Status:** Accepted — 2026-06-22
+
+NativeContainers permits reviewed deletion of Deployments, StatefulSets,
+DaemonSets, and Jobs. The destructive sheet identifies the kind, namespace,
+and name; requires the exact name to be entered; explains that managed
+dependents are deleted; and adds a critical warning for Kubernetes system
+namespaces. The product offers neither force deletion nor a grace-period
+override.
+
+Ordinary `kubectl delete TYPE/NAME` is forbidden because Kubernetes documents
+that it performs no resource-version check. The fixed guest command instead
+chooses one API URI from the closed workload-kind set and sends `kubectl delete
+--raw` a `DeleteOptions` body. Both UID and resourceVersion are server-enforced
+preconditions, and propagation is always `Foreground`. A stale review or
+same-name replacement therefore conflicts at the API server before deletion
+can affect it.
+
+Delete response details and stderr are suppressed inside the guest. After an
+accepted request, a bounded identity-aware poll reports only one of three
+outcomes: the reviewed UID is absent, a different same-name UID is present and
+untouched, or the reviewed object is still waiting on foreground finalizers.
+Transport or API failures during that poll produce no success claim. The host
+reloads the bounded inventory after every accepted or rejected request and
+never retries by name.

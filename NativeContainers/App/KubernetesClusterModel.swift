@@ -263,6 +263,55 @@ final class KubernetesClusterModel {
     return true
   }
 
+  func deleteWorkload(_ workload: KubernetesWorkloadRecord) async -> Bool {
+    guard !isBusy else { return false }
+    isWorking = true
+    resourceErrorMessage = nil
+    defer { isWorking = false }
+
+    let result: KubernetesWorkloadDeleteResult
+    do {
+      result = try await service.deleteWorkload(
+        try KubernetesWorkloadDeleteRequest(workload: workload)
+      )
+    } catch is CancellationError {
+      resourceErrorMessage = String(localized: "Deleting the workload was cancelled.")
+      return false
+    } catch {
+      let mutationError = error.localizedDescription
+      if let refreshed = try? await service.loadResourceInventory() {
+        resourceInventory = refreshed
+      }
+      resourceErrorMessage = mutationError
+      return false
+    }
+
+    do {
+      resourceInventory = try await service.loadResourceInventory()
+      switch result.outcome {
+      case .deleted:
+        break
+      case .replacementPresent:
+        resourceErrorMessage = String(
+          localized:
+            "The reviewed workload “\(result.request.name)” was deleted, but a same-name replacement now exists. NativeContainers did not modify it."
+        )
+      case .pendingFinalizers:
+        resourceErrorMessage = String(
+          localized:
+            "Deletion of “\(result.request.name)” was accepted and is waiting for foreground finalizers."
+        )
+      }
+    } catch {
+      resourceInventory = nil
+      resourceErrorMessage = String(
+        localized:
+          "Deletion of “\(result.request.name)” was accepted, but resources could not be refreshed: \(error.localizedDescription)"
+      )
+    }
+    return true
+  }
+
   private func performMutation(
     _ operation:
       @escaping @MainActor @Sendable (

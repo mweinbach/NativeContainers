@@ -161,6 +161,45 @@ struct KubernetesWorkloadRestartResult: Equatable, Sendable {
   let capturedAt: Date
 }
 
+struct KubernetesWorkloadDeleteRequest: Equatable, Sendable {
+  let workloadUID: String
+  let resourceVersion: String
+  let namespace: String
+  let name: String
+  let kind: KubernetesWorkloadKind
+
+  init(workload: KubernetesWorkloadRecord) throws {
+    guard
+      KubernetesResourceReferenceValidator.isUID(workload.uid),
+      KubernetesResourceReferenceValidator.isResourceVersion(
+        workload.resourceVersion
+      ),
+      KubernetesResourceReferenceValidator.isNamespace(workload.namespace),
+      KubernetesResourceReferenceValidator.isResourceName(workload.name)
+    else {
+      throw KubernetesClusterError.invalidWorkloadDeleteRequest
+    }
+
+    workloadUID = workload.uid
+    resourceVersion = workload.resourceVersion
+    namespace = workload.namespace
+    name = workload.name
+    kind = workload.kind
+  }
+}
+
+enum KubernetesWorkloadDeleteOutcome: String, Equatable, Sendable {
+  case deleted
+  case replacementPresent
+  case pendingFinalizers
+}
+
+struct KubernetesWorkloadDeleteResult: Equatable, Sendable {
+  let request: KubernetesWorkloadDeleteRequest
+  let outcome: KubernetesWorkloadDeleteOutcome
+  let capturedAt: Date
+}
+
 enum KubernetesPodPhase: String, CaseIterable, Codable, Equatable, Sendable {
   case pending
   case running

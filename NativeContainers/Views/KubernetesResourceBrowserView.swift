@@ -53,6 +53,7 @@ struct KubernetesResourceBrowserView: View {
   @State private var selectedPod: KubernetesPodRecord?
   @State private var workloadToScale: KubernetesWorkloadRecord?
   @State private var workloadToRestart: KubernetesWorkloadRecord?
+  @State private var workloadToDelete: KubernetesWorkloadRecord?
 
   var body: some View {
     @Bindable var browser = browser
@@ -95,6 +96,10 @@ struct KubernetesResourceBrowserView: View {
           onRestartWorkload: { workload in
             model.clearResourceError()
             workloadToRestart = workload
+          },
+          onDeleteWorkload: { workload in
+            model.clearResourceError()
+            workloadToDelete = workload
           }
         )
       }
@@ -146,6 +151,18 @@ struct KubernetesResourceBrowserView: View {
       },
       content: { workload in
         KubernetesWorkloadRestartView(
+          model: model,
+          workload: workload
+        )
+      }
+    )
+    .sheet(
+      item: $workloadToDelete,
+      onDismiss: {
+        browser.replaceInventory(model.resourceInventory)
+      },
+      content: { workload in
+        KubernetesWorkloadDeleteView(
           model: model,
           workload: workload
         )
@@ -270,6 +287,7 @@ private struct KubernetesResourceBrowserContent: View {
   let onViewPodLogs: (KubernetesPodRecord) -> Void
   let onScaleWorkload: (KubernetesWorkloadRecord) -> Void
   let onRestartWorkload: (KubernetesWorkloadRecord) -> Void
+  let onDeleteWorkload: (KubernetesWorkloadRecord) -> Void
 
   var body: some View {
     VStack(spacing: 0) {
@@ -292,7 +310,8 @@ private struct KubernetesResourceBrowserContent: View {
             hasSearchText: hasSearchText,
             isBusy: isBusy,
             onScale: onScaleWorkload,
-            onRestart: onRestartWorkload
+            onRestart: onRestartWorkload,
+            onDelete: onDeleteWorkload
           )
         case .pods:
           KubernetesPodList(
@@ -366,6 +385,7 @@ private struct KubernetesWorkloadList: View {
   let isBusy: Bool
   let onScale: (KubernetesWorkloadRecord) -> Void
   let onRestart: (KubernetesWorkloadRecord) -> Void
+  let onDelete: (KubernetesWorkloadRecord) -> Void
 
   var body: some View {
     if workloads.isEmpty {
@@ -395,6 +415,9 @@ private struct KubernetesWorkloadList: View {
           },
           onRestart: {
             onRestart(workload)
+          },
+          onDelete: {
+            onDelete(workload)
           }
         )
       }
@@ -416,6 +439,7 @@ private struct KubernetesWorkloadRow: View {
   let isBusy: Bool
   let onScale: () -> Void
   let onRestart: () -> Void
+  let onDelete: () -> Void
 
   var body: some View {
     HStack(spacing: 12) {
@@ -459,23 +483,25 @@ private struct KubernetesWorkloadRow: View {
         }
       }
 
-      if canScale || canRestart {
-        Menu("Actions", systemImage: "ellipsis.circle") {
-          if canScale {
-            Button("Scale…", systemImage: "arrow.up.arrow.down", action: onScale)
-          }
-          if canRestart {
-            Button(
-              "Restart…",
-              systemImage: "arrow.trianglehead.2.clockwise",
-              action: onRestart
-            )
-          }
+      Menu("Actions", systemImage: "ellipsis.circle") {
+        if canScale {
+          Button("Scale…", systemImage: "arrow.up.arrow.down", action: onScale)
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .disabled(isBusy)
+        if canRestart {
+          Button(
+            "Restart…",
+            systemImage: "arrow.trianglehead.2.clockwise",
+            action: onRestart
+          )
+        }
+        if canScale || canRestart {
+          Divider()
+        }
+        Button("Delete…", systemImage: "trash", role: .destructive, action: onDelete)
       }
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .disabled(isBusy)
     }
     .padding(.vertical, 4)
   }
@@ -639,6 +665,136 @@ private struct KubernetesWorkloadRestartView: View {
       if succeeded {
         dismiss()
       }
+    }
+  }
+}
+
+private struct KubernetesWorkloadDeleteView: View {
+  private static let systemNamespaces: Set<String> = [
+    "kube-system",
+    "kube-public",
+    "kube-node-lease",
+  ]
+
+  @Environment(\.dismiss) private var dismiss
+
+  let model: KubernetesClusterModel
+  let workload: KubernetesWorkloadRecord
+
+  @State private var confirmationText = ""
+  @State private var isSubmitting = false
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        KubernetesWorkloadIdentitySection(
+          name: workload.name,
+          namespace: workload.namespace,
+          kind: workload.kind
+        )
+        KubernetesWorkloadDeleteEffectSection(
+          isSystemNamespace: Self.systemNamespaces.contains(workload.namespace)
+        )
+        KubernetesWorkloadDeleteConfirmationSection(
+          workloadName: workload.name,
+          confirmationText: $confirmationText
+        )
+
+        if let errorMessage = model.resourceErrorMessage {
+          KubernetesWorkloadMutationErrorSection(
+            title: "Deletion failed",
+            message: errorMessage
+          )
+        }
+
+        if isSubmitting {
+          KubernetesWorkloadMutationProgressSection(
+            title: "Deleting workload…"
+          )
+        }
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Delete Workload")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            dismiss()
+          }
+          .disabled(isSubmitting)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Delete Workload", role: .destructive) {
+            submit()
+          }
+          .disabled(
+            isSubmitting
+              || confirmationText != workload.name
+          )
+        }
+      }
+    }
+    .frame(minWidth: 500, minHeight: 430)
+    .interactiveDismissDisabled(isSubmitting)
+  }
+
+  private func submit() {
+    guard
+      !isSubmitting,
+      confirmationText == workload.name
+    else {
+      return
+    }
+    isSubmitting = true
+    Task {
+      let succeeded = await model.deleteWorkload(workload)
+      isSubmitting = false
+      if succeeded {
+        dismiss()
+      }
+    }
+  }
+}
+
+private struct KubernetesWorkloadDeleteEffectSection: View {
+  let isSystemNamespace: Bool
+
+  var body: some View {
+    Section {
+      Label(
+        "This permanently deletes the workload controller and deletes its managed dependents, including Pods, in the foreground.",
+        systemImage: "trash"
+      )
+      .foregroundStyle(.red)
+      Label(
+        "Force deletion is not used. Kubernetes applies default graceful termination and waits for dependents and finalizers.",
+        systemImage: "shield"
+      )
+      if isSystemNamespace {
+        Label(
+          "This workload is in a Kubernetes system namespace. Deleting it can make the cluster unavailable.",
+          systemImage: "exclamationmark.octagon.fill"
+        )
+        .foregroundStyle(.red)
+      }
+    } header: {
+      Text("Deletion behavior")
+    } footer: {
+      Text(
+        "Deletion commits only if both the workload UID and resource version still match this review. A same-name replacement is never deleted."
+      )
+    }
+  }
+}
+
+private struct KubernetesWorkloadDeleteConfirmationSection: View {
+  let workloadName: String
+  @Binding var confirmationText: String
+
+  var body: some View {
+    Section("Confirm deletion") {
+      TextField("Workload name", text: $confirmationText)
+    } footer: {
+      Text("Enter the exact workload name “\(workloadName)” to enable deletion.")
     }
   }
 }

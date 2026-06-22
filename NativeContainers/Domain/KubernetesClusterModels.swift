@@ -254,6 +254,9 @@ protocol KubernetesClusterManaging: Sendable {
   func restartWorkload(
     _ request: KubernetesWorkloadRestartRequest
   ) async throws -> KubernetesWorkloadRestartResult
+  func deleteWorkload(
+    _ request: KubernetesWorkloadDeleteRequest
+  ) async throws -> KubernetesWorkloadDeleteResult
   func provision(
     _ request: KubernetesClusterProvisionRequest,
     progress: @escaping KubernetesClusterProgressHandler
@@ -293,6 +296,12 @@ struct UnavailableKubernetesClusterService: KubernetesClusterManaging {
   func restartWorkload(
     _ request: KubernetesWorkloadRestartRequest
   ) async throws -> KubernetesWorkloadRestartResult {
+    throw KubernetesClusterError.unavailable
+  }
+
+  func deleteWorkload(
+    _ request: KubernetesWorkloadDeleteRequest
+  ) async throws -> KubernetesWorkloadDeleteResult {
     throw KubernetesClusterError.unavailable
   }
 
@@ -363,6 +372,11 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
   case workloadRestartRejected(String)
   case workloadRestartNotConfirmed(String)
   case invalidWorkloadRestartResult
+  case invalidWorkloadDeleteRequest
+  case workloadDeleteRejected(String)
+  case workloadDeleteNotConfirmed(String)
+  case workloadDeleteVerificationFailed(String)
+  case invalidWorkloadDeleteResult
   case invalidPodShellDiscovery
   case podShellUnavailable
   case podIdentityChanged(String)
@@ -437,6 +451,21 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
       String(localized: "K3s could not confirm the restart for “\(name)”.")
     case .invalidWorkloadRestartResult:
       String(localized: "K3s returned an invalid workload restart result.")
+    case .invalidWorkloadDeleteRequest:
+      String(localized: "The Kubernetes workload deletion request is invalid.")
+    case .workloadDeleteRejected(let name):
+      String(
+        localized:
+          "K3s rejected deletion of the reviewed workload “\(name)”. Refresh resources and try again."
+      )
+    case .workloadDeleteNotConfirmed(let name):
+      String(localized: "K3s did not confirm deletion of the reviewed workload “\(name)”.")
+    case .workloadDeleteVerificationFailed(let name):
+      String(
+        localized: "Deletion of “\(name)” was accepted, but K3s could not verify its current state."
+      )
+    case .invalidWorkloadDeleteResult:
+      String(localized: "K3s returned an invalid workload deletion result.")
     case .invalidPodShellDiscovery:
       String(localized: "K3s returned an invalid Pod shell discovery result.")
     case .podShellUnavailable:

@@ -69,6 +69,7 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
   static let podLogIdentityMarker = "__NATIVECONTAINERS_K3S_POD_LOG_UID__"
   static let workloadScaleMarker = "__NATIVECONTAINERS_K3S_WORKLOAD_SCALE__"
   static let workloadRestartMarker = "__NATIVECONTAINERS_K3S_WORKLOAD_RESTART__"
+  static let workloadDeleteMarker = "__NATIVECONTAINERS_K3S_WORKLOAD_DELETE__"
   static let workloadRestartAnnotationKey = "kubectl.kubernetes.io/restartedAt"
   private static let versionMarker = "__NATIVECONTAINERS_K3S_VERSION__"
   private static let nodesMarker = "__NATIVECONTAINERS_K3S_NODES__"
@@ -274,6 +275,39 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
         operation: String(localized: "Restarting Kubernetes workload"),
         detail: Self.sanitizedFailureDetail(result)
       )
+    }
+  }
+
+  func deleteWorkload(
+    _ request: KubernetesWorkloadDeleteRequest
+  ) async throws -> KubernetesWorkloadDeleteResult {
+    let command = try Self.workloadDeleteCommand(request)
+    let descriptor = try await requireReadyRunningDescriptor()
+    let result = try await rootCommands.executeRootCommand(
+      command,
+      in: descriptor.machine,
+      timeoutSeconds: 75
+    )
+    guard !result.outputWasTruncated else {
+      throw KubernetesClusterError.guestOutputTooLarge
+    }
+    switch result.exitCode {
+    case 0:
+      return try Self.validatedWorkloadDeleteResult(
+        result.standardOutput,
+        request: request,
+        capturedAt: now()
+      )
+    case 66:
+      throw KubernetesClusterError.workloadIdentityChanged(request.name)
+    case 67:
+      throw KubernetesClusterError.workloadDeleteRejected(request.name)
+    case 68:
+      throw KubernetesClusterError.workloadDeleteNotConfirmed(request.name)
+    case 69:
+      throw KubernetesClusterError.workloadDeleteVerificationFailed(request.name)
+    default:
+      throw KubernetesClusterError.workloadDeleteRejected(request.name)
     }
   }
 
@@ -903,6 +937,145 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     return KubernetesWorkloadRestartResult(
       request: request,
       resourceVersion: String(fields[1]),
+      capturedAt: capturedAt
+    )
+  }
+
+  private static func workloadDeleteCommand(
+    _ request: KubernetesWorkloadDeleteRequest
+  ) throws -> String {
+    let resource: String
+    let apiVersion: String
+    let kind: String
+    let apiPath: String
+    switch request.kind {
+    case .deployment:
+      resource = "deployment"
+      apiVersion = "apps/v1"
+      kind = "Deployment"
+      apiPath =
+        "/apis/apps/v1/namespaces/\(request.namespace)/deployments/\(request.name)"
+    case .statefulSet:
+      resource = "statefulset"
+      apiVersion = "apps/v1"
+      kind = "StatefulSet"
+      apiPath =
+        "/apis/apps/v1/namespaces/\(request.namespace)/statefulsets/\(request.name)"
+    case .daemonSet:
+      resource = "daemonset"
+      apiVersion = "apps/v1"
+      kind = "DaemonSet"
+      apiPath =
+        "/apis/apps/v1/namespaces/\(request.namespace)/daemonsets/\(request.name)"
+    case .job:
+      resource = "job"
+      apiVersion = "batch/v1"
+      kind = "Job"
+      apiPath =
+        "/apis/batch/v1/namespaces/\(request.namespace)/jobs/\(request.name)"
+    }
+    guard
+      KubernetesResourceReferenceValidator.isUID(request.workloadUID),
+      KubernetesResourceReferenceValidator.isResourceVersion(
+        request.resourceVersion
+      ),
+      KubernetesResourceReferenceValidator.isNamespace(request.namespace),
+      KubernetesResourceReferenceValidator.isResourceName(request.name)
+    else {
+      throw KubernetesClusterError.invalidWorkloadDeleteRequest
+    }
+
+    return """
+      set -eu
+      resource=\(shellQuote(resource))
+      expected_api_version=\(shellQuote(apiVersion))
+      expected_kind=\(shellQuote(kind))
+      api_path=\(shellQuote(apiPath))
+      namespace=\(shellQuote(request.namespace))
+      name=\(shellQuote(request.name))
+      expected_uid=\(shellQuote(request.workloadUID))
+      expected_resource_version=\(shellQuote(request.resourceVersion))
+
+      if ! object=$(/usr/local/bin/k3s kubectl get "$resource" "$name" --namespace="$namespace" --output=json --request-timeout=5s 2>/dev/null); then
+        exit 66
+      fi
+      api_version=$(printf '%s' "$object" | jq --raw-output '.apiVersion // empty')
+      kind=$(printf '%s' "$object" | jq --raw-output '.kind // empty')
+      object_namespace=$(printf '%s' "$object" | jq --raw-output '.metadata.namespace // empty')
+      object_name=$(printf '%s' "$object" | jq --raw-output '.metadata.name // empty')
+      uid=$(printf '%s' "$object" | jq --raw-output '.metadata.uid // empty')
+      resource_version=$(printf '%s' "$object" | jq --raw-output '.metadata.resourceVersion // empty')
+      if [ "$api_version" != "$expected_api_version" ] || [ "$kind" != "$expected_kind" ] || [ "$object_namespace" != "$namespace" ] || [ "$object_name" != "$name" ] || [ "$uid" != "$expected_uid" ] || [ "$resource_version" != "$expected_resource_version" ]; then
+        exit 66
+      fi
+
+      delete_options=$(jq --null-input --compact-output --arg uid "$expected_uid" --arg resource_version "$expected_resource_version" '{
+        apiVersion: "v1",
+        kind: "DeleteOptions",
+        preconditions: {uid: $uid, resourceVersion: $resource_version},
+        propagationPolicy: "Foreground"
+      }')
+      if ! response=$(printf '%s' "$delete_options" | /usr/local/bin/k3s kubectl delete --raw="$api_path" --filename=- --request-timeout=15s 2>/dev/null); then
+        exit 67
+      fi
+      if [ -n "$response" ]; then
+        if ! printf '%s' "$response" | jq --exit-status 'type == "object" and ((.status // "Success") != "Failure")' >/dev/null 2>&1; then
+          exit 68
+        fi
+        response_uid=$(printf '%s' "$response" | jq --raw-output '.details.uid // .metadata.uid // empty')
+        if [ -n "$response_uid" ] && [ "$response_uid" != "$expected_uid" ]; then
+          exit 68
+        fi
+      fi
+
+      outcome='\(KubernetesWorkloadDeleteOutcome.pendingFinalizers.rawValue)'
+      attempt=0
+      while [ "$attempt" -lt 45 ]; do
+        if ! current=$(/usr/local/bin/k3s kubectl get "$resource" "$name" --namespace="$namespace" --ignore-not-found=true --output=json --request-timeout=5s 2>/dev/null); then
+          exit 69
+        fi
+        if [ -z "$current" ]; then
+          outcome='\(KubernetesWorkloadDeleteOutcome.deleted.rawValue)'
+          break
+        fi
+        current_uid=$(printf '%s' "$current" | jq --raw-output '.metadata.uid // empty')
+        if [ -z "$current_uid" ]; then
+          exit 69
+        fi
+        if [ "$current_uid" != "$expected_uid" ]; then
+          outcome='\(KubernetesWorkloadDeleteOutcome.replacementPresent.rawValue)'
+          break
+        fi
+        attempt=$((attempt + 1))
+        sleep 1
+      done
+      printf '%s%s\t%s\n' '\(workloadDeleteMarker)' "$expected_uid" "$outcome"
+      """
+  }
+
+  private static func validatedWorkloadDeleteResult(
+    _ output: String,
+    request: KubernetesWorkloadDeleteRequest,
+    capturedAt: Date
+  ) throws -> KubernetesWorkloadDeleteResult {
+    let line = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard line.hasPrefix(workloadDeleteMarker) else {
+      throw KubernetesClusterError.invalidWorkloadDeleteResult
+    }
+    let fields = line.dropFirst(workloadDeleteMarker.count).split(
+      separator: "\t",
+      omittingEmptySubsequences: false
+    )
+    guard
+      fields.count == 2,
+      fields[0] == Substring(request.workloadUID),
+      let outcome = KubernetesWorkloadDeleteOutcome(rawValue: String(fields[1]))
+    else {
+      throw KubernetesClusterError.invalidWorkloadDeleteResult
+    }
+    return KubernetesWorkloadDeleteResult(
+      request: request,
+      outcome: outcome,
       capturedAt: capturedAt
     )
   }
