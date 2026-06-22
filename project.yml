@@ -9,11 +9,16 @@ options:
 
 settings:
   base:
+    ARCHS: arm64
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: 6UHAW5UAT4
     MACOSX_DEPLOYMENT_TARGET: "26.0"
+    MARKETING_VERSION: "0.1.0"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     CLANG_ENABLE_MODULES: YES
     CODE_SIGN_STYLE: Automatic
+    VERSIONING_SYSTEM: apple-generic
 
 packages:
   AppleContainer:
@@ -88,9 +93,11 @@ targets:
           NativeContainers uses the Mac microphone only when you explicitly connect it to a macOS virtual machine.
         INFOPLIST_KEY_NSPrincipalClass: NSApplication
         ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
         DEAD_CODE_STRIPPING: YES
         SWIFT_EMIT_LOC_STRINGS: YES
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        VALIDATE_PRODUCT: YES
     scheme:
       testTargets:
         - NativeContainersTests
@@ -144,4 +151,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.nativecontainers.build-worker
         PRODUCT_NAME: NativeContainersBuildWorker
         ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
         DEAD_CODE_STRIPPING: YES
+        SKIP_INSTALL: YES
+        VALIDATE_PRODUCT: YES
