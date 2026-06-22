@@ -33,6 +33,8 @@ struct LinuxVirtualMachineModelsTests {
 
     #expect(manifest.linuxConfiguration == nil)
     #expect(manifest.guest == .macOS)
+    #expect(manifest.macOSMinimumCPUCount == nil)
+    #expect(manifest.macOSMinimumMemoryBytes == nil)
   }
 
   @Test

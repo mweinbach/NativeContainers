@@ -293,6 +293,7 @@ private struct GuestVirtualMachineConfigurationView: View {
         runtime: model.makeMacVirtualMachineRuntimeModel(for: machine),
         audio: model.makeMacVirtualMachineAudioModel(for: machine),
         network: model.makeMacVirtualMachineNetworkModel(for: machine),
+        compute: model.makeVirtualMachineComputeModel(for: machine),
         diskSnapshots: model.makeMacVirtualMachineDiskSnapshotModel(
           for: machine
         ),
@@ -307,6 +308,7 @@ private struct GuestVirtualMachineConfigurationView: View {
       LinuxVirtualMachineConfigurationView(
         machine: machine,
         runtime: model.makeLinuxVirtualMachineRuntimeModel(for: machine),
+        compute: model.makeVirtualMachineComputeModel(for: machine),
         network: model.makeLinuxVirtualMachineNetworkModel(for: machine),
         sharedDirectories: model.makeLinuxVirtualMachineSharedDirectoriesModel(
           for: machine

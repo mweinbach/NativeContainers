@@ -6,6 +6,7 @@ struct MacVirtualMachineConfigurationView: View {
 
   @State private var audio: MacVirtualMachineAudioModel
   @State private var network: MacVirtualMachineNetworkModel
+  let compute: VirtualMachineComputeModel
   @State private var diskSnapshots: MacVirtualMachineDiskSnapshotModel
   @State private var sharedDirectories: MacVirtualMachineSharedDirectoriesModel
   let diskMaintenance: VirtualMachineDiskImageMaintenanceModel
@@ -16,6 +17,7 @@ struct MacVirtualMachineConfigurationView: View {
     runtime: MacVirtualMachineRuntimeModel,
     audio: MacVirtualMachineAudioModel,
     network: MacVirtualMachineNetworkModel,
+    compute: VirtualMachineComputeModel,
     diskSnapshots: MacVirtualMachineDiskSnapshotModel,
     sharedDirectories: MacVirtualMachineSharedDirectoriesModel,
     diskMaintenance: VirtualMachineDiskImageMaintenanceModel
@@ -24,12 +26,18 @@ struct MacVirtualMachineConfigurationView: View {
     self.runtime = runtime
     _audio = State(initialValue: audio)
     _network = State(initialValue: network)
+    self.compute = compute
     _diskSnapshots = State(initialValue: diskSnapshots)
     _sharedDirectories = State(initialValue: sharedDirectories)
     self.diskMaintenance = diskMaintenance
   }
 
   var body: some View {
+    let computeEditBlock = MacVirtualMachineConfigurationEditPolicy().block(
+      installState: machine.installState,
+      runtime: runtime.snapshot,
+      diskMaintenanceIsBusy: diskMaintenance.isBusy || diskSnapshots.isBusy
+    )
     ScrollView {
       VStack(alignment: .leading, spacing: 20) {
         MacVirtualMachineConfigurationHeader(
@@ -38,6 +46,14 @@ struct MacVirtualMachineConfigurationView: View {
           diskMaintenanceOperation: diskMaintenance.operation,
           diskSnapshotOperation: diskSnapshots.operation,
           isRefreshingDiskState: diskMaintenance.isRefreshing
+        )
+        VirtualMachineComputeSection(
+          compute: compute,
+          refreshToken: machine.updatedAt,
+          editMessage: computeEditBlock?.message,
+          discardSavedState: computeEditBlock == .savedStatePresent
+            && canDiscardSavedState
+            ? { isConfirmingDiscardSavedState = true } : nil
         )
         MacVirtualMachineNetworkSection(
           installState: machine.installState,
@@ -80,7 +96,8 @@ struct MacVirtualMachineConfigurationView: View {
             ? { isConfirmingDiscardSavedState = true } : nil
         )
         if let errorMessage =
-          network.errorMessage
+          compute.errorMessage
+          ?? network.errorMessage
           ?? audio.errorMessage
           ?? diskSnapshots.errorMessage
           ?? diskSnapshots.warningMessage
@@ -91,6 +108,7 @@ struct MacVirtualMachineConfigurationView: View {
           MacVirtualMachineConfigurationErrorBanner(
             message: errorMessage,
             dismiss: {
+              compute.clearError()
               network.clearError()
               audio.clearError()
               diskSnapshots.clearMessages()

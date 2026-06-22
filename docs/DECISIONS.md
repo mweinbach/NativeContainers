@@ -2310,3 +2310,32 @@ start. Same-host clones preserve the explicit mode. Portable export/import
 clears it to automatic NAT for both guest families, while retaining Linux's
 stable MAC separately. Physical bridging remains excluded because the target
 does not carry its restricted entitlement.
+
+## ADR-081: Treat VM compute edits as cold, identity-pinned configuration
+
+**Status:** Accepted — 2026-06-22
+
+Virtual CPU count and memory size are common Virtualization.framework
+configuration inputs for macOS and Linux guests. NativeContainers therefore
+uses one guest-neutral compute value, limits snapshot, observable model, and
+SwiftUI editor. The composition root reads Apple's host-specific
+`VZVirtualMachineConfiguration` bounds once and injects the same immutable
+limits into guest-specific services.
+
+Persistence remains behind each guest's generation-pinned runtime lease. A
+mutation re-reads the exact manifest observed by the lease, validates the
+requested CPU and MiB-aligned memory against current host limits, preserves disk
+capacity, and atomically writes the bundle. Linux permits any value within the
+host bounds while stopped or ready to install. macOS additionally rejects saved
+state because CPU and memory participate in its configuration fingerprint.
+
+The macOS restore-image preparation result now retains Apple's minimum
+supported CPU count and memory size in optional manifest fields. Subsequent
+edits cannot cross those floors. Existing bundles lack that historical
+requirement evidence, so their current allocation becomes the conservative
+floor rather than guessing a lower supported value. Clone and portable transfer
+preserve both allocation and floors; bundle preparation and commit validation
+reject partial, unaligned, guest-incompatible, or allocation-exceeding floor
+metadata. Disk capacity is displayed but cannot be changed by this editor:
+virtual-disk growth and shrink policy require their own transactional storage
+workflow and must not be disguised as a manifest edit.

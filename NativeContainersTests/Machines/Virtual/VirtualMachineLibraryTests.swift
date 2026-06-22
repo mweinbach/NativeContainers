@@ -265,6 +265,11 @@ struct VirtualMachineLibraryTests {
         )
     )
     #expect(prepared.macOSFirstBootState == nil)
+    #expect(prepared.macOSMinimumCPUCount == 2)
+    #expect(
+      prepared.macOSMinimumMemoryBytes
+        == 2 * VirtualMachineResources.bytesPerGiB
+    )
     #expect(prepared.updatedAt >= draft.updatedAt)
     #expect(reloaded == [prepared])
 
@@ -686,6 +691,48 @@ struct VirtualMachineLibraryTests {
     recoveryLease.release()
   }
 
+  @Test
+  func computeConfigurationPersistsThroughMacRuntimeLease() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let lease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+    defer { lease.release() }
+    let limits = VirtualMachineComputeLimits(
+      minimumCPUCount: 1,
+      maximumCPUCount: 12,
+      minimumMemoryBytes: VirtualMachineResources.bytesPerGiB,
+      maximumMemoryBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+
+    let updated = try await fixture.library.setMacOSComputeConfiguration(
+      VirtualMachineComputeConfiguration(
+        cpuCount: 6,
+        memoryBytes: 8 * VirtualMachineResources.bytesPerGiB
+      ),
+      platformLimits: limits,
+      for: lease
+    )
+
+    #expect(updated.configuration.cpuCount == 6)
+    #expect(
+      updated.configuration.memoryBytes
+        == 8 * VirtualMachineResources.bytesPerGiB
+    )
+    #expect(updated.diskBytes == fixture.manifest.resources.diskBytes)
+    let reloaded = try #require(try await fixture.library.list().first)
+    #expect(reloaded.resources.cpuCount == 6)
+    #expect(
+      reloaded.resources.memoryBytes
+        == 8 * VirtualMachineResources.bytesPerGiB
+    )
+    #expect(
+      reloaded.resources.diskBytes == fixture.manifest.resources.diskBytes
+    )
+  }
+
   private func installedLibraryFixture(
     root: URL
   ) throws -> (
@@ -802,7 +849,9 @@ private actor TestMacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
         majorVersion: 27,
         minorVersion: 0,
         patchVersion: 0
-      )
+      ),
+      minimumCPUCount: 2,
+      minimumMemoryBytes: 2 * VirtualMachineResources.bytesPerGiB
     )
   }
 }

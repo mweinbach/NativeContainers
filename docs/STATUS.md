@@ -1557,6 +1557,34 @@ Updated: 2026-06-22.
   inspection and live cross-guest packet flow therefore remain in the
   disposable installed-guest smoke pass rather than being inferred.
 
+## Cross-guest VM compute configuration checkpoint
+
+- The selected-VM configuration screen now stages and applies virtual CPU and
+  memory changes for both macOS and GUI Linux. The editor uses Apple's current
+  host minimums and maximums, keeps disk capacity visibly separate, refreshes
+  inventory after a successful write, and applies changes on the next cold
+  start.
+- Guest-specific services acquire the existing generation-pinned runtime lease,
+  revalidate the complete compute state observed by that lease, preserve disk
+  capacity, and atomically persist only CPU and memory. macOS also rejects a
+  saved checkpoint; its existing configuration descriptor already fingerprints
+  both values.
+- New macOS preparations persist the selected restore image's minimum supported
+  CPU count and memory size. The editor cannot cross those requirements. Older
+  bundles decode without migration and conservatively use their current
+  allocation as the floor. Clone and portable transfer retain both allocation
+  and requirements; transfer preparation and commit validation reject partial,
+  unaligned, guest-incompatible, or allocation-exceeding requirement metadata.
+- Twenty-four focused model/service/library/compatibility tests pass. The
+  exact-head normal build and build-for-testing have zero Xcode warnings, and
+  the full plan reports 1,035 passed, zero failed, and 29 explicitly gated
+  live/destructive tests skipped. Xcode launched the app as PID 67457 and
+  stopped that exact process; its only logs were the existing Core
+  Spotlight/SetStore donation failures. Xcode compiled the standalone compute
+  preview, but its canvas host
+  hit the same `NativeContainers.app` launch timeout as the networking preview,
+  so no rendered-image claim is inferred.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are
@@ -1572,11 +1600,12 @@ integration pass.
 
 1. Live-install a reviewed arm64 Linux distribution, verify console/input/audio,
    mount a read-only and read-write host folder, eject its ISO, reboot from disk,
-   verify shared and host-only vmnet connectivity, clone and portable-round-trip
-   it, and exercise both graceful and watchdog force-stop paths.
+   change CPU/memory and verify the next boot, verify shared and host-only vmnet
+   connectivity, clone and portable-round-trip it, and exercise both graceful
+   and watchdog force-stop paths.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
-   recovery, console, same-host save/restore, and fresh-identity clone boot
-   against a local IPSW.
+   recovery, console, CPU/memory reconfiguration, same-host save/restore, and
+   fresh-identity clone boot against a local IPSW.
 3. Live-verify a second reviewed Up that grows a real pinned Socktainer project
    from a contiguous replica prefix, including stable metadata and exact Apple
    attachment observations. Keep recreation blocked until the pinned bridge

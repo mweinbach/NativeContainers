@@ -207,6 +207,7 @@ enum AppCompositionRoot {
     let virtualMachineNetworkDeviceFactory = AppleVirtualMachineNetworkDeviceFactory(
       vmnetNetworks: virtualMachineNetworkPool
     )
+    let virtualMachineComputeLimits = AppleVirtualMachineComputeLimits.current()
     let virtualMachineConfigurationFactory = AppleMacVirtualMachineConfigurationFactory(
       networkDeviceFactory: virtualMachineNetworkDeviceFactory
     )
@@ -305,6 +306,17 @@ enum AppCompositionRoot {
       leasingStore: virtualMachineLibrary,
       persistence: virtualMachineLibrary
     )
+    let virtualMachineCompute = MacVirtualMachineComputeService(
+      leasingStore: virtualMachineLibrary,
+      persistence: virtualMachineLibrary,
+      savedStateService: virtualMachineSavedState,
+      platformLimits: virtualMachineComputeLimits
+    )
+    let linuxVirtualMachineCompute = LinuxVirtualMachineComputeService(
+      leasingStore: virtualMachineLibrary,
+      persistence: virtualMachineLibrary,
+      platformLimits: virtualMachineComputeLimits
+    )
     let virtualMachineDiskSnapshots = MacVirtualMachineDiskSnapshotService(
       leasingStore: virtualMachineLibrary,
       persistence: virtualMachineLibrary,
@@ -390,6 +402,8 @@ enum AppCompositionRoot {
       virtualMachineAudio: virtualMachineAudio,
       virtualMachineNetwork: virtualMachineNetwork,
       linuxVirtualMachineNetwork: linuxVirtualMachineNetwork,
+      virtualMachineCompute: virtualMachineCompute,
+      linuxVirtualMachineCompute: linuxVirtualMachineCompute,
       virtualMachineSharedDirectories: virtualMachineSharedDirectories,
       linuxVirtualMachineSharedDirectories: linuxVirtualMachineSharedDirectories,
       virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(

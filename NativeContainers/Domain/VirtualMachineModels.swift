@@ -45,7 +45,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var name: String
   let guest: VirtualMachineGuest
   var installState: VirtualMachineInstallState
-  let resources: VirtualMachineResources
+  var resources: VirtualMachineResources
   let createdAt: Date
   var updatedAt: Date
   var diskImagePath: String
@@ -60,6 +60,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var networkConfiguration: VirtualMachineNetworkConfiguration? = nil
   var linuxConfiguration: LinuxVirtualMachineConfiguration? = nil
   var macOSGuestOperatingSystem: MacGuestOperatingSystemIdentity? = nil
+  var macOSMinimumCPUCount: Int? = nil
+  var macOSMinimumMemoryBytes: UInt64? = nil
   var macOSFirstBootState: MacVirtualMachineFirstBootState? = nil
   var macOSDiskSnapshotConfiguration: MacVirtualMachineDiskSnapshotConfiguration? = nil
 
@@ -137,6 +139,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
       linuxConfiguration = source.linuxConfiguration
     }
     macOSGuestOperatingSystem = source.macOSGuestOperatingSystem
+    macOSMinimumCPUCount = source.macOSMinimumCPUCount
+    macOSMinimumMemoryBytes = source.macOSMinimumMemoryBytes
     macOSFirstBootState = source.macOSFirstBootState
     macOSDiskSnapshotConfiguration = source.macOSDiskSnapshotConfiguration
   }
@@ -226,6 +230,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     hardwareModelPath: String,
     machineIdentifierPath: String,
     operatingSystem: MacGuestOperatingSystemIdentity? = nil,
+    minimumCPUCount: Int? = nil,
+    minimumMemoryBytes: UInt64? = nil,
     updatedAt: Date = Date()
   ) {
     installState = .readyToInstall
@@ -234,6 +240,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     self.hardwareModelPath = hardwareModelPath
     self.machineIdentifierPath = machineIdentifierPath
     macOSGuestOperatingSystem = operatingSystem
+    macOSMinimumCPUCount = minimumCPUCount
+    macOSMinimumMemoryBytes = minimumMemoryBytes
     macOSFirstBootState = nil
     macOSDiskSnapshotConfiguration = nil
     installationOperationID = nil

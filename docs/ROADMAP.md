@@ -144,6 +144,9 @@ must leave a usable, test-backed product slice.
 - [x] Generation-pinned GUI Linux runtime ownership, start/pause/resume,
       graceful stop with a 30-second automatic force-stop watchdog, explicit
       Force Stop, native console, installer-media ejection, and creation UI.
+- [x] Stopped-only GUI Linux CPU and memory editing within the current host's
+      Virtualization.framework limits, with generation-pinned persistence and
+      cold-start application while disk capacity remains storage-owned.
 - [x] Persistent GUI Linux VirtioFS shared folders through security-scoped
       bookmarks, stopped-only lease-backed editing, one stable
       `nativecontainers` mount tag, and exact in-guest mount guidance.
@@ -195,6 +198,9 @@ must leave a usable, test-backed product slice.
       manifest-backed service, app-owned vmnet pool, and focused VZ device
       factory. Custom modes are stopped-only, saved-state-free, and reset to NAT
       in portable packages.
+- [x] Stopped-only CPU and memory editing within current Apple virtualization
+      limits, with persisted restore-image minimums, saved-state rejection,
+      configuration fingerprinting, and cold-start application.
 - [ ] Complete macOS host integration where public APIs and distributable
       entitlements support the guest.
   - [x] Physical USB discovery, exact-generation attach/detach orchestration,

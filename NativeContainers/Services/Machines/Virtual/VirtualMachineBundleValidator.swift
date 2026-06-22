@@ -167,6 +167,8 @@ struct VirtualMachineBundleValidator {
     bundleURL: URL,
     isPortable: Bool
   ) throws {
+    try VirtualMachineComputeState.validatePersistedRequirements(in: manifest)
+
     switch manifest.guest {
     case .macOS:
       try validateDiskSnapshotArtifacts(
@@ -200,6 +202,8 @@ struct VirtualMachineBundleValidator {
         manifest.audioConfiguration == nil,
         !isPortable || manifest.networkConfiguration == nil,
         manifest.macOSGuestOperatingSystem == nil,
+        manifest.macOSMinimumCPUCount == nil,
+        manifest.macOSMinimumMemoryBytes == nil,
         manifest.macOSFirstBootState == nil,
         !manifest.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots
       else {

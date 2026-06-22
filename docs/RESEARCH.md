@@ -557,6 +557,18 @@ The installed Apple documentation confirms:
   builds the input stream. Clipboard sharing remains a SPICE-agent facility
   documented for Linux guests; the installed docs do not establish a native
   macOS-guest clipboard channel.
+- `VZVirtualMachineConfiguration.cpuCount` and `memorySize` are common guest
+  configuration inputs. Apple's installed documentation exposes host-specific
+  minimum and maximum CPU counts and memory sizes; memory must be MiB-aligned,
+  and normal configuration validation remains the final host compatibility
+  check. NativeContainers reads those limits once in composition and applies
+  edits only to the next cold configuration.
+- macOS restore-image requirements separately expose minimum supported CPU and
+  memory values. Running below them is documented as unsupported, so platform
+  preparation persists those floors rather than deriving them later from a
+  vanished restore-image reference. A legacy bundle with no stored floor cannot
+  safely infer a lower value and therefore treats its current allocation as its
+  minimum.
 - `VZVirtualMachineView` is the native interactive display. It supports
   automatic display reconfiguration and optional capture of system keys. SDK
   27's `VZVirtualMachineViewAdaptor` retains its VM, so a console must detach the

@@ -254,6 +254,8 @@ extension AppModel {
       virtualMachineAudio: PreviewMacVirtualMachineAudioService(),
       virtualMachineNetwork: PreviewVirtualMachineNetworkService(),
       linuxVirtualMachineNetwork: PreviewVirtualMachineNetworkService(),
+      virtualMachineCompute: PreviewVirtualMachineComputeService(),
+      linuxVirtualMachineCompute: PreviewVirtualMachineComputeService(),
       virtualMachineSharedDirectories: sharedDirectories,
       linuxVirtualMachineSharedDirectories: sharedDirectories,
       initialInventory: inventory,
@@ -755,6 +757,40 @@ private actor PreviewVirtualMachineNetworkService:
   ) async throws -> VirtualMachineNetworkSnapshot {
     configuration = try configuration.settingAttachment(attachment)
     return VirtualMachineNetworkSnapshot(configuration: configuration)
+  }
+}
+
+private actor PreviewVirtualMachineComputeService:
+  VirtualMachineComputeManaging
+{
+  private var configuration = VirtualMachineComputeConfiguration(
+    cpuCount: 8,
+    memoryBytes: 8 * VirtualMachineResources.bytesPerGiB
+  )
+
+  func snapshot(id: UUID) -> VirtualMachineComputeSnapshot {
+    makeSnapshot()
+  }
+
+  func setConfiguration(
+    _ configuration: VirtualMachineComputeConfiguration,
+    for machineID: UUID
+  ) -> VirtualMachineComputeSnapshot {
+    self.configuration = configuration
+    return makeSnapshot()
+  }
+
+  private func makeSnapshot() -> VirtualMachineComputeSnapshot {
+    VirtualMachineComputeSnapshot(
+      configuration: configuration,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB,
+      limits: VirtualMachineComputeLimits(
+        minimumCPUCount: 1,
+        maximumCPUCount: 12,
+        minimumMemoryBytes: VirtualMachineResources.bytesPerGiB,
+        maximumMemoryBytes: 64 * VirtualMachineResources.bytesPerGiB
+      )
+    )
   }
 }
 

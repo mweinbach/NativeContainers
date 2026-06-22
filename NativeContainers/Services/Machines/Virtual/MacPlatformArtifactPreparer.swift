@@ -93,7 +93,9 @@ struct MacPlatformArtifactPreparer: MacPlatformArtifactPreparing {
         operatingSystem: MacGuestOperatingSystemIdentity(
           buildVersion: restoreImage.buildVersion,
           operatingSystemVersion: restoreImage.operatingSystemVersion
-        )
+        ),
+        minimumCPUCount: requirements.minimumSupportedCPUCount,
+        minimumMemoryBytes: requirements.minimumSupportedMemorySize
       )
     #else
       throw MacPlatformArtifactError.requiresAppleSilicon

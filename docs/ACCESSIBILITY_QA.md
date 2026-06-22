@@ -80,8 +80,8 @@ live gate is not yet satisfied, even when its source structure has passed.
 | Persistent Linux machines | Create, first-user setup, selection versus tools, configuration, start/stop/Force Stop/delete, command runner and terminal | Open |
 | Compose | Project discovery, reviewed Up/Down, scale/start/stop, recovery records, external-resource warnings and locked navigation | Open |
 | Kubernetes | Cluster setup/lifecycle/delete/export, workload/pod/service browser, search, scale/restart/delete review, Pod logs, one-shot commands, and terminal tabs | Open |
-| GUI Linux virtual machines | ISO selection/copy, create, selection versus runtime actions, install console, configuration, network modes, shared folders, pause/resume/shutdown/Force Stop/eject, clone, export/import and delete | Open |
-| macOS virtual machines | IPSW download/import, prepare/install, selection versus runtime actions, console, saved state, disk and snapshots, shares, audio, network, USB, clone, export/import and delete | Open |
+| GUI Linux virtual machines | ISO selection/copy, create, selection versus runtime actions, install console, compute and network configuration, shared folders, pause/resume/shutdown/Force Stop/eject, clone, export/import and delete | Open |
+| macOS virtual machines | IPSW download/import, prepare/install, selection versus runtime actions, console, saved state, compute, disk and snapshots, shares, audio, network, USB, clone, export/import and delete | Open |
 | Settings and optional integrations | App behavior, menu-bar controls, Docker compatibility, diagnostics export/delete, performance baselines, cancellation and unavailable states | Open |
 | Cross-workflow presentation | Empty/loading/error states, sheets, popovers, confirmation dialogs, file panels, help, keyboard focus restoration and reduced-motion transitions | Open |
 

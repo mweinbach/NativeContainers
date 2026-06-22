@@ -44,6 +44,18 @@ enum MacVirtualMachineFirstBootState: String, Codable, Equatable, Sendable {
 
 struct MacPlatformPreparationResult: Equatable, Sendable {
   let operatingSystem: MacGuestOperatingSystemIdentity
+  let minimumCPUCount: Int
+  let minimumMemoryBytes: UInt64
+
+  init(
+    operatingSystem: MacGuestOperatingSystemIdentity,
+    minimumCPUCount: Int = 1,
+    minimumMemoryBytes: UInt64 = VirtualMachineResources.bytesPerGiB
+  ) {
+    self.operatingSystem = operatingSystem
+    self.minimumCPUCount = minimumCPUCount
+    self.minimumMemoryBytes = minimumMemoryBytes
+  }
 }
 
 struct MacGuestProvisioningRequest: Equatable, Sendable {

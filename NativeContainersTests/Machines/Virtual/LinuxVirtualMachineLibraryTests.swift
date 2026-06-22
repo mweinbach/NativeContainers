@@ -177,6 +177,59 @@ struct LinuxVirtualMachineLibraryTests {
   }
 
   @Test
+  func computeConfigurationPersistsThroughLinuxRuntimeLease() async throws {
+    let fixture = try LinuxLibraryFixture()
+    defer { fixture.remove() }
+    let library = VirtualMachineLibrary(
+      rootURL: fixture.root,
+      linuxPlatformArtifactPreparer: TestLinuxPlatformArtifactPreparer(
+        behavior: .success
+      )
+    )
+    let draft = try await library.createDraft(
+      name: "Compute Linux",
+      guest: .linux,
+      resources: fixture.resources
+    )
+    let prepared = try await library.prepareLinuxVM(
+      id: draft.id,
+      installationMediaURL: fixture.installationMedia
+    )
+    let service = LinuxVirtualMachineComputeService(
+      leasingStore: library,
+      persistence: library,
+      platformLimits: VirtualMachineComputeLimits(
+        minimumCPUCount: 1,
+        maximumCPUCount: 12,
+        minimumMemoryBytes: VirtualMachineResources.bytesPerGiB,
+        maximumMemoryBytes: 64 * VirtualMachineResources.bytesPerGiB
+      )
+    )
+
+    let updated = try await service.setConfiguration(
+      VirtualMachineComputeConfiguration(
+        cpuCount: 2,
+        memoryBytes: 2 * VirtualMachineResources.bytesPerGiB
+      ),
+      for: prepared.id
+    )
+
+    #expect(updated.configuration.cpuCount == 2)
+    #expect(
+      updated.configuration.memoryBytes
+        == 2 * VirtualMachineResources.bytesPerGiB
+    )
+    #expect(updated.diskBytes == prepared.resources.diskBytes)
+    let reloaded = try #require(try await library.list().first)
+    #expect(reloaded.resources.cpuCount == 2)
+    #expect(
+      reloaded.resources.memoryBytes
+        == 2 * VirtualMachineResources.bytesPerGiB
+    )
+    #expect(reloaded.resources.diskBytes == prepared.resources.diskBytes)
+  }
+
+  @Test
   func linuxRuntimeLeasePersistsAndReloadsSharedDirectories() async throws {
     let fixture = try LinuxLibraryFixture()
     defer { fixture.remove() }

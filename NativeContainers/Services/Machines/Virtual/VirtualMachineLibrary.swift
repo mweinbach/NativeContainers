@@ -95,6 +95,8 @@ actor VirtualMachineLibrary:
   MacVirtualMachineAudioConfigurationPersisting,
   MacVirtualMachineNetworkConfigurationPersisting,
   LinuxVirtualMachineNetworkConfigurationPersisting,
+  MacVirtualMachineComputePersisting,
+  LinuxVirtualMachineComputePersisting,
   MacVirtualMachineDiskSnapshotPersisting,
   VirtualMachineDiskImageReplacementStoring
 {
@@ -383,6 +385,72 @@ actor VirtualMachineLibrary:
       to: bundleURL.appending(path: Self.manifestFilename)
     )
     return updated
+  }
+
+  func macOSComputeState(id: UUID) throws -> VirtualMachineComputeState {
+    VirtualMachineComputeState(manifest: try installationManifest(id: id))
+  }
+
+  func setMacOSComputeConfiguration(
+    _ configuration: VirtualMachineComputeConfiguration,
+    platformLimits: VirtualMachineComputeLimits,
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineComputeState {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try installationManifest(id: lease.target.machineID)
+    let current = VirtualMachineComputeState(manifest: manifest)
+
+    guard current == VirtualMachineComputeState(manifest: lease.machine.manifest) else {
+      throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    let limits = try current.snapshot(platformLimits: platformLimits).limits
+    try limits.validate(configuration)
+    let updatedResources = try configuration.applying(to: manifest.resources)
+    guard updatedResources != manifest.resources else { return current }
+
+    manifest.resources = updatedResources
+    manifest.updatedAt = Date()
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
+    )
+    return VirtualMachineComputeState(manifest: manifest)
+  }
+
+  func linuxComputeState(id: UUID) throws -> VirtualMachineComputeState {
+    VirtualMachineComputeState(manifest: try linuxRuntimeManifest(id: id))
+  }
+
+  func setLinuxComputeConfiguration(
+    _ configuration: VirtualMachineComputeConfiguration,
+    platformLimits: VirtualMachineComputeLimits,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) throws -> VirtualMachineComputeState {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try linuxRuntimeManifest(id: lease.target.machineID)
+    let current = VirtualMachineComputeState(manifest: manifest)
+
+    guard current == VirtualMachineComputeState(manifest: lease.machine.manifest) else {
+      throw LinuxVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+
+    let limits = try current.snapshot(platformLimits: platformLimits).limits
+    try limits.validate(configuration)
+    let updatedResources = try configuration.applying(to: manifest.resources)
+    guard updatedResources != manifest.resources else { return current }
+
+    manifest.resources = updatedResources
+    manifest.updatedAt = Date()
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
+    )
+    return VirtualMachineComputeState(manifest: manifest)
   }
 
   func macOSDiskSnapshotConfiguration(
@@ -705,7 +773,9 @@ actor VirtualMachineLibrary:
         auxiliaryStoragePath: MacPlatformArtifactURLs.auxiliaryStorageManifestPath,
         hardwareModelPath: MacPlatformArtifactURLs.hardwareModelManifestPath,
         machineIdentifierPath: MacPlatformArtifactURLs.machineIdentifierManifestPath,
-        operatingSystem: preparation.operatingSystem
+        operatingSystem: preparation.operatingSystem,
+        minimumCPUCount: preparation.minimumCPUCount,
+        minimumMemoryBytes: preparation.minimumMemoryBytes
       )
       try bundleStore.write(
         manifest,

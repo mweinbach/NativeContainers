@@ -3,6 +3,7 @@ import SwiftUI
 struct LinuxVirtualMachineConfigurationView: View {
   let machine: VirtualMachineManifest
   let runtime: LinuxVirtualMachineRuntimeModel
+  let compute: VirtualMachineComputeModel
   let network: LinuxVirtualMachineNetworkModel
   let sharedDirectories: LinuxVirtualMachineSharedDirectoriesModel
 
@@ -13,17 +14,19 @@ struct LinuxVirtualMachineConfigurationView: View {
           machine: machine,
           snapshot: runtime.snapshot
         )
-        LinuxVirtualMachineResourcesSection(resources: machine.resources)
+        VirtualMachineComputeSection(
+          compute: compute,
+          refreshToken: machine.updatedAt,
+          editMessage: configurationEditMessage,
+          discardSavedState: nil
+        )
         LinuxVirtualMachineBootSection(
           installState: machine.installState,
           configuration: machine.linuxConfiguration,
           hasLiveInstallationMedia: runtime.snapshot.hasInstallationMedia
         )
         LinuxVirtualMachineNetworkSection(
-          installState: machine.installState,
-          isPrepared: machine.linuxConfiguration != nil,
-          runtimeState: runtime.snapshot.state,
-          hasActiveRuntime: runtime.snapshot.target != nil,
+          editMessage: configurationEditMessage,
           network: network
         )
         LinuxVirtualMachineConnectivitySection(
@@ -35,10 +38,15 @@ struct LinuxVirtualMachineConfigurationView: View {
           hasActiveRuntime: runtime.snapshot.target != nil,
           sharedDirectories: sharedDirectories
         )
-        if let errorMessage = network.errorMessage ?? runtime.errorMessage {
+        if let errorMessage =
+          compute.errorMessage
+          ?? network.errorMessage
+          ?? runtime.errorMessage
+        {
           LinuxVirtualMachineConfigurationErrorBanner(
             message: errorMessage,
             dismiss: {
+              compute.clearError()
               network.clearError()
               runtime.clearActionError()
             }
@@ -52,13 +60,30 @@ struct LinuxVirtualMachineConfigurationView: View {
     .navigationTitle(machine.name)
     .task { runtime.observe() }
   }
+
+  private var configurationEditMessage: LocalizedStringResource? {
+    guard machine.linuxConfiguration != nil,
+      machine.installState == .readyToInstall || machine.installState == .stopped
+    else {
+      return "Finish preparing this VM before changing its configuration."
+    }
+    guard runtime.snapshot.target == nil else {
+      return "Shut down this VM before changing its configuration."
+    }
+    switch runtime.snapshot.state {
+    case .stopped:
+      return nil
+    case .ownedElsewhere:
+      return "Another NativeContainers process owns this VM."
+    case .starting, .running, .pausing, .paused, .resuming,
+      .ejectingInstallationMedia, .stopping:
+      return "Wait for this VM to finish changing state."
+    }
+  }
 }
 
 private struct LinuxVirtualMachineNetworkSection: View {
-  let installState: VirtualMachineInstallState
-  let isPrepared: Bool
-  let runtimeState: LinuxVirtualMachineRuntimeState
-  let hasActiveRuntime: Bool
+  let editMessage: LocalizedStringResource?
   let network: LinuxVirtualMachineNetworkModel
 
   var body: some View {
@@ -78,25 +103,6 @@ private struct LinuxVirtualMachineNetworkSection: View {
     }
   }
 
-  private var editMessage: LocalizedStringResource? {
-    guard isPrepared,
-      installState == .readyToInstall || installState == .stopped
-    else {
-      return "Finish preparing this VM before changing its network."
-    }
-    guard !hasActiveRuntime else {
-      return "Shut down this VM before changing its network."
-    }
-    switch runtimeState {
-    case .stopped:
-      return nil
-    case .ownedElsewhere:
-      return "Another NativeContainers process owns this VM."
-    case .starting, .running, .pausing, .paused, .resuming,
-      .ejectingInstallationMedia, .stopping:
-      return "Wait for this VM to finish changing state."
-    }
-  }
 }
 
 private struct LinuxVirtualMachineConfigurationHeader: View {
@@ -130,18 +136,6 @@ private struct LinuxVirtualMachineConfigurationHeader: View {
         .font(.subheadline)
         .foregroundStyle(.secondary)
       }
-    }
-  }
-}
-
-private struct LinuxVirtualMachineResourcesSection: View {
-  let resources: VirtualMachineResources
-
-  var body: some View {
-    GroupBox("Hardware") {
-      VirtualMachineResourceSummary(resources: resources)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 6)
     }
   }
 }

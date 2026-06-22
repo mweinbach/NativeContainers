@@ -93,6 +93,10 @@ struct VirtualMachineCloneServiceTests {
     #expect(clone.name == "Source Mac Copy")
     #expect(clone.installState == .stopped)
     #expect(clone.resources == source.resources)
+    #expect(clone.macOSMinimumCPUCount == source.macOSMinimumCPUCount)
+    #expect(
+      clone.macOSMinimumMemoryBytes == source.macOSMinimumMemoryBytes
+    )
     #expect(clone.diskImagePath == source.diskImagePath)
     #expect(clone.auxiliaryStoragePath == source.auxiliaryStoragePath)
     #expect(clone.hardwareModelPath == source.hardwareModelPath)
@@ -440,6 +444,9 @@ struct VirtualMachineCloneServiceTests {
     stopped.auxiliaryStoragePath = MacPlatformArtifactURLs.auxiliaryStorageManifestPath
     stopped.hardwareModelPath = MacPlatformArtifactURLs.hardwareModelManifestPath
     stopped.machineIdentifierPath = MacPlatformArtifactURLs.machineIdentifierManifestPath
+    stopped.macOSMinimumCPUCount = 2
+    stopped.macOSMinimumMemoryBytes =
+      2 * VirtualMachineResources.bytesPerGiB
     if microphoneEnabled {
       stopped.audioConfiguration = MacVirtualMachineAudioConfiguration(
         revision: 1,

@@ -1130,6 +1130,21 @@ than sharing presentation state across an implied multi-window group.
   preparation clears it to automatic NAT. Physical bridging is deliberately
   excluded because its restricted entitlement is not available through the
   target capability surface.
+- VM compute editing is guest-neutral above the lease boundary and
+  guest-specific below it. One Apple limits adapter reads the current host's
+  `VZVirtualMachineConfiguration` CPU and memory bounds. macOS and Linux
+  services then acquire their own generation-pinned runtime lease, revalidate
+  the exact manifest observed by that lease, and atomically replace only CPU
+  and memory while preserving disk capacity.
+- macOS platform preparation persists the selected restore image's minimum CPU
+  and memory requirements. Compute edits can never move below those floors and
+  are rejected while saved state exists; older bundles without requirement
+  metadata conservatively use their current allocation as the floor. Linux has
+  no restore-image or saved-memory floor and uses the Apple host limits. The
+  shared SwiftUI model stages edits, applies them on the next cold start, and
+  refreshes inventory only after persistence succeeds. Clone and transfer
+  validation reject partial, unaligned, guest-incompatible, or allocation-
+  exceeding requirement metadata before a bundle can be published.
 - Physical USB is a separate host-local service lane. AccessoryAccess owns
   discovery and system authorization; a focused Apple adapter parses only the
   stable registry ID and standard device descriptor needed by the domain. The

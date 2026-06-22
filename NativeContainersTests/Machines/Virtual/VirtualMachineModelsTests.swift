@@ -73,6 +73,8 @@ struct VirtualMachineModelsTests {
       revision: 2,
       isMicrophoneEnabled: true
     )
+    source.macOSMinimumCPUCount = 2
+    source.macOSMinimumMemoryBytes = 4 * VirtualMachineResources.bytesPerGiB
 
     let clone = try VirtualMachineManifest(cloning: source, name: "ASIF Clone")
 
@@ -81,5 +83,10 @@ struct VirtualMachineModelsTests {
     #expect(clone.effectiveDiskImageFormat == .asif)
     #expect(clone.audioConfiguration == nil)
     #expect(clone.effectiveAudioConfiguration == .disconnected)
+    #expect(clone.macOSMinimumCPUCount == 2)
+    #expect(
+      clone.macOSMinimumMemoryBytes
+        == 4 * VirtualMachineResources.bytesPerGiB
+    )
   }
 }

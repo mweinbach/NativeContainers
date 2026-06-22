@@ -131,6 +131,26 @@ struct AppModelTests {
   }
 
   @Test
+  func virtualMachineComputeUsesAStableAppScopedModelPerGuest() throws {
+    let model = AppModel.previewVirtualMachines
+    let mac = try #require(model.virtualMachines.first { $0.guest == .macOS })
+    let linux = try #require(model.virtualMachines.first { $0.guest == .linux })
+
+    #expect(
+      model.makeVirtualMachineComputeModel(for: mac)
+        === model.makeVirtualMachineComputeModel(for: mac)
+    )
+    #expect(
+      model.makeVirtualMachineComputeModel(for: linux)
+        === model.makeVirtualMachineComputeModel(for: linux)
+    )
+    #expect(
+      model.makeVirtualMachineComputeModel(for: mac)
+        !== model.makeVirtualMachineComputeModel(for: linux)
+    )
+  }
+
+  @Test
   func macVirtualMachineDiskSnapshotsUseAStableAppScopedModel() throws {
     let model = AppModel.previewVirtualMachines
     let machine = try #require(model.virtualMachines.first)

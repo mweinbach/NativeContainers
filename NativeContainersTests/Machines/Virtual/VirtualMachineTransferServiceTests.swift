@@ -38,6 +38,10 @@ struct VirtualMachineTransferServiceTests {
     #expect(exported.restoreImageURL == nil)
     #expect(exported.installationOperationID == nil)
     #expect(exported.installationFailure == nil)
+    #expect(exported.macOSMinimumCPUCount == source.macOSMinimumCPUCount)
+    #expect(
+      exported.macOSMinimumMemoryBytes == source.macOSMinimumMemoryBytes
+    )
     #expect(source.effectiveAudioConfiguration.isMicrophoneEnabled)
     #expect(exported.audioConfiguration == nil)
     #expect(exported.effectiveAudioConfiguration == .disconnected)
@@ -277,6 +281,34 @@ struct VirtualMachineTransferServiceTests {
     )
     #expect(try await fixture.importLibrary.list() == [imported])
     #expect(FileManager.default.fileExists(atPath: package.path))
+    try fixture.expectNoImportPartials()
+  }
+
+  @Test
+  func importRejectsIncompleteMacGuestRequirements() async throws {
+    let fixture = try VirtualMachineTransferFixture()
+    defer { fixture.remove() }
+    let source = try await fixture.makeStoppedMachine(
+      library: fixture.sourceLibrary,
+      libraryRoot: fixture.sourceLibraryRoot,
+      name: "Incomplete Requirements"
+    )
+    let package = fixture.root.appending(
+      path: "Incomplete Requirements.nativevm",
+      directoryHint: .isDirectory
+    )
+    _ = try await fixture.service(library: fixture.sourceLibrary)
+      .exportVirtualMachine(id: source.id, to: package)
+    var packageManifest = try fixture.readManifest(in: package)
+    packageManifest.macOSMinimumMemoryBytes = nil
+    try fixture.write(packageManifest, to: package)
+
+    await #expect(throws: VirtualMachineBundleError.self) {
+      _ = try await fixture.service(library: fixture.importLibrary)
+        .importVirtualMachine(from: package, mode: .preserveIdentity)
+    }
+
+    #expect(try await fixture.importLibrary.list().isEmpty)
     try fixture.expectNoImportPartials()
   }
 
@@ -788,6 +820,9 @@ private struct VirtualMachineTransferFixture {
     stopped.auxiliaryStoragePath = MacPlatformArtifactURLs.auxiliaryStorageManifestPath
     stopped.hardwareModelPath = MacPlatformArtifactURLs.hardwareModelManifestPath
     stopped.machineIdentifierPath = MacPlatformArtifactURLs.machineIdentifierManifestPath
+    stopped.macOSMinimumCPUCount = 2
+    stopped.macOSMinimumMemoryBytes =
+      2 * VirtualMachineResources.bytesPerGiB
     if includeHostLocalState {
       stopped.audioConfiguration = MacVirtualMachineAudioConfiguration(
         revision: 1,

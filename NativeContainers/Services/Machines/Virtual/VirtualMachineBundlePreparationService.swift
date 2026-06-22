@@ -162,6 +162,18 @@ struct VirtualMachineBundlePreparationService:
   private func validateGuestManifestState(
     _ request: VirtualMachineBundlePreparationRequest
   ) throws {
+    for manifest in [request.sourceManifest, request.destinationManifest] {
+      do {
+        try VirtualMachineComputeState.validatePersistedRequirements(
+          in: manifest
+        )
+      } catch {
+        throw VirtualMachineBundleError.invalidBundle(
+          error.localizedDescription
+        )
+      }
+    }
+
     guard request.sourceManifest.guest == .linux else { return }
     for manifest in [request.sourceManifest, request.destinationManifest] {
       guard let configuration = manifest.linuxConfiguration,
@@ -172,6 +184,8 @@ struct VirtualMachineBundlePreparationService:
         manifest.restoreImageURL == nil,
         manifest.audioConfiguration == nil,
         manifest.macOSGuestOperatingSystem == nil,
+        manifest.macOSMinimumCPUCount == nil,
+        manifest.macOSMinimumMemoryBytes == nil,
         manifest.macOSFirstBootState == nil,
         !manifest.effectiveMacOSDiskSnapshotConfiguration.hasSnapshots
       else {
