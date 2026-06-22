@@ -368,12 +368,12 @@ struct PerformanceBenchmarkServiceTests {
     }
     #expect(result.kind == .coldLinuxMachineStartup)
     #expect(result.samples.map(\.durationNanoseconds) == [8_000])
-    let request = await runtime.lastRequest
-    #expect(request?.startAfterCreation == false)
-    #expect(request?.architecture == .arm64)
-    #expect(request?.cpuCount == 1)
-    #expect(request?.memoryBytes == LinuxMachineCreationRequest.minimumMemoryBytes)
-    #expect(request?.homeMount == .none)
+    let request = try #require(await runtime.lastRequest)
+    #expect(request.startAfterCreation == false)
+    #expect(request.architecture == .arm64)
+    #expect(request.cpuCount == 1)
+    #expect(request.memoryBytes == LinuxMachineCreationRequest.minimumMemoryBytes)
+    #expect(request.homeMount == LinuxMachineHomeMount.none)
     #expect(await runtime.currentMachine() == nil)
     #expect(
       await runtime.calls == [
