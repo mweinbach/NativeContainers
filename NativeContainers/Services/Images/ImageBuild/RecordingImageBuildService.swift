@@ -204,7 +204,8 @@ struct RecordingImageBuildService: ImageBuilding, Sendable {
     case .emptyTags, .duplicateTags, .archiveReferenceCount, .unexpectedTags,
       .rootFilesystemSinglePlatform, .emptyPlatforms, .duplicatePlatforms,
       .unsupportedPlatform, .invalidKeyValue, .invalidBuilderCPUCount,
-      .invalidBuilderMemory:
+      .invalidBuilderMemory, .remoteCacheRequiresCaching,
+      .invalidRemoteCacheReference, .remoteCacheMatchesOutput:
       .context
     case .unsupported:
       .builder

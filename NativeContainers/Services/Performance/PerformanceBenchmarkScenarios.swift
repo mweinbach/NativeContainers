@@ -1367,7 +1367,8 @@ actor ExternalNetworkPerformanceBenchmarkScenario: PerformanceBenchmarkScenario 
       return false
     }
     if host.hasPrefix("172."),
-      let secondOctet = host.split(separator: ".").dropFirst().first.flatMap(Int.init),
+      let secondOctetText = host.split(separator: ".").dropFirst().first,
+      let secondOctet = Int(secondOctetText),
       (16...31).contains(secondOctet)
     {
       return false
@@ -1706,7 +1707,7 @@ actor ImageBuildPerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
     )
     guard
       values.isRegularFile == true,
-      values.fileSize.map { Int64($0) } == byteCount
+      values.fileSize.map({ Int64($0) }) == byteCount
     else {
       throw ImageBuildPerformanceBenchmarkError.invalidOutputArchive
     }

@@ -842,6 +842,33 @@ struct ImageBuildHistoryTests {
   }
 
   @Test
+  func recorderClassifiesRemoteCacheReviewFailureAsContextFailure() async throws {
+    let plan = makeHistoryBuildPlan()
+    let history = CapturingImageBuildHistoryStore()
+    let expected = ImageBuildError.invalidRemoteCacheReference("cache@sha256:bad")
+    let recorder = RecordingImageBuildService(
+      base: TestHistoryImageBuilder(
+        plan: plan,
+        behavior: .imageBuildFailure(expected)
+      ),
+      history: history,
+      launchID: UUID()
+    )
+
+    await #expect(throws: expected) {
+      _ = try await recorder.build(
+        plan,
+        authorization: .none,
+        progress: { _ in }
+      )
+    }
+
+    let failed = try #require(await history.capturedRecords().last)
+    #expect(failed.status == .failed)
+    #expect(failed.failureKind == .context)
+  }
+
+  @Test
   func recorderClassifiesSecretFailureAndCancellation() async throws {
     let plan = makeHistoryBuildPlan()
     let secretHistory = CapturingImageBuildHistoryStore()
