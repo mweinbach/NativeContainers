@@ -791,8 +791,10 @@ private struct KubernetesWorkloadDeleteConfirmationSection: View {
   @Binding var confirmationText: String
 
   var body: some View {
-    Section("Confirm deletion") {
+    Section {
       TextField("Workload name", text: $confirmationText)
+    } header: {
+      Text("Confirm deletion")
     } footer: {
       Text("Enter the exact workload name “\(workloadName)” to enable deletion.")
     }
