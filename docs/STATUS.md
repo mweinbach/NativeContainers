@@ -1294,6 +1294,12 @@ Updated: 2026-06-22.
   UID, a new version, and the target count. Deterministic service/model coverage
   and a real two-replica live-smoke extension are present, but this exact head
   remains unclaimed until the Xcode MCP transport reconnects and runs them.
+- The remaining workload-mutation research is now concrete. Restart cannot use
+  stock `kubectl rollout restart` because it sends a last-write-wins patch; the
+  planned path is a full resourceVersion-bearing replace with one controlled
+  Pod-template annotation change. Delete can use raw Kubernetes DeleteOptions,
+  whose UID/resourceVersion preconditions fail with conflict, together with
+  foreground propagation and no force mode. Neither path is implemented yet.
 - An opt-in Xcode smoke passed the complete destructive lane on Apple container
   1.0.0: it created a unique two-core/2-GiB Alpine machine, installed the pinned
   K3s release, exported a host-usable kubeconfig, created a namespace,

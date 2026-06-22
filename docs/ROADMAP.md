@@ -256,8 +256,11 @@ must leave a usable, test-backed product slice.
           identity without admitting environment, annotation, or secret data.
     - [x] Scale Deployments/StatefulSets only with exact UID, resource-version,
           and current-replica preconditions plus authoritative reconciliation.
-    - [ ] Keep restart and delete blocked until their identity, cascade, and
-          grace contracts can fail closed against same-name replacement.
+    - [ ] Restart through a full-object optimistic-locked replace that changes
+          only the Pod-template restart annotation and confirms UID/new version.
+    - [ ] Delete through a raw Kubernetes DeleteOptions request with exact
+          UID/resourceVersion, foreground propagation, no force mode, and
+          reconciliation that never acts on a same-name replacement.
   - [x] Live-provision the gated Alpine machine, verify API reachability and a
         real Deployment, Service, and disposable pod, verify the app-owned
         inventory path, survive a stop/start, then delete the exact machine,

@@ -776,6 +776,11 @@ Primary sources:
 - [Kubernetes: kubectl exec](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_exec/)
 - [Kubernetes: kubectl scale](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_scale/)
 - [Kubernetes: kubectl delete](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_delete/)
+- [Kubernetes: kubectl replace](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_replace/)
+- [Kubernetes API concepts](https://kubernetes.io/docs/reference/using-api/api-concepts/)
+- [Kubernetes DeleteOptions and Preconditions](https://github.com/kubernetes/apimachinery/blob/master/pkg/apis/meta/v1/types.go)
+- [kubectl raw HTTP implementation](https://github.com/kubernetes/kubectl/blob/master/pkg/rawhttp/raw.go)
+- [kubectl rollout restart implementation](https://github.com/kubernetes/kubectl/blob/master/pkg/cmd/rollout/rollout_restart.go)
 - [K3s quick start](https://docs.k3s.io/quick-start)
 - [K3s requirements](https://docs.k3s.io/installation/requirements)
 - [K3s installer source](https://github.com/k3s-io/k3s/blob/master/install.sh)
@@ -849,9 +854,23 @@ Primary sources:
   count before the app reports success.
 - `kubectl delete` explicitly performs no resource-version check. Workload or
   Pod deletion is therefore not bundled into the scale slice: a name-only
-  delete could erase a replacement created after review. It remains blocked
-  until the app uses an API operation with an enforceable UID/resourceVersion
-  precondition and a separately reviewed cascade/grace policy.
+  delete could erase a replacement created after review. The lower-level API
+  does expose the missing contract: `DeleteOptions.preconditions` accepts both
+  UID and resourceVersion and rejects drift with HTTP 409, while `kubectl
+  delete --raw` accepts a DELETE body from one local file or stdin. A future
+  fixed workload-delete command can therefore send those exact preconditions
+  to a kind-specific API path, require foreground propagation, prohibit force
+  deletion, and reconcile absence versus same-name replacement. That path is
+  researched but not implemented yet.
+- The stock `kubectl rollout restart` reads the latest object and sends a
+  strategic-merge patch. Kubernetes documents that patches do not provide
+  optimistic-lock failures, so that command cannot preserve the browser's
+  reviewed resourceVersion. A fail-closed restart instead needs a guest-side
+  read of the exact object, one controlled Pod-template annotation change, and
+  a full `kubectl replace` carrying the frozen resourceVersion. Replace is the
+  documented read-then-write optimistic-lock path; the app must still verify
+  the returned UID, advanced version, and restart annotation before reporting
+  success. That path is also researched but not implemented yet.
 - A 2026-06-22 live pass established an Apple-machine-specific service detail:
   the guest boots under Apple's `vminitd`, not OpenRC or systemd as PID 1. The
   K3s installer can write a valid OpenRC unit, but its ordinary cgroups
