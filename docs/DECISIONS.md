@@ -1796,13 +1796,16 @@ input. One bounded root command tries only a fixed common-shell allowlist inside
 the selected container and reads the Pod UID both before and after the probe.
 The resulting terminal-mode Apple child runs the machine init helper as UID 0,
 performs another UID preflight, and then replaces itself with explicit-container
-`k3s kubectl exec` using stdin, TTY, and a bounded Pod-running wait. Only the
-discovered allowlisted shell can occupy the command position.
+`k3s kubectl exec` using stdin, TTY, and a bounded Pod-running wait. Before the
+new session is returned, one separate bounded UID read must still match; a
+mismatch or unverifiable result closes the session. Only the discovered
+allowlisted shell can occupy the command position.
 
 Kubernetes exec is name-addressed and provides no conditional Pod-UID token.
 The final UID check therefore cannot prevent replacement in the narrow interval
 before the upstream exec begins, and an interactive stream cannot be bracketed
 with a useful post-read identity decision. NativeContainers fails closed for
-replacement detected during discovery or final preflight and documents the
-remaining upstream race. A general arbitrary-command/non-interactive exec UI
-remains a separate reviewed capability.
+replacement detected during discovery, final preflight, or the immediate
+post-launch check and documents the remaining upstream race. A general
+arbitrary-command/non-interactive exec UI remains a separate reviewed
+capability.

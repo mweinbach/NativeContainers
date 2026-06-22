@@ -1282,8 +1282,10 @@ Updated: 2026-06-22.
   namespace, Pod name, and container name. A fixed bounded probe discovers only
   allowlisted shells with UID checks before and after, then a terminal-mode
   Apple process performs one last UID preflight and enters explicit-container
-  K3s exec with stdin and TTY. Pod presets and arbitrary startup commands are
-  disabled; the remaining upstream name-addressed race is documented.
+  K3s exec with stdin and TTY. A separate bounded post-launch UID read must
+  still match before the session is returned, otherwise the PTY is closed. Pod
+  presets and arbitrary startup commands are disabled; the remaining upstream
+  name-addressed race is documented.
 - An opt-in Xcode smoke passed the complete destructive lane on Apple container
   1.0.0: it created a unique two-core/2-GiB Alpine machine, installed the pinned
   K3s release, exported a host-usable kubeconfig, created a namespace,

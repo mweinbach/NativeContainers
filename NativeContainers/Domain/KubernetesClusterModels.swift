@@ -337,6 +337,7 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
   case invalidPodShellDiscovery
   case podShellUnavailable
   case podIdentityChanged(String)
+  case podIdentityVerificationFailed
   case unsupportedPodTerminalRequest
   case readinessTimedOut
   case missingIPAddress
@@ -389,6 +390,8 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
       String(localized: "The selected container does not have a supported interactive shell.")
     case .podIdentityChanged(let name):
       String(localized: "Pod “\(name)” was replaced after it was selected.")
+    case .podIdentityVerificationFailed:
+      String(localized: "K3s could not verify the selected Pod while opening its terminal.")
     case .unsupportedPodTerminalRequest:
       String(localized: "Kubernetes Pod terminals use the discovered container shell.")
     case .readinessTimedOut:

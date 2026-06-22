@@ -1,9 +1,7 @@
 import ContainerAPIClient
-import ContainerAPIClient
 import ContainerPersistence
 import ContainerResource
 import Foundation
-import MachineAPIClient
 import MachineAPIClient
 
 struct KubernetesRunningClusterTarget: Equatable, Sendable {
@@ -140,14 +138,7 @@ struct AppleKubernetesPodTerminalSessionLauncher:
 actor AppleKubernetesPodTerminalService: KubernetesPodTerminalOpening {
   static let shellDiscoveryMarker =
     "__NATIVECONTAINERS_K3S_POD_SHELL__"
-  static let supportedShells = [
-    "/bin/sh",
-    "/bin/bash",
-    "/bin/ash",
-    "/usr/bin/bash",
-    "/bin/zsh",
-    "/usr/bin/zsh",
-  ]
+  static let supportedShells = ContainerShellCandidatePolicy.fallbackExecutables
 
   private let runningTargetResolver: any KubernetesRunningClusterTargetResolving
   private let rootCommands: any KubernetesMachineRootCommandRunning
@@ -195,11 +186,18 @@ actor AppleKubernetesPodTerminalService: KubernetesPodTerminalOpening {
       target: target,
       shell: shell
     )
-    return try await sessionLauncher.openSession(
+    let session = try await sessionLauncher.openSession(
       backingContainerID: processTarget.backingContainerID,
       configuration: configuration,
       request: request
     )
+    do {
+      try await revalidatePodIdentity(target)
+      return session
+    } catch {
+      await session.close()
+      throw error
+    }
   }
 
   private func discoverShell(
@@ -231,6 +229,25 @@ actor AppleKubernetesPodTerminalService: KubernetesPodTerminalOpening {
       throw KubernetesClusterError.invalidPodShellDiscovery
     }
     return shell
+  }
+
+  private func revalidatePodIdentity(
+    _ target: KubernetesPodTerminalIdentity
+  ) async throws {
+    let result = try await rootCommands.executeRootCommand(
+      Self.podIdentityCommand(target),
+      in: target.machine,
+      timeoutSeconds: 15
+    )
+    guard !result.outputWasTruncated else {
+      throw KubernetesClusterError.guestOutputTooLarge
+    }
+    guard result.exitCode == 0 else {
+      if result.exitCode == 66 {
+        throw KubernetesClusterError.podIdentityChanged(target.podName)
+      }
+      throw KubernetesClusterError.podIdentityVerificationFailed
+    }
   }
 
   private static func validate(
@@ -311,6 +328,18 @@ actor AppleKubernetesPodTerminalService: KubernetesPodTerminalOpening {
       terminal: true,
       user: .id(uid: 0, gid: 0)
     )
+  }
+
+  private static func podIdentityCommand(
+    _ target: KubernetesPodTerminalIdentity
+  ) -> String {
+    """
+    set -eu
+    pod_uid=$(/usr/local/bin/k3s kubectl get pod --namespace=\(target.namespace) --output=jsonpath='{.metadata.uid}' --request-timeout=5s \(target.podName))
+    if [ "$pod_uid" != '\(target.podUID)' ]; then
+      exit 66
+    fi
+    """
   }
 
   private static func terminalCommand(

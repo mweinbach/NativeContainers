@@ -26,7 +26,7 @@ struct ContainerShellCandidatePolicy: Sendable {
     "ash", "bash", "dash", "fish", "ksh", "mksh", "sh", "yash", "zsh",
   ]
 
-  private static let fallbackExecutables = [
+  static let fallbackExecutables = [
     "/bin/bash",
     "/usr/bin/bash",
     "/bin/zsh",

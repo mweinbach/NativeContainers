@@ -201,11 +201,13 @@ stored Ready descriptor and exact running machine, discovers only a bounded
 allowlist of common shells through the fixed root-command lane, and brackets
 that discovery with Pod UID reads. It then resolves the machine's fresh
 per-boot backing container and starts `/sbin.machine/init -s` as UID 0 with a
-terminal-mode Apple process. The only guest command is a final UID preflight
-followed by explicit-container `k3s kubectl exec` with stdin, TTY, and a bounded
-Pod-running wait. Kubernetes exec remains name-addressed, so replacement in the
-narrow interval after the final UID check cannot be made atomic with the
-current upstream API and is documented rather than hidden.
+terminal-mode Apple process. The only guest command is a final in-process UID
+preflight followed by explicit-container `k3s kubectl exec` with stdin, TTY,
+and a bounded Pod-running wait. While that PTY is starting, a separate bounded
+UID read must still match or the new session is immediately closed. Kubernetes
+exec remains name-addressed, so replacement in the narrow interval after a UID
+check cannot be made atomic with the current upstream API and is documented
+rather than hidden.
 
 Kubeconfig is read only after an explicit export action, validated and bounded
 in memory, rewritten from guest loopback to the current dedicated machine IP,

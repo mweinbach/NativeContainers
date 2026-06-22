@@ -833,9 +833,10 @@ Primary sources:
   carries the inventory Pod UID in the terminal target, requires the exact Ready
   cluster machine to be running, and brackets bounded allowlisted shell discovery
   with UID reads. The terminal child performs one more UID check immediately
-  before a fixed `kubectl exec --stdin=true --tty=true` command. That narrows but
-  cannot eliminate replacement between the final check and the upstream exec;
-  the product does not describe the name-addressed call as atomic.
+  before a fixed `kubectl exec --stdin=true --tty=true` command, and a separate
+  bounded UID read must still match before the live session is returned. That
+  narrows but cannot eliminate replacement between a check and the upstream
+  exec; the product does not describe the name-addressed call as atomic.
 - A 2026-06-22 live pass established an Apple-machine-specific service detail:
   the guest boots under Apple's `vminitd`, not OpenRC or systemd as PID 1. The
   K3s installer can write a valid OpenRC unit, but its ordinary cgroups

@@ -72,10 +72,13 @@ struct KubernetesPodTerminalServiceTests {
       )
     )
     let rootCommands = PodTerminalRootCommandRecorder(
-      result: podTerminalCommandResult(
-        standardOutput:
-          "\(AppleKubernetesPodTerminalService.shellDiscoveryMarker)/bin/ash\n"
-      )
+      results: [
+        podTerminalCommandResult(
+          standardOutput:
+            "\(AppleKubernetesPodTerminalService.shellDiscoveryMarker)/bin/ash\n"
+        ),
+        podTerminalCommandResult(),
+      ]
     )
     let processResolver = PodTerminalProcessTargetResolver(
       target: LinuxMachineProcessTarget(
@@ -118,6 +121,16 @@ struct KubernetesPodTerminalServiceTests {
     #expect(discovery.command.contains("--container=api"))
     #expect(discovery.command.contains("--pod-running-timeout=5s"))
     #expect(discovery.command.contains("/bin/ash"))
+
+    let identityCheck = try #require(
+      await rootCommands.invocations.dropFirst().first
+    )
+    #expect(await rootCommands.invocations.count == 2)
+    #expect(identityCheck.target == identity.machine)
+    #expect(identityCheck.timeoutSeconds == 15)
+    #expect(identityCheck.command.contains("kubectl get pod"))
+    #expect(identityCheck.command.contains(identity.podUID))
+    #expect(!identityCheck.command.contains("kubectl exec"))
 
     let capture = try #require(await launcher.captures.first)
     #expect(capture.backingContainerID == "fresh-k3s-backing-container")
@@ -205,7 +218,7 @@ struct KubernetesPodTerminalServiceTests {
     let rootCommands = PodTerminalRootCommandRecorder(
       result: podTerminalCommandResult(
         standardOutput:
-          "\(AppleKubernetesPodTerminalService.shellDiscoveryMarker)/bin/fish\n"
+          "\(AppleKubernetesPodTerminalService.shellDiscoveryMarker)/tmp/evil-shell\n"
       )
     )
     let launcher = PodTerminalSessionLauncherRecorder()
@@ -259,6 +272,49 @@ struct KubernetesPodTerminalServiceTests {
     }
 
     #expect(await launcher.captures.isEmpty)
+  }
+
+  @Test
+  func closesLaunchedSessionWhenPostLaunchPodIdentityCheckFails() async throws {
+    let machine = podTerminalMachine()
+    let identity = podTerminalIdentity(machine: machine)
+    let rootCommands = PodTerminalRootCommandRecorder(
+      results: [
+        podTerminalCommandResult(
+          standardOutput:
+            "\(AppleKubernetesPodTerminalService.shellDiscoveryMarker)/bin/sh\n"
+        ),
+        podTerminalCommandResult(exitCode: 66),
+      ]
+    )
+    let session = PodTerminalTestSession()
+    let launcher = PodTerminalSessionLauncherRecorder(session: session)
+    let service = AppleKubernetesPodTerminalService(
+      runningTargetResolver: PodTerminalRunningTargetResolver(
+        target: KubernetesRunningClusterTarget(
+          descriptor: podTerminalDescriptor(machine: machine),
+          machine: machine
+        )
+      ),
+      rootCommands: rootCommands,
+      machineProcessTargetResolver: PodTerminalProcessTargetResolver(
+        target: podTerminalProcessTarget(machine: machine)
+      ),
+      sessionLauncher: launcher
+    )
+
+    await #expect(
+      throws: KubernetesClusterError.podIdentityChanged(identity.podName)
+    ) {
+      _ = try await service.openTerminal(
+        in: identity,
+        request: try ContainerTerminalRequest()
+      )
+    }
+
+    #expect(await launcher.captures.count == 1)
+    #expect(await rootCommands.invocations.count == 2)
+    #expect(await session.closeCount == 1)
   }
 }
 
@@ -331,11 +387,16 @@ private actor PodTerminalRootCommandRecorder:
     let timeoutSeconds: Int
   }
 
-  private var result: ContainerCommandResult
+  private var results: [ContainerCommandResult]
   private(set) var invocations: [Invocation] = []
 
   init(result: ContainerCommandResult) {
-    self.result = result
+    self.results = [result]
+  }
+
+  init(results: [ContainerCommandResult]) {
+    precondition(!results.isEmpty)
+    self.results = results
   }
 
   func executeRootCommand(
@@ -350,11 +411,19 @@ private actor PodTerminalRootCommandRecorder:
         timeoutSeconds: timeoutSeconds
       )
     )
-    return result
+    if results.count > 1 {
+      return results.removeFirst()
+    }
+    return results[0]
   }
 
   func replace(result: ContainerCommandResult) {
-    self.result = result
+    results = [result]
+  }
+
+  func replace(results: [ContainerCommandResult]) {
+    precondition(!results.isEmpty)
+    self.results = results
   }
 }
 
@@ -383,7 +452,12 @@ private actor PodTerminalSessionLauncherRecorder:
     let request: ContainerTerminalRequest
   }
 
+  private let session: PodTerminalTestSession
   private(set) var captures: [Capture] = []
+
+  init(session: PodTerminalTestSession = PodTerminalTestSession()) {
+    self.session = session
+  }
 
   func openSession(
     backingContainerID: String,
@@ -397,7 +471,7 @@ private actor PodTerminalSessionLauncherRecorder:
         request: request
       )
     )
-    return PodTerminalTestSession()
+    return session
   }
 }
 
@@ -405,6 +479,7 @@ private actor PodTerminalTestSession: ContainerTerminalSession {
   nonisolated let output = AsyncStream<Data> { continuation in
     continuation.finish()
   }
+  private(set) var closeCount = 0
 
   func sendInput(_ data: Data) {}
 
@@ -424,7 +499,9 @@ private actor PodTerminalTestSession: ContainerTerminalSession {
     0
   }
 
-  func close() {}
+  func close() {
+    closeCount += 1
+  }
 }
 
 private func podTerminalMachine(
