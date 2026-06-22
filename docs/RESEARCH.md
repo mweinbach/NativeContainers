@@ -870,7 +870,8 @@ Primary sources:
   a full `kubectl replace` carrying the frozen resourceVersion. Replace is the
   documented read-then-write optimistic-lock path; the app must still verify
   the returned UID, advanced version, and restart annotation before reporting
-  success. That path is also researched but not implemented yet.
+  success. NativeContainers now implements that exact guest-only path for
+  Deployments, StatefulSets, and DaemonSets while keeping Jobs excluded.
 - A 2026-06-22 live pass established an Apple-machine-specific service detail:
   the guest boots under Apple's `vminitd`, not OpenRC or systemd as PID 1. The
   K3s installer can write a valid OpenRC unit, but its ordinary cgroups

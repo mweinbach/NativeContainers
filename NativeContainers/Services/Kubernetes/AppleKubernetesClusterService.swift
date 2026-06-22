@@ -68,6 +68,8 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
   static let maximumPodLogLines = 2_000
   static let podLogIdentityMarker = "__NATIVECONTAINERS_K3S_POD_LOG_UID__"
   static let workloadScaleMarker = "__NATIVECONTAINERS_K3S_WORKLOAD_SCALE__"
+  static let workloadRestartMarker = "__NATIVECONTAINERS_K3S_WORKLOAD_RESTART__"
+  static let workloadRestartAnnotationKey = "kubectl.kubernetes.io/restartedAt"
   private static let versionMarker = "__NATIVECONTAINERS_K3S_VERSION__"
   private static let nodesMarker = "__NATIVECONTAINERS_K3S_NODES__"
   private static let podsMarker = "__NATIVECONTAINERS_K3S_PODS__"
@@ -231,6 +233,45 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     default:
       throw KubernetesClusterError.guestCommandFailed(
         operation: String(localized: "Scaling Kubernetes workload"),
+        detail: Self.sanitizedFailureDetail(result)
+      )
+    }
+  }
+
+  func restartWorkload(
+    _ request: KubernetesWorkloadRestartRequest
+  ) async throws -> KubernetesWorkloadRestartResult {
+    let restartedAt = Self.workloadRestartTimestamp(now())
+    let command = try Self.workloadRestartCommand(
+      request,
+      restartedAt: restartedAt
+    )
+    let descriptor = try await requireReadyRunningDescriptor()
+    let result = try await rootCommands.executeRootCommand(
+      command,
+      in: descriptor.machine,
+      timeoutSeconds: 45
+    )
+    guard !result.outputWasTruncated else {
+      throw KubernetesClusterError.guestOutputTooLarge
+    }
+    switch result.exitCode {
+    case 0:
+      return try Self.validatedWorkloadRestartResult(
+        result.standardOutput,
+        request: request,
+        restartedAt: restartedAt,
+        capturedAt: now()
+      )
+    case 66:
+      throw KubernetesClusterError.workloadIdentityChanged(request.name)
+    case 67:
+      throw KubernetesClusterError.workloadRestartRejected(request.name)
+    case 68:
+      throw KubernetesClusterError.workloadRestartNotConfirmed(request.name)
+    default:
+      throw KubernetesClusterError.guestCommandFailed(
+        operation: String(localized: "Restarting Kubernetes workload"),
         detail: Self.sanitizedFailureDetail(result)
       )
     }
@@ -760,6 +801,112 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
     )
   }
 
+  private static func workloadRestartCommand(
+    _ request: KubernetesWorkloadRestartRequest,
+    restartedAt: String
+  ) throws -> String {
+    let resource: String
+    let kind: String
+    switch request.kind {
+    case .deployment:
+      resource = "deployment"
+      kind = "Deployment"
+    case .statefulSet:
+      resource = "statefulset"
+      kind = "StatefulSet"
+    case .daemonSet:
+      resource = "daemonset"
+      kind = "DaemonSet"
+    case .job:
+      throw KubernetesClusterError.workloadNotRestartable
+    }
+    guard
+      KubernetesResourceReferenceValidator.isUID(request.workloadUID),
+      KubernetesResourceReferenceValidator.isResourceVersion(
+        request.resourceVersion
+      ),
+      KubernetesResourceReferenceValidator.isNamespace(request.namespace),
+      KubernetesResourceReferenceValidator.isResourceName(request.name),
+      isWorkloadRestartTimestamp(restartedAt)
+    else {
+      throw KubernetesClusterError.invalidWorkloadRestartRequest
+    }
+
+    return """
+      set -eu
+      resource=\(shellQuote(resource))
+      expected_api_version='apps/v1'
+      expected_kind=\(shellQuote(kind))
+      namespace=\(shellQuote(request.namespace))
+      name=\(shellQuote(request.name))
+      expected_uid=\(shellQuote(request.workloadUID))
+      expected_resource_version=\(shellQuote(request.resourceVersion))
+      restarted_at=\(shellQuote(restartedAt))
+
+      object=$(/usr/local/bin/k3s kubectl get "$resource" "$name" --namespace="$namespace" --output=json --request-timeout=5s)
+      api_version=$(printf '%s' "$object" | jq --raw-output '.apiVersion // empty')
+      kind=$(printf '%s' "$object" | jq --raw-output '.kind // empty')
+      object_namespace=$(printf '%s' "$object" | jq --raw-output '.metadata.namespace // empty')
+      object_name=$(printf '%s' "$object" | jq --raw-output '.metadata.name // empty')
+      uid=$(printf '%s' "$object" | jq --raw-output '.metadata.uid // empty')
+      resource_version=$(printf '%s' "$object" | jq --raw-output '.metadata.resourceVersion // empty')
+      if [ "$api_version" != "$expected_api_version" ] || [ "$kind" != "$expected_kind" ] || [ "$object_namespace" != "$namespace" ] || [ "$object_name" != "$name" ] || [ "$uid" != "$expected_uid" ] || [ "$resource_version" != "$expected_resource_version" ]; then
+        exit 66
+      fi
+
+      updated=$(printf '%s' "$object" | jq --compact-output --arg restarted_at "$restarted_at" '
+        if (.spec.template | type) != "object" then error("missing Pod template") else . end
+        | del(.status, .metadata.managedFields)
+        | .spec.template.metadata.annotations = (.spec.template.metadata.annotations // {})
+        | .spec.template.metadata.annotations["\(workloadRestartAnnotationKey)"] = $restarted_at
+      ')
+      if ! response=$(printf '%s' "$updated" | /usr/local/bin/k3s kubectl replace --filename=- --namespace="$namespace" --output=json --request-timeout=15s 2>/dev/null); then
+        exit 67
+      fi
+      api_version=$(printf '%s' "$response" | jq --raw-output '.apiVersion // empty')
+      kind=$(printf '%s' "$response" | jq --raw-output '.kind // empty')
+      object_namespace=$(printf '%s' "$response" | jq --raw-output '.metadata.namespace // empty')
+      object_name=$(printf '%s' "$response" | jq --raw-output '.metadata.name // empty')
+      uid=$(printf '%s' "$response" | jq --raw-output '.metadata.uid // empty')
+      resource_version=$(printf '%s' "$response" | jq --raw-output '.metadata.resourceVersion // empty')
+      confirmed_restart=$(printf '%s' "$response" | jq --raw-output '.spec.template.metadata.annotations["\(workloadRestartAnnotationKey)"] // empty')
+      if [ "$api_version" != "$expected_api_version" ] || [ "$kind" != "$expected_kind" ] || [ "$object_namespace" != "$namespace" ] || [ "$object_name" != "$name" ] || [ "$uid" != "$expected_uid" ] || [ "$resource_version" = "$expected_resource_version" ] || [ "$confirmed_restart" != "$restarted_at" ]; then
+        exit 68
+      fi
+      printf '%s%s\t%s\t%s\n' '\(workloadRestartMarker)' "$uid" "$resource_version" "$confirmed_restart"
+      """
+  }
+
+  private static func validatedWorkloadRestartResult(
+    _ output: String,
+    request: KubernetesWorkloadRestartRequest,
+    restartedAt: String,
+    capturedAt: Date
+  ) throws -> KubernetesWorkloadRestartResult {
+    let line = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard line.hasPrefix(workloadRestartMarker) else {
+      throw KubernetesClusterError.invalidWorkloadRestartResult
+    }
+    let fields = line.dropFirst(workloadRestartMarker.count).split(
+      separator: "\t",
+      omittingEmptySubsequences: false
+    )
+    guard
+      fields.count == 3,
+      fields[0] == Substring(request.workloadUID),
+      KubernetesResourceReferenceValidator.isResourceVersion(String(fields[1])),
+      fields[1] != Substring(request.resourceVersion),
+      fields[2] == Substring(restartedAt)
+    else {
+      throw KubernetesClusterError.invalidWorkloadRestartResult
+    }
+    return KubernetesWorkloadRestartResult(
+      request: request,
+      resourceVersion: String(fields[1]),
+      capturedAt: capturedAt
+    )
+  }
+
   private static func validatedPodLogOutput(
     _ output: String,
     request: KubernetesPodLogRequest
@@ -966,5 +1113,18 @@ actor AppleKubernetesClusterService: KubernetesClusterManaging {
 
   private static func shellQuote(_ value: String) -> String {
     "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+  }
+
+  private static func workloadRestartTimestamp(_ date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.string(from: date)
+  }
+
+  private static func isWorkloadRestartTimestamp(_ value: String) -> Bool {
+    guard !value.isEmpty, value.utf8.count <= 64 else { return false }
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.date(from: value) != nil
   }
 }

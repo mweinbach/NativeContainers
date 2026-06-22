@@ -27,6 +27,15 @@ enum KubernetesWorkloadKind: String, CaseIterable, Codable, Equatable, Sendable 
       false
     }
   }
+
+  var supportsRestart: Bool {
+    switch self {
+    case .deployment, .statefulSet, .daemonSet:
+      true
+    case .job:
+      false
+    }
+  }
 }
 
 struct KubernetesWorkloadRecord: Identifiable, Equatable, Sendable {
@@ -113,6 +122,42 @@ struct KubernetesWorkloadScaleResult: Equatable, Sendable {
   let request: KubernetesWorkloadScaleRequest
   let resourceVersion: String
   let observedReplicas: Int
+  let capturedAt: Date
+}
+
+struct KubernetesWorkloadRestartRequest: Equatable, Sendable {
+  let workloadUID: String
+  let resourceVersion: String
+  let namespace: String
+  let name: String
+  let kind: KubernetesWorkloadKind
+
+  init(workload: KubernetesWorkloadRecord) throws {
+    guard workload.kind.supportsRestart else {
+      throw KubernetesClusterError.workloadNotRestartable
+    }
+    guard
+      KubernetesResourceReferenceValidator.isUID(workload.uid),
+      KubernetesResourceReferenceValidator.isResourceVersion(
+        workload.resourceVersion
+      ),
+      KubernetesResourceReferenceValidator.isNamespace(workload.namespace),
+      KubernetesResourceReferenceValidator.isResourceName(workload.name)
+    else {
+      throw KubernetesClusterError.invalidWorkloadRestartRequest
+    }
+
+    workloadUID = workload.uid
+    resourceVersion = workload.resourceVersion
+    namespace = workload.namespace
+    name = workload.name
+    kind = workload.kind
+  }
+}
+
+struct KubernetesWorkloadRestartResult: Equatable, Sendable {
+  let request: KubernetesWorkloadRestartRequest
+  let resourceVersion: String
   let capturedAt: Date
 }
 

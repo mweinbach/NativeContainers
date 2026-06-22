@@ -1837,8 +1837,40 @@ checks. A post-read must retain the UID, advance resourceVersion, and report the
 target replica count before success is returned. Stale reviews fail closed and
 the browser reloads authoritative inventory.
 
-This decision does not authorize generic patching, rollout restart, or delete.
+This decision does not authorize generic patching, restart, or delete.
 Kubernetes documents that `kubectl delete` performs no resource-version check;
-a name-only deletion could erase a same-name replacement. Those mutations stay
-blocked until each has a conditional identity and user-reviewed cascade/grace
-contract.
+a name-only deletion could erase a same-name replacement. Restart requires the
+separate optimistic-replace contract in ADR-066; deletion stays blocked until
+its conditional identity and user-reviewed cascade/grace contract is
+implemented.
+
+## ADR-066: Restart workloads through an optimistic full-object replace
+
+**Status:** Accepted — 2026-06-22
+
+NativeContainers restarts Deployments, StatefulSets, and DaemonSets by changing
+the standard `kubectl.kubernetes.io/restartedAt` annotation on the reviewed
+workload's Pod template. Jobs are excluded because their Pod template is
+immutable. The UI explicitly warns that the controller follows its configured
+update strategy and that `OnDelete` does not replace existing Pods
+automatically.
+
+The stock `kubectl rollout restart` is not used. It issues a strategic-merge
+patch, and Kubernetes patches are last-write-wins rather than optimistic-lock
+updates. Instead, the fixed guest command re-reads the complete named object,
+requires the reviewed API version, kind, namespace, name, UID, and
+resourceVersion, changes only the restart annotation, and sends a full
+`kubectl replace`. The unchanged resourceVersion in that object makes a race
+fail with conflict at the API server. Success additionally requires the same
+UID, a new resourceVersion, and the exact annotation value in the returned
+object.
+
+The complete workload object never crosses the Apple process transport. It is
+held only in guest shell variables and piped directly back to K3s; host output
+contains one private marker with UID, new resourceVersion, and the restart
+timestamp. Replace stderr is suppressed inside the guest and becomes a generic
+service-owned rejection, so a validating admission response cannot leak object
+details. This avoids adding environment values, annotations, or referenced
+secret material to the host inventory contract. Workload deletion remains a
+separate destructive review using DeleteOptions preconditions and foreground
+propagation.

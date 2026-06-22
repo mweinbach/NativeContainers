@@ -1294,12 +1294,19 @@ Updated: 2026-06-22.
   UID, a new version, and the target count. Deterministic service/model coverage
   and a real two-replica live-smoke extension are present, but this exact head
   remains unclaimed until the Xcode MCP transport reconnects and runs them.
-- The remaining workload-mutation research is now concrete. Restart cannot use
-  stock `kubectl rollout restart` because it sends a last-write-wins patch; the
-  planned path is a full resourceVersion-bearing replace with one controlled
-  Pod-template annotation change. Delete can use raw Kubernetes DeleteOptions,
-  whose UID/resourceVersion preconditions fail with conflict, together with
-  foreground propagation and no force mode. Neither path is implemented yet.
+- Deployment, StatefulSet, and DaemonSet rows now expose a reviewed restart
+  action; Jobs remain excluded. The service avoids stock `kubectl rollout
+  restart` and its last-write-wins patch. It verifies the full reviewed
+  identity, changes only the standard Pod-template restart annotation inside
+  the guest, performs a resourceVersion-bearing full replace, and confirms the
+  same UID, new version, and annotation. The complete workload object never
+  crosses to the host. Deterministic service/model coverage and a Deployment
+  live-smoke extension are present, but this exact head remains unclaimed until
+  Xcode MCP reconnects and runs them.
+- Workload deletion remains the final reviewed-mutation gap. Its researched
+  path uses raw Kubernetes DeleteOptions, whose UID/resourceVersion
+  preconditions fail with conflict, together with foreground propagation and
+  no force mode; it is not implemented yet.
 - An opt-in Xcode smoke passed the complete destructive lane on Apple container
   1.0.0: it created a unique two-core/2-GiB Alpine machine, installed the pinned
   K3s release, exported a host-usable kubeconfig, created a namespace,

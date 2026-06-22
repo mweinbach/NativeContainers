@@ -444,6 +444,124 @@ struct KubernetesClusterServiceTests {
   }
 
   @Test
+  func restartsOnlyTheReviewedWorkloadVersionWithAnOptimisticReplace() async throws {
+    let machine = makeMachine()
+    let runtime = KubernetesMachineRuntimeDouble(machine: machine)
+    let commands = KubernetesRootCommandDouble()
+    let descriptor = KubernetesClusterDescriptor(
+      operationID: UUID(),
+      machine: LinuxMachineIdentity(machine: machine),
+      distribution: .current,
+      phase: .ready,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_100)
+    )
+    let service = makeService(
+      runtime: runtime,
+      commands: commands,
+      store: InMemoryKubernetesDescriptorStore(descriptor: descriptor)
+    )
+    let workload = try #require(readyResourceInventory().workloads.first)
+    let request = try KubernetesWorkloadRestartRequest(workload: workload)
+
+    let result = try await service.restartWorkload(request)
+
+    #expect(result.request == request)
+    #expect(result.resourceVersion == "102")
+    #expect(result.capturedAt == Date(timeIntervalSince1970: 1_700_000_100))
+    let invocation = try #require(
+      await commands.commands.first(where: { $0.command.contains("kubectl replace") })
+    )
+    #expect(invocation.target == descriptor.machine)
+    #expect(invocation.timeoutSeconds == 45)
+    #expect(invocation.command.contains("resource='deployment'"))
+    #expect(invocation.command.contains("expected_api_version='apps/v1'"))
+    #expect(invocation.command.contains("expected_kind='Deployment'"))
+    #expect(invocation.command.contains("expected_uid='\(workload.uid)'"))
+    #expect(invocation.command.contains("expected_resource_version='101'"))
+    #expect(invocation.command.contains("restarted_at='2023-11-14T22:15:00.000Z'"))
+    #expect(
+      invocation.command.contains(
+        #".spec.template.metadata.annotations["kubectl.kubernetes.io/restartedAt"]"#
+      )
+    )
+    #expect(invocation.command.contains("del(.status, .metadata.managedFields)"))
+    #expect(invocation.command.contains("--filename=-"))
+    #expect(invocation.command.contains("--namespace=\"$namespace\""))
+    #expect(invocation.command.contains("--output=json"))
+    #expect(invocation.command.contains("2>/dev/null"))
+    #expect(
+      invocation.command.components(separatedBy: "kubectl get").count - 1
+        == 1
+    )
+    #expect(
+      invocation.command.components(separatedBy: "kubectl replace").count - 1
+        == 1
+    )
+    #expect(!invocation.command.contains("rollout restart"))
+    #expect(!invocation.command.contains("kubectl patch"))
+
+    await commands.setWorkloadRestartExitCode(66)
+    await #expect(
+      throws: KubernetesClusterError.workloadIdentityChanged(workload.name)
+    ) {
+      _ = try await service.restartWorkload(request)
+    }
+    await commands.setWorkloadRestartExitCode(68)
+    await #expect(
+      throws: KubernetesClusterError.workloadRestartNotConfirmed(workload.name)
+    ) {
+      _ = try await service.restartWorkload(request)
+    }
+    await commands.setWorkloadRestartExitCode(67)
+    await #expect(
+      throws: KubernetesClusterError.workloadRestartRejected(workload.name)
+    ) {
+      _ = try await service.restartWorkload(request)
+    }
+    await commands.setWorkloadRestartExitCode(0)
+    await commands.setWorkloadRestartOutput(
+      "\(AppleKubernetesClusterService.workloadRestartMarker)bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\t102\t2023-11-14T22:15:00.000Z\n"
+    )
+    await #expect(throws: KubernetesClusterError.invalidWorkloadRestartResult) {
+      _ = try await service.restartWorkload(request)
+    }
+  }
+
+  @Test
+  func restartRequestRejectsJobsAndUnsafeIdentity() throws {
+    let workload = try #require(readyResourceInventory().workloads.first)
+    let unsafe = KubernetesWorkloadRecord(
+      uid: workload.uid,
+      resourceVersion: "101\nunsafe",
+      namespace: workload.namespace,
+      name: workload.name,
+      kind: workload.kind,
+      desiredCount: workload.desiredCount,
+      readyCount: workload.readyCount,
+      availableCount: workload.availableCount,
+      failedCount: workload.failedCount
+    )
+    #expect(throws: KubernetesClusterError.invalidWorkloadRestartRequest) {
+      _ = try KubernetesWorkloadRestartRequest(workload: unsafe)
+    }
+
+    let job = KubernetesWorkloadRecord(
+      uid: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      resourceVersion: "202",
+      namespace: "default",
+      name: "migration",
+      kind: .job,
+      desiredCount: 1,
+      readyCount: 0,
+      availableCount: 1,
+      failedCount: 0
+    )
+    #expect(throws: KubernetesClusterError.workloadNotRestartable) {
+      _ = try KubernetesWorkloadRestartRequest(workload: job)
+    }
+  }
+
+  @Test
   func failedBootstrapRetainsExactPendingDescriptorForRetry() async throws {
     let machine = makeMachine()
     let runtime = KubernetesMachineRuntimeDouble(machine: machine)
@@ -625,6 +743,34 @@ struct KubernetesClusterModelTests {
   }
 
   @Test
+  func restartsReviewedWorkloadAndReloadsAuthoritativeResources() async {
+    let snapshot = readyKubernetesSnapshot()
+    let service = KubernetesModelServiceDouble(snapshot: snapshot)
+    let model = KubernetesClusterModel(
+      service: service,
+      initialSnapshot: snapshot
+    )
+    await model.loadResources()
+    guard let workload = model.resourceInventory?.workloads.first else {
+      Issue.record("The fixture did not load its workload.")
+      return
+    }
+    await service.setResourceInventory(
+      readyResourceInventory(resourceVersion: "102")
+    )
+
+    let restarted = await model.restartWorkload(workload)
+
+    #expect(restarted)
+    #expect(model.resourceInventory?.workloads.first?.resourceVersion == "102")
+    #expect(model.resourceErrorMessage == nil)
+    #expect(await service.resourceLoadCount == 2)
+    let request = await service.restartRequests.first
+    #expect(request?.workloadUID == workload.uid)
+    #expect(request?.resourceVersion == "101")
+  }
+
+  @Test
   func podLogsModelLoadsFiltersAndSwitchesExplicitContainers() async {
     let pod = KubernetesPodRecord(
       uid: "11111111-1111-4111-8111-111111111111",
@@ -795,6 +941,7 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
   private var resourceInventory = readyResourceInventory()
   private var stopError: KubernetesClusterError?
   private(set) var scaleRequests: [KubernetesWorkloadScaleRequest] = []
+  private(set) var restartRequests: [KubernetesWorkloadRestartRequest] = []
 
   init(snapshot: KubernetesClusterSnapshot) {
     self.snapshot = snapshot
@@ -830,6 +977,17 @@ private actor KubernetesModelServiceDouble: KubernetesClusterManaging {
       request: request,
       resourceVersion: "102",
       observedReplicas: request.targetReplicas,
+      capturedAt: Date(timeIntervalSince1970: 1_700_000_100)
+    )
+  }
+
+  func restartWorkload(
+    _ request: KubernetesWorkloadRestartRequest
+  ) -> KubernetesWorkloadRestartResult {
+    restartRequests.append(request)
+    return KubernetesWorkloadRestartResult(
+      request: request,
+      resourceVersion: "102",
       capturedAt: Date(timeIntervalSince1970: 1_700_000_100)
     )
   }
@@ -1030,6 +1188,9 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
   private var workloadScaleExitCode: Int32 = 0
   private var workloadScaleOutput =
     "\(AppleKubernetesClusterService.workloadScaleMarker)aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\t102\t3\n"
+  private var workloadRestartExitCode: Int32 = 0
+  private var workloadRestartOutput =
+    "\(AppleKubernetesClusterService.workloadRestartMarker)aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\t102\t2023-11-14T22:15:00.000Z\n"
 
   init(
     bootstrapFailures: Int = 0,
@@ -1104,6 +1265,12 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
       }
       return result(standardOutput: workloadScaleOutput)
     }
+    if command.contains("kubectl replace") {
+      if workloadRestartExitCode != 0 {
+        return result(exitCode: workloadRestartExitCode)
+      }
+      return result(standardOutput: workloadRestartOutput)
+    }
     if command.contains("__NATIVECONTAINERS_K3S_VERSION__") {
       return result(
         standardOutput: """
@@ -1142,6 +1309,14 @@ private actor KubernetesRootCommandDouble: KubernetesMachineRootCommandRunning {
 
   func setWorkloadScaleOutput(_ value: String) {
     workloadScaleOutput = value
+  }
+
+  func setWorkloadRestartExitCode(_ value: Int32) {
+    workloadRestartExitCode = value
+  }
+
+  func setWorkloadRestartOutput(_ value: String) {
+    workloadRestartOutput = value
   }
 
   private func result(

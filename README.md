@@ -75,7 +75,11 @@ Kubernetes now has a dedicated native control plane built on those Apple
 machine APIs: one isolated K3s machine with no host-home mount, a pinned and
 checksum-verified install, crash-resumable identity-bound setup, native
 start/stop/Force Stop/delete/status controls, and explicit in-memory kubeconfig
-export without host-side credential persistence.
+export without host-side credential persistence. Its bounded native resource
+browser keeps workload and Pod identity pinned, supports preconditioned
+Deployment/StatefulSet scaling, optimistic-locked Deployment, StatefulSet, and
+DaemonSet restarts, bounded Pod logs, and identity-checked interactive Pod
+terminals without exporting workload payloads or credentials to the host.
 Ordinary container terminals and the exec sheet share typed, bounded shell
 discovery instead of assuming `/bin/sh`, while preserving explicit executable
 overrides for minimal and custom images. Container and Linux-machine shells now

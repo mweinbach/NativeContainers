@@ -694,6 +694,16 @@ private struct PreviewKubernetesClusterService: KubernetesClusterManaging {
     )
   }
 
+  func restartWorkload(
+    _ request: KubernetesWorkloadRestartRequest
+  ) async throws -> KubernetesWorkloadRestartResult {
+    KubernetesWorkloadRestartResult(
+      request: request,
+      resourceVersion: "preview-restart",
+      capturedAt: Date()
+    )
+  }
+
   func provision(
     _ request: KubernetesClusterProvisionRequest,
     progress: @escaping KubernetesClusterProgressHandler

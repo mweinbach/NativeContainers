@@ -182,6 +182,43 @@ struct LiveAppleKubernetesSmokeTests {
             && $0.readyCount == 2
         }
       )
+      let scaledWorkload = try #require(
+        scaledInventory.workloads.first {
+          $0.uid == inventoryWorkload.uid
+            && $0.desiredCount == 2
+            && $0.readyCount == 2
+        }
+      )
+      let restartResult = try await graph.cluster.restartWorkload(
+        try KubernetesWorkloadRestartRequest(workload: scaledWorkload)
+      )
+      #expect(restartResult.resourceVersion != scaledWorkload.resourceVersion)
+      _ = try await graph.kubectl(
+        kubeconfigURL: kubeconfigURL,
+        arguments: [
+          "--namespace", namespace,
+          "rollout", "status", "deployment/inventory", "--timeout=180s",
+        ],
+        timeout: .seconds(210)
+      )
+      let restartAnnotation = try await graph.kubectl(
+        kubeconfigURL: kubeconfigURL,
+        arguments: [
+          "--namespace", namespace,
+          "get", "deployment/inventory",
+          "--output=jsonpath={.spec.template.metadata.annotations.kubectl\\.kubernetes\\.io/restartedAt}",
+        ]
+      )
+      #expect(!restartAnnotation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      let restartedInventory = try await graph.cluster.loadResourceInventory()
+      #expect(
+        restartedInventory.workloads.contains {
+          $0.uid == scaledWorkload.uid
+            && $0.resourceVersion != scaledWorkload.resourceVersion
+            && $0.desiredCount == 2
+            && $0.readyCount == 2
+        }
+      )
 
       let smokePod = try #require(
         inventory.pods.first {

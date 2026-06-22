@@ -206,6 +206,20 @@ and the target count, and returns one marker-framed result. The model reloads
 the bounded inventory after success and refreshes it after rejected stale
 reviews; scaling never exposes a generic guest command or host kubeconfig.
 
+Deployment, StatefulSet, and DaemonSet rows also expose a reviewed restart
+sheet; Jobs remain excluded because their Pod template is immutable. The fixed
+guest command reads the complete exact object, verifies API version, kind,
+namespace, name, UID, and resourceVersion, and changes only the standard
+`kubectl.kubernetes.io/restartedAt` Pod-template annotation. It removes status
+and managed-field response metadata, then submits the full object through
+`kubectl replace`, preserving Kubernetes' resourceVersion optimistic lock. The
+response must retain the exact identity, advance resourceVersion, and echo the
+restart annotation before success is returned. Full workload JSON—including
+any environment values—stays inside the guest and is never returned to the
+host; replace stderr is suppressed in-guest and mapped to a service-owned
+rejection, while success returns only marker fields. The review warns that
+configured `OnDelete` strategies do not replace existing Pods automatically.
+
 The log sheet can open a terminal for the selected standard container. Its
 restorable target carries the exact cluster-machine identity, Pod API UID,
 namespace, Pod name, and container name. The terminal service requires the

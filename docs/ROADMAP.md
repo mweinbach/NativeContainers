@@ -256,7 +256,7 @@ must leave a usable, test-backed product slice.
           identity without admitting environment, annotation, or secret data.
     - [x] Scale Deployments/StatefulSets only with exact UID, resource-version,
           and current-replica preconditions plus authoritative reconciliation.
-    - [ ] Restart through a full-object optimistic-locked replace that changes
+    - [x] Restart through a full-object optimistic-locked replace that changes
           only the Pod-template restart annotation and confirms UID/new version.
     - [ ] Delete through a raw Kubernetes DeleteOptions request with exact
           UID/resourceVersion, foreground propagation, no force mode, and

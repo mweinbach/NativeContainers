@@ -179,6 +179,10 @@ final class KubernetesClusterModel {
     errorMessage = nil
   }
 
+  func clearResourceError() {
+    resourceErrorMessage = nil
+  }
+
   func makePodLogsModel(for pod: KubernetesPodRecord) -> KubernetesPodLogsModel {
     KubernetesPodLogsModel(service: service, pod: pod)
   }
@@ -219,6 +223,41 @@ final class KubernetesClusterModel {
       resourceErrorMessage = String(
         localized:
           "Scale to \(result.observedReplicas) replicas was confirmed, but resources could not be refreshed: \(error.localizedDescription)"
+      )
+    }
+    return true
+  }
+
+  func restartWorkload(_ workload: KubernetesWorkloadRecord) async -> Bool {
+    guard !isBusy else { return false }
+    isWorking = true
+    resourceErrorMessage = nil
+    defer { isWorking = false }
+
+    let result: KubernetesWorkloadRestartResult
+    do {
+      result = try await service.restartWorkload(
+        try KubernetesWorkloadRestartRequest(workload: workload)
+      )
+    } catch is CancellationError {
+      resourceErrorMessage = String(localized: "Restarting the workload was cancelled.")
+      return false
+    } catch {
+      let mutationError = error.localizedDescription
+      if let refreshed = try? await service.loadResourceInventory() {
+        resourceInventory = refreshed
+      }
+      resourceErrorMessage = mutationError
+      return false
+    }
+
+    do {
+      resourceInventory = try await service.loadResourceInventory()
+    } catch {
+      resourceInventory = nil
+      resourceErrorMessage = String(
+        localized:
+          "Restart of “\(result.request.name)” was confirmed, but resources could not be refreshed: \(error.localizedDescription)"
       )
     }
     return true

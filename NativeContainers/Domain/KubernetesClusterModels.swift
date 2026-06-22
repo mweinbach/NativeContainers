@@ -251,6 +251,9 @@ protocol KubernetesClusterManaging: Sendable {
   func scaleWorkload(
     _ request: KubernetesWorkloadScaleRequest
   ) async throws -> KubernetesWorkloadScaleResult
+  func restartWorkload(
+    _ request: KubernetesWorkloadRestartRequest
+  ) async throws -> KubernetesWorkloadRestartResult
   func provision(
     _ request: KubernetesClusterProvisionRequest,
     progress: @escaping KubernetesClusterProgressHandler
@@ -284,6 +287,12 @@ struct UnavailableKubernetesClusterService: KubernetesClusterManaging {
   func scaleWorkload(
     _ request: KubernetesWorkloadScaleRequest
   ) async throws -> KubernetesWorkloadScaleResult {
+    throw KubernetesClusterError.unavailable
+  }
+
+  func restartWorkload(
+    _ request: KubernetesWorkloadRestartRequest
+  ) async throws -> KubernetesWorkloadRestartResult {
     throw KubernetesClusterError.unavailable
   }
 
@@ -349,6 +358,11 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
   case workloadReplicaCountChanged(String)
   case workloadScaleNotApplied(String)
   case invalidWorkloadScaleResult
+  case invalidWorkloadRestartRequest
+  case workloadNotRestartable
+  case workloadRestartRejected(String)
+  case workloadRestartNotConfirmed(String)
+  case invalidWorkloadRestartResult
   case invalidPodShellDiscovery
   case podShellUnavailable
   case podIdentityChanged(String)
@@ -411,6 +425,18 @@ enum KubernetesClusterError: LocalizedError, Equatable, Sendable {
       String(localized: "K3s did not confirm the requested scale for “\(name)”.")
     case .invalidWorkloadScaleResult:
       String(localized: "K3s returned an invalid workload scale result.")
+    case .invalidWorkloadRestartRequest:
+      String(localized: "The Kubernetes workload restart request is invalid.")
+    case .workloadNotRestartable:
+      String(localized: "Only Deployments, StatefulSets, and DaemonSets can be restarted.")
+    case .workloadRestartRejected(let name):
+      String(
+        localized:
+          "K3s rejected the reviewed restart for “\(name)”. Refresh resources and try again.")
+    case .workloadRestartNotConfirmed(let name):
+      String(localized: "K3s could not confirm the restart for “\(name)”.")
+    case .invalidWorkloadRestartResult:
+      String(localized: "K3s returned an invalid workload restart result.")
     case .invalidPodShellDiscovery:
       String(localized: "K3s returned an invalid Pod shell discovery result.")
     case .podShellUnavailable:

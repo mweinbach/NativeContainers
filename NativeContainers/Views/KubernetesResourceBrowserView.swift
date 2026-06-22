@@ -52,6 +52,7 @@ struct KubernetesResourceBrowserView: View {
   @State private var browser = KubernetesResourceBrowserModel()
   @State private var selectedPod: KubernetesPodRecord?
   @State private var workloadToScale: KubernetesWorkloadRecord?
+  @State private var workloadToRestart: KubernetesWorkloadRecord?
 
   var body: some View {
     @Bindable var browser = browser
@@ -88,7 +89,12 @@ struct KubernetesResourceBrowserView: View {
             selectedPod = pod
           },
           onScaleWorkload: { workload in
+            model.clearResourceError()
             workloadToScale = workload
+          },
+          onRestartWorkload: { workload in
+            model.clearResourceError()
+            workloadToRestart = workload
           }
         )
       }
@@ -128,6 +134,18 @@ struct KubernetesResourceBrowserView: View {
       },
       content: { workload in
         KubernetesWorkloadScaleView(
+          model: model,
+          workload: workload
+        )
+      }
+    )
+    .sheet(
+      item: $workloadToRestart,
+      onDismiss: {
+        browser.replaceInventory(model.resourceInventory)
+      },
+      content: { workload in
+        KubernetesWorkloadRestartView(
           model: model,
           workload: workload
         )
@@ -251,6 +269,7 @@ private struct KubernetesResourceBrowserContent: View {
   let onRetry: () -> Void
   let onViewPodLogs: (KubernetesPodRecord) -> Void
   let onScaleWorkload: (KubernetesWorkloadRecord) -> Void
+  let onRestartWorkload: (KubernetesWorkloadRecord) -> Void
 
   var body: some View {
     VStack(spacing: 0) {
@@ -272,7 +291,8 @@ private struct KubernetesResourceBrowserContent: View {
             workloads: workloads,
             hasSearchText: hasSearchText,
             isBusy: isBusy,
-            onScale: onScaleWorkload
+            onScale: onScaleWorkload,
+            onRestart: onRestartWorkload
           )
         case .pods:
           KubernetesPodList(
@@ -345,6 +365,7 @@ private struct KubernetesWorkloadList: View {
   let hasSearchText: Bool
   let isBusy: Bool
   let onScale: (KubernetesWorkloadRecord) -> Void
+  let onRestart: (KubernetesWorkloadRecord) -> Void
 
   var body: some View {
     if workloads.isEmpty {
@@ -367,9 +388,13 @@ private struct KubernetesWorkloadList: View {
           availableCount: workload.availableCount,
           failedCount: workload.failedCount,
           canScale: workload.kind.supportsScaling,
+          canRestart: workload.kind.supportsRestart,
           isBusy: isBusy,
           onScale: {
             onScale(workload)
+          },
+          onRestart: {
+            onRestart(workload)
           }
         )
       }
@@ -387,8 +412,10 @@ private struct KubernetesWorkloadRow: View {
   let availableCount: Int
   let failedCount: Int
   let canScale: Bool
+  let canRestart: Bool
   let isBusy: Bool
   let onScale: () -> Void
+  let onRestart: () -> Void
 
   var body: some View {
     HStack(spacing: 12) {
@@ -432,10 +459,22 @@ private struct KubernetesWorkloadRow: View {
         }
       }
 
-      if canScale {
-        Button("Scale", systemImage: "arrow.up.arrow.down", action: onScale)
-          .buttonStyle(.borderless)
-          .disabled(isBusy)
+      if canScale || canRestart {
+        Menu("Actions", systemImage: "ellipsis.circle") {
+          if canScale {
+            Button("Scale…", systemImage: "arrow.up.arrow.down", action: onScale)
+          }
+          if canRestart {
+            Button(
+              "Restart…",
+              systemImage: "arrow.trianglehead.2.clockwise",
+              action: onRestart
+            )
+          }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(isBusy)
       }
     }
     .padding(.vertical, 4)
@@ -471,55 +510,27 @@ private struct KubernetesWorkloadScaleView: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Workload") {
-          LabeledContent("Name", value: workload.name)
-          LabeledContent("Namespace", value: workload.namespace)
-          LabeledContent("Kind") {
-            Text(workload.kind.title)
-          }
-        }
+        KubernetesWorkloadIdentitySection(
+          name: workload.name,
+          namespace: workload.namespace,
+          kind: workload.kind
+        )
+        KubernetesWorkloadScaleReplicaSection(
+          currentReplicas: workload.desiredCount,
+          targetReplicas: $targetReplicas
+        )
 
-        Section {
-          LabeledContent("Current") {
-            Text(workload.desiredCount, format: .number)
-              .monospacedDigit()
-          }
-          LabeledContent("Target") {
-            Stepper(
-              value: $targetReplicas,
-              in: 0...KubernetesWorkloadScaleRequest.maximumReplicaCount
-            ) {
-              Text(targetReplicas, format: .number)
-                .monospacedDigit()
-            }
-          }
-          if targetReplicas == 0 {
-            Label(
-              "Scaling to zero stops every replica of this workload.",
-              systemImage: "exclamationmark.triangle"
-            )
-            .foregroundStyle(.orange)
-          }
-        } header: {
-          Text("Replica count")
-        } footer: {
-          Text(
-            "The scale commits only if the workload UID, resource version, and current replica count still match this review."
+        if let errorMessage = model.resourceErrorMessage {
+          KubernetesWorkloadMutationErrorSection(
+            title: "Scale failed",
+            message: errorMessage
           )
         }
 
-        if let errorMessage = model.resourceErrorMessage {
-          Section("Scale failed") {
-            Text(errorMessage)
-              .foregroundStyle(.red)
-              .textSelection(.enabled)
-          }
-        }
-
         if isSubmitting {
-          Section {
-            ProgressView("Scaling workload…")
-          }
+          KubernetesWorkloadMutationProgressSection(
+            title: "Scaling workload…"
+          )
         }
       }
       .formStyle(.grouped)
@@ -562,6 +573,172 @@ private struct KubernetesWorkloadScaleView: View {
       isSubmitting = false
       if succeeded {
         dismiss()
+      }
+    }
+  }
+}
+
+private struct KubernetesWorkloadRestartView: View {
+  @Environment(\.dismiss) private var dismiss
+
+  let model: KubernetesClusterModel
+  let workload: KubernetesWorkloadRecord
+
+  @State private var isSubmitting = false
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        KubernetesWorkloadIdentitySection(
+          name: workload.name,
+          namespace: workload.namespace,
+          kind: workload.kind
+        )
+        KubernetesWorkloadRestartEffectSection()
+
+        if let errorMessage = model.resourceErrorMessage {
+          KubernetesWorkloadMutationErrorSection(
+            title: "Restart failed",
+            message: errorMessage
+          )
+        }
+
+        if isSubmitting {
+          KubernetesWorkloadMutationProgressSection(
+            title: "Restarting workload…"
+          )
+        }
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Restart Workload")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            dismiss()
+          }
+          .disabled(isSubmitting)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Restart Workload") {
+            submit()
+          }
+          .disabled(isSubmitting)
+        }
+      }
+    }
+    .frame(minWidth: 480, minHeight: 360)
+    .interactiveDismissDisabled(isSubmitting)
+  }
+
+  private func submit() {
+    guard !isSubmitting else { return }
+    isSubmitting = true
+    Task {
+      let succeeded = await model.restartWorkload(workload)
+      isSubmitting = false
+      if succeeded {
+        dismiss()
+      }
+    }
+  }
+}
+
+private struct KubernetesWorkloadIdentitySection: View {
+  let name: String
+  let namespace: String
+  let kind: KubernetesWorkloadKind
+
+  var body: some View {
+    Section("Workload") {
+      LabeledContent("Name", value: name)
+      LabeledContent("Namespace", value: namespace)
+      LabeledContent("Kind") {
+        Text(kind.title)
+      }
+    }
+  }
+}
+
+private struct KubernetesWorkloadScaleReplicaSection: View {
+  let currentReplicas: Int
+  @Binding var targetReplicas: Int
+
+  var body: some View {
+    Section {
+      LabeledContent("Current") {
+        Text(currentReplicas, format: .number)
+          .monospacedDigit()
+      }
+      LabeledContent("Target") {
+        Stepper(
+          value: $targetReplicas,
+          in: 0...KubernetesWorkloadScaleRequest.maximumReplicaCount
+        ) {
+          Text(targetReplicas, format: .number)
+            .monospacedDigit()
+        }
+      }
+      if targetReplicas == 0 {
+        Label(
+          "Scaling to zero stops every replica of this workload.",
+          systemImage: "exclamationmark.triangle"
+        )
+        .foregroundStyle(.orange)
+      }
+    } header: {
+      Text("Replica count")
+    } footer: {
+      Text(
+        "The scale commits only if the workload UID, resource version, and current replica count still match this review."
+      )
+    }
+  }
+}
+
+private struct KubernetesWorkloadRestartEffectSection: View {
+  var body: some View {
+    Section {
+      Label(
+        "Kubernetes will create a new rollout by changing only the Pod-template restart annotation.",
+        systemImage: "arrow.trianglehead.2.clockwise"
+      )
+      Label(
+        "Managed Pods may be replaced and temporarily unavailable during the rollout.",
+        systemImage: "exclamationmark.triangle"
+      )
+      .foregroundStyle(.orange)
+    } header: {
+      Text("Restart behavior")
+    } footer: {
+      Text(
+        "The replace commits only if the workload UID and resource version still match this review. The controller then follows its configured update strategy; OnDelete strategies do not replace existing Pods automatically."
+      )
+    }
+  }
+}
+
+private struct KubernetesWorkloadMutationErrorSection: View {
+  let title: LocalizedStringResource
+  let message: String
+
+  var body: some View {
+    Section {
+      Text(message)
+        .foregroundStyle(.red)
+        .textSelection(.enabled)
+    } header: {
+      Text(title)
+    }
+  }
+}
+
+private struct KubernetesWorkloadMutationProgressSection: View {
+  let title: LocalizedStringResource
+
+  var body: some View {
+    Section {
+      ProgressView {
+        Text(title)
       }
     }
   }
