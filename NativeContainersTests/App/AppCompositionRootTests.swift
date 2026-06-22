@@ -86,6 +86,8 @@ struct AppCompositionRootTests {
       )
     }
     #expect(services.linuxVirtualMachineRuntime is LinuxVirtualMachineRuntimeService)
+    #expect(services.virtualMachineName is MacVirtualMachineNameService)
+    #expect(services.linuxVirtualMachineName is LinuxVirtualMachineNameService)
     #expect(
       services.linuxVirtualMachineSharedDirectories
         is LinuxVirtualMachineSharedDirectoryService

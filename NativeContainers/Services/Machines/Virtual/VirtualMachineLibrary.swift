@@ -95,6 +95,8 @@ actor VirtualMachineLibrary:
   MacVirtualMachineAudioConfigurationPersisting,
   MacVirtualMachineNetworkConfigurationPersisting,
   LinuxVirtualMachineNetworkConfigurationPersisting,
+  MacVirtualMachineNamePersisting,
+  LinuxVirtualMachineNamePersisting,
   MacVirtualMachineComputePersisting,
   LinuxVirtualMachineComputePersisting,
   MacVirtualMachineDiskSnapshotPersisting,
@@ -385,6 +387,56 @@ actor VirtualMachineLibrary:
       to: bundleURL.appending(path: Self.manifestFilename)
     )
     return updated
+  }
+
+  func macOSName(id: UUID) throws -> String {
+    try installationManifest(id: id).name
+  }
+
+  func renameMacOS(
+    to name: String,
+    for lease: MacVirtualMachineRuntimeLease
+  ) throws -> String {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try installationManifest(id: lease.target.machineID)
+
+    guard manifest.name == lease.machine.manifest.name else {
+      throw MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+    guard try manifest.rename(to: name) else { return manifest.name }
+
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
+    )
+    return manifest.name
+  }
+
+  func linuxName(id: UUID) throws -> String {
+    try linuxRuntimeManifest(id: id).name
+  }
+
+  func renameLinux(
+    to name: String,
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) throws -> String {
+    let borrow = try lease.borrow()
+    defer { borrow.release() }
+    let bundleURL = try requireConfigurationMutationLease(lease)
+    var manifest = try linuxRuntimeManifest(id: lease.target.machineID)
+
+    guard manifest.name == lease.machine.manifest.name else {
+      throw LinuxVirtualMachineRuntimeError.staleTarget(lease.target)
+    }
+    guard try manifest.rename(to: name) else { return manifest.name }
+
+    try bundleStore.write(
+      manifest,
+      to: bundleURL.appending(path: Self.manifestFilename)
+    )
+    return manifest.name
   }
 
   func macOSComputeState(id: UUID) throws -> VirtualMachineComputeState {

@@ -256,6 +256,8 @@ extension AppModel {
       linuxVirtualMachineNetwork: PreviewVirtualMachineNetworkService(),
       virtualMachineCompute: PreviewVirtualMachineComputeService(),
       linuxVirtualMachineCompute: PreviewVirtualMachineComputeService(),
+      virtualMachineName: PreviewVirtualMachineNameService(),
+      linuxVirtualMachineName: PreviewVirtualMachineNameService(),
       virtualMachineSharedDirectories: sharedDirectories,
       linuxVirtualMachineSharedDirectories: sharedDirectories,
       initialInventory: inventory,
@@ -791,6 +793,20 @@ private actor PreviewVirtualMachineComputeService:
         maximumMemoryBytes: 64 * VirtualMachineResources.bytesPerGiB
       )
     )
+  }
+}
+
+private actor PreviewVirtualMachineNameService: VirtualMachineNameManaging {
+  private var names: [UUID: String] = [:]
+
+  func currentName(id: UUID) -> String {
+    names[id, default: "Preview VM"]
+  }
+
+  func rename(_ name: String, for machineID: UUID) -> String {
+    let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    names[machineID] = name
+    return name
   }
 }
 

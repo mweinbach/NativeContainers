@@ -56,6 +56,47 @@ struct VirtualMachineModelsTests {
   }
 
   @Test
+  func renameTrimsAndUpdatesOnlyMutableMetadata() throws {
+    let identifier = UUID()
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var manifest = try VirtualMachineManifest(
+      id: identifier,
+      name: "Before",
+      guest: .macOS,
+      installState: .stopped,
+      resources: resources
+    )
+    let renamedAt = Date(timeIntervalSince1970: 1_000)
+
+    let changed = try manifest.rename(
+      to: "  After  ",
+      updatedAt: renamedAt
+    )
+
+    #expect(changed)
+    #expect(manifest.name == "After")
+    #expect(manifest.updatedAt == renamedAt)
+    #expect(manifest.id == identifier)
+    #expect(manifest.resources == resources)
+
+    let changedAgain = try manifest.rename(
+      to: "After",
+      updatedAt: Date(timeIntervalSince1970: 2_000)
+    )
+    #expect(!changedAgain)
+    #expect(manifest.updatedAt == renamedAt)
+
+    #expect(throws: VirtualMachineModelError.emptyName) {
+      try manifest.rename(to: "   ")
+    }
+    #expect(manifest.name == "After")
+  }
+
+  @Test
   func clonePreservesExplicitASIFFormat() throws {
     let resources = try VirtualMachineResources(
       cpuCount: 4,

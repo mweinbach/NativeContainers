@@ -67,6 +67,8 @@ struct AppServices: Sendable {
   let linuxVirtualMachineNetwork: any LinuxVirtualMachineNetworkManaging
   let virtualMachineCompute: any MacVirtualMachineComputeManaging
   let linuxVirtualMachineCompute: any LinuxVirtualMachineComputeManaging
+  let virtualMachineName: any MacVirtualMachineNameManaging
+  let linuxVirtualMachineName: any LinuxVirtualMachineNameManaging
   let virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging
   let linuxVirtualMachineSharedDirectories: any LinuxVirtualMachineSharedDirectoryManaging
   let virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices
@@ -151,6 +153,10 @@ struct AppServices: Sendable {
       UnavailableVirtualMachineComputeService(),
     linuxVirtualMachineCompute: any LinuxVirtualMachineComputeManaging =
       UnavailableVirtualMachineComputeService(),
+    virtualMachineName: any MacVirtualMachineNameManaging =
+      UnavailableVirtualMachineNameService(),
+    linuxVirtualMachineName: any LinuxVirtualMachineNameManaging =
+      UnavailableVirtualMachineNameService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
     linuxVirtualMachineSharedDirectories:
@@ -218,6 +224,8 @@ struct AppServices: Sendable {
     self.linuxVirtualMachineNetwork = linuxVirtualMachineNetwork
     self.virtualMachineCompute = virtualMachineCompute
     self.linuxVirtualMachineCompute = linuxVirtualMachineCompute
+    self.virtualMachineName = virtualMachineName
+    self.linuxVirtualMachineName = linuxVirtualMachineName
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
     self.linuxVirtualMachineSharedDirectories = linuxVirtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages
@@ -292,6 +300,10 @@ struct AppServices: Sendable {
       UnavailableVirtualMachineComputeService(),
     linuxVirtualMachineCompute: any LinuxVirtualMachineComputeManaging =
       UnavailableVirtualMachineComputeService(),
+    virtualMachineName: any MacVirtualMachineNameManaging =
+      UnavailableVirtualMachineNameService(),
+    linuxVirtualMachineName: any LinuxVirtualMachineNameManaging =
+      UnavailableVirtualMachineNameService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
     linuxVirtualMachineSharedDirectories:
@@ -359,6 +371,8 @@ struct AppServices: Sendable {
     self.linuxVirtualMachineNetwork = linuxVirtualMachineNetwork
     self.virtualMachineCompute = virtualMachineCompute
     self.linuxVirtualMachineCompute = linuxVirtualMachineCompute
+    self.virtualMachineName = virtualMachineName
+    self.linuxVirtualMachineName = linuxVirtualMachineName
     self.virtualMachineSharedDirectories = virtualMachineSharedDirectories
     self.linuxVirtualMachineSharedDirectories = linuxVirtualMachineSharedDirectories
     self.virtualMachineDiskImages = virtualMachineDiskImages

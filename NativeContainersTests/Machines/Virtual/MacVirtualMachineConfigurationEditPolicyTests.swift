@@ -45,5 +45,19 @@ struct MacVirtualMachineConfigurationEditPolicyTests {
         diskMaintenanceIsBusy: true
       ) == .diskMaintenance
     )
+    #expect(
+      policy.nameBlock(
+        installState: .stopped,
+        runtime: saved,
+        diskMaintenanceIsBusy: false
+      ) == nil
+    )
+    #expect(
+      policy.nameBlock(
+        installState: .stopped,
+        runtime: stopped,
+        diskMaintenanceIsBusy: true
+      ) == .diskMaintenance
+    )
   }
 }

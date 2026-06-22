@@ -1145,6 +1145,14 @@ than sharing presentation state across an implied multi-window group.
   refreshes inventory only after persistence succeeds. Clone and transfer
   validation reject partial, unaligned, guest-incompatible, or allocation-
   exceeding requirement metadata before a bundle can be published.
+- VM names are guest-neutral app metadata, not platform identity. A shared
+  observable model stages a trimmed, nonempty label while Mac- and Linux-
+  specific services acquire their existing stopped runtime lease, reject a
+  stale observed name, and atomically update only the manifest name and
+  timestamp. The manifest UUID, bundle path, guest machine identifier, network
+  identity, storage, and configuration remain unchanged. macOS saved state does
+  not block a label-only rename, while active runtime ownership, transitions,
+  and disk maintenance still do.
 - Physical USB is a separate host-local service lane. AccessoryAccess owns
   discovery and system authorization; a focused Apple adapter parses only the
   stable registry ID and standard device descriptor needed by the domain. The

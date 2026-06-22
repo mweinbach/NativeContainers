@@ -230,6 +230,39 @@ struct LinuxVirtualMachineLibraryTests {
   }
 
   @Test
+  func renamePersistsThroughLinuxRuntimeLease() async throws {
+    let fixture = try LinuxLibraryFixture()
+    defer { fixture.remove() }
+    let library = VirtualMachineLibrary(
+      rootURL: fixture.root,
+      linuxPlatformArtifactPreparer: TestLinuxPlatformArtifactPreparer(
+        behavior: .success
+      )
+    )
+    let draft = try await library.createDraft(
+      name: "Before",
+      guest: .linux,
+      resources: fixture.resources
+    )
+    let prepared = try await library.prepareLinuxVM(
+      id: draft.id,
+      installationMediaURL: fixture.installationMedia
+    )
+    let service = LinuxVirtualMachineNameService(
+      leasingStore: library,
+      persistence: library
+    )
+
+    let name = try await service.rename("  Renamed Linux  ", for: prepared.id)
+
+    #expect(name == "Renamed Linux")
+    let reloaded = try #require(try await library.list().first)
+    #expect(reloaded.name == "Renamed Linux")
+    #expect(reloaded.id == prepared.id)
+    #expect(reloaded.resources == prepared.resources)
+  }
+
+  @Test
   func linuxRuntimeLeasePersistsAndReloadsSharedDirectories() async throws {
     let fixture = try LinuxLibraryFixture()
     defer { fixture.remove() }

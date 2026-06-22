@@ -2339,3 +2339,22 @@ reject partial, unaligned, guest-incompatible, or allocation-exceeding floor
 metadata. Disk capacity is displayed but cannot be changed by this editor:
 virtual-disk growth and shrink policy require their own transactional storage
 workflow and must not be disguised as a manifest edit.
+
+## ADR-082: Keep VM display names separate from guest identity
+
+**Status:** Accepted — 2026-06-22
+
+NativeContainers treats a virtual machine's mutable display name as app-owned
+manifest metadata. Renaming never changes the manifest UUID, canonical bundle
+path, macOS or Linux machine identifier, Linux MAC address, storage artifacts,
+or runtime configuration. This preserves clone, transfer, saved-state, and
+external-reference identity while giving both guest families ordinary
+post-creation name management.
+
+The shared name model stages edits, rejects an empty normalized label, preserves
+the user's draft across inventory refreshes, and refreshes inventory only after
+persistence succeeds. Guest-specific services acquire the existing stopped
+runtime lease; persistence revalidates the name observed by that lease and
+atomically updates only `name` and `updatedAt`. macOS saved state remains valid
+because no configuration fingerprint input changes. Active runtime ownership,
+state transitions, and disk maintenance still block the mutation.

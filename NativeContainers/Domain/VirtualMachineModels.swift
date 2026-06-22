@@ -75,10 +75,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     diskImagePath: String = "Disk.img",
     diskImageFormat: VirtualMachineDiskImageFormat = .raw
   ) throws {
-    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedName.isEmpty else {
-      throw VirtualMachineModelError.emptyName
-    }
+    let trimmedName = try Self.normalizedName(name)
 
     self.schemaVersion = Self.currentSchemaVersion
     self.id = id
@@ -103,10 +100,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     createdAt: Date = Date(),
     linuxMACAddress: String? = nil
   ) throws {
-    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedName.isEmpty else {
-      throw VirtualMachineModelError.emptyName
-    }
+    let trimmedName = try Self.normalizedName(name)
 
     schemaVersion = Self.currentSchemaVersion
     self.id = id
@@ -155,6 +149,26 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
 
   var effectiveMacOSDiskSnapshotConfiguration: MacVirtualMachineDiskSnapshotConfiguration {
     macOSDiskSnapshotConfiguration ?? .empty
+  }
+
+  @discardableResult
+  mutating func rename(
+    to name: String,
+    updatedAt: Date = Date()
+  ) throws -> Bool {
+    let normalizedName = try Self.normalizedName(name)
+    guard normalizedName != self.name else { return false }
+    self.name = normalizedName
+    self.updatedAt = updatedAt
+    return true
+  }
+
+  private static func normalizedName(_ name: String) throws -> String {
+    let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedName.isEmpty else {
+      throw VirtualMachineModelError.emptyName
+    }
+    return normalizedName
   }
 
   mutating func markInstallationStarted(

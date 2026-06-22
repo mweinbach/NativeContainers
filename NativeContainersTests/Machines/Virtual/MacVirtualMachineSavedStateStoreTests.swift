@@ -255,6 +255,20 @@ struct MacVirtualMachineSavedStateStoreTests {
   }
 
   @Test
+  func configurationDescriptorIgnoresTheAppFacingDisplayName() throws {
+    let fixture = try SavedStateStoreFixture()
+    defer { fixture.remove() }
+    let service = MacVirtualMachineConfigurationDescriptorService()
+
+    let baseline = try service.descriptor(for: fixture.machine)
+    let renamed = try service.descriptor(
+      for: fixture.machine.withName("Renamed")
+    )
+
+    #expect(renamed == baseline)
+  }
+
+  @Test
   func hostAudioAdvancesTopologyWhileSharingRemainsOptional() throws {
     let fixture = try SavedStateStoreFixture()
     defer { fixture.remove() }
@@ -398,6 +412,21 @@ struct MacVirtualMachineSavedStateStoreTests {
 }
 
 extension ResolvedMacVirtualMachine {
+  fileprivate func withName(_ name: String) throws -> ResolvedMacVirtualMachine {
+    var manifest = manifest
+    try manifest.rename(to: name)
+    return ResolvedMacVirtualMachine(
+      manifest: manifest,
+      bundleURL: bundleURL,
+      diskImageURL: diskImageURL,
+      diskSnapshotLayerURLs: diskSnapshotLayerURLs,
+      auxiliaryStorageURL: auxiliaryStorageURL,
+      hardwareModelURL: hardwareModelURL,
+      machineIdentifierURL: machineIdentifierURL,
+      sharedDirectories: sharedDirectories
+    )
+  }
+
   fileprivate func withDiskSnapshots(
     _ configuration: MacVirtualMachineDiskSnapshotConfiguration,
     layerURLs: [URL]

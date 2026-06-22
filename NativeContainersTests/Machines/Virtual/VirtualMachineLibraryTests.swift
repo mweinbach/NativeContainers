@@ -733,6 +733,54 @@ struct VirtualMachineLibraryTests {
     )
   }
 
+  @Test
+  func renamePersistsThroughMacRuntimeLease() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let lease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+    defer { lease.release() }
+
+    let name = try await fixture.library.renameMacOS(
+      to: "  Renamed Mac  ",
+      for: lease
+    )
+
+    #expect(name == "Renamed Mac")
+    let reloaded = try #require(try await fixture.library.list().first)
+    #expect(reloaded.name == "Renamed Mac")
+    #expect(reloaded.id == fixture.manifest.id)
+    #expect(reloaded.resources == fixture.manifest.resources)
+  }
+
+  @Test
+  func renameRejectsANameChangedAfterMacRuntimeLeaseAcquisition() async throws {
+    let root = temporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let fixture = try installedLibraryFixture(root: root)
+    let lease = try await fixture.library.acquireMacOSRuntime(
+      id: fixture.manifest.id
+    )
+    defer { lease.release() }
+    var externallyRenamed = fixture.manifest
+    try externallyRenamed.rename(to: "External")
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(externallyRenamed).write(
+      to: fixture.bundle.appending(
+        path: VirtualMachineLibrary.manifestFilename
+      )
+    )
+
+    await #expect(
+      throws: MacVirtualMachineRuntimeError.staleTarget(lease.target)
+    ) {
+      _ = try await fixture.library.renameMacOS(to: "Requested", for: lease)
+    }
+  }
+
   private func installedLibraryFixture(
     root: URL
   ) throws -> (

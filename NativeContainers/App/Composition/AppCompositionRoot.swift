@@ -317,6 +317,14 @@ enum AppCompositionRoot {
       persistence: virtualMachineLibrary,
       platformLimits: virtualMachineComputeLimits
     )
+    let virtualMachineName = MacVirtualMachineNameService(
+      leasingStore: virtualMachineLibrary,
+      persistence: virtualMachineLibrary
+    )
+    let linuxVirtualMachineName = LinuxVirtualMachineNameService(
+      leasingStore: virtualMachineLibrary,
+      persistence: virtualMachineLibrary
+    )
     let virtualMachineDiskSnapshots = MacVirtualMachineDiskSnapshotService(
       leasingStore: virtualMachineLibrary,
       persistence: virtualMachineLibrary,
@@ -404,6 +412,8 @@ enum AppCompositionRoot {
       linuxVirtualMachineNetwork: linuxVirtualMachineNetwork,
       virtualMachineCompute: virtualMachineCompute,
       linuxVirtualMachineCompute: linuxVirtualMachineCompute,
+      virtualMachineName: virtualMachineName,
+      linuxVirtualMachineName: linuxVirtualMachineName,
       virtualMachineSharedDirectories: virtualMachineSharedDirectories,
       linuxVirtualMachineSharedDirectories: linuxVirtualMachineSharedDirectories,
       virtualMachineDiskImages: VirtualMachineDiskImageMaintenanceServices(

@@ -3,6 +3,7 @@ import SwiftUI
 struct LinuxVirtualMachineConfigurationView: View {
   let machine: VirtualMachineManifest
   let runtime: LinuxVirtualMachineRuntimeModel
+  let naming: VirtualMachineNameModel
   let compute: VirtualMachineComputeModel
   let network: LinuxVirtualMachineNetworkModel
   let sharedDirectories: LinuxVirtualMachineSharedDirectoriesModel
@@ -13,6 +14,11 @@ struct LinuxVirtualMachineConfigurationView: View {
         LinuxVirtualMachineConfigurationHeader(
           machine: machine,
           snapshot: runtime.snapshot
+        )
+        VirtualMachineNameSection(
+          naming: naming,
+          refreshToken: machine.updatedAt,
+          editMessage: configurationEditMessage
         )
         VirtualMachineComputeSection(
           compute: compute,
@@ -39,13 +45,15 @@ struct LinuxVirtualMachineConfigurationView: View {
           sharedDirectories: sharedDirectories
         )
         if let errorMessage =
-          compute.errorMessage
+          naming.errorMessage
+          ?? compute.errorMessage
           ?? network.errorMessage
           ?? runtime.errorMessage
         {
           LinuxVirtualMachineConfigurationErrorBanner(
             message: errorMessage,
             dismiss: {
+              naming.clearError()
               compute.clearError()
               network.clearError()
               runtime.clearActionError()

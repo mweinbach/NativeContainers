@@ -147,6 +147,8 @@ must leave a usable, test-backed product slice.
 - [x] Stopped-only GUI Linux CPU and memory editing within the current host's
       Virtualization.framework limits, with generation-pinned persistence and
       cold-start application while disk capacity remains storage-owned.
+- [x] Stopped-only GUI Linux renaming through a generation-pinned metadata
+      service that preserves bundle, machine, network, and storage identity.
 - [x] Persistent GUI Linux VirtioFS shared folders through security-scoped
       bookmarks, stopped-only lease-backed editing, one stable
       `nativecontainers` mount tag, and exact in-guest mount guidance.
@@ -201,6 +203,8 @@ must leave a usable, test-backed product slice.
 - [x] Stopped-only CPU and memory editing within current Apple virtualization
       limits, with persisted restore-image minimums, saved-state rejection,
       configuration fingerprinting, and cold-start application.
+- [x] Stopped-only macOS VM renaming that preserves platform identity and saved
+      state while rejecting stale ownership and active storage maintenance.
 - [ ] Complete macOS host integration where public APIs and distributable
       entitlements support the guest.
   - [x] Physical USB discovery, exact-generation attach/detach orchestration,

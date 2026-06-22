@@ -6,6 +6,7 @@ struct MacVirtualMachineConfigurationView: View {
 
   @State private var audio: MacVirtualMachineAudioModel
   @State private var network: MacVirtualMachineNetworkModel
+  let naming: VirtualMachineNameModel
   let compute: VirtualMachineComputeModel
   @State private var diskSnapshots: MacVirtualMachineDiskSnapshotModel
   @State private var sharedDirectories: MacVirtualMachineSharedDirectoriesModel
@@ -17,6 +18,7 @@ struct MacVirtualMachineConfigurationView: View {
     runtime: MacVirtualMachineRuntimeModel,
     audio: MacVirtualMachineAudioModel,
     network: MacVirtualMachineNetworkModel,
+    naming: VirtualMachineNameModel,
     compute: VirtualMachineComputeModel,
     diskSnapshots: MacVirtualMachineDiskSnapshotModel,
     sharedDirectories: MacVirtualMachineSharedDirectoriesModel,
@@ -26,6 +28,7 @@ struct MacVirtualMachineConfigurationView: View {
     self.runtime = runtime
     _audio = State(initialValue: audio)
     _network = State(initialValue: network)
+    self.naming = naming
     self.compute = compute
     _diskSnapshots = State(initialValue: diskSnapshots)
     _sharedDirectories = State(initialValue: sharedDirectories)
@@ -46,6 +49,11 @@ struct MacVirtualMachineConfigurationView: View {
           diskMaintenanceOperation: diskMaintenance.operation,
           diskSnapshotOperation: diskSnapshots.operation,
           isRefreshingDiskState: diskMaintenance.isRefreshing
+        )
+        VirtualMachineNameSection(
+          naming: naming,
+          refreshToken: machine.updatedAt,
+          editMessage: nameEditMessage
         )
         VirtualMachineComputeSection(
           compute: compute,
@@ -96,7 +104,8 @@ struct MacVirtualMachineConfigurationView: View {
             ? { isConfirmingDiscardSavedState = true } : nil
         )
         if let errorMessage =
-          compute.errorMessage
+          naming.errorMessage
+          ?? compute.errorMessage
           ?? network.errorMessage
           ?? audio.errorMessage
           ?? diskSnapshots.errorMessage
@@ -108,6 +117,7 @@ struct MacVirtualMachineConfigurationView: View {
           MacVirtualMachineConfigurationErrorBanner(
             message: errorMessage,
             dismiss: {
+              naming.clearError()
               compute.clearError()
               network.clearError()
               audio.clearError()
@@ -144,6 +154,14 @@ struct MacVirtualMachineConfigurationView: View {
   private var canDiscardSavedState: Bool {
     machine.installState == .stopped && !diskMaintenance.isBusy
       && !diskSnapshots.isBusy && runtime.snapshot.canDiscardSavedState
+  }
+
+  private var nameEditMessage: LocalizedStringResource? {
+    MacVirtualMachineConfigurationEditPolicy().nameBlock(
+      installState: machine.installState,
+      runtime: runtime.snapshot,
+      diskMaintenanceIsBusy: diskMaintenance.isBusy || diskSnapshots.isBusy
+    )?.message
   }
 }
 

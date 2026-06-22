@@ -1585,6 +1585,29 @@ Updated: 2026-06-22.
   hit the same `NativeContainers.app` launch timeout as the networking preview,
   so no rendered-image claim is inferred.
 
+## Cross-guest VM rename checkpoint
+
+- The selected-VM configuration screen now includes a shared General section
+  for renaming both macOS and GUI Linux machines. It stages edits, trims the
+  persisted value, rejects an empty label, preserves unsaved user input across
+  unrelated manifest refreshes, and updates inventory/navigation only after a
+  successful atomic write.
+- Guest-specific services acquire the existing stopped runtime lease and
+  revalidate the name observed by that exact lease before changing only
+  `name` and `updatedAt`. The manifest UUID, canonical bundle path, guest
+  platform and network identity, disks, resources, and device configuration do
+  not change. macOS saved state remains valid because the configuration
+  fingerprint is untouched; runtime ownership, transitions, and disk
+  maintenance still block editing.
+- Fourteen focused model/policy/service/library/composition checks pass. The
+  exact-head normal build and build-for-testing are warning-free, and the full
+  plan reports 1,047 passed, zero failed, and 29 explicitly gated
+  live/destructive tests skipped. Xcode launched the app as PID 29559 and
+  stopped that exact process; its only logs were the existing Core
+  Spotlight/SetStore donation failures. The standalone rename preview hit the
+  existing `PreviewsFoundationHost.TaskTimeoutError`, so no rendered-image
+  claim is inferred.
+
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, and capability availability are

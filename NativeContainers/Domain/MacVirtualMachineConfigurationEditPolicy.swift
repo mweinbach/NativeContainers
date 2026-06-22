@@ -30,6 +30,19 @@ enum MacVirtualMachineConfigurationEditBlock: Equatable, Sendable {
 }
 
 struct MacVirtualMachineConfigurationEditPolicy: Sendable {
+  func nameBlock(
+    installState: VirtualMachineInstallState,
+    runtime: MacVirtualMachineRuntimeSnapshot,
+    diskMaintenanceIsBusy: Bool
+  ) -> MacVirtualMachineConfigurationEditBlock? {
+    let block = block(
+      installState: installState,
+      runtime: runtime,
+      diskMaintenanceIsBusy: diskMaintenanceIsBusy
+    )
+    return block == .savedStatePresent ? nil : block
+  }
+
   func block(
     installState: VirtualMachineInstallState,
     runtime: MacVirtualMachineRuntimeSnapshot,

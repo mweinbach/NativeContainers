@@ -152,6 +152,9 @@ final class AppModel {
   private var virtualMachineComputeModels: [UUID: VirtualMachineComputeModel] = [:]
 
   @ObservationIgnored
+  private var virtualMachineNameModels: [UUID: VirtualMachineNameModel] = [:]
+
+  @ObservationIgnored
   private var macVirtualMachineDiskSnapshotModels: [UUID: MacVirtualMachineDiskSnapshotModel] = [:]
 
   @ObservationIgnored
@@ -247,6 +250,10 @@ final class AppModel {
       UnavailableVirtualMachineComputeService(),
     linuxVirtualMachineCompute: any LinuxVirtualMachineComputeManaging =
       UnavailableVirtualMachineComputeService(),
+    virtualMachineName: any MacVirtualMachineNameManaging =
+      UnavailableVirtualMachineNameService(),
+    linuxVirtualMachineName: any LinuxVirtualMachineNameManaging =
+      UnavailableVirtualMachineNameService(),
     virtualMachineSharedDirectories: any MacVirtualMachineSharedDirectoryManaging =
       UnavailableMacVirtualMachineSharedDirectoryService(),
     linuxVirtualMachineSharedDirectories:
@@ -297,6 +304,8 @@ final class AppModel {
         linuxVirtualMachineNetwork: linuxVirtualMachineNetwork,
         virtualMachineCompute: virtualMachineCompute,
         linuxVirtualMachineCompute: linuxVirtualMachineCompute,
+        virtualMachineName: virtualMachineName,
+        linuxVirtualMachineName: linuxVirtualMachineName,
         virtualMachineSharedDirectories: virtualMachineSharedDirectories,
         linuxVirtualMachineSharedDirectories: linuxVirtualMachineSharedDirectories,
         virtualMachineDiskImages: virtualMachineDiskImages,
@@ -976,6 +985,30 @@ final class AppModel {
     return model
   }
 
+  func makeVirtualMachineNameModel(
+    for machine: VirtualMachineManifest
+  ) -> VirtualMachineNameModel {
+    if let model = virtualMachineNameModels[machine.id] {
+      return model
+    }
+    let service: any VirtualMachineNameManaging =
+      switch machine.guest {
+      case .macOS:
+        services.virtualMachineName
+      case .linux:
+        services.linuxVirtualMachineName
+      }
+    let model = VirtualMachineNameModel(
+      machineID: machine.id,
+      initialName: machine.name,
+      service: service
+    ) { [weak self] in
+      await self?.refresh()
+    }
+    virtualMachineNameModels[machine.id] = model
+    return model
+  }
+
   func makeMacVirtualMachineSharedDirectoriesModel(
     for machine: VirtualMachineManifest
   ) -> MacVirtualMachineSharedDirectoriesModel {
@@ -1047,6 +1080,10 @@ final class AppModel {
     for identifier in Array(virtualMachineComputeModels.keys)
     where !currentIdentifiers.contains(identifier) {
       virtualMachineComputeModels.removeValue(forKey: identifier)
+    }
+    for identifier in Array(virtualMachineNameModels.keys)
+    where !currentIdentifiers.contains(identifier) {
+      virtualMachineNameModels.removeValue(forKey: identifier)
     }
     for identifier in Array(macVirtualMachineDiskSnapshotModels.keys)
     where !currentIdentifiers.contains(identifier) {
