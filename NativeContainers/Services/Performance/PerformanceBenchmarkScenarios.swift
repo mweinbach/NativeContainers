@@ -1412,6 +1412,205 @@ enum ExternalNetworkPerformanceBenchmarkError:
   }
 }
 
+struct IdleContainerResourceObservation: Equatable, Sendable {
+  let initialMemoryUsageBytes: UInt64
+  let finalMemoryUsageBytes: UInt64
+  let memoryLimitBytes: UInt64
+  let cpuUsageDeltaMicroseconds: UInt64
+  let networkReceivedDeltaBytes: UInt64?
+  let networkTransmittedDeltaBytes: UInt64?
+  let blockReadDeltaBytes: UInt64?
+  let blockWrittenDeltaBytes: UInt64?
+  let processCount: UInt64
+}
+
+protocol IdleContainerStatisticsSampling: Sendable {
+  func sampleContainer(id: String) async throws -> ContainerStatistics?
+}
+
+extension AppleContainerService: IdleContainerStatisticsSampling {}
+
+actor IdleContainerResourcePerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  nonisolated let kind = PerformanceBenchmarkKind.idleContainerResources
+
+  private let lifecycle: ColdContainerStartupPerformanceBenchmarkScenario
+  private let statistics: any IdleContainerStatisticsSampling
+  private let settlingDuration: Duration
+  private let samplingDuration: Duration
+  private let sleep: @Sendable (Duration) async throws -> Void
+  private var recordedObservations: [IdleContainerResourceObservation] = []
+
+  init(
+    containers: any ContainerCreating & ContainerLifecycleManaging,
+    stateReader: any ContainerStartupBenchmarkStateReading =
+      AppleContainerStartupBenchmarkStateReader(),
+    statistics: any IdleContainerStatisticsSampling,
+    imageReference: String = "docker.io/library/alpine:3.21",
+    expectedImageDigest: String,
+    settlingDuration: Duration = .seconds(2),
+    samplingDuration: Duration = .seconds(10),
+    makeContainerID: @escaping @Sendable () -> String = {
+      "nativecontainers-idle-\(UUID().uuidString.lowercased().prefix(8))"
+    },
+    sleep: @escaping @Sendable (Duration) async throws -> Void = {
+      try await Task.sleep(for: $0)
+    }
+  ) throws {
+    guard
+      settlingDuration >= .zero,
+      settlingDuration <= .seconds(60),
+      samplingDuration >= .seconds(1),
+      samplingDuration <= .seconds(300)
+    else {
+      throw IdleContainerResourceBenchmarkError.invalidSamplingDuration
+    }
+    lifecycle = ColdContainerStartupPerformanceBenchmarkScenario(
+      containers: containers,
+      stateReader: stateReader,
+      imageReference: imageReference,
+      expectedImageDigest: expectedImageDigest,
+      makeContainerID: makeContainerID
+    )
+    self.statistics = statistics
+    self.settlingDuration = settlingDuration
+    self.samplingDuration = samplingDuration
+    self.sleep = sleep
+  }
+
+  func prepareIteration() async throws {
+    try await lifecycle.prepareIteration()
+    try await lifecycle.prepareMeasurement()
+    _ = try await lifecycle.perform()
+  }
+
+  func prepareMeasurement() async throws {
+    try await sleep(settlingDuration)
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+  }
+
+  func perform() async throws -> Int64? {
+    let id = try await lifecycle.currentContainerID()
+    let initial = try await requireStatistics(id: id)
+    try await sleep(samplingDuration)
+    let final = try await requireStatistics(id: id)
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+
+    guard
+      let initialMemoryUsage = initial.memoryUsageBytes,
+      let finalMemoryUsage = final.memoryUsageBytes,
+      let initialMemoryLimit = initial.memoryLimitBytes,
+      let finalMemoryLimit = final.memoryLimitBytes,
+      let initialCPU = initial.cpuUsageMicroseconds,
+      let finalCPU = final.cpuUsageMicroseconds,
+      let processCount = final.processCount
+    else {
+      throw IdleContainerResourceBenchmarkError.requiredCountersUnavailable
+    }
+    guard
+      initialMemoryLimit == finalMemoryLimit,
+      finalMemoryLimit == 256 * ContainerCreationRequest.bytesPerMiB
+    else {
+      throw IdleContainerResourceBenchmarkError.memoryLimitChanged
+    }
+    guard finalCPU >= initialCPU else {
+      throw IdleContainerResourceBenchmarkError.counterRegressed("CPU")
+    }
+
+    recordedObservations.append(
+      IdleContainerResourceObservation(
+        initialMemoryUsageBytes: initialMemoryUsage,
+        finalMemoryUsageBytes: finalMemoryUsage,
+        memoryLimitBytes: finalMemoryLimit,
+        cpuUsageDeltaMicroseconds: finalCPU - initialCPU,
+        networkReceivedDeltaBytes: try Self.delta(
+          named: "network receive",
+          initial: initial.networkReceivedBytes,
+          final: final.networkReceivedBytes
+        ),
+        networkTransmittedDeltaBytes: try Self.delta(
+          named: "network transmit",
+          initial: initial.networkTransmittedBytes,
+          final: final.networkTransmittedBytes
+        ),
+        blockReadDeltaBytes: try Self.delta(
+          named: "block read",
+          initial: initial.blockReadBytes,
+          final: final.blockReadBytes
+        ),
+        blockWrittenDeltaBytes: try Self.delta(
+          named: "block write",
+          initial: initial.blockWrittenBytes,
+          final: final.blockWrittenBytes
+        ),
+        processCount: processCount
+      )
+    )
+    return nil
+  }
+
+  func cleanUpIteration() async throws {
+    try await lifecycle.cleanUpIteration()
+  }
+
+  func observations() -> [IdleContainerResourceObservation] {
+    recordedObservations
+  }
+
+  private func requireStatistics(id: String) async throws -> ContainerStatistics {
+    guard let sample = try await statistics.sampleContainer(id: id) else {
+      throw IdleContainerResourceBenchmarkError.statisticsUnavailable
+    }
+    return sample
+  }
+
+  private static func delta(
+    named name: String,
+    initial: UInt64?,
+    final: UInt64?
+  ) throws -> UInt64? {
+    switch (initial, final) {
+    case (nil, nil):
+      return nil
+    case (.some(let initial), .some(let final)):
+      guard final >= initial else {
+        throw IdleContainerResourceBenchmarkError.counterRegressed(name)
+      }
+      return final - initial
+    case (.some, nil), (nil, .some):
+      throw IdleContainerResourceBenchmarkError.requiredCountersUnavailable
+    }
+  }
+}
+
+enum IdleContainerResourceBenchmarkError:
+  LocalizedError,
+  Equatable,
+  Sendable
+{
+  case invalidSamplingDuration
+  case statisticsUnavailable
+  case requiredCountersUnavailable
+  case memoryLimitChanged
+  case counterRegressed(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidSamplingDuration:
+      "The idle-resource benchmark requires a 1–300 second sampling window and at most 60 seconds of settling time."
+    case .statisticsUnavailable:
+      "The idle-resource benchmark could not sample the running container."
+    case .requiredCountersUnavailable:
+      "The idle-resource benchmark did not receive a complete counter pair."
+    case .memoryLimitChanged:
+      "The idle-resource benchmark container did not retain its reviewed memory limit."
+    case .counterRegressed(let name):
+      "The idle-resource benchmark \(name) counter moved backward."
+    }
+  }
+}
+
 actor ImageBuildPerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
   nonisolated let kind = PerformanceBenchmarkKind.imageBuild
 

@@ -30,6 +30,11 @@ struct PerformanceBenchmarkServiceTests {
         .externalNetworkTransfer
       )
     )
+    #expect(
+      !PerformanceBenchmarkKind.settingsSuiteCases.contains(
+        .idleContainerResources
+      )
+    )
   }
 
   @Test
@@ -976,6 +981,142 @@ struct PerformanceBenchmarkServiceTests {
   }
 
   @Test
+  func idleContainerResourcesSamplesCounterDeltasAndDeletesContainer() async throws {
+    let id = "nativecontainers-idle-fixture"
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let statistics = IdleContainerStatisticsRuntimeDouble(
+      samples: [
+        idleContainerStatistics(
+          memoryUsageBytes: 20 * 1_048_576,
+          cpuUsageMicroseconds: 1_000,
+          networkReceivedBytes: 100,
+          networkTransmittedBytes: 200,
+          blockReadBytes: 300,
+          blockWrittenBytes: 400,
+          processCount: 2
+        ),
+        idleContainerStatistics(
+          memoryUsageBytes: 21 * 1_048_576,
+          cpuUsageMicroseconds: 2_500,
+          networkReceivedBytes: 110,
+          networkTransmittedBytes: 220,
+          blockReadBytes: 330,
+          blockWrittenBytes: 440,
+          processCount: 2
+        ),
+      ]
+    )
+    let sleeper = IdleResourceSleepDouble()
+    let scenario = try IdleContainerResourcePerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      statistics: statistics,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      settlingDuration: .seconds(2),
+      samplingDuration: .seconds(10),
+      makeContainerID: { id },
+      sleep: { duration in await sleeper.sleep(for: duration) }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [0, 10_000_000_000])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured idle-resource result.")
+      return
+    }
+    #expect(result.kind == .idleContainerResources)
+    #expect(result.samples.map(\.durationNanoseconds) == [10_000_000_000])
+    #expect(
+      await scenario.observations() == [
+        IdleContainerResourceObservation(
+          initialMemoryUsageBytes: 20 * 1_048_576,
+          finalMemoryUsageBytes: 21 * 1_048_576,
+          memoryLimitBytes: 256 * 1_048_576,
+          cpuUsageDeltaMicroseconds: 1_500,
+          networkReceivedDeltaBytes: 10,
+          networkTransmittedDeltaBytes: 20,
+          blockReadDeltaBytes: 30,
+          blockWrittenDeltaBytes: 40,
+          processCount: 2
+        )
+      ]
+    )
+    #expect(await statistics.containerIDs == [id, id])
+    #expect(await sleeper.durations == [.seconds(2), .seconds(10)])
+    #expect(try await runtime.listedObservation(forContainerID: id) == nil)
+  }
+
+  @Test
+  func idleContainerResourcesRejectsCounterRegressionAndStillCleansUp() async throws {
+    let id = "nativecontainers-idle-regression"
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let statistics = IdleContainerStatisticsRuntimeDouble(
+      samples: [
+        idleContainerStatistics(cpuUsageMicroseconds: 2_000),
+        idleContainerStatistics(cpuUsageMicroseconds: 1_999),
+      ]
+    )
+    let scenario = try IdleContainerResourcePerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      statistics: statistics,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      settlingDuration: .zero,
+      samplingDuration: .seconds(1),
+      makeContainerID: { id },
+      sleep: { _ in }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [10])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .failed(let kind, let message) = report.outcomes[0] else {
+      Issue.record("Expected a regressed idle CPU counter to fail.")
+      return
+    }
+    #expect(kind == .idleContainerResources)
+    #expect(
+      message
+        == IdleContainerResourceBenchmarkError.counterRegressed("CPU")
+        .localizedDescription
+    )
+    #expect(try await runtime.listedObservation(forContainerID: id) == nil)
+  }
+
+  @Test
+  func idleContainerResourcesRejectsUnboundedSamplingWindow() async {
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let statistics = IdleContainerStatisticsRuntimeDouble(samples: [])
+
+    #expect(throws: IdleContainerResourceBenchmarkError.invalidSamplingDuration) {
+      _ = try IdleContainerResourcePerformanceBenchmarkScenario(
+        containers: runtime,
+        stateReader: runtime,
+        statistics: statistics,
+        expectedImageDigest: "sha256:fixture",
+        samplingDuration: .zero
+      )
+    }
+  }
+
+  @Test
   func imageBuildUsesReviewedNoCachePlanAndRemovesOCIOutput() async throws {
     let fixture = try ImageBuildPerformanceFixture()
     defer { fixture.remove() }
@@ -1155,6 +1296,8 @@ struct LiveApplePerformanceBenchmarkTests {
     "__NATIVECONTAINERS_CONTAINER_IO_BENCHMARK__"
   private static let networkOutputMarker =
     "__NATIVECONTAINERS_EXTERNAL_NETWORK_BENCHMARK__"
+  private static let idleOutputMarker =
+    "__NATIVECONTAINERS_IDLE_CONTAINER_BENCHMARK__"
   private static let buildOutputMarker =
     "__NATIVECONTAINERS_IMAGE_BUILD_BENCHMARK__"
   private static let machineOutputMarker =
@@ -1760,6 +1903,139 @@ struct LiveApplePerformanceBenchmarkTests {
         "NATIVECONTAINERS_LIVE_PERFORMANCE"
       ] == "1"
         && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_IDLE"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_IDLE=1 with Apple container services running and the selected image already local."
+    )
+  )
+  func measuresIdleContainerResourceCountersWithoutResidue() async throws {
+    let environment = ProcessInfo.processInfo.environment
+    let samplingSecondsValue =
+      environment["NATIVECONTAINERS_LIVE_PERFORMANCE_IDLE_SECONDS"] ?? "10"
+    guard
+      let samplingSeconds = Int64(samplingSecondsValue),
+      (1...300).contains(samplingSeconds)
+    else {
+      throw LivePerformanceBenchmarkError.invalidIdleSamplingDuration(
+        samplingSecondsValue
+      )
+    }
+
+    let service = AppleContainerService()
+    let imageReference =
+      environment["NATIVECONTAINERS_LIVE_PERFORMANCE_IMAGE"]
+      ?? "docker.io/library/alpine:3.21"
+    let initialInventory = try await service.loadInventory()
+    guard
+      let image = initialInventory.images.first(where: {
+        $0.reference == imageReference
+      })
+    else {
+      throw LivePerformanceBenchmarkError.missingLocalImage(imageReference)
+    }
+
+    let runPrefix =
+      "nativecontainers-idle-\(UUID().uuidString.lowercased().prefix(8))-"
+    let scenario = try IdleContainerResourcePerformanceBenchmarkScenario(
+      containers: service,
+      statistics: service,
+      imageReference: image.reference,
+      expectedImageDigest: image.digest,
+      settlingDuration: .seconds(2),
+      samplingDuration: .seconds(samplingSeconds),
+      makeContainerID: {
+        "\(runPrefix)\(UUID().uuidString.lowercased().prefix(6))"
+      }
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 1,
+        measuredIterations: 3
+      )
+    )
+
+    let report: PerformanceBenchmarkReport
+    do {
+      report = try await benchmark.run { _ in }
+    } catch {
+      try await requireNoResidualContainers(prefix: runPrefix, service: service)
+      throw error
+    }
+    try await requireNoResidualContainers(prefix: runPrefix, service: service)
+
+    guard
+      let outcome = report.outcomes.first,
+      case .measured(let result) = outcome
+    else {
+      if let outcome = report.outcomes.first,
+        case .failed(let kind, let message) = outcome
+      {
+        throw LivePerformanceBenchmarkError.scenarioFailed(
+          kind: kind.rawValue,
+          message: message
+        )
+      }
+      throw LivePerformanceBenchmarkError.missingScenarioResult(
+        PerformanceBenchmarkKind.idleContainerResources.rawValue
+      )
+    }
+    #expect(result.kind == .idleContainerResources)
+    #expect(result.samples.count == 3)
+    #expect(result.samples.allSatisfy { $0.durationNanoseconds > 0 })
+
+    let observations = Array((await scenario.observations()).suffix(result.samples.count))
+    guard observations.count == result.samples.count else {
+      throw LivePerformanceBenchmarkError.missingIdleResourceObservations
+    }
+    let samples = zip(result.samples, observations).map { sample, observation in
+      LiveIdleContainerResourceSample(
+        durationNanoseconds: sample.durationNanoseconds,
+        normalizedCPUPercentage:
+          Double(observation.cpuUsageDeltaMicroseconds) * 1_000
+          / Double(sample.durationNanoseconds) * 100,
+        cpuUsageDeltaMicroseconds: observation.cpuUsageDeltaMicroseconds,
+        initialMemoryUsageBytes: observation.initialMemoryUsageBytes,
+        finalMemoryUsageBytes: observation.finalMemoryUsageBytes,
+        memoryLimitBytes: observation.memoryLimitBytes,
+        networkReceivedDeltaBytes: observation.networkReceivedDeltaBytes,
+        networkTransmittedDeltaBytes: observation.networkTransmittedDeltaBytes,
+        blockReadDeltaBytes: observation.blockReadDeltaBytes,
+        blockWrittenDeltaBytes: observation.blockWrittenDeltaBytes,
+        processCount: observation.processCount
+      )
+    }
+    let cpuPercentages = samples.map(\.normalizedCPUPercentage)
+    let output = LiveIdleContainerResourceBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      appleContainerVersion: initialInventory.system.version,
+      imageReference: image.reference,
+      imageDigest: image.digest,
+      cpuCount: 1,
+      memoryLimitBytes: 256 * ContainerCreationRequest.bytesPerMiB,
+      settlingSeconds: 2,
+      requestedSamplingSeconds: samplingSeconds,
+      command: "/bin/sleep 3600",
+      samples: samples,
+      medianCPUPercentage: nearestRankPercentile(cpuPercentages, 0.5),
+      p95CPUPercentage: nearestRankPercentile(cpuPercentages, 0.95),
+      peakFinalMemoryUsageBytes: samples.map(\.finalMemoryUsageBytes).max() ?? 0
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.idleOutputMarker)\(json)")
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
           "NATIVECONTAINERS_LIVE_PERFORMANCE_BUILD"
         ] == "1",
       "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_BUILD=1 with Apple container services running and the selected base image already local."
@@ -2059,6 +2335,44 @@ private struct LiveExternalNetworkBenchmarkOutput: Encodable {
   let throughputMebibytesPerSecond: Double?
 }
 
+private struct LiveIdleContainerResourceBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let appleContainerVersion: String
+  let imageReference: String
+  let imageDigest: String
+  let cpuCount: Int
+  let memoryLimitBytes: UInt64
+  let settlingSeconds: Int64
+  let requestedSamplingSeconds: Int64
+  let command: String
+  let samples: [LiveIdleContainerResourceSample]
+  let medianCPUPercentage: Double
+  let p95CPUPercentage: Double
+  let peakFinalMemoryUsageBytes: UInt64
+}
+
+private struct LiveIdleContainerResourceSample: Encodable {
+  let durationNanoseconds: UInt64
+  let normalizedCPUPercentage: Double
+  let cpuUsageDeltaMicroseconds: UInt64
+  let initialMemoryUsageBytes: UInt64
+  let finalMemoryUsageBytes: UInt64
+  let memoryLimitBytes: UInt64
+  let networkReceivedDeltaBytes: UInt64?
+  let networkTransmittedDeltaBytes: UInt64?
+  let blockReadDeltaBytes: UInt64?
+  let blockWrittenDeltaBytes: UInt64?
+  let processCount: UInt64
+}
+
+private func nearestRankPercentile(_ values: [Double], _ percentile: Double) -> Double {
+  guard !values.isEmpty else { return 0 }
+  let sorted = values.sorted()
+  let rank = Int(ceil(percentile * Double(sorted.count)))
+  return sorted[max(0, min(sorted.count - 1, rank - 1))]
+}
+
 private struct LiveImageBuildBenchmarkOutput: Encodable {
   let generatedAt: Date
   let hostOperatingSystem: String
@@ -2081,6 +2395,8 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
   case missingMacVirtualMachineSource(UUID)
   case macVirtualMachineSourceChanged(UUID)
   case missingExternalNetworkFixture
+  case invalidIdleSamplingDuration(String)
+  case missingIdleResourceObservations
   case residualContainers([String])
   case residualMachines([String])
   case residualMacVirtualMachines([String])
@@ -2106,6 +2422,10 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
       "The macOS virtual-machine benchmark source \(id.uuidString) changed during the live gate."
     case .missingExternalNetworkFixture:
       "Set the external-network benchmark URL, byte count, and lowercase SHA-256 fixture values."
+    case .invalidIdleSamplingDuration(let value):
+      "The idle-resource sampling duration “\(value)” is not between 1 and 300 seconds."
+    case .missingIdleResourceObservations:
+      "The idle-resource benchmark did not retain all measured counter observations."
     case .residualContainers(let ids):
       "The live performance gate left benchmark containers behind: \(ids.joined(separator: ", "))."
     case .residualMachines(let ids):
@@ -2936,6 +3256,52 @@ private actor ExternalNetworkCommandRuntimeDouble: ContainerCommandRunning {
       duration: .milliseconds(1)
     )
   }
+}
+
+private actor IdleContainerStatisticsRuntimeDouble:
+  IdleContainerStatisticsSampling
+{
+  private(set) var containerIDs: [String] = []
+  private var samples: [ContainerStatistics]
+
+  init(samples: [ContainerStatistics]) {
+    self.samples = samples
+  }
+
+  func sampleContainer(id: String) -> ContainerStatistics? {
+    containerIDs.append(id)
+    guard !samples.isEmpty else { return nil }
+    return samples.removeFirst()
+  }
+}
+
+private actor IdleResourceSleepDouble {
+  private(set) var durations: [Duration] = []
+
+  func sleep(for duration: Duration) {
+    durations.append(duration)
+  }
+}
+
+private func idleContainerStatistics(
+  memoryUsageBytes: UInt64 = 20 * 1_048_576,
+  cpuUsageMicroseconds: UInt64,
+  networkReceivedBytes: UInt64 = 0,
+  networkTransmittedBytes: UInt64 = 0,
+  blockReadBytes: UInt64 = 0,
+  blockWrittenBytes: UInt64 = 0,
+  processCount: UInt64 = 2
+) -> ContainerStatistics {
+  ContainerStatistics(
+    memoryUsageBytes: memoryUsageBytes,
+    memoryLimitBytes: 256 * 1_048_576,
+    cpuUsageMicroseconds: cpuUsageMicroseconds,
+    networkReceivedBytes: networkReceivedBytes,
+    networkTransmittedBytes: networkTransmittedBytes,
+    blockReadBytes: blockReadBytes,
+    blockWrittenBytes: blockWrittenBytes,
+    processCount: processCount
+  )
 }
 
 private actor ContainerIOCommandRuntimeDouble: ContainerCommandRunning {

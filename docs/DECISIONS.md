@@ -2104,3 +2104,36 @@ throughput, host and Apple runtime versions, exact image provenance, endpoint
 authority without query data, expected bytes/digest, cache request, and
 verification mode. Fixture drift fails the lane while preserving the same
 cancellation-independent cleanup contract as the other mutating benchmarks.
+
+## ADR-074: Measure idle containers with authoritative paired stats
+
+**Status:** Accepted — 2026-06-22
+
+The final performance lane is gated by
+`NATIVECONTAINERS_LIVE_PERFORMANCE=1` and
+`NATIVECONTAINERS_LIVE_PERFORMANCE_IDLE=1`. Its fixture is a fresh stopped
+container created from an already-local, digest-pinned image with one CPU,
+256 MiB of memory, no attachments, and `/bin/sleep 3600` as its only workload.
+Creation and startup happen before timing. A two-second settling period also
+stays outside the clock; the operator may select a 1–300 second sampling window
+with `NATIVECONTAINERS_LIVE_PERFORMANCE_IDLE_SECONDS`, defaulting to ten.
+
+The measured interval begins before the first production `stats` request and
+ends after the second request plus an authoritative running-state recheck. CPU
+usage is a cumulative microsecond counter, so each sample records its monotonic
+delta and derives one-vCPU normalized utilization from the actual measured wall
+duration. Network receive/transmit and block read/write are likewise paired
+cumulative deltas. A counter family may be absent only from both snapshots;
+partial availability or regression invalidates the sample. Current memory at
+both boundaries, the unchanged 256-MiB limit, and final process count are
+required snapshots rather than cumulative values.
+
+This lane describes the container/runtime accounting surface, not total host
+RSS, energy, or every Apple service process, and it asserts no universal idle
+threshold. Host activity, thermal state, runtime warmth, stats-RPC overhead, and
+kernel variance remain provenance-sensitive. One warmup plus three fresh
+containers emit raw durations and counters, normalized CPU percentages,
+median/P95 CPU, peak final memory, host/runtime/image provenance, command, and
+settling/sampling configuration. Cleanup remains outside timing and must stop,
+delete, and prove absence of every operation-owned fixture even after failure or
+cancellation.

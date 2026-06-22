@@ -279,7 +279,7 @@ must leave a usable, test-backed product slice.
         disk-write, and daily metric payloads, with bounded private retention,
         explicit JSON export/deletion, hosted-process suppression, and matching
         app/build-worker dSYM enforcement in the archive gate.
-- [ ] Complete performance benchmark coverage.
+- [x] Complete performance benchmark coverage.
   - [x] User-initiated local baselines for warm Apple inventory, private
         temporary-file write/read I/O, and Network.framework localhost TCP,
         with warmups, median/P95 reporting, bounded cancellation, and no
@@ -305,7 +305,9 @@ must leave a usable, test-backed product slice.
   - [x] Verified external HTTPS transfer behind a sixth explicit live gate,
         with an operator-supplied bounded fixture, fresh digest-pinned
         containers, exact byte/digest checks, and provenance JSON.
-  - [ ] Idle-resource lane behind an explicit live gate.
+  - [x] Idle-container CPU, memory, network, block-I/O, and process accounting
+        behind a seventh explicit live gate, with a bounded settling/sample
+        window, authoritative counter pairs, and exact cleanup.
 
 ## Public-API constraint log
 

@@ -113,6 +113,15 @@ Verified architecture:
   and removes the file through an exit trap. A no-cache request does not prove
   a remote intermediary missed its cache, so the result remains an end-to-end
   session measurement. Source: <https://busybox.net/downloads/BusyBox.html>.
+- Apple's official `container stats` documentation defines its snapshot as CPU
+  usage in cumulative microseconds, current/limit memory bytes, cumulative
+  network receive/transmit and block read/write bytes, and process count. It
+  also explains that roughly 100% CPU represents one fully utilized core and
+  that multi-core workloads may exceed 100%. NativeContainers therefore derives
+  idle CPU from two monotonic cumulative samples and the measured wall interval,
+  records memory/PIDs as snapshots, and treats I/O counters as deltas without
+  imposing a universal performance threshold. Source:
+  <https://github.com/apple/container/blob/1.0.0/docs/how-to.md#monitor-container-resource-usage>.
 - The installed 1.0.0 `MachineClient.setConfig(id:bootConfig:)` and matching
   server route persist a replacement `MachineConfig` for the next boot. The
   supported mutable CLI surface is exactly CPU count, memory, and home-mount

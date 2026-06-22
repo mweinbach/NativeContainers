@@ -1271,6 +1271,22 @@ Updated: 2026-06-22.
   host/runtime/image provenance, endpoint authority, cache request, byte count,
   digest, and verification mode. This exact head awaits Xcode MCP
   build/test/live execution because the bridge remains unavailable.
+- A seventh opt-in gate now measures a fresh idle Apple container using the
+  product's authoritative `stats` path. Every iteration creates and starts a
+  digest-pinned one-vCPU/256-MiB container running `/bin/sleep 3600` outside the
+  clock, allows a bounded two-second settling period, then measures two stats
+  snapshots around a configurable 1–300 second window. CPU, network, and block
+  counters must be paired and monotonic; memory usage, the exact reviewed memory
+  limit, and process count must be present. Optional network/block families may
+  be absent only in both snapshots. The measured duration includes both stats
+  RPCs and the idle wait, and normalized CPU is derived from cumulative CPU
+  microseconds over that observed duration. No pass threshold is asserted
+  because host load and runtime warmth are uncontrolled. One warmup plus three
+  measured fresh containers emit raw counters, CPU percentages, peak final
+  memory, host/runtime/image provenance, configuration, and sampling boundary.
+  Cancellation-independent exact container cleanup and run-prefix absence are
+  still required. This exact head awaits Xcode MCP build/test/live execution
+  because the bridge remains unavailable.
 
 ## Distribution-readiness checkpoint
 
