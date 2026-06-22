@@ -42,7 +42,7 @@ struct NativeContainersApp: App {
     MenuBarExtra(
       "NativeContainers",
       systemImage: "shippingbox.fill",
-      isInserted: AppExecutionContext.current.allowsPersistentSystemScenes
+      isInserted: AppExecutionContext.current.allowsMenuBarExtra
         ? $isMenuBarExtraInserted
         : .constant(false)
     ) {
