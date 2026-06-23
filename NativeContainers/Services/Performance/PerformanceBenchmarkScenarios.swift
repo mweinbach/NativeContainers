@@ -91,6 +91,12 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
   private let imageReference: String
   private let expectedImageDigest: String
   private let attachments: ContainerAttachmentSelection
+  private let cpuCount: Int
+  private let memoryBytes: UInt64
+  private let arguments: [String]
+  private let environment: [ContainerEnvironmentVariable]
+  private let workingDirectory: String?
+  private let publishedPorts: [ContainerPortPublication]
   private let makeContainerID: @Sendable () -> String
   private var preparedContainer: PreparedContainer?
 
@@ -101,6 +107,12 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
     imageReference: String = "docker.io/library/alpine:3.21",
     expectedImageDigest: String,
     attachments: ContainerAttachmentSelection = .empty,
+    cpuCount: Int = 1,
+    memoryBytes: UInt64 = 256 * ContainerCreationRequest.bytesPerMiB,
+    arguments: [String] = ["/bin/sleep", "3600"],
+    environment: [ContainerEnvironmentVariable] = [],
+    workingDirectory: String? = nil,
+    publishedPorts: [ContainerPortPublication] = [],
     makeContainerID: @escaping @Sendable () -> String = {
       "nativecontainers-perf-\(UUID().uuidString.lowercased().prefix(8))"
     }
@@ -110,6 +122,12 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
     self.imageReference = imageReference
     self.expectedImageDigest = expectedImageDigest
     self.attachments = attachments
+    self.cpuCount = cpuCount
+    self.memoryBytes = memoryBytes
+    self.arguments = arguments
+    self.environment = environment
+    self.workingDirectory = workingDirectory
+    self.publishedPorts = publishedPorts
     self.makeContainerID = makeContainerID
   }
 
@@ -129,9 +147,12 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
       operationID: operationID,
       name: id,
       imageReference: imageReference,
-      cpuCount: 1,
-      memoryBytes: 256 * ContainerCreationRequest.bytesPerMiB,
-      arguments: ["/bin/sleep", "3600"],
+      cpuCount: cpuCount,
+      memoryBytes: memoryBytes,
+      arguments: arguments,
+      environment: environment,
+      workingDirectory: workingDirectory,
+      publishedPorts: publishedPorts,
       attachments: attachments,
       startAfterCreation: false,
       removeWhenStopped: false
@@ -169,6 +190,13 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
     return preparedContainer.id
   }
 
+  func currentOperationID() throws -> UUID {
+    guard let preparedContainer, preparedContainer.didCreate else {
+      throw ColdContainerStartupBenchmarkError.invalidIterationState
+    }
+    return preparedContainer.operationID
+  }
+
   func validateCurrentContainer(expectedState: RuntimeState) async throws {
     guard let preparedContainer, preparedContainer.didCreate else {
       throw ColdContainerStartupBenchmarkError.invalidIterationState
@@ -189,6 +217,14 @@ actor ColdContainerStartupPerformanceBenchmarkScenario:
         preparedContainer.id
       )
     }
+  }
+
+  func stopCurrentContainer() async throws {
+    guard let preparedContainer, preparedContainer.didCreate else {
+      throw ColdContainerStartupBenchmarkError.invalidIterationState
+    }
+    try await stopIfNeeded(preparedContainer)
+    try await validateCurrentContainer(expectedState: .stopped)
   }
 
   func cleanUpIteration() async throws {
@@ -365,6 +401,52 @@ enum ColdContainerStartupBenchmarkError: LocalizedError, Equatable, Sendable {
     case .cleanupFailed(let id, let operation, let recovery):
       "Benchmark container “\(id)” cleanup failed after “\(operation)”: \(recovery)"
     }
+  }
+}
+
+actor WarmContainerStartupPerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  nonisolated let kind = PerformanceBenchmarkKind.warmContainerStartup
+
+  private let lifecycle: ColdContainerStartupPerformanceBenchmarkScenario
+
+  init(
+    containers: any ContainerCreating & ContainerLifecycleManaging,
+    stateReader: any ContainerStartupBenchmarkStateReading =
+      AppleContainerStartupBenchmarkStateReader(),
+    imageReference: String = "docker.io/library/alpine:3.21",
+    expectedImageDigest: String,
+    makeContainerID: @escaping @Sendable () -> String = {
+      "nativecontainers-warm-\(UUID().uuidString.lowercased().prefix(8))"
+    }
+  ) {
+    lifecycle = ColdContainerStartupPerformanceBenchmarkScenario(
+      containers: containers,
+      stateReader: stateReader,
+      imageReference: imageReference,
+      expectedImageDigest: expectedImageDigest,
+      makeContainerID: makeContainerID
+    )
+  }
+
+  func prepareIteration() async throws {
+    try await lifecycle.prepareIteration()
+    try await lifecycle.prepareMeasurement()
+    _ = try await lifecycle.perform()
+    try await lifecycle.stopCurrentContainer()
+  }
+
+  func prepareMeasurement() async throws {
+    try await lifecycle.validateCurrentContainer(expectedState: .stopped)
+  }
+
+  func perform() async throws -> Int64? {
+    try await lifecycle.perform()
+  }
+
+  func cleanUpIteration() async throws {
+    try await lifecycle.cleanUpIteration()
   }
 }
 
@@ -1203,6 +1285,401 @@ enum ContainerIOPerformanceBenchmarkError: LocalizedError, Equatable, Sendable {
   }
 }
 
+struct BindMountMetadataObservation: Equatable, Sendable {
+  let batches: Int
+  let operationsPerBatch: Int
+  let totalOperations: Int
+}
+
+actor BindMountMetadataPerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  private static let successMarker = "nativecontainers-metadata-ok"
+  private static let operationsPerBatch = 7
+  private static let workload = """
+    set -eu
+    root=/workspace/nativecontainers-metadata
+    count=$1
+    cleanup() { rm -rf -- "$root"; }
+    trap cleanup EXIT HUP INT TERM
+    mkdir "$root"
+    i=0
+    while [ "$i" -lt "$count" ]; do
+      source="$root/source-$i"
+      target="$root/target-$i"
+      directory="$root/directory-$i"
+      : > "$source"
+      stat "$source" >/dev/null
+      chmod 600 "$source"
+      mv "$source" "$target"
+      rm "$target"
+      mkdir "$directory"
+      rmdir "$directory"
+      i=$((i + 1))
+    done
+    printf 'operations=%s\\n%s\\n' "$((count * 7))" nativecontainers-metadata-ok
+    """
+
+  nonisolated let kind = PerformanceBenchmarkKind.bindMountMetadata
+
+  private let lifecycle: ColdContainerStartupPerformanceBenchmarkScenario
+  private let commands: any ContainerCommandRunning
+  private let batches: Int
+  private var recordedObservations: [BindMountMetadataObservation] = []
+
+  init(
+    containers: any ContainerCreating & ContainerLifecycleManaging,
+    stateReader: any ContainerStartupBenchmarkStateReading =
+      AppleContainerStartupBenchmarkStateReader(),
+    commands: any ContainerCommandRunning,
+    attachments: ContainerAttachmentSelection,
+    imageReference: String = "docker.io/library/alpine:3.21",
+    expectedImageDigest: String,
+    batches: Int = 256,
+    makeContainerID: @escaping @Sendable () -> String = {
+      "nativecontainers-metadata-\(UUID().uuidString.lowercased().prefix(8))"
+    }
+  ) throws {
+    guard
+      attachments.hostDirectoryMounts.contains(where: {
+        $0.containerPath == "/workspace" && !$0.isReadOnly
+      })
+    else {
+      throw ContainerIOPerformanceBenchmarkError.missingWritableBindMount
+    }
+    guard (1...10_000).contains(batches) else {
+      throw BindMountMetadataBenchmarkError.invalidBatchCount
+    }
+    lifecycle = ColdContainerStartupPerformanceBenchmarkScenario(
+      containers: containers,
+      stateReader: stateReader,
+      imageReference: imageReference,
+      expectedImageDigest: expectedImageDigest,
+      attachments: attachments,
+      makeContainerID: makeContainerID
+    )
+    self.commands = commands
+    self.batches = batches
+  }
+
+  func prepareIteration() async throws {
+    try await lifecycle.prepareIteration()
+    try await lifecycle.prepareMeasurement()
+    _ = try await lifecycle.perform()
+  }
+
+  func prepareMeasurement() async throws {
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+  }
+
+  func perform() async throws -> Int64? {
+    let id = try await lifecycle.currentContainerID()
+    let result = try await commands.executeCommand(
+      in: id,
+      request: ContainerCommandRequest(
+        executable: "/bin/sh",
+        arguments: ["-c", Self.workload, "nativecontainers-metadata", String(batches)],
+        timeoutSeconds: 180
+      )
+    )
+    guard !result.outputWasTruncated else {
+      throw BindMountMetadataBenchmarkError.outputWasTruncated
+    }
+    guard result.exitCode == 0 else {
+      throw BindMountMetadataBenchmarkError.commandFailed(result.exitCode)
+    }
+    let totalOperations = try Self.parseOperations(result.standardOutput)
+    let expectedOperations = batches * Self.operationsPerBatch
+    guard totalOperations == expectedOperations else {
+      throw BindMountMetadataBenchmarkError.operationCountMismatch(
+        expected: expectedOperations,
+        actual: totalOperations
+      )
+    }
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+    recordedObservations.append(
+      BindMountMetadataObservation(
+        batches: batches,
+        operationsPerBatch: Self.operationsPerBatch,
+        totalOperations: totalOperations
+      )
+    )
+    return nil
+  }
+
+  func cleanUpIteration() async throws {
+    try await lifecycle.cleanUpIteration()
+  }
+
+  func observations() -> [BindMountMetadataObservation] {
+    recordedObservations
+  }
+
+  private static func parseOperations(_ output: String) throws -> Int {
+    let lines = output.split(whereSeparator: \.isNewline).map(String.init)
+    guard
+      lines.count == 2,
+      lines[0].hasPrefix("operations="),
+      let operations = Int(lines[0].dropFirst("operations=".count)),
+      operations > 0,
+      lines[1] == successMarker
+    else {
+      throw BindMountMetadataBenchmarkError.invalidOutput
+    }
+    return operations
+  }
+}
+
+enum BindMountMetadataBenchmarkError: LocalizedError, Equatable, Sendable {
+  case invalidBatchCount
+  case commandFailed(Int32)
+  case outputWasTruncated
+  case invalidOutput
+  case operationCountMismatch(expected: Int, actual: Int)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidBatchCount:
+      "The bind-mount metadata benchmark requires between 1 and 10,000 batches."
+    case .commandFailed(let exitCode):
+      "The fixed bind-mount metadata workload exited with status \(exitCode)."
+    case .outputWasTruncated:
+      "The fixed bind-mount metadata workload exceeded its bounded output limit."
+    case .invalidOutput:
+      "The fixed bind-mount metadata workload returned an invalid verification record."
+    case .operationCountMismatch(let expected, let actual):
+      "The bind-mount metadata workload completed \(actual) operations instead of \(expected)."
+    }
+  }
+}
+
+struct PostgreSQLDurabilityObservation: Equatable, Sendable {
+  let fsyncEnabled: Bool
+  let synchronousCommitEnabled: Bool
+  let pgTestFsyncCompleted: Bool
+  let committedRowCount: Int
+  let committedPayloadBytes: Int64
+}
+
+actor PostgreSQLDurabilityPerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  nonisolated let kind = PerformanceBenchmarkKind.postgreSQLDurability
+
+  private let lifecycle: ColdContainerStartupPerformanceBenchmarkScenario
+  private let commands: any ContainerCommandRunning
+  private let rowCount: Int
+  private let readinessAttempts: Int
+  private let readinessDelay: Duration
+  private let sleep: @Sendable (Duration) async throws -> Void
+  private var recordedObservations: [PostgreSQLDurabilityObservation] = []
+
+  init(
+    containers: any ContainerCreating & ContainerLifecycleManaging,
+    stateReader: any ContainerStartupBenchmarkStateReading =
+      AppleContainerStartupBenchmarkStateReader(),
+    commands: any ContainerCommandRunning,
+    imageReference: String = "docker.io/library/postgres:17-alpine",
+    expectedImageDigest: String,
+    rowCount: Int = 1_024,
+    readinessAttempts: Int = 60,
+    readinessDelay: Duration = .milliseconds(500),
+    makeContainerID: @escaping @Sendable () -> String = {
+      "nativecontainers-postgres-\(UUID().uuidString.lowercased().prefix(8))"
+    },
+    sleep: @escaping @Sendable (Duration) async throws -> Void = {
+      try await Task.sleep(for: $0)
+    }
+  ) throws {
+    guard
+      (1...100_000).contains(rowCount),
+      (1...300).contains(readinessAttempts),
+      readinessDelay >= .milliseconds(10),
+      readinessDelay <= .seconds(10)
+    else {
+      throw PostgreSQLDurabilityBenchmarkError.invalidConfiguration
+    }
+    lifecycle = ColdContainerStartupPerformanceBenchmarkScenario(
+      containers: containers,
+      stateReader: stateReader,
+      imageReference: imageReference,
+      expectedImageDigest: expectedImageDigest,
+      memoryBytes: 512 * ContainerCreationRequest.bytesPerMiB,
+      arguments: [],
+      environment: [
+        try ContainerEnvironmentVariable(
+          key: "POSTGRES_HOST_AUTH_METHOD",
+          value: "trust"
+        ),
+        try ContainerEnvironmentVariable(
+          key: "POSTGRES_INITDB_ARGS",
+          value: "--data-checksums"
+        ),
+      ],
+      makeContainerID: makeContainerID
+    )
+    self.commands = commands
+    self.rowCount = rowCount
+    self.readinessAttempts = readinessAttempts
+    self.readinessDelay = readinessDelay
+    self.sleep = sleep
+  }
+
+  func prepareIteration() async throws {
+    try await lifecycle.prepareIteration()
+    try await lifecycle.prepareMeasurement()
+    _ = try await lifecycle.perform()
+    try await awaitReadiness()
+  }
+
+  func prepareMeasurement() async throws {
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+  }
+
+  func perform() async throws -> Int64? {
+    let id = try await lifecycle.currentContainerID()
+    let fsyncResult = try await commands.executeCommand(
+      in: id,
+      request: ContainerCommandRequest(
+        executable: "/usr/local/bin/pg_test_fsync",
+        arguments: ["-f", "/tmp/nativecontainers-pg-test-fsync"],
+        timeoutSeconds: 180
+      )
+    )
+    guard !fsyncResult.outputWasTruncated else {
+      throw PostgreSQLDurabilityBenchmarkError.outputWasTruncated
+    }
+    guard fsyncResult.exitCode == 0 else {
+      throw PostgreSQLDurabilityBenchmarkError.pgTestFsyncFailed(
+        fsyncResult.exitCode
+      )
+    }
+
+    let sql = """
+      BEGIN;
+      DROP TABLE IF EXISTS nativecontainers_durability;
+      CREATE TABLE nativecontainers_durability (id integer PRIMARY KEY, payload text NOT NULL);
+      INSERT INTO nativecontainers_durability
+        SELECT value, repeat('x', 1024) FROM generate_series(1, \(rowCount)) AS value;
+      COMMIT;
+      CHECKPOINT;
+      SELECT current_setting('fsync') || '|' || current_setting('synchronous_commit') || '|' || count(*)
+        FROM nativecontainers_durability;
+      """
+    let transactionResult = try await commands.executeCommand(
+      in: id,
+      request: ContainerCommandRequest(
+        executable: "/usr/local/bin/psql",
+        arguments: [
+          "-X", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-c",
+          sql,
+        ],
+        timeoutSeconds: 180
+      )
+    )
+    guard !transactionResult.outputWasTruncated else {
+      throw PostgreSQLDurabilityBenchmarkError.outputWasTruncated
+    }
+    guard transactionResult.exitCode == 0 else {
+      throw PostgreSQLDurabilityBenchmarkError.transactionFailed(
+        transactionResult.exitCode
+      )
+    }
+    let observedRows = try Self.parseVerification(transactionResult.standardOutput)
+    guard observedRows == rowCount else {
+      throw PostgreSQLDurabilityBenchmarkError.rowCountMismatch(
+        expected: rowCount,
+        actual: observedRows
+      )
+    }
+    let payloadBytes = Int64(rowCount) * 1_024
+    recordedObservations.append(
+      PostgreSQLDurabilityObservation(
+        fsyncEnabled: true,
+        synchronousCommitEnabled: true,
+        pgTestFsyncCompleted: true,
+        committedRowCount: rowCount,
+        committedPayloadBytes: payloadBytes
+      )
+    )
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+    return payloadBytes
+  }
+
+  func cleanUpIteration() async throws {
+    try await lifecycle.cleanUpIteration()
+  }
+
+  func observations() -> [PostgreSQLDurabilityObservation] {
+    recordedObservations
+  }
+
+  private func awaitReadiness() async throws {
+    let id = try await lifecycle.currentContainerID()
+    for attempt in 0..<readinessAttempts {
+      let result = try await commands.executeCommand(
+        in: id,
+        request: ContainerCommandRequest(
+          executable: "/usr/local/bin/pg_isready",
+          arguments: ["-U", "postgres", "-d", "postgres"],
+          timeoutSeconds: 10
+        )
+      )
+      if result.exitCode == 0, !result.outputWasTruncated {
+        return
+      }
+      if attempt + 1 < readinessAttempts {
+        try await sleep(readinessDelay)
+      }
+    }
+    throw PostgreSQLDurabilityBenchmarkError.readinessTimedOut
+  }
+
+  private static func parseVerification(_ output: String) throws -> Int {
+    let line = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    let fields = line.split(separator: "|", omittingEmptySubsequences: false)
+    guard
+      fields.count == 3,
+      fields[0] == "on",
+      fields[1] == "on",
+      let rows = Int(fields[2]),
+      rows > 0
+    else {
+      throw PostgreSQLDurabilityBenchmarkError.invalidVerificationOutput
+    }
+    return rows
+  }
+}
+
+enum PostgreSQLDurabilityBenchmarkError: LocalizedError, Equatable, Sendable {
+  case invalidConfiguration
+  case readinessTimedOut
+  case pgTestFsyncFailed(Int32)
+  case transactionFailed(Int32)
+  case outputWasTruncated
+  case invalidVerificationOutput
+  case rowCountMismatch(expected: Int, actual: Int)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidConfiguration:
+      "The PostgreSQL durability benchmark configuration is outside its bounded limits."
+    case .readinessTimedOut:
+      "The PostgreSQL durability benchmark did not reach database readiness."
+    case .pgTestFsyncFailed(let exitCode):
+      "PostgreSQL pg_test_fsync exited with status \(exitCode)."
+    case .transactionFailed(let exitCode):
+      "The fixed PostgreSQL transaction exited with status \(exitCode)."
+    case .outputWasTruncated:
+      "The PostgreSQL durability workload exceeded its bounded output limit."
+    case .invalidVerificationOutput:
+      "PostgreSQL did not verify fsync, synchronous commit, and the committed row count."
+    case .rowCountMismatch(let expected, let actual):
+      "PostgreSQL committed \(actual) rows instead of \(expected)."
+    }
+  }
+}
+
 actor ExternalNetworkPerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
   private static let successMarker = "nativecontainers-network-ok"
   private static let targetPath = "/tmp/nativecontainers-external-network.bin"
@@ -1413,6 +1890,444 @@ enum ExternalNetworkPerformanceBenchmarkError:
   }
 }
 
+protocol PerformanceBenchmarkHTTPTransferring: Sendable {
+  func fetch(_ url: URL) async throws -> Data
+}
+
+struct URLSessionPerformanceBenchmarkHTTPTransport:
+  PerformanceBenchmarkHTTPTransferring
+{
+  private let session: URLSession
+
+  init(timeout: TimeInterval = 30) {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+    configuration.urlCache = nil
+    configuration.timeoutIntervalForRequest = timeout
+    configuration.timeoutIntervalForResource = timeout
+    session = URLSession(configuration: configuration)
+  }
+
+  func fetch(_ url: URL) async throws -> Data {
+    var request = URLRequest(
+      url: url,
+      cachePolicy: .reloadIgnoringLocalCacheData,
+      timeoutInterval: 30
+    )
+    request.httpMethod = "GET"
+    request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+    request.setValue("NativeContainers-Performance/1", forHTTPHeaderField: "User-Agent")
+    let (data, response) = try await session.data(for: request)
+    guard
+      let response = response as? HTTPURLResponse,
+      response.statusCode == 200
+    else {
+      throw NATDirectNetworkBenchmarkError.invalidHTTPResponse
+    }
+    return data
+  }
+}
+
+struct NetworkRoutePerformanceObservation: Equatable, Sendable {
+  let samplesNanoseconds: [UInt64]
+  let transferredByteCount: Int64
+
+  var medianLatencyNanoseconds: UInt64 {
+    percentile(0.5)
+  }
+
+  var p95LatencyNanoseconds: UInt64 {
+    percentile(0.95)
+  }
+
+  var throughputMebibytesPerSecond: Double? {
+    var total: UInt64 = 0
+    for sample in samplesNanoseconds {
+      let addition = total.addingReportingOverflow(sample)
+      guard !addition.overflow else { return nil }
+      total = addition.partialValue
+    }
+    guard transferredByteCount > 0, total > 0 else { return nil }
+    return Double(transferredByteCount) / 1_048_576
+      / (Double(total) / 1_000_000_000)
+  }
+
+  private func percentile(_ value: Double) -> UInt64 {
+    guard !samplesNanoseconds.isEmpty else { return 0 }
+    let sorted = samplesNanoseconds.sorted()
+    let rank = Int(ceil(value * Double(sorted.count)))
+    return sorted[max(0, min(sorted.count - 1, rank - 1))]
+  }
+}
+
+struct NATDirectNetworkObservation: Equatable, Sendable {
+  let publishedHost: String
+  let publishedPort: UInt16
+  let directHost: String
+  let containerPort: UInt16
+  let payloadByteCount: Int
+  let requestCountPerRoute: Int
+  let publishedRoute: NetworkRoutePerformanceObservation
+  let directRoute: NetworkRoutePerformanceObservation
+}
+
+actor NATDirectNetworkPerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  private static let successMarker = "nativecontainers-http-server-ok"
+  private static let containerPort: UInt16 = 8_080
+  private static let setupWorkload = """
+    set -eu
+    root=/tmp/nativecontainers-network-root
+    payload="$root/payload.bin"
+    bytes=$1
+    rm -rf -- "$root"
+    mkdir -p "$root"
+    head -c "$bytes" /dev/zero > "$payload"
+    busybox httpd -p 8080 -h "$root"
+    actual=$(wc -c < "$payload" | tr -d '[:space:]')
+    printf 'bytes=%s\\n%s\\n' "$actual" nativecontainers-http-server-ok
+    """
+
+  nonisolated let kind = PerformanceBenchmarkKind.natDirectNetworkComparison
+
+  private let lifecycle: ColdContainerStartupPerformanceBenchmarkScenario
+  private let inventory: any ContainerInventoryLoading
+  private let commands: any ContainerCommandRunning
+  private let transport: any PerformanceBenchmarkHTTPTransferring
+  private let clock: any PerformanceBenchmarkClock
+  private let expectedImageReference: String
+  private let expectedImageDigest: String
+  private let hostPort: UInt16
+  private let payload: Data
+  private let requestCount: Int
+  private let readinessAttempts: Int
+  private let readinessDelay: Duration
+  private let sleep: @Sendable (Duration) async throws -> Void
+  private var publishedURL: URL?
+  private var directURL: URL?
+  private var recordedObservations: [NATDirectNetworkObservation] = []
+
+  init(
+    containers: any ContainerCreating & ContainerLifecycleManaging,
+    stateReader: any ContainerStartupBenchmarkStateReading =
+      AppleContainerStartupBenchmarkStateReader(),
+    inventory: any ContainerInventoryLoading,
+    commands: any ContainerCommandRunning,
+    hostPort: UInt16,
+    imageReference: String = "docker.io/library/alpine:3.21",
+    expectedImageDigest: String,
+    payloadByteCount: Int = 1_048_576,
+    requestCount: Int = 8,
+    readinessAttempts: Int = 60,
+    readinessDelay: Duration = .milliseconds(100),
+    transport: any PerformanceBenchmarkHTTPTransferring =
+      URLSessionPerformanceBenchmarkHTTPTransport(),
+    clock: any PerformanceBenchmarkClock = ContinuousPerformanceBenchmarkClock(),
+    makeContainerID: @escaping @Sendable () -> String = {
+      "nativecontainers-network-compare-\(UUID().uuidString.lowercased().prefix(8))"
+    },
+    sleep: @escaping @Sendable (Duration) async throws -> Void = {
+      try await Task.sleep(for: $0)
+    }
+  ) throws {
+    guard
+      hostPort > 1,
+      (1...4 * 1_048_576).contains(payloadByteCount),
+      (1...100).contains(requestCount),
+      (1...300).contains(readinessAttempts),
+      readinessDelay >= .milliseconds(10),
+      readinessDelay <= .seconds(5)
+    else {
+      throw NATDirectNetworkBenchmarkError.invalidConfiguration
+    }
+    let publication = try ContainerPortPublication(
+      hostAddress: "127.0.0.1",
+      hostPort: hostPort,
+      containerPort: Self.containerPort,
+      transportProtocol: .tcp
+    )
+    lifecycle = ColdContainerStartupPerformanceBenchmarkScenario(
+      containers: containers,
+      stateReader: stateReader,
+      imageReference: imageReference,
+      expectedImageDigest: expectedImageDigest,
+      publishedPorts: [publication],
+      makeContainerID: makeContainerID
+    )
+    self.inventory = inventory
+    self.commands = commands
+    self.transport = transport
+    self.clock = clock
+    expectedImageReference = imageReference
+    self.expectedImageDigest = expectedImageDigest
+    self.hostPort = hostPort
+    payload = Data(repeating: 0, count: payloadByteCount)
+    self.requestCount = requestCount
+    self.readinessAttempts = readinessAttempts
+    self.readinessDelay = readinessDelay
+    self.sleep = sleep
+  }
+
+  func prepareIteration() async throws {
+    guard publishedURL == nil, directURL == nil else {
+      throw NATDirectNetworkBenchmarkError.invalidIterationState
+    }
+    try await lifecycle.prepareIteration()
+    try await lifecycle.prepareMeasurement()
+    _ = try await lifecycle.perform()
+    let id = try await lifecycle.currentContainerID()
+    let setup = try await commands.executeCommand(
+      in: id,
+      request: ContainerCommandRequest(
+        executable: "/bin/sh",
+        arguments: [
+          "-c", Self.setupWorkload, "nativecontainers-http-server",
+          String(payload.count),
+        ],
+        timeoutSeconds: 120
+      )
+    )
+    guard !setup.outputWasTruncated else {
+      throw NATDirectNetworkBenchmarkError.outputWasTruncated
+    }
+    guard setup.exitCode == 0 else {
+      throw NATDirectNetworkBenchmarkError.serverSetupFailed(setup.exitCode)
+    }
+    guard try Self.parseSetupByteCount(setup.standardOutput) == payload.count else {
+      throw NATDirectNetworkBenchmarkError.payloadChanged
+    }
+    try await resolveEndpoints()
+    try await awaitReadiness()
+  }
+
+  func prepareMeasurement() async throws {
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+    try await resolveEndpoints()
+  }
+
+  func perform() async throws -> Int64? {
+    guard let publishedURL, let directURL else {
+      throw NATDirectNetworkBenchmarkError.invalidIterationState
+    }
+    var publishedSamples: [UInt64] = []
+    var directSamples: [UInt64] = []
+    publishedSamples.reserveCapacity(requestCount)
+    directSamples.reserveCapacity(requestCount)
+
+    for index in 0..<requestCount {
+      if index.isMultiple(of: 2) {
+        publishedSamples.append(try await measure(publishedURL))
+        directSamples.append(try await measure(directURL))
+      } else {
+        directSamples.append(try await measure(directURL))
+        publishedSamples.append(try await measure(publishedURL))
+      }
+    }
+
+    let bytesPerRoute = try Self.checkedTransferredBytes(
+      payloadBytes: payload.count,
+      requestCount: requestCount
+    )
+    let directHost = try URL.requireHost(directURL)
+    recordedObservations.append(
+      NATDirectNetworkObservation(
+        publishedHost: "127.0.0.1",
+        publishedPort: hostPort,
+        directHost: directHost,
+        containerPort: Self.containerPort,
+        payloadByteCount: payload.count,
+        requestCountPerRoute: requestCount,
+        publishedRoute: NetworkRoutePerformanceObservation(
+          samplesNanoseconds: publishedSamples,
+          transferredByteCount: bytesPerRoute
+        ),
+        directRoute: NetworkRoutePerformanceObservation(
+          samplesNanoseconds: directSamples,
+          transferredByteCount: bytesPerRoute
+        )
+      )
+    )
+    let total = bytesPerRoute.multipliedReportingOverflow(by: 2)
+    guard !total.overflow else {
+      throw NATDirectNetworkBenchmarkError.byteCountOverflow
+    }
+    return total.partialValue
+  }
+
+  func cleanUpIteration() async throws {
+    publishedURL = nil
+    directURL = nil
+    try await lifecycle.cleanUpIteration()
+  }
+
+  func observations() -> [NATDirectNetworkObservation] {
+    recordedObservations
+  }
+
+  private func resolveEndpoints() async throws {
+    let id = try await lifecycle.currentContainerID()
+    let operationID = try await lifecycle.currentOperationID()
+    let snapshot = try await inventory.loadInventory()
+    guard
+      let container = snapshot.containers.first(where: { $0.id == id }),
+      container.state == .running,
+      container.imageReference == expectedImageReference,
+      container.imageDigest == expectedImageDigest,
+      container.labels[AppleContainerOwnership.creationOperationLabel]
+        == operationID.uuidString,
+      container.ports.contains(where: {
+        $0.hostAddress == "127.0.0.1"
+          && $0.hostPort == hostPort
+          && $0.containerPort == Self.containerPort
+          && $0.protocolName == "tcp"
+      }),
+      let rawAddress = container.ipAddress
+    else {
+      throw NATDirectNetworkBenchmarkError.containerIdentityChanged
+    }
+    let address = String(rawAddress.split(separator: "/", maxSplits: 1)[0])
+    guard
+      address != "127.0.0.1",
+      address != "::1",
+      IPv4Address(address) != nil || IPv6Address(address) != nil
+    else {
+      throw NATDirectNetworkBenchmarkError.invalidDirectAddress
+    }
+    publishedURL = try Self.makeURL(host: "127.0.0.1", port: hostPort)
+    directURL = try Self.makeURL(host: address, port: Self.containerPort)
+  }
+
+  private func awaitReadiness() async throws {
+    guard let publishedURL, let directURL else {
+      throw NATDirectNetworkBenchmarkError.invalidIterationState
+    }
+    for attempt in 0..<readinessAttempts {
+      do {
+        let published = try await transport.fetch(publishedURL)
+        let direct = try await transport.fetch(directURL)
+        guard published == payload, direct == payload else {
+          throw NATDirectNetworkBenchmarkError.payloadChanged
+        }
+        return
+      } catch {
+        if attempt + 1 == readinessAttempts {
+          throw NATDirectNetworkBenchmarkError.readinessTimedOut(
+            error.localizedDescription
+          )
+        }
+        try await sleep(readinessDelay)
+      }
+    }
+  }
+
+  private func measure(_ url: URL) async throws -> UInt64 {
+    let startedAt = clock.nowNanoseconds()
+    let data = try await transport.fetch(url)
+    let finishedAt = clock.nowNanoseconds()
+    guard finishedAt >= startedAt else {
+      throw PerformanceBenchmarkError.nonMonotonicClock
+    }
+    guard data == payload else {
+      throw NATDirectNetworkBenchmarkError.payloadChanged
+    }
+    return finishedAt - startedAt
+  }
+
+  private static func parseSetupByteCount(_ output: String) throws -> Int {
+    let lines = output.split(whereSeparator: \.isNewline).map(String.init)
+    guard
+      lines.count == 2,
+      lines[0].hasPrefix("bytes="),
+      let bytes = Int(lines[0].dropFirst("bytes=".count)),
+      bytes > 0,
+      lines[1] == successMarker
+    else {
+      throw NATDirectNetworkBenchmarkError.invalidSetupOutput
+    }
+    return bytes
+  }
+
+  private static func makeURL(host: String, port: UInt16) throws -> URL {
+    var components = URLComponents()
+    components.scheme = "http"
+    components.host = host
+    components.port = Int(port)
+    components.path = "/payload.bin"
+    guard let url = components.url else {
+      throw NATDirectNetworkBenchmarkError.invalidDirectAddress
+    }
+    return url
+  }
+
+  private static func checkedTransferredBytes(
+    payloadBytes: Int,
+    requestCount: Int
+  ) throws -> Int64 {
+    guard
+      let payload = Int64(exactly: payloadBytes),
+      let count = Int64(exactly: requestCount)
+    else {
+      throw NATDirectNetworkBenchmarkError.byteCountOverflow
+    }
+    let result = payload.multipliedReportingOverflow(by: count)
+    guard !result.overflow else {
+      throw NATDirectNetworkBenchmarkError.byteCountOverflow
+    }
+    return result.partialValue
+  }
+}
+
+extension URL {
+  fileprivate static func requireHost(_ url: URL) throws -> String {
+    guard let host = url.host, !host.isEmpty else {
+      throw NATDirectNetworkBenchmarkError.invalidDirectAddress
+    }
+    return host
+  }
+}
+
+enum NATDirectNetworkBenchmarkError: LocalizedError, Equatable, Sendable {
+  case invalidConfiguration
+  case invalidIterationState
+  case serverSetupFailed(Int32)
+  case outputWasTruncated
+  case invalidSetupOutput
+  case payloadChanged
+  case containerIdentityChanged
+  case invalidDirectAddress
+  case invalidHTTPResponse
+  case readinessTimedOut(String)
+  case byteCountOverflow
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidConfiguration:
+      "The NAT/direct-IP benchmark configuration is outside its bounded limits."
+    case .invalidIterationState:
+      "The NAT/direct-IP benchmark iteration is not in a valid state."
+    case .serverSetupFailed(let exitCode):
+      "The fixed container HTTP server setup exited with status \(exitCode)."
+    case .outputWasTruncated:
+      "The fixed container HTTP server setup exceeded its bounded output limit."
+    case .invalidSetupOutput:
+      "The fixed container HTTP server returned an invalid verification record."
+    case .payloadChanged:
+      "The NAT/direct-IP benchmark payload changed between the compared routes."
+    case .containerIdentityChanged:
+      "The NAT/direct-IP benchmark container identity or published port changed."
+    case .invalidDirectAddress:
+      "The NAT/direct-IP benchmark did not receive a dedicated container IP address."
+    case .invalidHTTPResponse:
+      "The NAT/direct-IP benchmark received a non-successful HTTP response."
+    case .readinessTimedOut(let message):
+      "The NAT/direct-IP benchmark server did not become ready: \(message)"
+    case .byteCountOverflow:
+      "The NAT/direct-IP benchmark byte count overflowed."
+    }
+  }
+}
+
 struct IdleContainerResourceObservation: Equatable, Sendable {
   let initialMemoryUsageBytes: UInt64
   let finalMemoryUsageBytes: UInt64
@@ -1608,6 +2523,400 @@ enum IdleContainerResourceBenchmarkError:
       "The idle-resource benchmark container did not retain its reviewed memory limit."
     case .counterRegressed(let name):
       "The idle-resource benchmark \(name) counter moved backward."
+    }
+  }
+}
+
+enum IdleContainerDensity: Int, CaseIterable, Sendable {
+  case ten = 10
+  case fifty = 50
+
+  var kind: PerformanceBenchmarkKind {
+    switch self {
+    case .ten: .idleContainerDensity10
+    case .fifty: .idleContainerDensity50
+    }
+  }
+}
+
+struct IdleContainerDensityObservation: Equatable, Sendable {
+  let containerCount: Int
+  let initialTotalMemoryUsageBytes: UInt64
+  let finalTotalMemoryUsageBytes: UInt64
+  let initialMemoryUsageBytes: [UInt64]
+  let finalMemoryUsageBytes: [UInt64]
+}
+
+actor IdleContainerDensityPerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  nonisolated let kind: PerformanceBenchmarkKind
+
+  private let density: IdleContainerDensity
+  private let lifecycles: [ColdContainerStartupPerformanceBenchmarkScenario]
+  private let statistics: any IdleContainerStatisticsSampling
+  private let settlingDuration: Duration
+  private let samplingDuration: Duration
+  private let sleep: @Sendable (Duration) async throws -> Void
+  private var recordedObservations: [IdleContainerDensityObservation] = []
+
+  init(
+    density: IdleContainerDensity,
+    containers: any ContainerCreating & ContainerLifecycleManaging,
+    stateReader: any ContainerStartupBenchmarkStateReading =
+      AppleContainerStartupBenchmarkStateReader(),
+    statistics: any IdleContainerStatisticsSampling,
+    imageReference: String = "docker.io/library/alpine:3.21",
+    expectedImageDigest: String,
+    settlingDuration: Duration = .seconds(2),
+    samplingDuration: Duration = .seconds(10),
+    makeContainerID: @escaping @Sendable () -> String = {
+      "nativecontainers-density-\(UUID().uuidString.lowercased().prefix(8))"
+    },
+    sleep: @escaping @Sendable (Duration) async throws -> Void = {
+      try await Task.sleep(for: $0)
+    }
+  ) throws {
+    guard
+      settlingDuration >= .zero,
+      settlingDuration <= .seconds(60),
+      samplingDuration >= .seconds(1),
+      samplingDuration <= .seconds(300)
+    else {
+      throw IdleContainerResourceBenchmarkError.invalidSamplingDuration
+    }
+    self.density = density
+    kind = density.kind
+    lifecycles = (0..<density.rawValue).map { _ in
+      ColdContainerStartupPerformanceBenchmarkScenario(
+        containers: containers,
+        stateReader: stateReader,
+        imageReference: imageReference,
+        expectedImageDigest: expectedImageDigest,
+        makeContainerID: makeContainerID
+      )
+    }
+    self.statistics = statistics
+    self.settlingDuration = settlingDuration
+    self.samplingDuration = samplingDuration
+    self.sleep = sleep
+  }
+
+  func prepareIteration() async throws {
+    for lifecycle in lifecycles {
+      try await lifecycle.prepareIteration()
+      try await lifecycle.prepareMeasurement()
+      _ = try await lifecycle.perform()
+    }
+  }
+
+  func prepareMeasurement() async throws {
+    try await sleep(settlingDuration)
+    for lifecycle in lifecycles {
+      try await lifecycle.validateCurrentContainer(expectedState: .running)
+    }
+  }
+
+  func perform() async throws -> Int64? {
+    let initial = try await memorySamples()
+    try await sleep(samplingDuration)
+    let final = try await memorySamples()
+    guard initial.count == density.rawValue, final.count == density.rawValue else {
+      throw IdleContainerDensityBenchmarkError.containerCountChanged
+    }
+    recordedObservations.append(
+      IdleContainerDensityObservation(
+        containerCount: density.rawValue,
+        initialTotalMemoryUsageBytes: try Self.checkedSum(initial),
+        finalTotalMemoryUsageBytes: try Self.checkedSum(final),
+        initialMemoryUsageBytes: initial,
+        finalMemoryUsageBytes: final
+      )
+    )
+    return nil
+  }
+
+  func cleanUpIteration() async throws {
+    var failures: [String] = []
+    for lifecycle in lifecycles.reversed() {
+      do {
+        try await lifecycle.cleanUpIteration()
+      } catch {
+        failures.append(error.localizedDescription)
+      }
+    }
+    guard failures.isEmpty else {
+      throw IdleContainerDensityBenchmarkError.cleanupFailed(failures)
+    }
+  }
+
+  func observations() -> [IdleContainerDensityObservation] {
+    recordedObservations
+  }
+
+  private func memorySamples() async throws -> [UInt64] {
+    var values: [UInt64] = []
+    values.reserveCapacity(density.rawValue)
+    var ids: Set<String> = []
+    for lifecycle in lifecycles {
+      let id = try await lifecycle.currentContainerID()
+      guard ids.insert(id).inserted else {
+        throw IdleContainerDensityBenchmarkError.duplicateContainerIdentity(id)
+      }
+      try await lifecycle.validateCurrentContainer(expectedState: .running)
+      guard
+        let sample = try await statistics.sampleContainer(id: id),
+        let memoryUsage = sample.memoryUsageBytes,
+        let memoryLimit = sample.memoryLimitBytes
+      else {
+        throw IdleContainerResourceBenchmarkError.requiredCountersUnavailable
+      }
+      guard
+        memoryLimit == 256 * ContainerCreationRequest.bytesPerMiB,
+        memoryUsage <= memoryLimit
+      else {
+        throw IdleContainerResourceBenchmarkError.memoryLimitChanged
+      }
+      values.append(memoryUsage)
+    }
+    return values
+  }
+
+  private static func checkedSum(_ values: [UInt64]) throws -> UInt64 {
+    try values.reduce(0) { partial, value in
+      let result = partial.addingReportingOverflow(value)
+      guard !result.overflow else {
+        throw IdleContainerDensityBenchmarkError.memoryTotalOverflow
+      }
+      return result.partialValue
+    }
+  }
+}
+
+enum IdleContainerDensityBenchmarkError: LocalizedError, Equatable, Sendable {
+  case duplicateContainerIdentity(String)
+  case containerCountChanged
+  case memoryTotalOverflow
+  case cleanupFailed([String])
+
+  var errorDescription: String? {
+    switch self {
+    case .duplicateContainerIdentity(let id):
+      "The idle-density benchmark received duplicate container identity “\(id)”."
+    case .containerCountChanged:
+      "The idle-density benchmark did not retain its exact reviewed container count."
+    case .memoryTotalOverflow:
+      "The idle-density benchmark memory total overflowed."
+    case .cleanupFailed(let failures):
+      "Idle-density cleanup failed for \(failures.count) container(s): \(failures.joined(separator: "; "))"
+    }
+  }
+}
+
+struct PostStressMemoryObservation: Equatable, Sendable {
+  let baselineMemoryUsageBytes: UInt64
+  let stressedMemoryUsageBytes: UInt64
+  let retainedMemoryUsageBytes: UInt64
+  let memoryLimitBytes: UInt64
+  let workloadMebibytes: Int
+  let stopConfirmed: Bool
+}
+
+actor PostStressMemoryPerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  private static let successMarker = "nativecontainers-memory-stress-ok"
+  private static let workload = """
+    set -eu
+    target=/tmp/nativecontainers-memory-stress.bin
+    size_mib=$1
+    hold_seconds=$2
+    cleanup() { rm -f -- "$target"; }
+    trap cleanup EXIT HUP INT TERM
+    dd if=/dev/zero of="$target" bs=1048576 count="$size_mib" 2>/dev/null
+    dd if="$target" of=/dev/null bs=1048576 2>/dev/null
+    sleep "$hold_seconds"
+    dd if="$target" of=/dev/null bs=1048576 2>/dev/null
+    printf '%s\\n' nativecontainers-memory-stress-ok
+    """
+
+  nonisolated let kind = PerformanceBenchmarkKind.postStressRetainedMemory
+
+  private let lifecycle: ColdContainerStartupPerformanceBenchmarkScenario
+  private let commands: any ContainerCommandRunning
+  private let statistics: any IdleContainerStatisticsSampling
+  private let workloadMebibytes: Int
+  private let stressHoldSeconds: Int
+  private let stressSamplingDelay: Duration
+  private let retainedIdleDuration: Duration
+  private let sleep: @Sendable (Duration) async throws -> Void
+  private var recordedObservations: [PostStressMemoryObservation] = []
+
+  init(
+    containers: any ContainerCreating & ContainerLifecycleManaging,
+    stateReader: any ContainerStartupBenchmarkStateReading =
+      AppleContainerStartupBenchmarkStateReader(),
+    commands: any ContainerCommandRunning,
+    statistics: any IdleContainerStatisticsSampling,
+    imageReference: String = "docker.io/library/alpine:3.21",
+    expectedImageDigest: String,
+    workloadMebibytes: Int = 64,
+    stressHoldSeconds: Int = 3,
+    stressSamplingDelay: Duration = .seconds(1),
+    retainedIdleDuration: Duration = .seconds(10),
+    makeContainerID: @escaping @Sendable () -> String = {
+      "nativecontainers-stress-\(UUID().uuidString.lowercased().prefix(8))"
+    },
+    sleep: @escaping @Sendable (Duration) async throws -> Void = {
+      try await Task.sleep(for: $0)
+    }
+  ) throws {
+    guard
+      (1...128).contains(workloadMebibytes),
+      (2...60).contains(stressHoldSeconds),
+      stressSamplingDelay >= .milliseconds(100),
+      stressSamplingDelay < .seconds(stressHoldSeconds),
+      retainedIdleDuration >= .seconds(1),
+      retainedIdleDuration <= .seconds(300)
+    else {
+      throw PostStressMemoryBenchmarkError.invalidConfiguration
+    }
+    lifecycle = ColdContainerStartupPerformanceBenchmarkScenario(
+      containers: containers,
+      stateReader: stateReader,
+      imageReference: imageReference,
+      expectedImageDigest: expectedImageDigest,
+      makeContainerID: makeContainerID
+    )
+    self.commands = commands
+    self.statistics = statistics
+    self.workloadMebibytes = workloadMebibytes
+    self.stressHoldSeconds = stressHoldSeconds
+    self.stressSamplingDelay = stressSamplingDelay
+    self.retainedIdleDuration = retainedIdleDuration
+    self.sleep = sleep
+  }
+
+  func prepareIteration() async throws {
+    try await lifecycle.prepareIteration()
+    try await lifecycle.prepareMeasurement()
+    _ = try await lifecycle.perform()
+  }
+
+  func prepareMeasurement() async throws {
+    try await lifecycle.validateCurrentContainer(expectedState: .running)
+  }
+
+  func perform() async throws -> Int64? {
+    let id = try await lifecycle.currentContainerID()
+    let baseline = try await requireMemorySample(id: id)
+    let request = try ContainerCommandRequest(
+      executable: "/bin/sh",
+      arguments: [
+        "-c", Self.workload, "nativecontainers-memory-stress",
+        String(workloadMebibytes), String(stressHoldSeconds),
+      ],
+      timeoutSeconds: stressHoldSeconds + 120
+    )
+    let commandTask = Task {
+      try await commands.executeCommand(in: id, request: request)
+    }
+
+    let stressed: (usage: UInt64, limit: UInt64)
+    do {
+      try await sleep(stressSamplingDelay)
+      stressed = try await requireMemorySample(id: id)
+    } catch {
+      commandTask.cancel()
+      _ = try? await commandTask.value
+      throw error
+    }
+
+    let result = try await commandTask.value
+    guard !result.outputWasTruncated else {
+      throw PostStressMemoryBenchmarkError.outputWasTruncated
+    }
+    guard result.exitCode == 0 else {
+      throw PostStressMemoryBenchmarkError.commandFailed(result.exitCode)
+    }
+    guard
+      result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        == Self.successMarker
+    else {
+      throw PostStressMemoryBenchmarkError.invalidSuccessMarker
+    }
+
+    try await sleep(retainedIdleDuration)
+    let retained = try await requireMemorySample(id: id)
+    guard baseline.limit == stressed.limit, stressed.limit == retained.limit else {
+      throw PostStressMemoryBenchmarkError.memoryLimitChanged
+    }
+    guard stressed.usage >= baseline.usage else {
+      throw PostStressMemoryBenchmarkError.stressNotObserved
+    }
+    try await lifecycle.stopCurrentContainer()
+    recordedObservations.append(
+      PostStressMemoryObservation(
+        baselineMemoryUsageBytes: baseline.usage,
+        stressedMemoryUsageBytes: stressed.usage,
+        retainedMemoryUsageBytes: retained.usage,
+        memoryLimitBytes: retained.limit,
+        workloadMebibytes: workloadMebibytes,
+        stopConfirmed: true
+      )
+    )
+    return nil
+  }
+
+  func cleanUpIteration() async throws {
+    try await lifecycle.cleanUpIteration()
+  }
+
+  func observations() -> [PostStressMemoryObservation] {
+    recordedObservations
+  }
+
+  private func requireMemorySample(
+    id: String
+  ) async throws -> (usage: UInt64, limit: UInt64) {
+    guard
+      let sample = try await statistics.sampleContainer(id: id),
+      let usage = sample.memoryUsageBytes,
+      let limit = sample.memoryLimitBytes,
+      limit == 256 * ContainerCreationRequest.bytesPerMiB,
+      usage <= limit
+    else {
+      throw PostStressMemoryBenchmarkError.statisticsUnavailable
+    }
+    return (usage, limit)
+  }
+}
+
+enum PostStressMemoryBenchmarkError: LocalizedError, Equatable, Sendable {
+  case invalidConfiguration
+  case statisticsUnavailable
+  case commandFailed(Int32)
+  case outputWasTruncated
+  case invalidSuccessMarker
+  case memoryLimitChanged
+  case stressNotObserved
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidConfiguration:
+      "The post-stress benchmark configuration is outside its bounded limits."
+    case .statisticsUnavailable:
+      "The post-stress benchmark could not obtain bounded resident-memory counters."
+    case .commandFailed(let exitCode):
+      "The fixed guest-memory workload exited with status \(exitCode)."
+    case .outputWasTruncated:
+      "The fixed guest-memory workload exceeded its bounded output limit."
+    case .invalidSuccessMarker:
+      "The fixed guest-memory workload did not return its completion marker."
+    case .memoryLimitChanged:
+      "The post-stress benchmark container memory limit changed during measurement."
+    case .stressNotObserved:
+      "The post-stress benchmark did not observe memory growth during the fixed workload."
     }
   }
 }
@@ -1818,6 +3127,221 @@ enum ImageBuildPerformanceBenchmarkError: LocalizedError, Equatable, Sendable {
       "The image-build benchmark output remained after cleanup."
     case .stagedContextRemovalNotConfirmed(let path):
       "The image-build benchmark staged context remained after cleanup: \(path)"
+    }
+  }
+}
+
+struct ImagePullDiskGrowthObservation: Equatable, Sendable {
+  let reference: String
+  let digest: String
+  let allocatedImageBytesBefore: UInt64
+  let allocatedImageBytesAfter: UInt64
+  let allocatedImageGrowthBytes: UInt64
+  let imageCountBefore: Int
+  let imageCountAfter: Int
+}
+
+actor ImagePullDiskGrowthPerformanceBenchmarkScenario:
+  PerformanceBenchmarkScenario
+{
+  nonisolated let kind = PerformanceBenchmarkKind.imagePullAndDiskGrowth
+
+  private let images: any ImageManaging
+  private let storage: any AppleRuntimeStorageUsageLoading
+  private let reference: String
+  private let maxConcurrentDownloads: Int
+  private var preparedPlan: ImagePullPlan?
+  private var storageBeforePull: AppleRuntimeStorageUsage?
+  private var pulledResult: ImagePullResult?
+  private var recordedObservations: [ImagePullDiskGrowthObservation] = []
+
+  init(
+    images: any ImageManaging,
+    storage: any AppleRuntimeStorageUsageLoading,
+    reference: String,
+    maxConcurrentDownloads: Int = 4
+  ) throws {
+    let reference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard
+      !reference.isEmpty,
+      !reference.contains("@"),
+      (1...16).contains(maxConcurrentDownloads)
+    else {
+      throw ImagePullDiskGrowthBenchmarkError.invalidConfiguration
+    }
+    self.images = images
+    self.storage = storage
+    self.reference = reference
+    self.maxConcurrentDownloads = maxConcurrentDownloads
+  }
+
+  func prepareIteration() async throws {
+    guard preparedPlan == nil, storageBeforePull == nil, pulledResult == nil else {
+      throw ImagePullDiskGrowthBenchmarkError.invalidIterationState
+    }
+    let plan = try await images.prepareImagePull(
+      reference: reference,
+      platform: .current,
+      transport: .https,
+      unpackAfterPull: false,
+      maxConcurrentDownloads: maxConcurrentDownloads
+    )
+    try validate(plan)
+    preparedPlan = plan
+  }
+
+  func prepareMeasurement() async throws {
+    guard let preparedPlan else {
+      throw ImagePullDiskGrowthBenchmarkError.invalidIterationState
+    }
+    let refreshed = try await images.prepareImagePull(
+      reference: reference,
+      platform: .current,
+      transport: .https,
+      unpackAfterPull: false,
+      maxConcurrentDownloads: maxConcurrentDownloads
+    )
+    try validate(refreshed)
+    guard Self.hasSameExecutionIdentity(refreshed, preparedPlan) else {
+      throw ImagePullDiskGrowthBenchmarkError.planChanged
+    }
+    storageBeforePull = try await storage.loadAppleRuntimeStorageUsage()
+  }
+
+  func perform() async throws -> Int64? {
+    guard let preparedPlan, let storageBeforePull else {
+      throw ImagePullDiskGrowthBenchmarkError.invalidIterationState
+    }
+    let result: ImagePullResult
+    do {
+      result = try await images.pullImage(
+        preparedPlan,
+        authorization: .none
+      ) { _ in }
+      pulledResult = result
+    } catch let partial as ImagePullPartialCompletionError {
+      pulledResult = partial.result
+      throw partial
+    }
+    guard
+      result.reference == preparedPlan.normalizedReference,
+      !result.digest.isEmpty,
+      result.replacedDigest == nil,
+      result.unpackOutcome == nil
+    else {
+      throw ImagePullDiskGrowthBenchmarkError.resultChanged
+    }
+    let storageAfterPull = try await storage.loadAppleRuntimeStorageUsage()
+    guard
+      storageAfterPull.images.allocatedBytes
+        >= storageBeforePull.images.allocatedBytes,
+      storageAfterPull.images.totalCount >= storageBeforePull.images.totalCount
+    else {
+      throw ImagePullDiskGrowthBenchmarkError.storageAccountingRegressed
+    }
+    let growth =
+      storageAfterPull.images.allocatedBytes
+      - storageBeforePull.images.allocatedBytes
+    recordedObservations.append(
+      ImagePullDiskGrowthObservation(
+        reference: result.reference,
+        digest: result.digest,
+        allocatedImageBytesBefore: storageBeforePull.images.allocatedBytes,
+        allocatedImageBytesAfter: storageAfterPull.images.allocatedBytes,
+        allocatedImageGrowthBytes: growth,
+        imageCountBefore: storageBeforePull.images.totalCount,
+        imageCountAfter: storageAfterPull.images.totalCount
+      )
+    )
+    return nil
+  }
+
+  func cleanUpIteration() async throws {
+    let result = pulledResult
+    preparedPlan = nil
+    storageBeforePull = nil
+    pulledResult = nil
+    guard let result else { return }
+
+    let plan = try await images.prepareImageDeletion(reference: result.reference)
+    guard
+      plan.reference == result.reference,
+      plan.digest == result.digest,
+      plan.usedByContainerIDs.isEmpty,
+      !plan.isInfrastructureImage
+    else {
+      throw ImagePullDiskGrowthBenchmarkError.cleanupIdentityChanged
+    }
+    let cleanup = try await images.deleteImage(plan)
+    guard
+      cleanup.completedWithoutFailures,
+      cleanup.removedReferences.contains(result.reference)
+    else {
+      throw ImagePullDiskGrowthBenchmarkError.cleanupNotConfirmed
+    }
+  }
+
+  func observations() -> [ImagePullDiskGrowthObservation] {
+    recordedObservations
+  }
+
+  private func validate(_ plan: ImagePullPlan) throws {
+    guard
+      plan.existingDigest == nil,
+      plan.platform != .all,
+      plan.requestedTransport == .https,
+      plan.resolvedTransport == .https,
+      !plan.unpackAfterPull,
+      plan.maxConcurrentDownloads == maxConcurrentDownloads,
+      !plan.normalizedReference.isEmpty
+    else {
+      throw ImagePullDiskGrowthBenchmarkError.invalidPlan
+    }
+  }
+
+  private static func hasSameExecutionIdentity(
+    _ lhs: ImagePullPlan,
+    _ rhs: ImagePullPlan
+  ) -> Bool {
+    lhs.normalizedReference == rhs.normalizedReference
+      && lhs.registryHost == rhs.registryHost
+      && lhs.existingDigest == rhs.existingDigest
+      && lhs.platform == rhs.platform
+      && lhs.requestedTransport == rhs.requestedTransport
+      && lhs.resolvedTransport == rhs.resolvedTransport
+      && lhs.unpackAfterPull == rhs.unpackAfterPull
+      && lhs.maxConcurrentDownloads == rhs.maxConcurrentDownloads
+  }
+}
+
+enum ImagePullDiskGrowthBenchmarkError: LocalizedError, Equatable, Sendable {
+  case invalidConfiguration
+  case invalidIterationState
+  case invalidPlan
+  case planChanged
+  case resultChanged
+  case storageAccountingRegressed
+  case cleanupIdentityChanged
+  case cleanupNotConfirmed
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidConfiguration:
+      "The image-pull benchmark requires an unpinned reference and 1–16 concurrent downloads."
+    case .invalidIterationState:
+      "The image-pull benchmark iteration is not in a valid state."
+    case .invalidPlan:
+      "The image-pull benchmark requires an absent current-platform image over HTTPS without unpacking."
+    case .planChanged:
+      "The reviewed image-pull benchmark plan changed before execution."
+    case .resultChanged:
+      "The image-pull benchmark result did not match its reviewed plan."
+    case .storageAccountingRegressed:
+      "Apple runtime image allocation or count regressed during the isolated pull measurement."
+    case .cleanupIdentityChanged:
+      "The pulled image identity changed before benchmark cleanup."
+    case .cleanupNotConfirmed:
+      "The exact pulled image reference was not confirmed removed after the benchmark."
     }
   }
 }

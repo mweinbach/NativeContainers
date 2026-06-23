@@ -112,8 +112,17 @@ require_literal docs/ROADMAP.md \
   '[ ] Complete product-contract performance benchmark coverage.' \
   "open complete-performance roadmap item"
 require_literal docs/FEATURE_MATRIX.md \
-  'None of the eight performance-contract requirements is fully covered yet' \
+  'Seven of eight contract requirements are complete; sleep/wake and crash recovery remains missing.' \
   "performance coverage qualification"
+require_literal docs/FEATURE_MATRIX.md \
+  '| NAT/direct-IP latency and throughput | Complete |' \
+  "completed network-performance contract"
+require_literal NativeContainers/Services/Performance/PerformanceBenchmarkScenarios.swift \
+  'actor ImagePullDiskGrowthPerformanceBenchmarkScenario' \
+  "image-pull disk-growth benchmark"
+require_literal NativeContainers/Services/Performance/PerformanceBenchmarkScenarios.swift \
+  'actor NATDirectNetworkPerformanceBenchmarkScenario' \
+  "NAT/direct-IP benchmark"
 
 require_literal docs/FEATURE_MATRIX.md \
   '| Persistent Apple-machine snapshots/backups | Versioned fork Machine API + crash-safe snapshot catalog/store + native Snapshots UI | Conditional M3 |' \

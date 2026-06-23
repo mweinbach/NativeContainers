@@ -432,18 +432,22 @@ must leave a usable, test-backed product slice.
   - [x] Idle-container CPU, memory, network, block-I/O, and process accounting
         behind a seventh explicit live gate, with a bounded settling/sample
         window, authoritative counter pairs, and exact cleanup.
-  - [ ] Add warm container-start measurement alongside the existing cold-start
-        lane.
-  - [ ] Measure resident memory at 1, 10, and 50 idle containers plus retained
-        memory after guest stress and idle-stop; the current lane samples one
-        fresh idle container only.
-  - [ ] Add bind-mount metadata workloads; the current VirtioFS lane covers
-        sequential write, fsync, and immediate read only.
-  - [ ] Add a PostgreSQL durability/fsync workload.
-  - [ ] Add image-pull timing and allocated-disk growth; the current image lane
-        measures a no-cache build only.
-  - [ ] Add comparative NAT/direct-IP latency and throughput; localhost TCP and
-        guest HTTPS transfer do not satisfy that contract.
+  - [x] Add warm container-start measurement alongside the existing cold-start
+        lane, using an untimed initial start/clean stop before the measured
+        restart.
+  - [x] Measure runtime-reported resident memory at exact concurrent counts of
+        1, 10, and 50 containers plus baseline/stressed/post-idle memory around
+        a bounded guest workload and authoritative stop.
+  - [x] Add reviewed bind-mount create/stat/chmod/rename/unlink/mkdir/rmdir
+        batches alongside sequential write, fsync, and immediate read.
+  - [x] Add a digest-pinned PostgreSQL 17 durability lane covering
+        `pg_test_fsync`, required fsync/synchronous-commit settings, committed
+        rows, and `CHECKPOINT`.
+  - [x] Add absent-reference HTTPS image-pull timing, before/after Apple runtime
+        allocated-image accounting, and exact-reference cleanup alongside the
+        no-cache build lane.
+  - [x] Add alternating published-NAT/direct-IP latency and throughput samples
+        for the same byte-verified container payload.
   - [ ] Add host sleep/wake and app/runtime crash-recovery benchmarks.
 
 ## Public-API constraint log

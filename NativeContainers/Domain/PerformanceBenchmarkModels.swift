@@ -5,13 +5,21 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
   case privateDiskIO
   case loopbackNetwork
   case coldContainerStartup
+  case warmContainerStartup
   case guestRootFileIO
   case bindMountFileIO
+  case bindMountMetadata
   case imageBuild
+  case imagePullAndDiskGrowth
   case coldLinuxMachineStartup
   case coldMacVirtualMachineStartup
   case externalNetworkTransfer
   case idleContainerResources
+  case idleContainerDensity10
+  case idleContainerDensity50
+  case postStressRetainedMemory
+  case postgreSQLDurability
+  case natDirectNetworkComparison
 
   static let settingsSuiteCases: [Self] = [
     .warmInventory,
@@ -31,12 +39,18 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Loopback TCP"
     case .coldContainerStartup:
       "Cold container startup"
+    case .warmContainerStartup:
+      "Warm container startup"
     case .guestRootFileIO:
       "Guest root filesystem I/O"
     case .bindMountFileIO:
       "VirtioFS bind-mount I/O"
+    case .bindMountMetadata:
+      "VirtioFS bind-mount metadata"
     case .imageBuild:
       "No-cache OCI image build"
+    case .imagePullAndDiskGrowth:
+      "Image pull and allocated disk growth"
     case .coldLinuxMachineStartup:
       "Cold Linux machine startup"
     case .coldMacVirtualMachineStartup:
@@ -45,6 +59,16 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "External HTTPS transfer"
     case .idleContainerResources:
       "Idle container resources"
+    case .idleContainerDensity10:
+      "10-container idle memory"
+    case .idleContainerDensity50:
+      "50-container idle memory"
+    case .postStressRetainedMemory:
+      "Post-stress retained memory"
+    case .postgreSQLDurability:
+      "PostgreSQL durability and fsync"
+    case .natDirectNetworkComparison:
+      "NAT and direct-IP networking"
     }
   }
 
@@ -58,12 +82,18 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Transfers data through Network.framework over localhost without using an external network."
     case .coldContainerStartup:
       "Starts a newly created stopped Apple container and confirms its authoritative running state."
+    case .warmContainerStartup:
+      "Restarts a previously started and cleanly stopped Apple container and confirms its authoritative running state."
     case .guestRootFileIO:
       "Writes, synchronizes, and reads a fixed file inside a running container’s writable root filesystem."
     case .bindMountFileIO:
       "Writes, synchronizes, and reads a fixed file through a reviewed writable host-folder mount."
+    case .bindMountMetadata:
+      "Runs a fixed create, stat, chmod, rename, unlink, and directory metadata workload through a reviewed writable host-folder mount."
     case .imageBuild:
       "Builds a fixed local context without cache or registry refresh and exports a reviewed OCI archive."
+    case .imagePullAndDiskGrowth:
+      "Pulls a reviewed absent image reference, records runtime-allocated disk growth, and removes the exact pulled reference."
     case .coldLinuxMachineStartup:
       "Starts a newly created stopped Apple Linux machine through first-user provisioning and confirmed readiness."
     case .coldMacVirtualMachineStartup:
@@ -72,6 +102,16 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Downloads and verifies a fixed HTTPS payload through a fresh Apple container."
     case .idleContainerResources:
       "Samples authoritative CPU, memory, I/O, network, and process counters for an idle container."
+    case .idleContainerDensity10:
+      "Samples authoritative resident-memory counters across exactly 10 concurrently idle containers."
+    case .idleContainerDensity50:
+      "Samples authoritative resident-memory counters across exactly 50 concurrently idle containers."
+    case .postStressRetainedMemory:
+      "Measures memory before, during, and after a bounded guest-memory workload, then confirms an identity-pinned stop."
+    case .postgreSQLDurability:
+      "Runs a fixed transactional PostgreSQL workload with fsync and synchronous_commit enabled, followed by CHECKPOINT."
+    case .natDirectNetworkComparison:
+      "Measures the same fixed container payload over its published host port and dedicated direct IP."
     }
   }
 }
@@ -96,10 +136,10 @@ enum PerformanceBenchmarkContractRequirement: String, CaseIterable, Identifiable
 
   var coverage: PerformanceBenchmarkContractCoverage {
     switch self {
-    case .containerStartup, .idleContainerMemory, .bindMountIO,
-      .imagePullBuildAndDisk, .containerNetworking:
-      .partial
-    case .postStressMemory, .postgreSQLDurability, .recovery:
+    case .containerStartup, .idleContainerMemory, .postStressMemory, .bindMountIO,
+      .postgreSQLDurability, .imagePullBuildAndDisk, .containerNetworking:
+      .complete
+    case .recovery:
       .missing
     }
   }
@@ -128,19 +168,19 @@ enum PerformanceBenchmarkContractRequirement: String, CaseIterable, Identifiable
   var gap: LocalizedStringResource {
     switch self {
     case .containerStartup:
-      "Cold startup is covered; warm container startup is not."
+      "Cold creation and warm restart are measured separately with authoritative state confirmation."
     case .idleContainerMemory:
-      "One idle container is sampled; 10- and 50-container resident-memory density is not."
+      "Runtime-reported resident memory is sampled at exactly 1, 10, and 50 concurrently idle containers."
     case .postStressMemory:
-      "No workload measures memory retained after guest stress and idle-stop."
+      "A bounded guest-memory workload records baseline, stressed, and post-idle retained memory before a confirmed stop."
     case .bindMountIO:
-      "Sequential write, fsync, and read are covered; metadata operations are not."
+      "Reviewed VirtioFS lanes cover sequential write/fsync/read and fixed metadata operations."
     case .postgreSQLDurability:
-      "No PostgreSQL durability or fsync workload exists."
+      "A digest-pinned PostgreSQL lane verifies fsync and synchronous commit before transactional writes and CHECKPOINT."
     case .imagePullBuildAndDisk:
-      "No-cache build time is covered; pull time and allocated disk growth are not."
+      "Separate lanes measure reviewed image pull, no-cache build, and runtime-reported allocated disk growth."
     case .containerNetworking:
-      "Local TCP and guest HTTPS transfer are covered; comparative NAT/direct-IP latency and throughput are not."
+      "The same verified payload is compared over a published host port and the container’s dedicated direct IP."
     case .recovery:
       "No benchmark covers host sleep/wake or process and runtime crash recovery."
     }

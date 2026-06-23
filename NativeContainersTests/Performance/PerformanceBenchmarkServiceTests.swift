@@ -7,13 +7,13 @@ import Testing
 
 struct PerformanceBenchmarkServiceTests {
   @Test
-  func productContractPublishesEveryIncompleteRequirement() {
+  func productContractPublishesImplementedPerformanceRequirements() {
     let requirements = PerformanceBenchmarkContractRequirement.allCases
 
     #expect(requirements.count == 8)
-    #expect(requirements.count(where: { $0.coverage == .complete }) == 0)
-    #expect(requirements.count(where: { $0.coverage == .partial }) == 5)
-    #expect(requirements.count(where: { $0.coverage == .missing }) == 3)
+    #expect(requirements.count(where: { $0.coverage == .complete }) == 7)
+    #expect(requirements.count(where: { $0.coverage == .partial }) == 0)
+    #expect(requirements.count(where: { $0.coverage == .missing }) == 1)
     #expect(requirements.contains(.postgreSQLDurability))
     #expect(requirements.contains(.recovery))
   }
@@ -45,6 +45,11 @@ struct PerformanceBenchmarkServiceTests {
     #expect(
       !PerformanceBenchmarkKind.settingsSuiteCases.contains(
         .idleContainerResources
+      )
+    )
+    #expect(
+      !PerformanceBenchmarkKind.settingsSuiteCases.contains(
+        .idleContainerDensity50
       )
     )
   }
@@ -275,6 +280,41 @@ struct PerformanceBenchmarkServiceTests {
         "listed:nativecontainers-perf-fixture",
       ]
     )
+  }
+
+  @Test
+  func warmContainerStartupTimesRestartAfterAnUntimedStartStopCycle() async throws {
+    let id = "nativecontainers-warm-fixture"
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let scenario = WarmContainerStartupPerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      makeContainerID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [500, 725])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured warm-container startup result.")
+      return
+    }
+    #expect(result.kind == .warmContainerStartup)
+    #expect(result.samples.map(\.durationNanoseconds) == [225])
+    let calls = await runtime.calls
+    #expect(calls.filter { $0 == "start:\(id)" }.count == 2)
+    #expect(calls.filter { $0 == "stop:\(id)" }.count == 2)
+    #expect(calls.contains("delete:\(id)"))
+    #expect(try await runtime.listedObservation(forContainerID: id) == nil)
   }
 
   @Test
@@ -829,6 +869,142 @@ struct PerformanceBenchmarkServiceTests {
   }
 
   @Test
+  func bindMountMetadataRunsEveryReviewedOperationAndCleansHostPath() async throws {
+    let id = "nativecontainers-metadata-fixture"
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let commands = FixedContainerCommandRuntimeDouble(
+      standardOutput: "operations=28\nnativecontainers-metadata-ok\n"
+    )
+    let mount = try ContainerHostDirectoryMount(
+      bookmarkData: Data([0x01]),
+      lastKnownPath: "/private/tmp/nativecontainers-metadata-fixture",
+      sourceIdentity: ContainerHostDirectorySourceIdentity(device: 1, inode: 3),
+      containerPath: "/workspace",
+      isReadOnly: false
+    )
+    let attachments = try ContainerAttachmentSelection(
+      volumeMounts: [],
+      hostDirectoryMounts: [mount],
+      networks: [],
+      publishedSockets: [],
+      requiredHostAccess: nil
+    )
+    let scenario = try BindMountMetadataPerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      commands: commands,
+      attachments: attachments,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      batches: 4,
+      makeContainerID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [10, 20])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured bind-mount metadata result.")
+      return
+    }
+    #expect(result.kind == .bindMountMetadata)
+    #expect(
+      await scenario.observations() == [
+        BindMountMetadataObservation(
+          batches: 4,
+          operationsPerBatch: 7,
+          totalOperations: 28
+        )
+      ]
+    )
+    let request = try #require(await commands.requests.first)
+    let workload = try #require(request.arguments.dropFirst().first)
+    for operation in ["stat", "chmod", "mv", "rm", "mkdir", "rmdir"] {
+      #expect(workload.contains(operation))
+    }
+    #expect(workload.contains("trap cleanup"))
+    #expect(await runtime.lastRequest?.attachments.hostDirectoryMounts == [mount])
+    #expect(try await runtime.listedObservation(forContainerID: id) == nil)
+  }
+
+  @Test
+  func postgreSQLDurabilityVerifiesFsyncCommitsAndCheckpoint() async throws {
+    let id = "nativecontainers-postgres-fixture"
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let commands = PostgreSQLCommandRuntimeDouble(
+      readinessExitCodes: [1, 0],
+      verificationOutput: "on|on|32\n"
+    )
+    let sleeper = IdleResourceSleepDouble()
+    let scenario = try PostgreSQLDurabilityPerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      commands: commands,
+      imageReference: "example.invalid/postgres:17",
+      expectedImageDigest: "sha256:fixture",
+      rowCount: 32,
+      readinessAttempts: 3,
+      readinessDelay: .milliseconds(10),
+      makeContainerID: { id },
+      sleep: { duration in await sleeper.sleep(for: duration) }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [100, 300])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured PostgreSQL durability result.")
+      return
+    }
+    #expect(result.kind == .postgreSQLDurability)
+    #expect(result.samples.map(\.processedByteCount) == [32 * 1_024])
+    #expect(
+      await scenario.observations() == [
+        PostgreSQLDurabilityObservation(
+          fsyncEnabled: true,
+          synchronousCommitEnabled: true,
+          pgTestFsyncCompleted: true,
+          committedRowCount: 32,
+          committedPayloadBytes: 32 * 1_024
+        )
+      ]
+    )
+    let creation = try #require(await runtime.lastRequest)
+    #expect(creation.arguments.isEmpty)
+    #expect(creation.memoryBytes == 512 * ContainerCreationRequest.bytesPerMiB)
+    #expect(
+      creation.environment.contains(where: {
+        $0.key == "POSTGRES_HOST_AUTH_METHOD" && $0.value == "trust"
+      })
+    )
+    let requests = await commands.requests
+    #expect(requests.map(\.executable).contains("/usr/local/bin/pg_test_fsync"))
+    let psql = try #require(
+      requests.first(where: { $0.executable == "/usr/local/bin/psql" })
+    )
+    let sql = try #require(psql.arguments.last)
+    #expect(sql.contains("CHECKPOINT"))
+    #expect(sql.contains("current_setting('fsync')"))
+    #expect(sql.contains("current_setting('synchronous_commit')"))
+    #expect(await sleeper.durations == [.milliseconds(10)])
+    #expect(try await runtime.listedObservation(forContainerID: id) == nil)
+  }
+
+  @Test
   func externalNetworkTransferVerifiesFixedPayloadAndDeletesContainer() async throws {
     let id = "nativecontainers-network-fixture"
     let digest = String(repeating: "a", count: 64)
@@ -993,6 +1169,75 @@ struct PerformanceBenchmarkServiceTests {
   }
 
   @Test
+  func natDirectNetworkComparesSamePayloadOverBothRoutes() async throws {
+    let id = "nativecontainers-network-compare-fixture"
+    let runtime = ContainerStartupBenchmarkRuntimeDouble(
+      containerIPAddress: "192.0.2.44/24"
+    )
+    let commands = FixedContainerCommandRuntimeDouble(
+      standardOutput: "bytes=16\nnativecontainers-http-server-ok\n"
+    )
+    let transport = PerformanceHTTPTransportDouble(
+      payload: Data(repeating: 0, count: 16)
+    )
+    let routeClock = SequencePerformanceClock(
+      values: [0, 10, 10, 30, 30, 50, 50, 60]
+    )
+    let scenario = try NATDirectNetworkPerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      inventory: runtime,
+      commands: commands,
+      hostPort: 38_080,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      payloadByteCount: 16,
+      requestCount: 2,
+      readinessAttempts: 1,
+      readinessDelay: .milliseconds(10),
+      transport: transport,
+      clock: routeClock,
+      makeContainerID: { id }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [100, 200])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured NAT/direct-IP comparison.")
+      return
+    }
+    #expect(result.kind == .natDirectNetworkComparison)
+    #expect(result.samples.map(\.processedByteCount) == [64])
+    let observation = try #require(await scenario.observations().first)
+    #expect(observation.publishedHost == "127.0.0.1")
+    #expect(observation.publishedPort == 38_080)
+    #expect(observation.directHost == "192.0.2.44")
+    #expect(observation.containerPort == 8_080)
+    #expect(observation.requestCountPerRoute == 2)
+    #expect(observation.publishedRoute.samplesNanoseconds == [10, 10])
+    #expect(observation.directRoute.samplesNanoseconds == [20, 20])
+    #expect(observation.publishedRoute.medianLatencyNanoseconds == 10)
+    #expect(observation.directRoute.p95LatencyNanoseconds == 20)
+    let publication = try #require(await runtime.lastRequest?.publishedPorts.first)
+    #expect(publication.hostAddress == "127.0.0.1")
+    #expect(publication.hostPort == 38_080)
+    #expect(publication.containerPort == 8_080)
+    let fetchedURLs = await transport.urls
+    #expect(fetchedURLs.count == 6)
+    #expect(fetchedURLs.contains(where: { $0.host == "127.0.0.1" }))
+    #expect(fetchedURLs.contains(where: { $0.host == "192.0.2.44" }))
+    #expect(try await runtime.listedObservation(forContainerID: id) == nil)
+  }
+
+  @Test
   func idleContainerResourcesSamplesCounterDeltasAndDeletesContainer() async throws {
     let id = "nativecontainers-idle-fixture"
     let runtime = ContainerStartupBenchmarkRuntimeDouble()
@@ -1126,6 +1371,266 @@ struct PerformanceBenchmarkServiceTests {
         samplingDuration: .zero
       )
     }
+  }
+
+  @Test
+  func idleContainerDensityMeasuresExactTenAndFiftyContainerSets() async throws {
+    for density in IdleContainerDensity.allCases {
+      let runtime = MultiContainerStartupBenchmarkRuntimeDouble()
+      let initial = idleContainerStatistics(
+        memoryUsageBytes: 20 * 1_048_576,
+        cpuUsageMicroseconds: 1_000
+      )
+      let final = idleContainerStatistics(
+        memoryUsageBytes: 21 * 1_048_576,
+        cpuUsageMicroseconds: 1_100
+      )
+      let statistics = IdleContainerStatisticsRuntimeDouble(
+        samples:
+          Array(repeating: initial, count: density.rawValue)
+          + Array(repeating: final, count: density.rawValue)
+      )
+      let sleeper = IdleResourceSleepDouble()
+      let scenario = try IdleContainerDensityPerformanceBenchmarkScenario(
+        density: density,
+        containers: runtime,
+        stateReader: runtime,
+        statistics: statistics,
+        imageReference: "example.invalid/local:benchmark",
+        expectedImageDigest: "sha256:fixture",
+        settlingDuration: .zero,
+        samplingDuration: .seconds(1),
+        sleep: { duration in await sleeper.sleep(for: duration) }
+      )
+      let service = PerformanceBenchmarkService(
+        scenarios: [scenario],
+        configuration: PerformanceBenchmarkConfiguration(
+          warmupIterations: 0,
+          measuredIterations: 1
+        ),
+        clock: SequencePerformanceClock(values: [100, 200])
+      )
+
+      let report = try await service.run { _ in }
+
+      guard case .measured(let result) = report.outcomes[0] else {
+        Issue.record("Expected a measured idle-density result for \(density.rawValue).")
+        continue
+      }
+      #expect(result.kind == density.kind)
+      let observation = try #require(await scenario.observations().first)
+      #expect(observation.containerCount == density.rawValue)
+      #expect(observation.initialMemoryUsageBytes.count == density.rawValue)
+      #expect(observation.finalMemoryUsageBytes.count == density.rawValue)
+      #expect(
+        observation.initialTotalMemoryUsageBytes
+          == UInt64(density.rawValue * 20 * 1_048_576)
+      )
+      #expect(
+        observation.finalTotalMemoryUsageBytes
+          == UInt64(density.rawValue * 21 * 1_048_576)
+      )
+      #expect(await statistics.containerIDs.count == density.rawValue * 2)
+      #expect(await runtime.containerCount == 0)
+      #expect(await sleeper.durations == [.zero, .seconds(1)])
+    }
+  }
+
+  @Test
+  func postStressMemoryRecordsBaselinePeakRetentionAndConfirmedStop() async throws {
+    let id = "nativecontainers-stress-fixture"
+    let runtime = ContainerStartupBenchmarkRuntimeDouble()
+    let commands = FixedContainerCommandRuntimeDouble(
+      standardOutput: "nativecontainers-memory-stress-ok\n"
+    )
+    let statistics = IdleContainerStatisticsRuntimeDouble(
+      samples: [
+        idleContainerStatistics(
+          memoryUsageBytes: 20 * 1_048_576,
+          cpuUsageMicroseconds: 100
+        ),
+        idleContainerStatistics(
+          memoryUsageBytes: 84 * 1_048_576,
+          cpuUsageMicroseconds: 200
+        ),
+        idleContainerStatistics(
+          memoryUsageBytes: 31 * 1_048_576,
+          cpuUsageMicroseconds: 300
+        ),
+      ]
+    )
+    let sleeper = IdleResourceSleepDouble()
+    let scenario = try PostStressMemoryPerformanceBenchmarkScenario(
+      containers: runtime,
+      stateReader: runtime,
+      commands: commands,
+      statistics: statistics,
+      imageReference: "example.invalid/local:benchmark",
+      expectedImageDigest: "sha256:fixture",
+      workloadMebibytes: 64,
+      stressHoldSeconds: 3,
+      stressSamplingDelay: .seconds(1),
+      retainedIdleDuration: .seconds(10),
+      makeContainerID: { id },
+      sleep: { duration in await sleeper.sleep(for: duration) }
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [1_000, 2_000])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured post-stress memory result.")
+      return
+    }
+    #expect(result.kind == .postStressRetainedMemory)
+    #expect(
+      await scenario.observations() == [
+        PostStressMemoryObservation(
+          baselineMemoryUsageBytes: 20 * 1_048_576,
+          stressedMemoryUsageBytes: 84 * 1_048_576,
+          retainedMemoryUsageBytes: 31 * 1_048_576,
+          memoryLimitBytes: 256 * 1_048_576,
+          workloadMebibytes: 64,
+          stopConfirmed: true
+        )
+      ]
+    )
+    let request = try #require(await commands.requests.first)
+    #expect(request.arguments.dropFirst().first?.contains("dd if=/dev/zero") == true)
+    #expect(request.arguments.contains("64"))
+    #expect(await sleeper.durations == [.seconds(1), .seconds(10)])
+    #expect(try await runtime.listedObservation(forContainerID: id) == nil)
+  }
+
+  @Test
+  func imagePullMeasuresAllocatedGrowthAndDeletesExactPulledReference() async throws {
+    let reference = "registry.example/nativecontainers/pull-fixture:1"
+    let digest = "sha256:pull-fixture"
+    let plan = ImagePullPlan(
+      normalizedReference: reference,
+      registryHost: "registry.example",
+      existingDigest: nil,
+      platform: .specific(
+        OCIPlatformValue(os: "linux", architecture: "arm64", variant: "v8")
+      ),
+      requestedTransport: .https,
+      resolvedTransport: .https,
+      unpackAfterPull: false,
+      maxConcurrentDownloads: 4,
+      generatedAt: Date(timeIntervalSince1970: 1)
+    )
+    let images = ImagePullPerformanceRuntimeDouble(
+      plan: plan,
+      result: ImagePullResult(
+        reference: reference,
+        digest: digest,
+        replacedDigest: nil,
+        unpackOutcome: nil
+      )
+    )
+    let storage = ScriptedPerformanceStorageUsage(
+      values: [
+        performanceStorageUsage(imageCount: 4, allocatedImageBytes: 1_000),
+        performanceStorageUsage(imageCount: 5, allocatedImageBytes: 9_192),
+      ]
+    )
+    let scenario = try ImagePullDiskGrowthPerformanceBenchmarkScenario(
+      images: images,
+      storage: storage,
+      reference: reference
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [1_000, 4_000])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes[0] else {
+      Issue.record("Expected a measured image-pull result.")
+      return
+    }
+    #expect(result.kind == .imagePullAndDiskGrowth)
+    #expect(result.samples.map(\.durationNanoseconds) == [3_000])
+    #expect(
+      await scenario.observations() == [
+        ImagePullDiskGrowthObservation(
+          reference: reference,
+          digest: digest,
+          allocatedImageBytesBefore: 1_000,
+          allocatedImageBytesAfter: 9_192,
+          allocatedImageGrowthBytes: 8_192,
+          imageCountBefore: 4,
+          imageCountAfter: 5
+        )
+      ]
+    )
+    #expect(await images.preparedReferences == [reference, reference])
+    #expect(await images.pulledPlans == [plan])
+    #expect(await images.deletedReferences == [reference])
+    #expect(await storage.loadCount == 2)
+  }
+
+  @Test
+  func imagePullRejectsAnAlreadyPresentReferenceBeforeMutation() async throws {
+    let plan = ImagePullPlan(
+      normalizedReference: "registry.example/nativecontainers/present:1",
+      registryHost: "registry.example",
+      existingDigest: "sha256:existing",
+      platform: .specific(
+        OCIPlatformValue(os: "linux", architecture: "arm64", variant: "v8")
+      ),
+      requestedTransport: .https,
+      resolvedTransport: .https,
+      unpackAfterPull: false,
+      maxConcurrentDownloads: 4,
+      generatedAt: Date(timeIntervalSince1970: 1)
+    )
+    let images = ImagePullPerformanceRuntimeDouble(
+      plan: plan,
+      result: ImagePullResult(
+        reference: plan.normalizedReference,
+        digest: "sha256:new",
+        replacedDigest: plan.existingDigest,
+        unpackOutcome: nil
+      )
+    )
+    let storage = ScriptedPerformanceStorageUsage(values: [])
+    let scenario = try ImagePullDiskGrowthPerformanceBenchmarkScenario(
+      images: images,
+      storage: storage,
+      reference: plan.normalizedReference
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      )
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .failed(let kind, let message) = report.outcomes[0] else {
+      Issue.record("Expected an existing pull reference to fail closed.")
+      return
+    }
+    #expect(kind == .imagePullAndDiskGrowth)
+    #expect(message == ImagePullDiskGrowthBenchmarkError.invalidPlan.localizedDescription)
+    #expect(await images.pulledPlans.isEmpty)
+    #expect(await images.deletedReferences.isEmpty)
+    #expect(await storage.loadCount == 0)
   }
 
   @Test
@@ -1310,6 +1815,14 @@ struct LiveApplePerformanceBenchmarkTests {
     "__NATIVECONTAINERS_EXTERNAL_NETWORK_BENCHMARK__"
   private static let idleOutputMarker =
     "__NATIVECONTAINERS_IDLE_CONTAINER_BENCHMARK__"
+  private static let memoryContractOutputMarker =
+    "__NATIVECONTAINERS_MEMORY_CONTRACT_BENCHMARK__"
+  private static let postgreSQLOutputMarker =
+    "__NATIVECONTAINERS_POSTGRESQL_BENCHMARK__"
+  private static let imagePullOutputMarker =
+    "__NATIVECONTAINERS_IMAGE_PULL_BENCHMARK__"
+  private static let networkComparisonOutputMarker =
+    "__NATIVECONTAINERS_NETWORK_COMPARISON_BENCHMARK__"
   private static let buildOutputMarker =
     "__NATIVECONTAINERS_IMAGE_BUILD_BENCHMARK__"
   private static let machineOutputMarker =
@@ -1325,7 +1838,7 @@ struct LiveApplePerformanceBenchmarkTests {
       "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 with Apple container services running and the selected image already local."
     )
   )
-  func measuresPreparedImageColdContainerStartupAndLeavesNoContainer() async throws {
+  func measuresPreparedImageColdAndWarmContainerStartupWithoutResidue() async throws {
     let service = AppleContainerService()
     let imageReference =
       ProcessInfo.processInfo.environment[
@@ -1342,7 +1855,7 @@ struct LiveApplePerformanceBenchmarkTests {
 
     let runPrefix =
       "nativecontainers-perf-\(UUID().uuidString.lowercased().prefix(8))-"
-    let scenario = ColdContainerStartupPerformanceBenchmarkScenario(
+    let coldScenario = ColdContainerStartupPerformanceBenchmarkScenario(
       containers: service,
       stateReader: AppleContainerStartupBenchmarkStateReader(),
       imageReference: imageReference,
@@ -1351,8 +1864,17 @@ struct LiveApplePerformanceBenchmarkTests {
         "\(runPrefix)\(UUID().uuidString.lowercased().prefix(6))"
       }
     )
+    let warmScenario = WarmContainerStartupPerformanceBenchmarkScenario(
+      containers: service,
+      stateReader: AppleContainerStartupBenchmarkStateReader(),
+      imageReference: imageReference,
+      expectedImageDigest: image.digest,
+      makeContainerID: {
+        "\(runPrefix)warm-\(UUID().uuidString.lowercased().prefix(6))"
+      }
+    )
     let benchmark = PerformanceBenchmarkService(
-      scenarios: [scenario],
+      scenarios: [coldScenario, warmScenario],
       configuration: PerformanceBenchmarkConfiguration(
         warmupIterations: 1,
         measuredIterations: 3
@@ -1368,32 +1890,40 @@ struct LiveApplePerformanceBenchmarkTests {
     }
     try await requireNoResidualContainers(prefix: runPrefix, service: service)
 
-    guard
-      let outcome = report.outcomes.first,
-      case .measured(let result) = outcome
-    else {
-      if let outcome = report.outcomes.first,
-        case .failed(_, let message) = outcome
-      {
-        Issue.record("Cold-container startup benchmark failed: \(message)")
-      } else {
-        Issue.record("Cold-container startup benchmark returned no result.")
+    let results = try report.outcomes.map { outcome in
+      switch outcome {
+      case .measured(let result):
+        guard result.samples.count == 3 else {
+          throw LivePerformanceBenchmarkError.missingScenarioResult(
+            result.kind.rawValue
+          )
+        }
+        return LiveContainerStartupBenchmarkResult(
+          kind: result.kind.rawValue,
+          samplesNanoseconds: result.samples.map(\.durationNanoseconds),
+          medianMilliseconds: result.medianDurationMilliseconds,
+          p95Milliseconds: result.p95DurationMilliseconds
+        )
+      case .failed(let kind, let message):
+        throw LivePerformanceBenchmarkError.scenarioFailed(
+          kind: kind.rawValue,
+          message: message
+        )
       }
-      return
     }
-    #expect(result.kind == .coldContainerStartup)
-    #expect(result.samples.count == 3)
-    #expect(result.samples.allSatisfy { $0.durationNanoseconds > 0 })
+    #expect(
+      results.map(\.kind) == [
+        PerformanceBenchmarkKind.coldContainerStartup.rawValue,
+        PerformanceBenchmarkKind.warmContainerStartup.rawValue,
+      ])
 
-    let output = LiveColdContainerStartupBenchmarkOutput(
+    let output = LiveContainerStartupBenchmarkOutput(
       generatedAt: report.generatedAt,
       hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
       appleContainerVersion: initialInventory.system.version,
       imageReference: image.reference,
       imageDigest: image.digest,
-      samplesNanoseconds: result.samples.map(\.durationNanoseconds),
-      medianMilliseconds: result.medianDurationMilliseconds,
-      p95Milliseconds: result.p95DurationMilliseconds
+      results: results
     )
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
@@ -1732,8 +2262,18 @@ struct LiveApplePerformanceBenchmarkTests {
         "\(runPrefix)bind-\(UUID().uuidString.lowercased().prefix(6))"
       }
     )
+    let metadataScenario = try BindMountMetadataPerformanceBenchmarkScenario(
+      containers: service,
+      commands: service,
+      attachments: bindAttachments,
+      imageReference: imageReference,
+      expectedImageDigest: image.digest,
+      makeContainerID: {
+        "\(runPrefix)metadata-\(UUID().uuidString.lowercased().prefix(6))"
+      }
+    )
     let benchmark = PerformanceBenchmarkService(
-      scenarios: [guestScenario, bindScenario],
+      scenarios: [guestScenario, bindScenario, metadataScenario],
       configuration: PerformanceBenchmarkConfiguration(
         warmupIterations: 1,
         measuredIterations: 3
@@ -1768,7 +2308,7 @@ struct LiveApplePerformanceBenchmarkTests {
         )
       }
     }
-    #expect(results.count == 2)
+    #expect(results.count == 3)
 
     let output = LiveContainerIOBenchmarkOutput(
       generatedAt: report.generatedAt,
@@ -2048,6 +2588,345 @@ struct LiveApplePerformanceBenchmarkTests {
         "NATIVECONTAINERS_LIVE_PERFORMANCE"
       ] == "1"
         && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_MEMORY_CONTRACT"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_MEMORY_CONTRACT=1 with Apple container services running and enough capacity for 50 idle containers."
+    )
+  )
+  func measuresTenFiftyAndPostStressMemoryWithoutResidue() async throws {
+    let service = AppleContainerService()
+    let imageReference =
+      ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_IMAGE"
+      ] ?? "docker.io/library/alpine:3.21"
+    let initialInventory = try await service.loadInventory()
+    guard
+      let image = initialInventory.images.first(where: {
+        $0.reference == imageReference
+      })
+    else {
+      throw LivePerformanceBenchmarkError.missingLocalImage(imageReference)
+    }
+
+    let runPrefix =
+      "nativecontainers-memory-\(UUID().uuidString.lowercased().prefix(8))-"
+    let ten = try IdleContainerDensityPerformanceBenchmarkScenario(
+      density: .ten,
+      containers: service,
+      statistics: service,
+      imageReference: image.reference,
+      expectedImageDigest: image.digest,
+      makeContainerID: {
+        "\(runPrefix)ten-\(UUID().uuidString.lowercased().prefix(8))"
+      }
+    )
+    let fifty = try IdleContainerDensityPerformanceBenchmarkScenario(
+      density: .fifty,
+      containers: service,
+      statistics: service,
+      imageReference: image.reference,
+      expectedImageDigest: image.digest,
+      makeContainerID: {
+        "\(runPrefix)fifty-\(UUID().uuidString.lowercased().prefix(8))"
+      }
+    )
+    let stress = try PostStressMemoryPerformanceBenchmarkScenario(
+      containers: service,
+      commands: service,
+      statistics: service,
+      imageReference: image.reference,
+      expectedImageDigest: image.digest,
+      makeContainerID: {
+        "\(runPrefix)stress-\(UUID().uuidString.lowercased().prefix(8))"
+      }
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [ten, fifty, stress],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      )
+    )
+
+    let report: PerformanceBenchmarkReport
+    do {
+      report = try await benchmark.run { _ in }
+    } catch {
+      try await requireNoResidualContainers(prefix: runPrefix, service: service)
+      throw error
+    }
+    try await requireNoResidualContainers(prefix: runPrefix, service: service)
+    for outcome in report.outcomes {
+      if case .failed(let kind, let message) = outcome {
+        throw LivePerformanceBenchmarkError.scenarioFailed(
+          kind: kind.rawValue,
+          message: message
+        )
+      }
+    }
+    let tenObservation = try #require(await ten.observations().first)
+    let fiftyObservation = try #require(await fifty.observations().first)
+    let stressObservation = try #require(await stress.observations().first)
+    let output = LiveMemoryContractBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      appleContainerVersion: initialInventory.system.version,
+      imageReference: image.reference,
+      imageDigest: image.digest,
+      density: [
+        LiveIdleDensityObservation(tenObservation),
+        LiveIdleDensityObservation(fiftyObservation),
+      ],
+      stress: LivePostStressMemoryObservation(stressObservation)
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.memoryContractOutputMarker)\(json)")
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_POSTGRESQL"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_POSTGRESQL=1 with the selected PostgreSQL image already local."
+    )
+  )
+  func measuresPostgreSQLDurabilityAndFsyncWithoutResidue() async throws {
+    let service = AppleContainerService()
+    let imageReference =
+      ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_POSTGRESQL_IMAGE"
+      ] ?? "docker.io/library/postgres:17-alpine"
+    let initialInventory = try await service.loadInventory()
+    guard
+      let image = initialInventory.images.first(where: {
+        $0.reference == imageReference
+      })
+    else {
+      throw LivePerformanceBenchmarkError.missingLocalImage(imageReference)
+    }
+    let runPrefix =
+      "nativecontainers-postgres-\(UUID().uuidString.lowercased().prefix(8))-"
+    let scenario = try PostgreSQLDurabilityPerformanceBenchmarkScenario(
+      containers: service,
+      commands: service,
+      imageReference: image.reference,
+      expectedImageDigest: image.digest,
+      makeContainerID: {
+        "\(runPrefix)\(UUID().uuidString.lowercased().prefix(8))"
+      }
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 1,
+        measuredIterations: 3
+      )
+    )
+    let report: PerformanceBenchmarkReport
+    do {
+      report = try await benchmark.run { _ in }
+    } catch {
+      try await requireNoResidualContainers(prefix: runPrefix, service: service)
+      throw error
+    }
+    try await requireNoResidualContainers(prefix: runPrefix, service: service)
+    guard
+      let outcome = report.outcomes.first,
+      case .measured(let result) = outcome
+    else {
+      throw LivePerformanceBenchmarkError.missingScenarioResult(
+        PerformanceBenchmarkKind.postgreSQLDurability.rawValue
+      )
+    }
+    let observations = Array(
+      (await scenario.observations()).suffix(result.samples.count)
+    )
+    let output = LivePostgreSQLBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      appleContainerVersion: initialInventory.system.version,
+      imageReference: image.reference,
+      imageDigest: image.digest,
+      samplesNanoseconds: result.samples.map(\.durationNanoseconds),
+      observations: observations.map(LivePostgreSQLObservation.init)
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.postgreSQLOutputMarker)\(json)")
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_IMAGE_PULL"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1, NATIVECONTAINERS_LIVE_PERFORMANCE_IMAGE_PULL=1, and NATIVECONTAINERS_LIVE_PERFORMANCE_PULL_REFERENCE to a disposable remote reference absent locally."
+    )
+  )
+  func measuresImagePullAndAllocatedDiskGrowthWithoutResidue() async throws {
+    guard
+      let reference = ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_PULL_REFERENCE"
+      ]
+    else {
+      throw LivePerformanceBenchmarkError.missingImagePullReference
+    }
+    let service = AppleContainerService()
+    let initialInventory = try await service.loadInventory()
+    let scenario = try ImagePullDiskGrowthPerformanceBenchmarkScenario(
+      images: service,
+      storage: AppleRuntimeStorageUsageService(),
+      reference: reference
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      )
+    )
+    let report = try await benchmark.run { _ in }
+    guard
+      let outcome = report.outcomes.first,
+      case .measured(let result) = outcome,
+      let observation = await scenario.observations().first
+    else {
+      throw LivePerformanceBenchmarkError.missingScenarioResult(
+        PerformanceBenchmarkKind.imagePullAndDiskGrowth.rawValue
+      )
+    }
+    let residual = try await service.loadInventory().images.contains(where: {
+      $0.reference == observation.reference
+    })
+    guard !residual else {
+      throw LivePerformanceBenchmarkError.residualBuildImages([
+        observation.reference
+      ])
+    }
+    let output = LiveImagePullBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      appleContainerVersion: initialInventory.system.version,
+      sampleNanoseconds: result.samples[0].durationNanoseconds,
+      observation: LiveImagePullObservation(observation)
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.imagePullOutputMarker)\(json)")
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_NETWORK_COMPARISON"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1, NATIVECONTAINERS_LIVE_PERFORMANCE_NETWORK_COMPARISON=1, and NATIVECONTAINERS_LIVE_PERFORMANCE_HOST_PORT to an unused localhost TCP port."
+    )
+  )
+  func measuresNATAndDirectIPNetworkPathsWithoutResidue() async throws {
+    let environment = ProcessInfo.processInfo.environment
+    guard
+      let hostPortValue = environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE_HOST_PORT"
+      ],
+      let hostPort = UInt16(hostPortValue),
+      hostPort > 1
+    else {
+      throw LivePerformanceBenchmarkError.invalidHostPort
+    }
+    let service = AppleContainerService()
+    let imageReference =
+      environment["NATIVECONTAINERS_LIVE_PERFORMANCE_IMAGE"]
+      ?? "docker.io/library/alpine:3.21"
+    let initialInventory = try await service.loadInventory()
+    guard
+      let image = initialInventory.images.first(where: {
+        $0.reference == imageReference
+      })
+    else {
+      throw LivePerformanceBenchmarkError.missingLocalImage(imageReference)
+    }
+    let runPrefix =
+      "nativecontainers-network-compare-\(UUID().uuidString.lowercased().prefix(8))-"
+    let scenario = try NATDirectNetworkPerformanceBenchmarkScenario(
+      containers: service,
+      inventory: service,
+      commands: service,
+      hostPort: hostPort,
+      imageReference: image.reference,
+      expectedImageDigest: image.digest,
+      makeContainerID: {
+        "\(runPrefix)\(UUID().uuidString.lowercased().prefix(8))"
+      }
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 1,
+        measuredIterations: 3
+      )
+    )
+    let report: PerformanceBenchmarkReport
+    do {
+      report = try await benchmark.run { _ in }
+    } catch {
+      try await requireNoResidualContainers(prefix: runPrefix, service: service)
+      throw error
+    }
+    try await requireNoResidualContainers(prefix: runPrefix, service: service)
+    guard
+      let outcome = report.outcomes.first,
+      case .measured(let result) = outcome
+    else {
+      throw LivePerformanceBenchmarkError.missingScenarioResult(
+        PerformanceBenchmarkKind.natDirectNetworkComparison.rawValue
+      )
+    }
+    let observations = Array(
+      (await scenario.observations()).suffix(result.samples.count)
+    )
+    let output = LiveNetworkComparisonBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      appleContainerVersion: initialInventory.system.version,
+      imageReference: image.reference,
+      imageDigest: image.digest,
+      observations: observations.map(LiveNetworkComparisonObservation.init)
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.networkComparisonOutputMarker)\(json)")
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
           "NATIVECONTAINERS_LIVE_PERFORMANCE_BUILD"
         ] == "1",
       "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_BUILD=1 with Apple container services running and the selected base image already local."
@@ -2270,12 +3149,17 @@ struct LiveApplePerformanceBenchmarkTests {
   }
 }
 
-private struct LiveColdContainerStartupBenchmarkOutput: Encodable {
+private struct LiveContainerStartupBenchmarkOutput: Encodable {
   let generatedAt: Date
   let hostOperatingSystem: String
   let appleContainerVersion: String
   let imageReference: String
   let imageDigest: String
+  let results: [LiveContainerStartupBenchmarkResult]
+}
+
+private struct LiveContainerStartupBenchmarkResult: Encodable {
+  let kind: String
   let samplesNanoseconds: [UInt64]
   let medianMilliseconds: Double
   let p95Milliseconds: Double
@@ -2378,6 +3262,151 @@ private struct LiveIdleContainerResourceSample: Encodable {
   let processCount: UInt64
 }
 
+private struct LiveMemoryContractBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let appleContainerVersion: String
+  let imageReference: String
+  let imageDigest: String
+  let density: [LiveIdleDensityObservation]
+  let stress: LivePostStressMemoryObservation
+}
+
+private struct LiveIdleDensityObservation: Encodable {
+  let containerCount: Int
+  let initialTotalMemoryUsageBytes: UInt64
+  let finalTotalMemoryUsageBytes: UInt64
+  let initialMemoryUsageBytes: [UInt64]
+  let finalMemoryUsageBytes: [UInt64]
+
+  init(_ observation: IdleContainerDensityObservation) {
+    containerCount = observation.containerCount
+    initialTotalMemoryUsageBytes = observation.initialTotalMemoryUsageBytes
+    finalTotalMemoryUsageBytes = observation.finalTotalMemoryUsageBytes
+    initialMemoryUsageBytes = observation.initialMemoryUsageBytes
+    finalMemoryUsageBytes = observation.finalMemoryUsageBytes
+  }
+}
+
+private struct LivePostStressMemoryObservation: Encodable {
+  let baselineMemoryUsageBytes: UInt64
+  let stressedMemoryUsageBytes: UInt64
+  let retainedMemoryUsageBytes: UInt64
+  let memoryLimitBytes: UInt64
+  let workloadMebibytes: Int
+  let stopConfirmed: Bool
+
+  init(_ observation: PostStressMemoryObservation) {
+    baselineMemoryUsageBytes = observation.baselineMemoryUsageBytes
+    stressedMemoryUsageBytes = observation.stressedMemoryUsageBytes
+    retainedMemoryUsageBytes = observation.retainedMemoryUsageBytes
+    memoryLimitBytes = observation.memoryLimitBytes
+    workloadMebibytes = observation.workloadMebibytes
+    stopConfirmed = observation.stopConfirmed
+  }
+}
+
+private struct LivePostgreSQLBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let appleContainerVersion: String
+  let imageReference: String
+  let imageDigest: String
+  let samplesNanoseconds: [UInt64]
+  let observations: [LivePostgreSQLObservation]
+}
+
+private struct LivePostgreSQLObservation: Encodable {
+  let fsyncEnabled: Bool
+  let synchronousCommitEnabled: Bool
+  let pgTestFsyncCompleted: Bool
+  let committedRowCount: Int
+  let committedPayloadBytes: Int64
+
+  init(_ observation: PostgreSQLDurabilityObservation) {
+    fsyncEnabled = observation.fsyncEnabled
+    synchronousCommitEnabled = observation.synchronousCommitEnabled
+    pgTestFsyncCompleted = observation.pgTestFsyncCompleted
+    committedRowCount = observation.committedRowCount
+    committedPayloadBytes = observation.committedPayloadBytes
+  }
+}
+
+private struct LiveImagePullBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let appleContainerVersion: String
+  let sampleNanoseconds: UInt64
+  let observation: LiveImagePullObservation
+}
+
+private struct LiveImagePullObservation: Encodable {
+  let reference: String
+  let digest: String
+  let allocatedImageBytesBefore: UInt64
+  let allocatedImageBytesAfter: UInt64
+  let allocatedImageGrowthBytes: UInt64
+  let imageCountBefore: Int
+  let imageCountAfter: Int
+
+  init(_ observation: ImagePullDiskGrowthObservation) {
+    reference = observation.reference
+    digest = observation.digest
+    allocatedImageBytesBefore = observation.allocatedImageBytesBefore
+    allocatedImageBytesAfter = observation.allocatedImageBytesAfter
+    allocatedImageGrowthBytes = observation.allocatedImageGrowthBytes
+    imageCountBefore = observation.imageCountBefore
+    imageCountAfter = observation.imageCountAfter
+  }
+}
+
+private struct LiveNetworkComparisonBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let appleContainerVersion: String
+  let imageReference: String
+  let imageDigest: String
+  let observations: [LiveNetworkComparisonObservation]
+}
+
+private struct LiveNetworkComparisonObservation: Encodable {
+  let publishedHost: String
+  let publishedPort: UInt16
+  let directHost: String
+  let containerPort: UInt16
+  let payloadByteCount: Int
+  let requestCountPerRoute: Int
+  let publishedRoute: LiveNetworkRouteObservation
+  let directRoute: LiveNetworkRouteObservation
+
+  init(_ observation: NATDirectNetworkObservation) {
+    publishedHost = observation.publishedHost
+    publishedPort = observation.publishedPort
+    directHost = observation.directHost
+    containerPort = observation.containerPort
+    payloadByteCount = observation.payloadByteCount
+    requestCountPerRoute = observation.requestCountPerRoute
+    publishedRoute = LiveNetworkRouteObservation(observation.publishedRoute)
+    directRoute = LiveNetworkRouteObservation(observation.directRoute)
+  }
+}
+
+private struct LiveNetworkRouteObservation: Encodable {
+  let samplesNanoseconds: [UInt64]
+  let transferredByteCount: Int64
+  let medianLatencyNanoseconds: UInt64
+  let p95LatencyNanoseconds: UInt64
+  let throughputMebibytesPerSecond: Double?
+
+  init(_ observation: NetworkRoutePerformanceObservation) {
+    samplesNanoseconds = observation.samplesNanoseconds
+    transferredByteCount = observation.transferredByteCount
+    medianLatencyNanoseconds = observation.medianLatencyNanoseconds
+    p95LatencyNanoseconds = observation.p95LatencyNanoseconds
+    throughputMebibytesPerSecond = observation.throughputMebibytesPerSecond
+  }
+}
+
 private func nearestRankPercentile(_ values: [Double], _ percentile: Double) -> Double {
   guard !values.isEmpty else { return 0 }
   let sorted = values.sorted()
@@ -2407,6 +3436,8 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
   case missingMacVirtualMachineSource(UUID)
   case macVirtualMachineSourceChanged(UUID)
   case missingExternalNetworkFixture
+  case missingImagePullReference
+  case invalidHostPort
   case invalidIdleSamplingDuration(String)
   case missingIdleResourceObservations
   case residualContainers([String])
@@ -2434,6 +3465,10 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
       "The macOS virtual-machine benchmark source \(id.uuidString) changed during the live gate."
     case .missingExternalNetworkFixture:
       "Set the external-network benchmark URL, byte count, and lowercase SHA-256 fixture values."
+    case .missingImagePullReference:
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE_PULL_REFERENCE to a disposable remote image reference that is absent locally."
+    case .invalidHostPort:
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE_HOST_PORT to an unused TCP port between 2 and 65535."
     case .invalidIdleSamplingDuration(let value):
       "The idle-resource sampling duration “\(value)” is not between 1 and 300 seconds."
     case .missingIdleResourceObservations:
@@ -2449,7 +3484,7 @@ private enum LivePerformanceBenchmarkError: LocalizedError {
     case .residualBuildArtifacts(let paths):
       "The image-build benchmark left private artifacts behind: \(paths.joined(separator: ", "))."
     case .residualBuildImages(let references):
-      "The OCI-export benchmark unexpectedly changed the image store: \(references.joined(separator: ", "))."
+      "The image benchmark left unexpected image-store references: \(references.joined(separator: ", "))."
     case .scenarioFailed(let kind, let message):
       "The live \(kind) benchmark failed: \(message)"
     case .missingScenarioResult(let kind):
@@ -2738,6 +3773,104 @@ private enum LiveImageBuildPerformanceFixtureError: LocalizedError {
   }
 }
 
+private actor ImagePullPerformanceRuntimeDouble: ImageManaging {
+  private let plan: ImagePullPlan
+  private let result: ImagePullResult
+
+  private(set) var preparedReferences: [String] = []
+  private(set) var pulledPlans: [ImagePullPlan] = []
+  private(set) var deletedReferences: [String] = []
+
+  init(plan: ImagePullPlan, result: ImagePullResult) {
+    self.plan = plan
+    self.result = result
+  }
+
+  func prepareImagePull(
+    reference: String,
+    platform: ImagePlatformRequest,
+    transport: RegistryTransport,
+    unpackAfterPull: Bool,
+    maxConcurrentDownloads: Int
+  ) async throws -> ImagePullPlan {
+    preparedReferences.append(reference)
+    return plan
+  }
+
+  func pullImage(
+    _ plan: ImagePullPlan,
+    authorization: ImagePullAuthorization,
+    progress: @escaping ContainerProgressHandler
+  ) async throws -> ImagePullResult {
+    pulledPlans.append(plan)
+    return result
+  }
+
+  func prepareImageDeletion(reference: String) async throws -> ImageDeletionPlan {
+    ImageDeletionPlan(
+      reference: reference,
+      digest: result.digest,
+      aliases: [],
+      usedByContainerIDs: [],
+      isInfrastructureImage: false
+    )
+  }
+
+  func deleteImage(_ plan: ImageDeletionPlan) async throws -> ImageCleanupResult {
+    deletedReferences.append(plan.reference)
+    return ImageCleanupResult(
+      removedReferences: [plan.reference],
+      failedReferences: [],
+      removedBlobDigests: [plan.digest],
+      reclaimedBytes: 8_192
+    )
+  }
+}
+
+private actor ScriptedPerformanceStorageUsage: AppleRuntimeStorageUsageLoading {
+  private var values: [AppleRuntimeStorageUsage]
+  private(set) var loadCount = 0
+
+  init(values: [AppleRuntimeStorageUsage]) {
+    self.values = values
+  }
+
+  func loadAppleRuntimeStorageUsage() async throws -> AppleRuntimeStorageUsage {
+    loadCount += 1
+    guard !values.isEmpty else {
+      throw FixturePerformanceError.expected
+    }
+    return values.removeFirst()
+  }
+}
+
+private func performanceStorageUsage(
+  imageCount: Int,
+  allocatedImageBytes: UInt64
+) -> AppleRuntimeStorageUsage {
+  AppleRuntimeStorageUsage(
+    capturedAt: Date(timeIntervalSince1970: 1),
+    images: StorageResourceUsage(
+      totalCount: imageCount,
+      activeCount: 0,
+      allocatedBytes: allocatedImageBytes,
+      reclaimableBytes: allocatedImageBytes
+    ),
+    containers: StorageResourceUsage(
+      totalCount: 0,
+      activeCount: 0,
+      allocatedBytes: 0,
+      reclaimableBytes: 0
+    ),
+    volumes: StorageResourceUsage(
+      totalCount: 0,
+      activeCount: 0,
+      allocatedBytes: 0,
+      reclaimableBytes: 0
+    )
+  )
+}
+
 private actor ScriptedPerformanceScenario: PerformanceBenchmarkScenario {
   nonisolated let kind: PerformanceBenchmarkKind
 
@@ -2807,7 +3940,8 @@ private actor CancellingPerformanceScenario: PerformanceBenchmarkScenario {
 private actor ContainerStartupBenchmarkRuntimeDouble:
   ContainerCreating,
   ContainerLifecycleManaging,
-  ContainerStartupBenchmarkStateReading
+  ContainerStartupBenchmarkStateReading,
+  ContainerInventoryLoading
 {
   private(set) var calls: [String] = []
   private(set) var lastRequest: ContainerCreationRequest?
@@ -2818,9 +3952,14 @@ private actor ContainerStartupBenchmarkRuntimeDouble:
   private var imageReference: String?
   private var imageDigest: String?
   private let createdImageDigest: String
+  private let containerIPAddress: String
 
-  init(createdImageDigest: String = "sha256:fixture") {
+  init(
+    createdImageDigest: String = "sha256:fixture",
+    containerIPAddress: String = "192.0.2.44/24"
+  ) {
     self.createdImageDigest = createdImageDigest
+    self.containerIPAddress = containerIPAddress
   }
 
   func createContainer(
@@ -2909,6 +4048,59 @@ private actor ContainerStartupBenchmarkRuntimeDouble:
     )
   }
 
+  func loadInventory() async throws -> ContainerInventory {
+    let records: [ContainerRecord]
+    if let currentID,
+      let state,
+      let operationID,
+      let imageReference,
+      let imageDigest,
+      let lastRequest
+    {
+      records = [
+        ContainerRecord(
+          id: currentID,
+          imageReference: imageReference,
+          imageDigest: imageDigest,
+          platform: "linux/arm64",
+          state: state,
+          ipAddress: containerIPAddress,
+          createdAt: Date(timeIntervalSince1970: 1),
+          startedAt: startedAt,
+          cpuCount: lastRequest.cpuCount,
+          memoryBytes: lastRequest.memoryBytes,
+          ports: lastRequest.publishedPorts.map {
+            ContainerPort(
+              hostAddress: $0.hostAddress,
+              hostPort: $0.hostPort,
+              containerPort: $0.containerPort,
+              protocolName: $0.transportProtocol.rawValue
+            )
+          },
+          labels: [
+            AppleContainerOwnership.creationOperationLabel: operationID.uuidString
+          ]
+        )
+      ]
+    } else {
+      records = []
+    }
+    return ContainerInventory(
+      system: ContainerSystemInfo(
+        version: "fixture",
+        build: "fixture",
+        commit: "fixture",
+        applicationRoot: URL(filePath: "/tmp/application"),
+        installRoot: URL(filePath: "/tmp/install")
+      ),
+      containers: records,
+      images: [],
+      volumes: [],
+      networks: [],
+      machines: []
+    )
+  }
+
   func replaceCurrentContainer() {
     guard let currentID else { return }
     calls.append("replace:\(currentID)")
@@ -2921,6 +4113,96 @@ private actor ContainerStartupBenchmarkRuntimeDouble:
     guard currentID == id else {
       throw FixturePerformanceError.missingContainer
     }
+  }
+}
+
+private actor MultiContainerStartupBenchmarkRuntimeDouble:
+  ContainerCreating,
+  ContainerLifecycleManaging,
+  ContainerStartupBenchmarkStateReading
+{
+  private struct Record {
+    let operationID: UUID
+    let imageReference: String
+    let imageDigest: String
+    var state: RuntimeState
+    var startedAt: Date?
+  }
+
+  private var containers: [String: Record] = [:]
+
+  var containerCount: Int { containers.count }
+
+  func createContainer(
+    request: ContainerCreationRequest,
+    progress: @escaping ContainerProgressHandler
+  ) async throws {
+    guard containers[request.name] == nil else {
+      throw FixturePerformanceError.expected
+    }
+    containers[request.name] = Record(
+      operationID: request.operationID,
+      imageReference: request.imageReference,
+      imageDigest: "sha256:fixture",
+      state: .stopped,
+      startedAt: nil
+    )
+  }
+
+  func startContainer(id: String) async throws {
+    guard var record = containers[id] else {
+      throw FixturePerformanceError.missingContainer
+    }
+    record.state = .running
+    record.startedAt = Date(timeIntervalSince1970: 123)
+    containers[id] = record
+  }
+
+  func stopContainer(id: String) async throws {
+    guard var record = containers[id] else {
+      throw FixturePerformanceError.missingContainer
+    }
+    record.state = .stopped
+    containers[id] = record
+  }
+
+  func restartContainer(id: String) async throws {
+    try await startContainer(id: id)
+  }
+
+  func forceStopContainer(id: String) async throws {
+    try await stopContainer(id: id)
+  }
+
+  func deleteContainer(id: String) async throws {
+    guard containers.removeValue(forKey: id) != nil else {
+      throw FixturePerformanceError.missingContainer
+    }
+  }
+
+  func observation(
+    forContainerID id: String
+  ) async throws -> ContainerStartupBenchmarkObservation {
+    guard let record = containers[id] else {
+      throw FixturePerformanceError.missingContainer
+    }
+    return Self.observation(record)
+  }
+
+  func listedObservation(
+    forContainerID id: String
+  ) async throws -> ContainerStartupBenchmarkObservation? {
+    containers[id].map(Self.observation)
+  }
+
+  private static func observation(_ record: Record) -> ContainerStartupBenchmarkObservation {
+    ContainerStartupBenchmarkObservation(
+      state: record.state,
+      startedAt: record.startedAt,
+      operationID: record.operationID,
+      imageReference: record.imageReference,
+      imageDigest: record.imageDigest
+    )
   }
 }
 
@@ -3263,6 +4545,92 @@ private actor ExternalNetworkCommandRuntimeDouble: ContainerCommandRunning {
     return ContainerCommandResult(
       exitCode: 0,
       standardOutput: standardOutput,
+      standardError: "",
+      outputWasTruncated: false,
+      duration: .milliseconds(1)
+    )
+  }
+}
+
+private actor FixedContainerCommandRuntimeDouble: ContainerCommandRunning {
+  private(set) var containerIDs: [String] = []
+  private(set) var requests: [ContainerCommandRequest] = []
+
+  private let standardOutput: String
+
+  init(standardOutput: String) {
+    self.standardOutput = standardOutput
+  }
+
+  func executeCommand(
+    in id: String,
+    request: ContainerCommandRequest
+  ) async throws -> ContainerCommandResult {
+    containerIDs.append(id)
+    requests.append(request)
+    return ContainerCommandResult(
+      exitCode: 0,
+      standardOutput: standardOutput,
+      standardError: "",
+      outputWasTruncated: false,
+      duration: .milliseconds(1)
+    )
+  }
+}
+
+private actor PerformanceHTTPTransportDouble:
+  PerformanceBenchmarkHTTPTransferring
+{
+  private let payload: Data
+  private(set) var urls: [URL] = []
+
+  init(payload: Data) {
+    self.payload = payload
+  }
+
+  func fetch(_ url: URL) async throws -> Data {
+    urls.append(url)
+    return payload
+  }
+}
+
+private actor PostgreSQLCommandRuntimeDouble: ContainerCommandRunning {
+  private(set) var requests: [ContainerCommandRequest] = []
+
+  private var readinessExitCodes: [Int32]
+  private let verificationOutput: String
+
+  init(readinessExitCodes: [Int32], verificationOutput: String) {
+    self.readinessExitCodes = readinessExitCodes
+    self.verificationOutput = verificationOutput
+  }
+
+  func executeCommand(
+    in id: String,
+    request: ContainerCommandRequest
+  ) async throws -> ContainerCommandResult {
+    requests.append(request)
+    let exitCode: Int32
+    let output: String
+    switch request.executable {
+    case "/usr/local/bin/pg_isready":
+      exitCode =
+        readinessExitCodes.isEmpty
+        ? 1
+        : readinessExitCodes.removeFirst()
+      output = exitCode == 0 ? "accepting connections\n" : "no response\n"
+    case "/usr/local/bin/pg_test_fsync":
+      exitCode = 0
+      output = "Compare file sync methods using one 8kB write\n"
+    case "/usr/local/bin/psql":
+      exitCode = 0
+      output = verificationOutput
+    default:
+      throw FixturePerformanceError.expected
+    }
+    return ContainerCommandResult(
+      exitCode: exitCode,
+      standardOutput: output,
       standardError: "",
       outputWasTruncated: false,
       duration: .milliseconds(1)
