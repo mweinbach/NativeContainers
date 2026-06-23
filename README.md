@@ -205,8 +205,14 @@ contain up to eight objects with an absolute `sourcePath`, `guestName`, and
 targets. It is accepted only with guest input and required persisted media
 ejection; after the first hold, the harness requests a production guest stop,
 applies the production compute and DiskImageKit growth services while stopped,
-cold-starts the same VM, and opens a second command-driven console. Each shared
-directory entry goes through the production stopped-VM service,
+cold-starts the same VM, and opens a second command-driven console. An optional
+`lifecycleVerification` object supplies bounded
+`snapshotMutationVisualHoldSeconds`, `snapshotRestoreVisualHoldSeconds`, and
+`savedStateRestoreVisualHoldSeconds` stages. It requires the same input and
+persisted-ejection gates, creates and restores a production DiskImageKit
+checkpoint around the mutation stage, then saves and restores the exact running
+session before the final stage. Each shared directory entry goes through the
+production stopped-VM service,
 security-scoped bookmark validation, sidecar persistence, and runtime VirtioFS
 resolution; a successful start proves host attachment, while guest access still
 requires the documented
