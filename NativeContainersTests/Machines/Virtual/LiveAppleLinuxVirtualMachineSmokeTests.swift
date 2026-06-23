@@ -668,6 +668,26 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     #expect(probeAddresses.count == 253)
     #expect(probeAddresses.first == "192.168.128.2")
     #expect(probeAddresses.last == "192.168.128.254")
+    #expect(
+      Self.tcpProbeConfirmsReachability(
+        HostCommandResult(
+          exitCode: 1,
+          standardOutput: "",
+          standardError: "nc: connectx failed: Connection refused",
+          outputWasTruncated: false
+        )
+      )
+    )
+    #expect(
+      !Self.tcpProbeConfirmsReachability(
+        HostCommandResult(
+          exitCode: 1,
+          standardOutput: "",
+          standardError: "nc: connectx failed: Operation timed out",
+          outputWasTruncated: false
+        )
+      )
+    )
   }
 
   @Test("Live input command rejects symbolic and hard links")
@@ -1318,13 +1338,13 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         in: arp.standardOutput,
         matching: normalizedMACAddress
       ) {
-        let ping = try await commands.execute(
-          executableURL: URL(filePath: "/sbin/ping"),
-          arguments: ["-c", "1", "-W", "1000", peerAddress],
+        let tcpProbe = try await commands.execute(
+          executableURL: URL(filePath: "/usr/bin/nc"),
+          arguments: ["-4", "-n", "-z", "-G", "2", peerAddress, "1"],
           environment: nil,
           timeout: .seconds(5)
         )
-        if ping.exitCode == 0, !ping.outputWasTruncated {
+        if tcpProbeConfirmsReachability(tcpProbe) {
           return peerAddress
         }
       }
@@ -1367,8 +1387,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         for address in batch {
           group.addTask {
             _ = try? await FoundationHostCommandExecutor().execute(
-              executableURL: URL(filePath: "/sbin/ping"),
-              arguments: ["-c", "1", "-W", "100", address],
+              executableURL: URL(filePath: "/usr/bin/nc"),
+              arguments: ["-4", "-n", "-z", "-G", "1", address, "1"],
               environment: nil,
               timeout: .seconds(2)
             )
@@ -1376,6 +1396,17 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         }
       }
     }
+  }
+
+  private static func tcpProbeConfirmsReachability(
+    _ result: HostCommandResult
+  ) -> Bool {
+    guard !result.outputWasTruncated else { return false }
+    if result.exitCode == 0 { return true }
+    let detail = [result.standardError, result.standardOutput]
+      .joined(separator: "\n")
+      .lowercased()
+    return detail.contains("connection refused")
   }
 
   private static func arpPeerAddress(
