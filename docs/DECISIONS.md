@@ -751,12 +751,15 @@ its focused collaborators. A separate synchronous
 
 The report is generated from immutable fixtures tied to Socktainer 1.0.0,
 Docker Engine API 1.51, and release revision `876c2fc`. Each fixture declares
-the Engine operations required for one Compose behavior. Missing operations
-make that fixture unsupported; known semantic gaps such as network aliases,
-health checks, restart policies, configs, and secrets cannot become supported
-merely because create/inspect routes exist. Project lifecycle is a distinct
-policy-blocked fixture until a reviewed Compose model supplies desired replicas,
-orphan handling, volume intent, and frozen resource identities.
+the Engine operations required for one Compose behavior. Recreation, aliases,
+health checks, and restart policies additionally declare exact semantic-scenario
+IDs and require observed postconditions for every scenario. Missing operations
+or unpassed scenarios keep that fixture blocked; an HTTP 200 no-op cannot satisfy
+rename, connect, disconnect, or any other recreation mutation. Known semantic
+gaps such as network aliases, health checks, restart policies, configs, and
+secrets cannot become supported merely because create/inspect routes exist.
+Project lifecycle is a distinct partial fixture until the blocked semantics pass
+against one exact signed release.
 
 Settings may display the report as source-pinned evidence, including partial
 and blocked results, but must not present it as a live Compose run. The service
@@ -1523,6 +1526,17 @@ injects a fail-closed unavailable service until Xcode can add and sign the
 capability normally. The full adapter, orchestration, model, and UI remain
 compiled and deterministically tested in the meantime.
 
+**Recheck checkpoint — 2026-06-23:** Xcode 27 beta 2 build `27A5209h`
+ships the AccessoryAccess API and documents the entitlement, but its local
+capability and provisioning catalogs cannot issue it. A raw entitlement entry
+fails during provisioning, ad-hoc signing is rejected by AMFI as a restricted
+entitlement, and certificate-only signing is rejected because no matching
+profile authorizes the key. Keep the entitlement absent until a later Xcode or
+Developer Portal update can generate an Apple-signed profile containing it.
+Activation then requires a successful Xcode build, inspection of the signed
+product, and a disposable physical-USB passthrough check. The separate sandbox
+USB entitlement does not satisfy this gate.
+
 ## ADR-054: Sample host pressure only for new editable resource defaults
 
 **Status:** Accepted — 2026-06-21
@@ -2149,7 +2163,7 @@ cancellation.
 
 ## ADR-075: Keep remote build caches typed and keep SSH gated on a session API
 
-**Status:** Accepted — 2026-06-22
+**Status:** Superseded by ADR-090 — 2026-06-23
 
 NativeContainers exposes one optional remote registry-cache profile in each
 immutable image-build review. It is not a free-form `cache-from`/`cache-to`
@@ -2531,7 +2545,7 @@ non-features.
 
 ## ADR-088: Require Apple’s signed system runtime for the container lane
 
-**Status:** Accepted — 2026-06-23
+**Status:** Superseded by ADR-090 — 2026-06-23
 
 NativeContainers distributes the app and its private build worker, not a fork of
 Apple’s container runtime. The container and persistent-machine lanes require
@@ -2606,3 +2620,118 @@ window. The status item retains no resource snapshot of its own, and its popover
 receives the shared model only when presented. ADR-057 remains the historical
 record of the macOS 27 regression and disabled-scene mitigation, but its runtime
 gate is superseded by this bridge.
+
+## ADR-090: Offer one verified NativeContainers runtime beside Apple’s runtime
+
+**Status:** Accepted — 2026-06-23
+
+NativeContainers maintains two exact sibling forks: Apple `container` 1.0.0 as
+`1.0.0-nc.2`, and `container-builder-shim` 0.12.0 as `0.12.0-nc.2`. The app and
+its private build worker link the exact `container` fork tag. The runtime keeps
+the upstream `com.apple.container.*` Mach service names and protocol shapes so
+the signed Socktainer bridge remains compatible, but this also makes simultaneous
+Apple and NativeContainers service graphs invalid. Activation first verifies the
+target package receipt, version, artifact digests, code-signing team and
+identifiers, builder digest metadata, and launch-service executable paths. It
+then stops and proves absence of the current graph before starting the other;
+unknown or mixed owners fail closed. A failed transition stops the candidate and
+restarts the previously verified installation.
+
+The fork is a separate, manually installed system package rooted at
+`/Library/Application Support/NativeContainers/Runtime/1.0.0-nc.2`. The app
+does not download it, elevate, invoke Installer, or modify Apple’s `/usr/local`
+payload. Release packaging signs runtime executables with team `6UHAW5UAT4`,
+signs the component package with the matching Developer ID Installer identity,
+submits it for notarization, staples it, and verifies the installed receipt and
+payload before activation. Source staging or an Apple Development signature is
+never enough to enable conditional features.
+
+The runtime owns a separate user-data root at
+`~/Library/Application Support/NativeContainers/Container Runtime`. A one-time
+migration may run only while both graphs are stopped. It clone-or-copies images,
+volumes, networks, kernels, configuration, and machines into an exclusive
+staging root, excludes sockets, PIDs, launch plists, and logs, validates source
+stability and the staged copy, synchronizes it, and publishes with one atomic
+rename. Apple’s source remains unchanged. Rollback stops the fork and restarts
+Apple’s unchanged installation; it never deletes either data root.
+
+The package carries the exact Linux/arm64 builder-shim OCI archive from source
+revision `f66f1680fe6b74d814fb5527247e7d81227fcecb`, whose archive SHA-256 is
+`d872daa5ff4534aeb18fb747e015e56cef1cd1b584e05d725b72b624b41a7680`.
+Runtime startup imports it
+only when absent and requires image digest
+`sha256:b3574dc6b867fc91d1ed1d2941c74811961e2645ffa4c1fc68c19ae69e5fdbff`;
+builder startup rechecks the resolved image-manifest digest, never ImageStore's
+synthetic top-level index digest, and has no registry fallback. The package's
+root-owned `etc/container/config.toml` pins the same native reference and is
+verified at SHA-256
+`15d02e3707d200579e23f03cf883bc8980a9dc4bfc3ea4f6e09224b17737892a`
+before native activation.
+
+This fork adds two conditional capabilities. Versioned machine routes create,
+list, restore, clone, and delete at most eight named snapshots per stopped
+machine under generation and catalog-revision preconditions. Snapshot bundles
+capture the EXT4 root filesystem, machine and boot configuration, and
+initialization state. Restore uses a recoverable predecessor swap; clones obtain
+a new ID, remain stopped and non-default, and disconnect external home mounts.
+External home contents, logs, runtime memory, and attached external resources
+are excluded. Build protocol v7 separately carries only the reviewed SSH agent
+ID `default`. The app revalidates the socket device and inode before builder
+preparation and execution, while the runtime and builder shim register an SSH
+session attachable only for opted-in builds. Private-key files and key bytes are
+never accepted.
+
+## ADR-091: Seal local Compose configs and secrets into reviewed execution
+
+**Status:** Accepted implementation; execution blocked — 2026-06-23
+
+Local Docker Compose does not require Engine config or secret objects for the
+target source forms. NativeContainers therefore prepares project-local file
+configs and secrets, reviewed environment-backed configs and secrets, and
+literal config content through a two-stage API while keeping their execution
+blocked:
+`discoverInputRequirements(...)` returns only requirements and safe metadata;
+`review(..., inputs:)` consumes required environment values into an in-memory
+vault and returns the ordinary immutable project plan. External resources,
+drivers, templates, paths outside the project, and user labels in the reserved
+`com.nativecontainers.compose.*` namespace are rejected.
+
+File traversal is descriptor-relative and no-follow. Every component must be
+owned by the current user and not group/world writable; inputs must be
+single-link regular files. Secrets reuse the build-secret count and byte limits;
+configs are capped at 1 MiB each and 4 MiB total. File-backed uid/gid/mode values
+receive Docker Compose’s local ignored warning. Environment and literal forms
+remain Compose-owned and retain those requested attributes.
+
+The vault seals each resource and each service’s effective grants with HMAC-SHA256
+using a device-only Keychain key. Plans, labels, and journals contain only opaque
+seals; environment values and direct secret hashes do not persist. Reviewed file
+bytes are copied to a stable mode-0400 input store and the final canonical overlay
+uses those paths. Environment values enter only the bounded Compose child, whose
+raw diagnostics are suppressed for sensitive executions. The overlay adds
+`com.nativecontainers.compose.input-seal` and computes exact reviewed service
+hashes after the final labels and input rewrites. Execution must reproduce those
+hashes exactly.
+
+Fresh projects and contiguous create-missing replicas may consume the reviewed
+inputs only after the runtime gate below passes. A changed seal on an existing
+service is a replacement requirement, so the plan reports the existing
+recreation blocker instead of silently starting or reusing stale containers.
+
+Signed Socktainer 1.0.0 fails both local Compose delivery paths. File-backed
+sources become host-file bind mounts, but Apple host mounts require the source to
+be a directory, so container creation rejects the stable input file. Literal
+configs and reviewed environment configs/secrets reach Compose's pre-start
+archive injection, but the bridge returns that the container root filesystem is
+unavailable. Converting file sources to strings is not exact: files may contain
+arbitrary non-UTF-8 or NUL bytes, bind mounts differ from copied rootfs content,
+and Docker Compose's file-backed attribute behavior differs from injected forms.
+Starting the workload before injection would also expose the entrypoint to
+missing inputs. The production decoder therefore emits a signed-bridge blocker;
+only an explicit test gate exercises the dormant implementation and negative
+live fixture.
+
+Configs, secrets, recreation, aliases, health checks, and restart policies remain
+blocked until one exact signed Socktainer release passes their live semantic
+conformance contracts; partial current-main behavior does not change those
+claims.

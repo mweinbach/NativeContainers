@@ -87,10 +87,13 @@ The adapter maps those values into small `Sendable`, `Codable`, `Equatable`
 domain records. The rest of the app does not import Apple’s client products.
 This keeps UI tests fast and isolates package source changes.
 
-The official Apple `container` 1.0.0 installation remains the authority for
-runtime state. It is a separately installed, Apple-signed system prerequisite;
-the app does not bundle its executables or create a second database of
-containers, images, networks, or volumes.
+Exactly one verified runtime installation is authoritative at a time. The
+ordinary lane uses Apple’s separately installed `container` 1.0.0 package. The
+conditional snapshot/build-SSH lane uses the separately installed
+NativeContainers `1.0.0-nc.2` fork and its exclusive data root. Both retain the
+same `com.apple.container.*` Mach names, so a launch-graph classifier rejects
+mixed, incomplete, or unknown owners. The app embeds neither runtime and does
+not elevate or invoke Installer.
 
 Stopped-container filesystem export crosses a dedicated
 `ContainerFilesystemExporting` facet backed by the pinned public
@@ -156,6 +159,16 @@ authorization and confirms exit. Delete revalidates the complete creation
 identity immediately before Apple’s ID-only route, but Apple 1.0 exposes no
 conditional delete token, so a narrow external same-name replacement race
 remains.
+
+Stopped-machine snapshots cross a separate `LinuxMachineSnapshotManaging`
+boundary and are enabled only after the native runtime package and active launch
+graph pass full origin verification. The forked Machine API carries versioned
+create/list/restore/clone/delete requests with machine-generation and
+catalog-revision preconditions under the server’s machine lock. Its snapshot
+store keeps at most eight self-contained bundle copies, synchronizes staged
+state before publication, and journals restore/clone swaps for startup recovery.
+The app re-inspects the exact stopped machine before every request and maps only
+versioned domain values into the Snapshots UI.
 
 ### Kubernetes lane
 
@@ -542,8 +555,8 @@ reconciliation runs in a fresh uncancelled task. Deletion additionally requires
 both inventory and the exact builder bundle path to be absent; the service never
 manually removes an orphaned bundle or the separate builder-export directory.
 
-Worker protocol v6 reserves stdout for capped length-prefixed control frames
-and adds typed output/cache requests and artifact receipts without host destinations.
+Worker protocol v7 reserves stdout for capped length-prefixed control frames
+and adds typed output/cache/SSH requests and artifact receipts without host destinations.
 Its exact-length stdin decoder reads one metadata-only JSON request followed by
 a bounded binary secret envelope and final commit marker, then leaves stdin open
 as the parent-lifetime lease; secret bytes never enter Codable state, argv,
@@ -574,28 +587,33 @@ later image-store or destination publication step fails.
 Inspection/reset use the same lock and never mutate Apple's builder container or
 unrelated `<appRoot>/builder` exports.
 
-Build-time SSH mounts remain unavailable. Forwarding `SSH_AUTH_SOCK` into the
-builder container is not equivalent to BuildKit's SSH session attachable, and
-the pinned public `Builder.BuildConfig` exposes neither an SSH field nor a
-session provider. NativeContainers therefore does not reinterpret the socket as
-a build secret or copy private-key material into a layer. This is separate from
-the implemented SSH-agent forwarding for ordinary containers and Linux
-machines.
+Build-time SSH uses the existing reviewed `ContainerSSHAgentConfiguration` only
+when the verified NativeContainers runtime is active. Planning and execution
+revalidate the socket device/inode; the worker request carries only a boolean
+builder compatibility requirement and agent ID `default`. The runtime forwards
+the socket into a builder created with SSH support, emits exact `ssh: default`
+BuildKit metadata, and the pinned builder shim registers its agent provider only
+for that opted-in solve. Sensitive diagnostics are suppressed. No private-key
+path or bytes enter the context, control frame, history, layer, or artifact. The
+official Apple runtime remains unsupported rather than receiving an approximate
+fallback.
 
 Both sides use POSIX pipe reads for short framed traffic. Foundation’s counted
 pipe read can wait for the entire requested buffer or until EOF; the input lease
 is intentionally open, and the worker stays alive during a solve, so using it
 would deadlock request dispatch or buffer progress until the build had ended.
 
-The distributable GUI connects only to the matching official Apple `container`
-1.0.0 installation. Apple’s public clients and `system start` implementation
-use fixed `com.apple.container.*` Mach service labels, while Apple’s signed
-installer owns the multi-binary runtime under `/usr/local`. NativeContainers
-therefore does not embed or re-sign those services. Overview can link to Apple’s
-exact signed release and recover stopped services only after validating the
-root-owned CLI’s path, signature, signing team, identifier, and exact version.
-It verifies both container and machine APIs after startup before inventory is
-treated as available. ADR-088 records the distribution and upgrade boundary.
+Runtime distribution is a separate verified boundary. Apple’s package remains
+unchanged under `/usr/local`; the NativeContainers fork is manually installed
+under `/Library/Application Support/NativeContainers/Runtime/1.0.0-nc.2` and
+uses `~/Library/Application Support/NativeContainers/Container Runtime` for
+user data. Before connecting, the app verifies the selected receipt, exact
+version, every reviewed artifact digest, code-signing team/identifier, service
+executable paths, pinned builder metadata, and active graph origin. Activation
+stops and proves absence of one graph before starting the other, with rollback
+to the previously verified installation on failure. A one-time stopped-graph
+migration clone-copies persistent categories through validated staging and never
+modifies Apple’s source. ADR-090 supersedes the official-only ADR-088 boundary.
 
 Docker CLI and Compose compatibility are a separate service boundary. Apple’s
 core project intentionally exposes OCI/Dockerfile compatibility rather than the
@@ -695,6 +713,18 @@ the exact reviewed contiguous replica prefix, then uses `--no-recreate` only to
 create the missing suffix. Existing and final attachments are checked against
 Apple inventory. Unknown canonical keys, non-prefix replica sets, and resource
 identity drift fail closed.
+
+Configs and secrets use a two-stage review before that overlay. A non-interpolating
+canonical pass discovers project-local file, environment, and literal config
+sources; secure values remain in an in-memory vault. Descriptor-relative file
+review rejects links, special files, extra hard links, foreign ownership,
+group/world writes, and paths outside the project. A Keychain-held HMAC key
+produces opaque per-resource and per-service seals. File bytes move to stable
+mode-0400 inputs, environment values enter only the bounded Compose child, and
+the final overlay adds the input seal before calculating exact reviewed service
+hashes. Plans, labels, and journals never retain environment values or direct
+secret hashes. Existing containers with a different seal require recreation and
+therefore remain blocked instead of being reused.
 
 Compose 5.1.4 still has a replacement flow that deletes the old container before
 a rename that Socktainer 1.0.0 does not implement. Configuration/image drift and

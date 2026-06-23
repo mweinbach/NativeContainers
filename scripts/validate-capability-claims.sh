@@ -47,6 +47,18 @@ require_literal NativeContainers/App/Composition/AppCompositionRoot.swift \
 forbid_literal NativeContainers/NativeContainers.entitlements \
   'com.apple.developer.accessory-access.usb' \
   "USB entitlement while the feature matrix still marks activation blocked"
+forbid_literal NativeContainers/NativeContainers.entitlements \
+  'com.apple.security.device.usb' \
+  "sandbox USB entitlement while physical USB activation is blocked"
+forbid_literal project.yml \
+  'com.apple.developer.accessory-access.usb' \
+  "unprovisioned AccessoryAccess entitlement in the project specification"
+forbid_literal project.yml \
+  'com.apple.security.device.usb' \
+  "unrelated sandbox USB entitlement in the project specification"
+forbid_literal NativeContainers.xcodeproj/project.pbxproj \
+  'ENABLE_RESOURCE_ACCESS_USB' \
+  "generated sandbox USB build setting"
 require_literal docs/FEATURE_MATRIX.md \
   '| Physical USB passthrough | AccessoryAccess discovery + generation-pinned VZ XHCI controller service + app-scoped observable model | Blocked |' \
   "blocked USB product status"
@@ -66,6 +78,21 @@ done
 require_literal NativeContainers/Domain/ComposeBridgeConformanceModels.swift \
   'case upstreamBlocked' \
   "upstream-blocked Compose status"
+require_literal NativeContainers/Services/Compose/ComposeProjectLifecycleService.swift \
+  'func discoverInputRequirements(' \
+  "two-stage Compose input discovery API"
+require_literal NativeContainers/Services/Compose/ComposeProjectInputVault.swift \
+  'actor ComposeProjectInputVault' \
+  "in-memory Compose review vault"
+require_literal NativeContainers/Services/Compose/ComposeContainerLifecyclePlanner.swift \
+  'container.labels[ComposeLabelKey.inputSeal] != inputSeal' \
+  "stale Compose input recreation blocker"
+require_literal NativeContainers/Services/Compose/ComposeDesiredStateDecoder.swift \
+  'remain blocked by signed Socktainer 1.0.0' \
+  "production signed-bridge input blocker"
+require_literal docs/FEATURE_MATRIX.md \
+  'The local config/secret review vault, HMAC seals, bounded mode-0400 staging, redaction, and final-overlay hashing are implemented but dormant behind an execution blocker.' \
+  "qualified Compose input implementation claim"
 
 for requirement in \
   containerStartup \
@@ -89,10 +116,19 @@ require_literal docs/FEATURE_MATRIX.md \
   "performance coverage qualification"
 
 require_literal docs/FEATURE_MATRIX.md \
-  '| Persistent Apple-machine snapshots/backups | None | Upstream blocked |' \
-  "Apple-machine snapshot blocker"
+  '| Persistent Apple-machine snapshots/backups | Versioned fork Machine API + crash-safe snapshot catalog/store + native Snapshots UI | Conditional M3 |' \
+  "conditional Apple-machine snapshot claim"
 require_literal docs/FEATURE_MATRIX.md \
-  '| Build-time SSH forwarding | None | Upstream blocked |' \
-  "build-time SSH blocker"
+  '| Build-time SSH forwarding | Reviewed agent configuration + protocol-v7 worker + NativeContainers `container`/builder-shim forks | Conditional M2 |' \
+  "conditional build-time SSH claim"
+require_literal NativeContainers/Services/Machines/Linux/AppleMachineRuntimeClient.swift \
+  'struct NativeContainersLinuxMachineSnapshotRuntimeVerifier' \
+  "snapshot active-runtime gate"
+require_literal NativeContainers/Services/Images/ImageBuild/ImageBuildPlanningService.swift \
+  'struct NativeContainersImageBuildRuntimeCapabilityVerifier' \
+  "build SSH active-runtime gate"
+require_literal NativeContainers/Services/RuntimeDistribution/NativeRuntimeProductionVerifier.swift \
+  'struct ProductionActiveNativeRuntimeVerifier' \
+  "verified native runtime origin"
 
 echo "capability claim validation passed"

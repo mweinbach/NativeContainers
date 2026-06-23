@@ -8,10 +8,11 @@ must leave a usable, test-backed product slice.
 - [x] Native macOS app and unit-test targets build in Xcode.
 - [x] Add and signing-verify the required Virtualization entitlement through Xcode.
 - [x] Direct Apple client adapter reports container system health.
-- [x] Explicit external-runtime distribution contract for Apple `container`
-      1.0.0: official signed package prerequisite, exact path/version/signature
-      validation, bounded service recovery, container-plus-machine endpoint
-      verification, install handoff, archive exclusion, and source drift gate.
+- [x] Dual-runtime distribution contract: official Apple `container` 1.0.0 plus
+      a separately packaged NativeContainers `1.0.0-nc.2` fork, with exact
+      receipt/version/path/signature/digest checks, active-origin verification,
+      mutually exclusive service graphs, rollback, and no in-app elevation or
+      installation.
 - [x] Live inventories for containers, images, volumes, and Linux machines.
 - [x] Stable domain models and mockable service protocols.
 - [x] Extract inventory, creation, lifecycle, inspection/tooling, terminal,
@@ -85,9 +86,11 @@ must leave a usable, test-backed product slice.
       registry. Apple 1.0 exposes raw cache fields without an upstream contract
       test or cache-auth session, so the product currently limits the profile to
       endpoints the builder can already access.
-- [ ] Build-time SSH forwarding after Apple's public builder client exposes a
-      BuildKit SSH session/attachable contract. Container and Linux-machine SSH
-      agent forwarding are already implemented independently.
+- [x] Conditional build-time SSH forwarding through protocol v7 and the pinned
+      NativeContainers runtime/builder-shim forks. Only reviewed agent ID
+      `default` crosses the worker boundary; socket identity is revalidated
+      before builder preparation and execution, and the official Apple runtime
+      remains unsupported.
 - [x] Version-pinned Socktainer service with SHA-256 and Developer ID validation,
       HTTP-level readiness, exact-PID TERM-to-KILL/Force Stop recovery, stale
       socket cleanup, and a product-specific Docker context that never becomes
@@ -123,9 +126,13 @@ must leave a usable, test-backed product slice.
       container creation and inspection.
 - [ ] Compose health checks and restart policies after the pinned bridge exposes
       both configuration and authoritative runtime state.
-- [ ] Compose configs and secrets after the bridge exposes Docker Engine resource
-      contracts for each object type. Image-build secrets are a separate,
-      already-supported capability.
+- [ ] Local Compose configs and secrets without Engine objects. The two-stage
+      review vault, Keychain HMAC seals, stable mode-0400 file staging,
+      bounded/redacted child execution, final-overlay hashes, and stale-input
+      recreation blockers are implemented but kept dormant. Signed Socktainer
+      1.0.0 rejects file-source host mounts and exposes no root filesystem for
+      pre-start literal/environment archive injection; enable only after an
+      exact signed-runtime conformance pass.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [x] SSH agent forwarding and safe host-directory sharing.
@@ -154,9 +161,11 @@ must leave a usable, test-backed product slice.
       these controls.
 - [x] Native login-shell terminal and bounded shell-command runner with
       stopped-machine auto-start, mapped-user execution, and explicit KILL.
-- [ ] Persistent Apple-machine snapshots/backups after the runtime exposes a
-      create/restore or backup API. Apple 1.0's `MachineSnapshot` is an inventory
-      record; its `MachineClient` has no persistent snapshot mutation route.
+- [x] Conditional stopped Apple-machine snapshots through the NativeContainers
+      runtime fork: versioned create/list/restore/clone/delete routes, eight-name
+      bound, generation/catalog CAS, synchronized staging, recoverable restore,
+      fresh stopped clone identity, and native size/date/actions/exclusions UI.
+      The official Apple runtime remains unsupported.
 - [x] Transactional general-purpose GUI Linux VM bundle foundation through
       Virtualization.framework: durable EFI/NVRAM and machine identity, copied
       ISO media, stable MAC identity, secure artifact resolution, and a
@@ -271,6 +280,10 @@ must leave a usable, test-backed product slice.
         against disposable physical hardware. The installed Xcode MCP
         capability action does not yet recognize this macOS 27 entitlement, so
         the live composition currently detects its absence and fails closed.
+        Recheck after an Xcode or Developer Portal update can issue a profile
+        that explicitly authorizes the entitlement; `codesign` alone cannot
+        bypass the restricted-entitlement check (verified 2026-06-23 with
+        Xcode 27 beta 2 build `27A5209h`).
   - [ ] Add macOS guest clipboard integration only if Apple publishes a
         supported channel. The current SPICE clipboard API is Linux-specific.
   - [ ] Add physical bridging only if the restricted entitlement becomes
@@ -302,6 +315,13 @@ must leave a usable, test-backed product slice.
 
 ## M5 — Optimization and polish
 
+- [x] Separate NativeContainers runtime staging, deterministic builder archive,
+      pinned runtime manifest, package verification, activation/rollback, and
+      one-time stopped-graph data migration implementation.
+- [ ] Produce and acceptance-test the Developer ID Application/Installer signed,
+      notarized, and stapled `1.0.0-nc.2` runtime package. This machine currently
+      has only an Apple Development identity and no notary keychain profile, so
+      conditional snapshots and build SSH must remain disabled here.
 - [x] Launch-on-login through `SMAppService.mainApp`, with approval and
       unavailable states surfaced rather than inferred.
 - [x] Demand-started optional integrations: Docker compatibility and Compose

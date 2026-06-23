@@ -14,14 +14,15 @@ This repository is intentionally split into two runtime lanes:
   [`Virtualization.framework`](https://developer.apple.com/documentation/virtualization)
   directly, including `VZVirtualMachineView` for native guest display.
 
-The app targets Apple silicon and macOS 26 or newer. The container lane requires
-Apple `container` 1.0.0 from Apple’s
+The app targets Apple silicon and macOS 26 or newer. The ordinary container lane
+uses Apple `container` 1.0.0 from Apple’s
 [signed installer](https://github.com/apple/container/releases/tag/1.0.0).
-NativeContainers does not bundle or silently install that system runtime. When
-the services are unavailable, the Overview links to Apple’s exact release,
-validates the root-owned Apple-signed CLI at `/usr/local/bin/container`, starts
-the official services, and verifies both container and machine APIs before
-refreshing app state.
+Stopped-machine snapshots and Dockerfile SSH mounts additionally require the
+separately packaged NativeContainers runtime `1.0.0-nc.2`. The two installations
+retain Apple-compatible Mach service names, so only one may be active. The app
+verifies package receipts, versions, signatures, digests, executable paths, and
+the active service origin; it never bundles, elevates, or silently installs
+either runtime.
 
 ## Status
 
@@ -41,13 +42,17 @@ the remaining destructive VM verification passes are still open. See:
 
 The feature matrix is also the availability contract. In particular, physical
 USB is implemented but blocked in the current signed build by the unavailable
-AccessoryAccess USB entitlement. Compose recreation, aliases, health checks,
-restart policies, configs, and secrets are upstream-blocked by the pinned
-bridge; persistent Apple-machine snapshots and Dockerfile SSH mounts are absent
-from Apple container 1.0's public clients. Performance work comprises useful
-local and opt-in lanes, but none of the eight original benchmark requirements is
-fully covered yet. Menu-bar controls use an AppKit status item on macOS 27 and
-later rather than the looping SwiftUI `MenuBarExtra` scene.
+AccessoryAccess USB entitlement. The local Compose config/secret review vault,
+sealing, staging, and overlay implementation is present, but execution remains
+blocked by the pinned bridge: signed Socktainer 1.0.0 rejects host-file mounts
+and cannot accept archive injection before the container root filesystem exists.
+Compose recreation, aliases, health checks, and restart policies remain blocked
+by the pinned bridge. Persistent Apple-machine snapshots and
+Dockerfile SSH mounts are conditional on a verified active NativeContainers
+runtime; the official Apple runtime does not expose them. Performance work
+comprises useful local and opt-in lanes, but none of the eight original benchmark
+requirements is fully covered yet. Menu-bar controls use an AppKit status item on
+macOS 27 and later rather than the looping SwiftUI `MenuBarExtra` scene.
 
 The current foundation includes native container lifecycle and inspection,
 exec/copy and interactive PTY workflows, stopped-container root-filesystem
@@ -261,9 +266,20 @@ unique Alpine-derived image through the signed embedded worker, verify its
 snapshot and marker in a running container, and remove the test resources.
 The longer cancellation probe requires
 `NATIVECONTAINERS_LIVE_BUILD_CANCELLATION_TESTS=1`.
+`NATIVECONTAINERS_LIVE_BUILD_SSH_TESTS=1` is a separate native-runtime-only gate:
+it starts an ephemeral real SSH agent, signs and verifies a challenge during
+`RUN --mount=type=ssh`, and proves the socket and private-key material are absent
+from retained logs and the resulting image. It must not run against the official
+Apple runtime or an unverified source build.
 
 The reviewed Compose lifecycle wire probe is separately destructive and remains
 double gated. Set `NATIVECONTAINERS_LIVE_SOCKTAINER=1`,
 `NATIVECONTAINERS_LIVE_COMPOSE_LIFECYCLE=1`, and explicitly point
 `NATIVECONTAINERS_SOCKTAINER_BINARY` at the pinned bridge to exercise isolated
-Up, Stop, Start, and Down with Apple-inventory proof and exact cleanup.
+Up, Stop, Start, and Down with Apple-inventory proof and exact cleanup. A
+signed-runtime config/secret blocker fixture requires file-backed inputs to fail
+at container creation because Apple host mounts require directories, with exact
+cleanup and no input contents in reported diagnostics. A separate isolated
+signed-runtime probe established that literal and reviewed-environment inputs
+reach pre-start archive injection, where the bridge reports that the root
+filesystem is unavailable.

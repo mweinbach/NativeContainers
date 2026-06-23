@@ -3,8 +3,10 @@
 NativeContainers ships as one Apple-silicon macOS application. The signed
 `NativeContainersBuildWorker` executable is embedded once at
 `Contents/Helpers/NativeContainersBuildWorker`; it is not installed as a
-separate product. Apple’s container runtime is a separately installed,
-Apple-signed system prerequisite and is never copied into the app bundle.
+separate product. Runtime payloads are never copied into the app bundle. The
+ordinary lane uses Apple’s separately installed signed runtime; conditional
+machine snapshots and build SSH use a separately distributed NativeContainers
+runtime package that the app also does not install.
 
 ## Product contract
 
@@ -21,9 +23,11 @@ Apple-signed system prerequisite and is never copied into the app bundle.
   Apple container runtime executables.
 - Symbols: the archive contains app and build-worker dSYMs whose UUIDs match
   their corresponding signed executables.
-- Container-lane prerequisite: Apple `container` 1.0.0 installed from Apple’s
-  signed `com.apple.container-installer` package at `/usr/local`, with the CLI
-  signed as `com.apple.container.cli` by team `UPBK2H6LZM`.
+- Runtime prerequisite: either Apple `container` 1.0.0 from signed package
+  `com.apple.container-installer` under `/usr/local`, or the separately signed,
+  notarized, and stapled NativeContainers `1.0.0-nc.2` package under
+  `/Library/Application Support/NativeContainers/Runtime/1.0.0-nc.2`. Only one
+  compatible service graph may be active.
 
 ## Apple runtime prerequisite
 
@@ -51,9 +55,53 @@ Run the drift gate before building an archive:
 scripts/validate-runtime-distribution-contract.sh
 ```
 
+## NativeContainers runtime package
+
+The sibling `container` fork is pinned at `1.0.0-nc.2` and the sibling
+`container-builder-shim` fork at `0.12.0-nc.2` revision
+`f66f1680fe6b74d814fb5527247e7d81227fcecb`. The package owns only its
+versioned NativeContainers install root and carries a Linux/arm64 OCI archive
+with SHA-256
+`d872daa5ff4534aeb18fb747e015e56cef1cd1b584e05d725b72b624b41a7680` whose
+required image digest is
+`sha256:b3574dc6b867fc91d1ed1d2941c74811961e2645ffa4c1fc68c19ae69e5fdbff`.
+The digest gate resolves through Apple ImageStore's synthetic indirect index and
+compares the underlying image-manifest descriptor.
+The package also installs the root-owned `etc/container/config.toml` with exact
+SHA-256 `15d02e3707d200579e23f03cf883bc8980a9dc4bfc3ea4f6e09224b17737892a`;
+activation verifies it before connecting to the native service graph.
+It retains Apple-compatible Mach service names, so installation does not start
+or register it and activation is mutually exclusive with Apple’s graph.
+
+Build the fork binaries through Xcode, then run its fail-closed release packaging
+script with the exact prebuilt binary directory, verified builder OCI archive,
+Developer ID Application identity, Developer ID Installer identity, notary
+keychain profile, output directory, and an explicit
+`NativeRuntimeReleaseContract.json` output path. The script stages only reviewed paths,
+signs and verifies every runtime executable, builds and signs package
+`com.nativecontainers.runtime`, submits it with `notarytool --wait`, staples it,
+and verifies the package signature and ticket. Only after those code-signature
+checks does it generate and canonically reverify the six signed-binary SHA-256
+values plus the exact runtime/builder identity consumed by the app. The app
+never invokes this script or Installer.
+
+The checked-in app resource is deliberately a schema-0 fail-closed placeholder.
+For a coordinated Developer ID release, point the runtime packaging command's
+contract output at `NativeContainers/Resources/NativeRuntimeReleaseContract.json`
+before archiving and sign the app only after the generated schema-1 contract is
+present. Do not hand-edit or synthesize this file. A source/development archive
+with the placeholder continues to support the verified official Apple runtime,
+but cannot enable machine snapshots or build SSH.
+
+After manual installation, NativeContainers verifies the package receipt,
+version, artifact digests, signing team/identifiers, builder metadata, service
+executable paths, and active launch graph before enabling snapshots or build
+SSH. Source builds, ad-hoc signatures, and Apple Development signatures do not
+satisfy this gate.
+
 ## Create and validate a local archive
 
-1. Validate the external Apple runtime distribution contract:
+1. Validate the dual-runtime distribution contract:
 
    ```sh
    scripts/validate-runtime-distribution-contract.sh
@@ -135,5 +183,8 @@ for account and submission details.
 ## Current signing prerequisite
 
 The local keychain currently has an Apple Development identity but no Developer
-ID Application identity. Local archive readiness is verified; public signing,
-notarization, and stapling remain pending until that credential is provisioned.
+ID Application or Developer ID Installer identity, and no
+`NativeContainers-notary` keychain profile. Local archive readiness can be
+verified; public app signing and the separate runtime package’s signing,
+notarization, and stapling remain pending until those credentials are
+provisioned.

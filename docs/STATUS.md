@@ -13,8 +13,8 @@ Updated: 2026-06-23.
   worker, both strictly signed by team `6UHAW5UAT4` with hardened runtime. The
   archive validator confirms that the app carries only microphone input and
   virtualization while the worker carries no app capability.
-- The current full app-hosted Xcode run contains 1,164 expanded outcomes: all
-  1,133 deterministic outcomes passed, with 31 destructive or external-service
+- The current full app-hosted Xcode run contains 1,251 test results: all
+  1,217 deterministic results passed, with 34 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
   tests. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
@@ -2132,3 +2132,62 @@ for that destructive integration pass.
   build completed in 6.326 seconds with no warning-level build-log entries.
   A pre-existing app process prevented an isolated current-head window launch,
   so it was left untouched and no visual or idle-CPU claim is inferred from it.
+
+## Compose inputs and NativeContainers runtime checkpoint
+
+- Compose config/secret review is implemented as a two-stage discovery and
+  review boundary. Environment values remain in an in-memory vault; Keychain
+  HMAC seals, descriptor-relative file validation, bounded mode-0400 stable
+  copies, redacted child-process diagnostics, final-overlay hashes, and the
+  reserved service input-seal label make changed inputs require replacement.
+  File, environment, and literal config sources plus file and environment secret
+  sources have deterministic coverage. Execution remains blocked: live tests
+  against signed Socktainer 1.0.0 proved that Apple host mounts reject files and
+  pre-start archive injection has no container root filesystem. The app does not
+  approximate those semantics or advertise the dormant path as supported.
+- Signed-release conformance now requires 41 observed semantic scenarios before
+  recreation, aliases, health checks, or restart policies can be enabled: eight
+  recreation, seven alias, sixteen health, and ten restart-policy cases. Every
+  case requires a state postcondition, so HTTP 200 no-ops cannot satisfy the
+  gate. Socktainer 1.0.0 passes none of those scenarios and all four features
+  remain upstream-blocked.
+- The sibling forks are immutably pinned at `container` `1.0.0-nc.2` revision
+  `3abca3683c9dd81d1ce3a1b20c13688b2e0888e6` and builder shim
+  `0.12.0-nc.2` revision `f66f1680fe6b74d814fb5527247e7d81227fcecb`.
+  The reproducible Linux/arm64 OCI archive has SHA-256
+  `d872daa5ff4534aeb18fb747e015e56cef1cd1b584e05d725b72b624b41a7680`
+  and resolved manifest digest
+  `sha256:b3574dc6b867fc91d1ed1d2941c74811961e2645ffa4c1fc68c19ae69e5fdbff`.
+  The fork keeps Apple-compatible Mach names, restores Apple’s builder as the
+  official default, and selects the exact native image only through the
+  separately packaged runtime config.
+- Runtime management is reachable in Settings. It verifies package receipts,
+  versions, every listed digest, code-signing identities, launch-service paths,
+  and active graph ownership before connection or switching. Apple and native
+  graphs are mutually exclusive; activation has verified rollback. The one-time
+  migration clone runs with both graphs stopped, copies only reviewed persistent
+  content/configuration/machine paths into an exclusive staging root, publishes
+  atomically, and never changes or deletes Apple’s source data.
+- The forked Machine API and native UI implement stopped-only create, list,
+  restore, clone, and delete for up to eight snapshots with generation/catalog
+  compare-and-swap and crash recovery. Snapshot publication rejects links,
+  special files, extra hard links, foreign ownership, and writable group/world
+  modes; size reports allocated restorable bytes. Build protocol v7 separately
+  forwards only reviewed SSH agent ID `default`, revalidates the socket twice,
+  suppresses sensitive diagnostics, and registers no attachable without opt-in.
+  Both capabilities remain conditional on an installed, fully verified native
+  runtime; no native package is installed on this host.
+- Builder-shim Go tests, OCI verification, runtime package preflight/tamper
+  tests, the runtime fork’s 21 focused tests, the app’s 120 focused runtime
+  tests, and the live official-runtime gate pass. The exact app package pin
+  resolves to `1.0.0-nc.2`. The complete app test action reports 1,251 total:
+  1,217 passed, 34 explicit live/destructive gates skipped, and zero failures;
+  its result bundle reports zero build warnings or errors. All four repository
+  contract validators, strict Swift formatting, JSON/project parsing, and diff
+  whitespace checks pass.
+- A signed/notarized native runtime package and its generated signed-binary
+  release contract could not be produced on this host because the required
+  Developer ID Application/Installer identities and notary profile are absent.
+  The bundled schema-0 placeholder therefore fails closed. Native snapshot and
+  build-SSH live tests remain gated until those release credentials produce a
+  manually installed notarized package.

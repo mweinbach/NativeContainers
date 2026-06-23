@@ -20,6 +20,7 @@ stop before commit.
 | macOS and GUI Linux VM library | `~/Library/Application Support/NativeContainers/Virtual Machines` | VM manifest v1 plus independently versioned shared-folder and saved-state metadata | One stopped bundle; copy metadata and changed small artifacts before manifest replacement. Disk payloads are never duplicated merely to change metadata. |
 | macOS restore images | `~/Library/Application Support/NativeContainers/Restore Images` | Store layout plus operation journals | One exact image and journal. The completed Caches-to-Application-Support migration deliberately retains the old artifact. |
 | Container host-folder selections | `~/Library/Application Support/NativeContainers/Container Host Directories/v1` | Manifest v1 | One operation manifest, including its security-scoped bookmarks. |
+| Stable file-backed Compose inputs | `~/Library/Application Support/NativeContainers/Compose/Projects/<project>/input-<opaque-HMAC>.data` | Opaque HMAC name + mode-0400 bytes | Preserve while any managed service seal references the input. Values are never logged or replaced in place. Environment-backed values are not stored here. |
 | Terminal presets | `UserDefaults` key `terminal.presets.v1` | Envelope v1 | One encoded envelope copied before replacement. |
 | Menu-bar preference | `UserDefaults` key `app.menuBarExtra.isInserted` | Scalar | Preserve the prior scalar or remove a newly introduced key. |
 
@@ -48,7 +49,9 @@ journal.
 
 - `~/Library/Application Support/NativeContainers/Build Contexts`
 - `~/Library/Application Support/NativeContainers/Build Artifacts`
-- `~/Library/Application Support/NativeContainers/Compose/Projects`
+- operation-scoped immutable Compose configuration files beneath
+  `~/Library/Application Support/NativeContainers/Compose/Projects` (stable
+  `input-<opaque-HMAC>.data` files are excluded)
 - `~/Library/Application Support/NativeContainers/Compatibility/Socktainer`
 - `~/Library/Application Support/NativeContainers/Compatibility/DockerCompose`
 - the namespaced app-owned BuildKit cache beneath Apple's builder export root
@@ -77,6 +80,24 @@ owned by an app-update migration:
 A migration may revalidate an external identity. It may not start, stop, delete,
 retag, log out, move, or rewrite an external authority as a side effect of app
 upgrade.
+
+### NativeContainers runtime clone migration
+
+Activation of the separately packaged NativeContainers runtime has one explicit
+exception to ordinary app-update migration: an operator may request a one-time
+clone of Apple runtime state into the fork’s exclusive data root. This is not
+triggered by application launch or version change.
+
+Both Apple and NativeContainers launch graphs must be stopped before and after
+copying. The migration clone-or-copies only the reviewed images/content,
+volumes, networks, kernels, configuration, and machines categories into an
+exclusive sibling staging root. It rejects links, special files, extra hard
+links, foreign ownership, group/world-writable sources, and source drift;
+sockets, PIDs, launch plists, and logs are excluded. The complete staged tree and
+completion marker are synchronized and atomically renamed into the previously
+absent NativeContainers data root. Apple’s source data is never modified or
+deleted. Rollback stops the fork and restarts the verified official graph rather
+than copying data back over Apple’s root.
 
 ## Required migration protocol
 

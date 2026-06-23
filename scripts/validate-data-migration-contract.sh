@@ -91,9 +91,21 @@ require_literal NativeContainers/Services/Containers/TerminalPresetStore.swift \
 require_literal NativeContainers/App/AppPreferences.swift \
   'static let menuBarExtraInserted = "app.menuBarExtra.isInserted"' \
   "menu-bar preference key"
+require_literal NativeContainers/Services/Compose/ComposeExecutionWorkspace.swift \
+  'path: "Compose"' \
+  "stable Compose input root"
 require_literal NativeContainers/Services/Images/Registry/AppleRegistryService.swift \
   'KeychainHelper(securityDomain: Constants.keychainID)' \
   "external registry Keychain authority"
+require_literal NativeContainers/Services/RuntimeDistribution/NativeRuntimeProductionContracts.swift \
+  'path: "Library/Application Support/NativeContainers/Container Runtime"' \
+  "isolated NativeContainers runtime data root"
+require_literal NativeContainers/Services/RuntimeDistribution/NativeRuntimeMigrationService.swift \
+  'try await requireBothRuntimesInactive()' \
+  "stopped dual-runtime migration gate"
+require_literal NativeContainers/Services/RuntimeDistribution/NativeRuntimeMigrationPublisher.swift \
+  'renameatx_np' \
+  "atomic runtime migration publication"
 
 for phrase in \
   'Authoritative app-owned data' \
@@ -115,5 +127,9 @@ require_literal README.md '[User-data migration and rollback](docs/DATA_MIGRATIO
   "README migration contract link"
 require_literal "$contract" '`~/.socktainer` compatibility socket/process workspace' \
   "external Socktainer workspace classification"
+require_literal "$contract" '### NativeContainers runtime clone migration' \
+  "NativeContainers runtime clone migration section"
+require_literal "$contract" 'Apple’s source data is never modified or' \
+  "non-destructive Apple runtime migration boundary"
 
 echo "data migration contract validation passed"
