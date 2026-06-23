@@ -55,6 +55,13 @@ struct ExportVirtualMachineView: View {
         )
         .font(.callout)
         .foregroundStyle(.secondary)
+      case .windows:
+        Label(
+          "Shared-folder bookmarks stay on this Mac; the package retains its encrypted guest-agent identity.",
+          systemImage: "folder.badge.minus"
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
       }
 
       if let errorMessage {

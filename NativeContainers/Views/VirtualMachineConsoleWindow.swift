@@ -52,6 +52,11 @@ private struct VirtualMachineConsoleRuntimeContent: View {
         machine: machine,
         model: appModel.makeLinuxVirtualMachineRuntimeModel(for: machine)
       )
+    case .windows:
+      LinuxVirtualMachineRuntimeView(
+        machine: machine,
+        model: appModel.makeLinuxVirtualMachineRuntimeModel(for: machine)
+      )
     }
   }
 }

@@ -23,6 +23,14 @@ protocol LinuxVirtualMachinePreparing: Sendable {
   ) async throws -> VirtualMachineManifest
 }
 
+protocol WindowsVirtualMachinePreparing: Sendable {
+  func prepareWindowsVM(
+    id: UUID,
+    installationMediaURL: URL,
+    securityMode: WindowsVirtualMachineSecurityMode
+  ) async throws -> VirtualMachineManifest
+}
+
 protocol VirtualMachineDiscarding: Sendable {
   func discardVirtualMachine(id: UUID) async throws
 }
@@ -36,6 +44,7 @@ protocol VirtualMachineLibraryProtocol:
   VirtualMachineDraftCreating,
   MacVirtualMachinePreparing,
   LinuxVirtualMachinePreparing,
+  WindowsVirtualMachinePreparing,
   VirtualMachineDiscarding
 {}
 
@@ -51,6 +60,16 @@ extension LinuxVirtualMachinePreparing {
     installationMediaURL: URL
   ) async throws -> VirtualMachineManifest {
     throw VirtualMachineModelError.linuxPlatformPreparationUnavailable
+  }
+}
+
+extension WindowsVirtualMachinePreparing {
+  func prepareWindowsVM(
+    id: UUID,
+    installationMediaURL: URL,
+    securityMode: WindowsVirtualMachineSecurityMode
+  ) async throws -> VirtualMachineManifest {
+    throw VirtualMachineModelError.windowsPlatformPreparationUnavailable
   }
 }
 
@@ -137,6 +156,7 @@ actor VirtualMachineLibrary:
   private let launchID: UUID
   private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
   private let linuxPlatformArtifactPreparer: any LinuxPlatformArtifactPreparing
+  private let windowsPlatformArtifactPreparer: any WindowsPlatformArtifactPreparing
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
   private let linuxVirtualMachineBundleResolver: any LinuxVirtualMachineBundleResolving
   private let linuxVirtualMachineIdentityGenerator: any LinuxVirtualMachineIdentityGenerating
@@ -155,6 +175,8 @@ actor VirtualMachineLibrary:
     macPlatformArtifactPreparer: any MacPlatformArtifactPreparing = MacPlatformArtifactPreparer(),
     linuxPlatformArtifactPreparer: any LinuxPlatformArtifactPreparing =
       LinuxPlatformArtifactPreparer(),
+    windowsPlatformArtifactPreparer: any WindowsPlatformArtifactPreparing =
+      WindowsPlatformArtifactPreparer(),
     macMachineIdentifierValidator: any MacVirtualMachineIdentifierValidating =
       AppleMacVirtualMachineIdentifierGenerator(),
     linuxIdentityGenerator: any LinuxVirtualMachineIdentityGenerating =
@@ -187,6 +209,7 @@ actor VirtualMachineLibrary:
     self.bundleStore = bundleStore
     self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
     self.linuxPlatformArtifactPreparer = linuxPlatformArtifactPreparer
+    self.windowsPlatformArtifactPreparer = windowsPlatformArtifactPreparer
     self.macVirtualMachineBundleResolver = bundleResolver
     self.linuxVirtualMachineBundleResolver = linuxBundleResolver
     self.linuxVirtualMachineIdentityGenerator = linuxIdentityGenerator
@@ -556,7 +579,7 @@ actor VirtualMachineLibrary:
     id: UUID
   ) throws -> VirtualMachineDiskSnapshotConfiguration {
     try linuxRuntimeManifest(id: id)
-      .effectiveLinuxDiskSnapshotConfiguration
+      .effectiveDiskSnapshotConfiguration
   }
 
   func commitLinuxDiskSnapshotConfiguration(
@@ -568,11 +591,11 @@ actor VirtualMachineLibrary:
     defer { borrow.release() }
     let bundleURL = try requireConfigurationMutationLease(lease)
     var manifest = try linuxRuntimeManifest(id: lease.target.machineID)
-    let current = manifest.effectiveLinuxDiskSnapshotConfiguration
+    let current = manifest.effectiveDiskSnapshotConfiguration
 
     guard manifest.installState == .stopped,
       current == expected,
-      lease.machine.manifest.effectiveLinuxDiskSnapshotConfiguration
+      lease.machine.manifest.effectiveDiskSnapshotConfiguration
         == expected,
       expected.revision < UInt64.max,
       configuration.revision == expected.revision + 1
@@ -589,7 +612,11 @@ actor VirtualMachineLibrary:
       )
     }
 
-    manifest.linuxDiskSnapshotConfiguration = configuration
+    if manifest.guest == .windows {
+      manifest.windowsDiskSnapshotConfiguration = configuration
+    } else {
+      manifest.linuxDiskSnapshotConfiguration = configuration
+    }
     manifest.updatedAt = Date()
     try bundleStore.write(
       manifest,
@@ -844,19 +871,19 @@ actor VirtualMachineLibrary:
     let bundleURL = try requireConfigurationMutationLease(lease)
     var manifest = try linuxRuntimeManifest(id: lease.target.machineID)
     let resizeArtifactPath =
-      manifest.effectiveLinuxDiskSnapshotConfiguration.layers.last?.relativePath
+      manifest.effectiveDiskSnapshotConfiguration.layers.last?.relativePath
       ?? manifest.diskImagePath
 
     guard commit.machineID == manifest.id,
-      commit.guest == .linux,
+      commit.guest == manifest.guest,
       commit.diskImagePath == manifest.diskImagePath,
       commit.resizeArtifactPath == resizeArtifactPath,
       commit.diskImageFormat == manifest.effectiveDiskImageFormat,
       lease.machine.manifest.diskImagePath == manifest.diskImagePath,
       lease.machine.manifest.effectiveDiskImageFormat
         == manifest.effectiveDiskImageFormat,
-      lease.machine.manifest.effectiveLinuxDiskSnapshotConfiguration
-        == manifest.effectiveLinuxDiskSnapshotConfiguration,
+      lease.machine.manifest.effectiveDiskSnapshotConfiguration
+        == manifest.effectiveDiskSnapshotConfiguration,
       lease.machine.manifest.resources.diskBytes
         == manifest.resources.diskBytes,
       manifest.resources.diskBytes == commit.sourceLogicalBytes
@@ -1088,6 +1115,88 @@ actor VirtualMachineLibrary:
     }
   }
 
+  func prepareWindowsVM(
+    id: UUID,
+    installationMediaURL: URL,
+    securityMode: WindowsVirtualMachineSecurityMode
+  ) async throws -> VirtualMachineManifest {
+    try bundleStore.ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
+    let bundleURL = bundleStore.bundleURL(for: id)
+    guard fileManager.fileExists(atPath: bundleURL.path) else {
+      throw VirtualMachineModelError.virtualMachineNotFound(id)
+    }
+
+    var manifest = try bundleStore.readManifest(in: bundleURL)
+    guard manifest.guest == .windows else {
+      throw VirtualMachineModelError.requiresWindowsGuest(id)
+    }
+    guard manifest.installState == .draft else {
+      throw VirtualMachineModelError.invalidInstallState(manifest.installState)
+    }
+
+    let finalArtifactDirectory = bundleURL.appending(
+      path: WindowsPlatformArtifactURLs.directoryName,
+      directoryHint: .isDirectory
+    )
+    guard manifest.windowsConfiguration == nil,
+      !fileManager.fileExists(atPath: finalArtifactDirectory.path)
+    else {
+      throw VirtualMachineModelError.windowsPlatformArtifactsAlreadyExist(id)
+    }
+
+    let stagingDirectory = bundleURL.appending(
+      path: ".\(WindowsPlatformArtifactURLs.directoryName).partial-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    let stagingArtifacts = WindowsPlatformArtifactURLs(directory: stagingDirectory)
+    var promotedArtifacts = false
+
+    do {
+      try fileManager.createDirectory(
+        at: stagingDirectory,
+        withIntermediateDirectories: false
+      )
+      let preparation = try await windowsPlatformArtifactPreparer.prepare(
+        installationMediaURL: installationMediaURL,
+        destination: stagingArtifacts,
+        securityMode: securityMode
+      )
+      try bundleStore.validatePreparedArtifacts(stagingArtifacts)
+
+      try fileManager.moveItem(at: stagingDirectory, to: finalArtifactDirectory)
+      promotedArtifacts = true
+
+      manifest.markReadyToInstallWindows(
+        configuration: WindowsVirtualMachineConfiguration(
+          efiVariableStorePath: WindowsPlatformArtifactURLs.efiVariableStoreManifestPath,
+          machineIdentifierPath: WindowsPlatformArtifactURLs.machineIdentifierManifestPath,
+          installationMediaPath: WindowsPlatformArtifactURLs.installationMediaManifestPath,
+          setupConfigurationMediaPath:
+            WindowsPlatformArtifactURLs.setupConfigurationMediaManifestPath,
+          guestAgentSecretPath: WindowsPlatformArtifactURLs.guestAgentSecretManifestPath,
+          installationMedia: preparation.installationMedia,
+          macAddress: preparation.macAddress,
+          securityMode: securityMode
+        )
+      )
+      try bundleStore.write(
+        manifest,
+        to: bundleURL.appending(path: Self.manifestFilename)
+      )
+      return manifest
+    } catch {
+      try? fileManager.removeItem(at: stagingDirectory)
+      if promotedArtifacts {
+        try? fileManager.removeItem(at: finalArtifactDirectory)
+      }
+      throw error
+    }
+  }
+
   func discardVirtualMachine(id: UUID) async throws {
     try discardVirtualMachine(id: id, expectedManifest: nil)
   }
@@ -1164,6 +1273,8 @@ actor VirtualMachineLibrary:
         throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
       case .linux:
         throw LinuxVirtualMachineRuntimeError.ownedElsewhere(id)
+      case .windows:
+        throw LinuxVirtualMachineRuntimeError.ownedElsewhere(id)
       }
     }
     runtimeLock = acquiredRuntimeLock
@@ -1175,10 +1286,13 @@ actor VirtualMachineLibrary:
 
     let linuxMACAddress =
       source.guest == .linux ? try makeUniqueLinuxMACAddress() : nil
+    let windowsMACAddress =
+      source.guest == .windows ? try makeUniqueLinuxMACAddress() : nil
     let clone = try VirtualMachineManifest(
       cloning: source,
       name: name,
-      linuxMACAddress: linuxMACAddress
+      linuxMACAddress: linuxMACAddress,
+      windowsMACAddress: windowsMACAddress
     )
     let finalBundleURL = bundleStore.bundleURL(for: clone.id)
     guard !fileManager.fileExists(atPath: finalBundleURL.path) else {
@@ -1255,6 +1369,8 @@ actor VirtualMachineLibrary:
         throw MacVirtualMachineRuntimeError.ownedElsewhere(id)
       case .linux:
         throw LinuxVirtualMachineRuntimeError.ownedElsewhere(id)
+      case .windows:
+        throw LinuxVirtualMachineRuntimeError.ownedElsewhere(id)
       }
     }
 
@@ -1322,9 +1438,16 @@ actor VirtualMachineLibrary:
     } else {
       linuxMACAddress = nil
     }
+    let windowsMACAddress: String?
+    if source.guest == .windows, case .clone = mode {
+      windowsMACAddress = try makeUniqueLinuxMACAddress()
+    } else {
+      windowsMACAddress = nil
+    }
     let imported = try source.imported(
       using: mode,
-      linuxMACAddress: linuxMACAddress
+      linuxMACAddress: linuxMACAddress,
+      windowsMACAddress: windowsMACAddress
     )
     let finalBundleURL = bundleStore.bundleURL(for: imported.id)
     guard !fileManager.fileExists(atPath: finalBundleURL.path) else {
@@ -1522,6 +1645,8 @@ actor VirtualMachineLibrary:
         efiVariableStoreURL: resolvedMachine.efiVariableStoreURL,
         machineIdentifierURL: resolvedMachine.machineIdentifierURL,
         installationMediaURL: resolvedMachine.installationMediaURL,
+        setupConfigurationMediaURL: resolvedMachine.setupConfigurationMediaURL,
+        guestAgentSecretURL: resolvedMachine.guestAgentSecretURL,
         sharedDirectories: try bundleValidator.sharedDirectoryConfiguration(
           in: resolvedMachine.bundleURL
         )
@@ -1553,18 +1678,22 @@ actor VirtualMachineLibrary:
     guard manifest.id == lease.machine.manifest.id else {
       throw LinuxVirtualMachineRuntimeError.staleTarget(lease.target)
     }
-    if manifest.installState == .stopped,
-      manifest.linuxConfiguration?.installationMediaPath == nil
-    {
+    let installationMediaPath =
+      manifest.guest == .windows
+      ? manifest.windowsConfiguration?.installationMediaPath
+      : manifest.linuxConfiguration?.installationMediaPath
+    if manifest.installState == .stopped, installationMediaPath == nil {
       return manifest
     }
-    guard manifest.installState == .readyToInstall,
-      manifest.linuxConfiguration?.installationMediaPath != nil
-    else {
+    guard manifest.installState == .readyToInstall, installationMediaPath != nil else {
       throw VirtualMachineModelError.invalidInstallState(manifest.installState)
     }
 
-    manifest.markLinuxInstallationCompleted()
+    if manifest.guest == .windows {
+      manifest.markWindowsInstallationCompleted()
+    } else {
+      manifest.markLinuxInstallationCompleted()
+    }
     try bundleStore.write(
       manifest,
       to: bundleStore.manifestURL(for: manifest.id)
@@ -1682,7 +1811,7 @@ actor VirtualMachineLibrary:
         in: bundleURL,
         machineID: manifest.id
       )
-    case .linux:
+    case .linux, .windows:
       try requireNoLinuxDiskImageReplacementJournal(
         in: bundleURL,
         machineID: manifest.id
@@ -1949,7 +2078,7 @@ actor VirtualMachineLibrary:
 
   private func linuxRuntimeManifest(id: UUID) throws -> VirtualMachineManifest {
     let manifest = try bundleStore.manifest(id: id)
-    guard manifest.guest == .linux else {
+    guard manifest.guest == .linux || manifest.guest == .windows else {
       throw VirtualMachineModelError.requiresLinuxGuest(id)
     }
     guard manifest.macOSDiskSnapshotConfiguration == nil else {
@@ -1966,13 +2095,16 @@ actor VirtualMachineLibrary:
       _ = try macVirtualMachineBundleResolver.resolveRuntime(manifest)
     case .linux:
       _ = try linuxVirtualMachineBundleResolver.resolve(manifest)
+    case .windows:
+      _ = try linuxVirtualMachineBundleResolver.resolve(manifest)
     }
   }
 
   private func makeUniqueLinuxMACAddress() throws -> String {
     let existingAddresses = Set(
       try bundleStore.list().compactMap {
-        $0.linuxConfiguration?.macAddress.lowercased()
+        ($0.linuxConfiguration?.macAddress ?? $0.windowsConfiguration?.macAddress)?
+          .lowercased()
       }
     )
     var generatedValidAddress = false

@@ -20,7 +20,7 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
   }
 
   func resolve(_ manifest: VirtualMachineManifest) throws -> ResolvedLinuxVirtualMachine {
-    guard manifest.guest == .linux else {
+    guard manifest.guest == .linux || manifest.guest == .windows else {
       throw VirtualMachineModelError.requiresLinuxGuest(manifest.id)
     }
     guard manifest.macOSDiskSnapshotConfiguration == nil else {
@@ -28,8 +28,32 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
         "macOS disk snapshot state is present"
       )
     }
-    guard let linuxConfiguration = manifest.linuxConfiguration else {
-      throw LinuxVirtualMachineError.missingManifestValue("linuxConfiguration")
+    let efiVariableStorePath: String
+    let machineIdentifierPath: String
+    let installationMediaPath: String?
+    let setupConfigurationMediaPath: String?
+    let guestAgentSecretPath: String?
+    switch manifest.guest {
+    case .linux:
+      guard let configuration = manifest.linuxConfiguration else {
+        throw LinuxVirtualMachineError.missingManifestValue("linuxConfiguration")
+      }
+      efiVariableStorePath = configuration.efiVariableStorePath
+      machineIdentifierPath = configuration.machineIdentifierPath
+      installationMediaPath = configuration.installationMediaPath
+      setupConfigurationMediaPath = nil
+      guestAgentSecretPath = nil
+    case .windows:
+      guard let configuration = manifest.windowsConfiguration else {
+        throw WindowsVirtualMachineError.missingManifestValue("windowsConfiguration")
+      }
+      efiVariableStorePath = configuration.efiVariableStorePath
+      machineIdentifierPath = configuration.machineIdentifierPath
+      installationMediaPath = configuration.installationMediaPath
+      setupConfigurationMediaPath = configuration.setupConfigurationMediaPath
+      guestAgentSecretPath = configuration.guestAgentSecretPath
+    case .macOS:
+      throw VirtualMachineModelError.requiresLinuxGuest(manifest.id)
     }
 
     let bundleURL =
@@ -45,7 +69,7 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
       in: bundleURL,
       writable: true
     )
-    let snapshotLayers = manifest.effectiveLinuxDiskSnapshotConfiguration.layers
+    let snapshotLayers = manifest.effectiveDiskSnapshotConfiguration.layers
     let diskSnapshotLayerURLs = try snapshotLayers.enumerated().map { index, layer in
       try resolveArtifact(
         layer.relativePath,
@@ -55,20 +79,34 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
       )
     }
     let efiVariableStoreURL = try resolveArtifact(
-      linuxConfiguration.efiVariableStorePath,
+      efiVariableStorePath,
       named: "efiVariableStorePath",
       in: bundleURL,
       writable: true
     )
     let machineIdentifierURL = try resolveArtifact(
-      linuxConfiguration.machineIdentifierPath,
+      machineIdentifierPath,
       named: "machineIdentifierPath",
       in: bundleURL
     )
-    let installationMediaURL = try linuxConfiguration.installationMediaPath.map {
+    let installationMediaURL = try installationMediaPath.map {
       try resolveArtifact(
         $0,
         named: "installationMediaPath",
+        in: bundleURL
+      )
+    }
+    let setupConfigurationMediaURL = try setupConfigurationMediaPath.map {
+      try resolveArtifact(
+        $0,
+        named: "setupConfigurationMediaPath",
+        in: bundleURL
+      )
+    }
+    let guestAgentSecretURL = try guestAgentSecretPath.map {
+      try resolveArtifact(
+        $0,
+        named: "guestAgentSecretPath",
         in: bundleURL
       )
     }
@@ -80,7 +118,9 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
       diskSnapshotLayerURLs: diskSnapshotLayerURLs,
       efiVariableStoreURL: efiVariableStoreURL,
       machineIdentifierURL: machineIdentifierURL,
-      installationMediaURL: installationMediaURL
+      installationMediaURL: installationMediaURL,
+      setupConfigurationMediaURL: setupConfigurationMediaURL,
+      guestAgentSecretURL: guestAgentSecretURL
     )
   }
 

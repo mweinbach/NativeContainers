@@ -429,6 +429,9 @@ private struct DiskResizeServiceFixture {
       case .linux:
         createdManifest.linuxDiskSnapshotConfiguration =
           mutation.configuration
+      case .windows:
+        createdManifest.windowsDiskSnapshotConfiguration =
+          mutation.configuration
       }
       createdLayerURLs = [layerURL]
     }

@@ -334,7 +334,7 @@ struct GuestAwareVirtualMachineSavedStateReclamationService:
       switch manifest.guest {
       case .macOS:
         macIDs.insert(machineID)
-      case .linux:
+      case .linux, .windows:
         linuxIDs.insert(machineID)
       }
     }
@@ -379,7 +379,7 @@ struct GuestAwareVirtualMachineSavedStateReclamationService:
       switch manifest.guest {
       case .macOS:
         macCandidates.append(candidate)
-      case .linux:
+      case .linux, .windows:
         linuxCandidates.append(candidate)
       }
     }

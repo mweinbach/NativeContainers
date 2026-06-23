@@ -233,6 +233,9 @@ enum AppCompositionRoot {
     let linuxVirtualMachineCreator = LinuxVirtualMachineCreationService(
       library: virtualMachineLibrary
     )
+    let windowsVirtualMachineCreator = WindowsVirtualMachineCreationService(
+      library: virtualMachineLibrary
+    )
     let virtualMachineCloner = VirtualMachineCloneService(
       store: virtualMachineLibrary,
       copier: FileVirtualMachineBundleCopier(preparer: virtualMachineBundlePreparer)
@@ -472,6 +475,7 @@ enum AppCompositionRoot {
       composeProjectLifecycle: optionalIntegrations.composeProjectLifecycle,
       virtualMachineLibrary: virtualMachineLibrary,
       linuxVirtualMachineCreator: linuxVirtualMachineCreator,
+      windowsVirtualMachineCreator: windowsVirtualMachineCreator,
       virtualMachineCloner: virtualMachineCloner,
       virtualMachineTransfer: virtualMachineTransfer,
       virtualMachineInstaller: virtualMachineInstaller,

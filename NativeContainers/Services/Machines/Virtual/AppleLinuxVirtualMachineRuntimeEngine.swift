@@ -28,7 +28,9 @@ final class AppleLinuxVirtualMachineRuntimeEngine: LinuxVirtualMachineRuntimeEng
     let memoryBalloonController = try AppleVirtualMachineMemoryBalloonController(
       virtualMachine: virtualMachine,
       configuredMemoryBytes: machine.manifest.resources.memoryBytes,
-      minimumTargetMemoryBytes: VirtualMachineResources.bytesPerGiB
+      minimumTargetMemoryBytes: machine.manifest.guest == .windows
+        ? 4 * VirtualMachineResources.bytesPerGiB
+        : VirtualMachineResources.bytesPerGiB
     )
     return AppleLinuxVirtualMachineRuntimeSession(
       target: target,

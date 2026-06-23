@@ -572,6 +572,25 @@ final class AppModel {
     return machine
   }
 
+  @discardableResult
+  func createWindowsVirtualMachine(
+    name: String,
+    resources: VirtualMachineResources,
+    installationMediaURL: URL,
+    securityMode: WindowsVirtualMachineSecurityMode
+  ) async throws -> VirtualMachineManifest {
+    let machine = try await services.windowsVirtualMachineCreator
+      .createWindowsVirtualMachine(
+        name: name,
+        resources: resources,
+        installationMediaURL: installationMediaURL,
+        securityMode: securityMode
+      )
+    publishVirtualMachineManifest(machine)
+    navigate(to: .macOSVirtualMachine(machine.id))
+    return machine
+  }
+
   func discardVirtualMachine(id: UUID) async {
     await performMutation {
       try await self.services.virtualMachineLibrary.discardVirtualMachine(id: id)
@@ -955,7 +974,7 @@ final class AppModel {
     case .macOS:
       let runtime = makeMacVirtualMachineRuntimeModel(for: machine)
       didSettle = { await runtime.refreshSavedState() }
-    case .linux:
+    case .linux, .windows:
       let runtime = makeLinuxVirtualMachineRuntimeModel(for: machine)
       didSettle = { await runtime.refreshSavedState() }
     }
@@ -999,7 +1018,7 @@ final class AppModel {
       service = services.virtualMachineDiskSnapshots
       let runtime = makeMacVirtualMachineRuntimeModel(for: machine)
       didSettle = { await runtime.refreshSavedState() }
-    case .linux:
+    case .linux, .windows:
       service = services.linuxVirtualMachineDiskSnapshots
       let runtime = makeLinuxVirtualMachineRuntimeModel(for: machine)
       didSettle = { await runtime.refreshSavedState() }
@@ -1075,6 +1094,8 @@ final class AppModel {
         services.virtualMachineCompute
       case .linux:
         services.linuxVirtualMachineCompute
+      case .windows:
+        services.linuxVirtualMachineCompute
       }
     let model = VirtualMachineComputeModel(
       machineID: machine.id,
@@ -1098,6 +1119,8 @@ final class AppModel {
       case .macOS:
         services.virtualMachineName
       case .linux:
+        services.linuxVirtualMachineName
+      case .windows:
         services.linuxVirtualMachineName
       }
     let model = VirtualMachineNameModel(

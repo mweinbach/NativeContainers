@@ -34,7 +34,7 @@ struct VirtualMachinesView: View {
         ContentUnavailableView {
           Label("No Virtual Machines", systemImage: "display.2")
         } description: {
-          Text("Create a native macOS or GUI Linux virtual machine.")
+          Text("Create a native macOS, GUI Linux, or experimental Windows virtual machine.")
         } actions: {
           HStack {
             Button("Create VM") { isCreating = true }
@@ -210,6 +210,8 @@ struct VirtualMachinesView: View {
         await model.makeMacVirtualMachineRuntimeModel(for: machine).forceStop()
       case .linux:
         await model.makeLinuxVirtualMachineRuntimeModel(for: machine).forceStop()
+      case .windows:
+        await model.makeLinuxVirtualMachineRuntimeModel(for: machine).forceStop()
       }
     }
   }
@@ -285,6 +287,21 @@ private struct GuestVirtualMachineRow: View {
         export: export,
         discard: discard
       )
+    case .windows:
+      LinuxVirtualMachineRow(
+        machine: machine,
+        runtime: model.makeLinuxVirtualMachineRuntimeModel(for: machine),
+        diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
+          for: machine
+        ),
+        isSelected: isSelected,
+        onSelect: onSelect,
+        open: open,
+        confirmForceStop: confirmForceStop,
+        clone: clone,
+        export: export,
+        discard: discard
+      )
     }
   }
 }
@@ -314,6 +331,23 @@ private struct GuestVirtualMachineConfigurationView: View {
         )
       )
     case .linux:
+      LinuxVirtualMachineConfigurationView(
+        machine: machine,
+        runtime: model.makeLinuxVirtualMachineRuntimeModel(for: machine),
+        naming: model.makeVirtualMachineNameModel(for: machine),
+        compute: model.makeVirtualMachineComputeModel(for: machine),
+        diskMaintenance: model.makeVirtualMachineDiskImageMaintenanceModel(
+          for: machine
+        ),
+        diskSnapshots: model.makeLinuxVirtualMachineDiskSnapshotModel(
+          for: machine
+        ),
+        network: model.makeLinuxVirtualMachineNetworkModel(for: machine),
+        sharedDirectories: model.makeLinuxVirtualMachineSharedDirectoriesModel(
+          for: machine
+        )
+      )
+    case .windows:
       LinuxVirtualMachineConfigurationView(
         machine: machine,
         runtime: model.makeLinuxVirtualMachineRuntimeModel(for: machine),

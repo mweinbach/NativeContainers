@@ -61,10 +61,36 @@ struct LinuxVirtualMachineConfigurationDescriptorService:
   func descriptor(
     for machine: ResolvedLinuxVirtualMachine
   ) throws -> LinuxVirtualMachineConfigurationDescriptor {
-    guard let linux = machine.manifest.linuxConfiguration else {
-      throw LinuxVirtualMachineError.missingManifestValue(
-        "linuxConfiguration"
-      )
+    let efiVariableStorePath: String
+    let machineIdentifierPath: String
+    let installationMediaPath: String?
+    let macAddress: String
+    let sharesClipboard: Bool
+    switch machine.manifest.guest {
+    case .linux:
+      guard let configuration = machine.manifest.linuxConfiguration else {
+        throw LinuxVirtualMachineError.missingManifestValue(
+          "linuxConfiguration"
+        )
+      }
+      efiVariableStorePath = configuration.efiVariableStorePath
+      machineIdentifierPath = configuration.machineIdentifierPath
+      installationMediaPath = configuration.installationMediaPath
+      macAddress = configuration.macAddress
+      sharesClipboard = configuration.sharesClipboard
+    case .windows:
+      guard let configuration = machine.manifest.windowsConfiguration else {
+        throw WindowsVirtualMachineError.missingManifestValue(
+          "windowsConfiguration"
+        )
+      }
+      efiVariableStorePath = configuration.efiVariableStorePath
+      machineIdentifierPath = configuration.machineIdentifierPath
+      installationMediaPath = configuration.installationMediaPath
+      macAddress = configuration.macAddress
+      sharesClipboard = configuration.sharesClipboard
+    case .macOS:
+      throw VirtualMachineModelError.requiresLinuxGuest(machine.manifest.id)
     }
 
     let network = machine.manifest.effectiveNetworkConfiguration
@@ -90,21 +116,21 @@ struct LinuxVirtualMachineConfigurationDescriptorService:
       diskImagePath: machine.manifest.diskImagePath,
       diskImageFormat: machine.manifest.effectiveDiskImageFormat.rawValue,
       diskSnapshotRevision:
-        machine.manifest.effectiveLinuxDiskSnapshotConfiguration.revision > 0
-        ? machine.manifest.effectiveLinuxDiskSnapshotConfiguration.revision
+        machine.manifest.effectiveDiskSnapshotConfiguration.revision > 0
+        ? machine.manifest.effectiveDiskSnapshotConfiguration.revision
         : nil,
       diskSnapshotLayerPaths:
-        machine.manifest.effectiveLinuxDiskSnapshotConfiguration.hasSnapshots
-        ? machine.manifest.effectiveLinuxDiskSnapshotConfiguration.layers.map(
+        machine.manifest.effectiveDiskSnapshotConfiguration.hasSnapshots
+        ? machine.manifest.effectiveDiskSnapshotConfiguration.layers.map(
           \.relativePath
         )
         : nil,
-      efiVariableStorePath: linux.efiVariableStorePath,
-      machineIdentifierPath: linux.machineIdentifierPath,
-      installationMediaPath: linux.installationMediaPath,
+      efiVariableStorePath: efiVariableStorePath,
+      machineIdentifierPath: machineIdentifierPath,
+      installationMediaPath: installationMediaPath,
       platform: "Generic",
       bootLoader: "EFI",
-      diskDevice: "VirtioBlock",
+      diskDevice: machine.manifest.guest == .windows ? "NVMe" : "VirtioBlock",
       diskCachingMode: "automatic",
       diskSynchronizationMode: "full",
       displayWidth: AppleLinuxVirtualMachineConfigurationFactory
@@ -115,15 +141,15 @@ struct LinuxVirtualMachineConfigurationDescriptorService:
       networkAttachment: networkAttachment,
       networkConfigurationRevision: network.revision > 0
         ? network.revision : nil,
-      macAddress: linux.macAddress,
+      macAddress: macAddress,
       audioDevices: ["VirtioSound/HostOutput"],
       keyboardDevices: ["USB"],
       pointingDevices: ["USBScreenCoordinate"],
       entropyDevices: ["Virtio"],
       memoryBalloonDevices: ["VirtioTraditional"],
-      consoleDevices: linux.sharesClipboard
+      consoleDevices: machine.manifest.guest == .linux && sharesClipboard
         ? ["VirtioConsole/SPICEAgent"] : [],
-      sharesClipboard: linux.sharesClipboard,
+      sharesClipboard: sharesClipboard,
       directorySharingDevice: hasDirectorySharingHistory
         && !machine.sharedDirectories.directories.isEmpty
         ? "VirtioFS/\(AppleLinuxVirtualMachineSharedDirectoryDeviceFactory.mountTag)"

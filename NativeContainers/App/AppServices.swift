@@ -79,6 +79,7 @@ struct AppServices: Sendable {
   let composeProjectLifecycle: any ComposeProjectLifecycleManaging
   let virtualMachineLibrary: any VirtualMachineLibraryProtocol
   let linuxVirtualMachineCreator: any LinuxVirtualMachineCreating
+  let windowsVirtualMachineCreator: any WindowsVirtualMachineCreating
   let virtualMachineCloner: any VirtualMachineCloning
   let virtualMachineTransfer: any VirtualMachinePackageTransferring
   let virtualMachineInstaller: any MacVirtualMachineInstalling
@@ -162,6 +163,8 @@ struct AppServices: Sendable {
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     linuxVirtualMachineCreator: any LinuxVirtualMachineCreating =
       UnavailableLinuxVirtualMachineCreationService(),
+    windowsVirtualMachineCreator: any WindowsVirtualMachineCreating =
+      UnavailableWindowsVirtualMachineCreationService(),
     virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
     virtualMachineTransfer: any VirtualMachinePackageTransferring =
       UnavailableVirtualMachineTransferService(),
@@ -249,6 +252,7 @@ struct AppServices: Sendable {
     self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
     self.linuxVirtualMachineCreator = linuxVirtualMachineCreator
+    self.windowsVirtualMachineCreator = windowsVirtualMachineCreator
     self.virtualMachineCloner = virtualMachineCloner
     self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller
@@ -322,6 +326,8 @@ struct AppServices: Sendable {
     virtualMachineLibrary: any VirtualMachineLibraryProtocol,
     linuxVirtualMachineCreator: any LinuxVirtualMachineCreating =
       UnavailableLinuxVirtualMachineCreationService(),
+    windowsVirtualMachineCreator: any WindowsVirtualMachineCreating =
+      UnavailableWindowsVirtualMachineCreationService(),
     virtualMachineCloner: any VirtualMachineCloning = UnavailableVirtualMachineCloneService(),
     virtualMachineTransfer: any VirtualMachinePackageTransferring =
       UnavailableVirtualMachineTransferService(),
@@ -409,6 +415,7 @@ struct AppServices: Sendable {
     self.composeProjectLifecycle = composeProjectLifecycle
     self.virtualMachineLibrary = virtualMachineLibrary
     self.linuxVirtualMachineCreator = linuxVirtualMachineCreator
+    self.windowsVirtualMachineCreator = windowsVirtualMachineCreator
     self.virtualMachineCloner = virtualMachineCloner
     self.virtualMachineTransfer = virtualMachineTransfer
     self.virtualMachineInstaller = virtualMachineInstaller

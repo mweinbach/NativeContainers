@@ -3,6 +3,7 @@ import Foundation
 enum VirtualMachineGuest: String, Codable, CaseIterable, Hashable, Sendable {
   case macOS
   case linux
+  case windows
 }
 
 enum VirtualMachineInstallState: String, Codable, CaseIterable, Sendable {
@@ -59,12 +60,14 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   var audioConfiguration: MacVirtualMachineAudioConfiguration? = nil
   var networkConfiguration: VirtualMachineNetworkConfiguration? = nil
   var linuxConfiguration: LinuxVirtualMachineConfiguration? = nil
+  var windowsConfiguration: WindowsVirtualMachineConfiguration? = nil
   var macOSGuestOperatingSystem: MacGuestOperatingSystemIdentity? = nil
   var macOSMinimumCPUCount: Int? = nil
   var macOSMinimumMemoryBytes: UInt64? = nil
   var macOSFirstBootState: MacVirtualMachineFirstBootState? = nil
   var macOSDiskSnapshotConfiguration: MacVirtualMachineDiskSnapshotConfiguration? = nil
   var linuxDiskSnapshotConfiguration: VirtualMachineDiskSnapshotConfiguration? = nil
+  var windowsDiskSnapshotConfiguration: VirtualMachineDiskSnapshotConfiguration? = nil
 
   init(
     id: UUID = UUID(),
@@ -99,7 +102,8 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     id: UUID = UUID(),
     name: String,
     createdAt: Date = Date(),
-    linuxMACAddress: String? = nil
+    linuxMACAddress: String? = nil,
+    windowsMACAddress: String? = nil
   ) throws {
     let trimmedName = try Self.normalizedName(name)
 
@@ -133,12 +137,25 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     } else {
       linuxConfiguration = source.linuxConfiguration
     }
+    if source.guest == .windows {
+      guard var configuration = source.windowsConfiguration else {
+        throw WindowsVirtualMachineError.missingManifestValue("windowsConfiguration")
+      }
+      guard let windowsMACAddress else {
+        throw WindowsVirtualMachineError.missingManifestValue("windowsMACAddress")
+      }
+      configuration.macAddress = windowsMACAddress
+      windowsConfiguration = configuration
+    } else {
+      windowsConfiguration = source.windowsConfiguration
+    }
     macOSGuestOperatingSystem = source.macOSGuestOperatingSystem
     macOSMinimumCPUCount = source.macOSMinimumCPUCount
     macOSMinimumMemoryBytes = source.macOSMinimumMemoryBytes
     macOSFirstBootState = source.macOSFirstBootState
     macOSDiskSnapshotConfiguration = source.macOSDiskSnapshotConfiguration
     linuxDiskSnapshotConfiguration = source.linuxDiskSnapshotConfiguration
+    windowsDiskSnapshotConfiguration = source.windowsDiskSnapshotConfiguration
   }
 
   var effectiveAudioConfiguration: MacVirtualMachineAudioConfiguration {
@@ -157,12 +174,18 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     linuxDiskSnapshotConfiguration ?? .empty
   }
 
+  var effectiveWindowsDiskSnapshotConfiguration: VirtualMachineDiskSnapshotConfiguration {
+    windowsDiskSnapshotConfiguration ?? .empty
+  }
+
   var effectiveDiskSnapshotConfiguration: VirtualMachineDiskSnapshotConfiguration {
     switch guest {
     case .macOS:
       effectiveMacOSDiskSnapshotConfiguration
     case .linux:
       effectiveLinuxDiskSnapshotConfiguration
+    case .windows:
+      effectiveWindowsDiskSnapshotConfiguration
     }
   }
 
@@ -211,6 +234,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     macOSFirstBootState = .pending
     macOSDiskSnapshotConfiguration = nil
     linuxDiskSnapshotConfiguration = nil
+    windowsDiskSnapshotConfiguration = nil
     self.updatedAt = updatedAt
   }
 
@@ -296,6 +320,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     macOSFirstBootState = nil
     macOSDiskSnapshotConfiguration = nil
     linuxDiskSnapshotConfiguration = nil
+    windowsDiskSnapshotConfiguration = nil
     installationOperationID = nil
     installationFailure = nil
     self.updatedAt = updatedAt
@@ -308,6 +333,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installState = .readyToInstall
     linuxConfiguration = configuration
     linuxDiskSnapshotConfiguration = nil
+    windowsDiskSnapshotConfiguration = nil
     installationOperationID = nil
     installationFailure = nil
     self.updatedAt = updatedAt
@@ -316,6 +342,27 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
   mutating func markLinuxInstallationCompleted(updatedAt: Date = Date()) {
     installState = .stopped
     linuxConfiguration?.installationMediaPath = nil
+    installationOperationID = nil
+    installationFailure = nil
+    self.updatedAt = updatedAt
+  }
+
+  mutating func markReadyToInstallWindows(
+    configuration: WindowsVirtualMachineConfiguration,
+    updatedAt: Date = Date()
+  ) {
+    installState = .readyToInstall
+    windowsConfiguration = configuration
+    windowsDiskSnapshotConfiguration = nil
+    installationOperationID = nil
+    installationFailure = nil
+    self.updatedAt = updatedAt
+  }
+
+  mutating func markWindowsInstallationCompleted(updatedAt: Date = Date()) {
+    installState = .stopped
+    windowsConfiguration?.installationMediaPath = nil
+    windowsConfiguration?.setupConfigurationMediaPath = nil
     installationOperationID = nil
     installationFailure = nil
     self.updatedAt = updatedAt
@@ -346,12 +393,15 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
   case virtualMachineIdentityChanged(UUID)
   case requiresMacOSGuest(UUID)
   case requiresLinuxGuest(UUID)
+  case requiresWindowsGuest(UUID)
   case invalidInstallState(VirtualMachineInstallState)
   case platformArtifactsAlreadyExist(UUID)
   case linuxPlatformArtifactsAlreadyExist(UUID)
+  case windowsPlatformArtifactsAlreadyExist(UUID)
   case invalidRestoreImageReference(URL)
   case macPlatformPreparationUnavailable
   case linuxPlatformPreparationUnavailable
+  case windowsPlatformPreparationUnavailable
   case virtualMachineDiscardUnavailable
 
   var errorDescription: String? {
@@ -380,18 +430,24 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
       "Virtual machine \(identifier.uuidString) is not configured for macOS."
     case .requiresLinuxGuest(let identifier):
       "Virtual machine \(identifier.uuidString) is not configured for Linux."
+    case .requiresWindowsGuest(let identifier):
+      "Virtual machine \(identifier.uuidString) is not configured for Windows."
     case .invalidInstallState(let state):
       "A virtual machine in the \(state.rawValue) state cannot perform this operation."
     case .platformArtifactsAlreadyExist(let identifier):
       "macOS platform artifacts already exist for virtual machine \(identifier.uuidString)."
     case .linuxPlatformArtifactsAlreadyExist(let identifier):
       "Linux platform artifacts already exist for virtual machine \(identifier.uuidString)."
+    case .windowsPlatformArtifactsAlreadyExist(let identifier):
+      "Windows platform artifacts already exist for virtual machine \(identifier.uuidString)."
     case .invalidRestoreImageReference(let url):
       "The restore-image reference is invalid: \(url.absoluteString)"
     case .macPlatformPreparationUnavailable:
       "macOS platform preparation is unavailable for this virtual machine library."
     case .linuxPlatformPreparationUnavailable:
       "Linux platform preparation is unavailable for this virtual machine library."
+    case .windowsPlatformPreparationUnavailable:
+      "Windows platform preparation is unavailable for this virtual machine library."
     case .virtualMachineDiscardUnavailable:
       "Discarding virtual machines is unavailable for this virtual machine library."
     }

@@ -34,6 +34,8 @@ struct ResolvedLinuxVirtualMachine: Sendable {
   let efiVariableStoreURL: URL
   let machineIdentifierURL: URL
   let installationMediaURL: URL?
+  let setupConfigurationMediaURL: URL?
+  let guestAgentSecretURL: URL?
   let sharedDirectories: LinuxVirtualMachineSharedDirectoryConfiguration
 
   init(
@@ -44,6 +46,8 @@ struct ResolvedLinuxVirtualMachine: Sendable {
     efiVariableStoreURL: URL,
     machineIdentifierURL: URL,
     installationMediaURL: URL?,
+    setupConfigurationMediaURL: URL? = nil,
+    guestAgentSecretURL: URL? = nil,
     sharedDirectories: LinuxVirtualMachineSharedDirectoryConfiguration = .empty
   ) {
     self.manifest = manifest
@@ -53,6 +57,8 @@ struct ResolvedLinuxVirtualMachine: Sendable {
     self.efiVariableStoreURL = efiVariableStoreURL
     self.machineIdentifierURL = machineIdentifierURL
     self.installationMediaURL = installationMediaURL
+    self.setupConfigurationMediaURL = setupConfigurationMediaURL
+    self.guestAgentSecretURL = guestAgentSecretURL
     self.sharedDirectories = sharedDirectories
   }
 }

@@ -34,7 +34,7 @@ protocol LinuxVirtualMachineSavedStateStoring: Sendable {
 struct LinuxVirtualMachineConfigurationFingerprinter:
   LinuxVirtualMachineConfigurationFingerprinting
 {
-  private static let runtimeConfigurationVersion = 2
+  private static let runtimeConfigurationVersion = 3
 
   private struct FileIdentity: Codable {
     let device: UInt64
@@ -52,6 +52,7 @@ struct LinuxVirtualMachineConfigurationFingerprinter:
     let diskSnapshotLayerIdentities: [FileIdentity]
     let efiVariableStoreIdentity: FileIdentity
     let installationMediaIdentity: FileIdentity?
+    let setupConfigurationMediaIdentity: FileIdentity?
   }
 
   private let descriptorService: any LinuxVirtualMachineConfigurationDescribing
@@ -76,6 +77,9 @@ struct LinuxVirtualMachineConfigurationFingerprinter:
         of: machine.efiVariableStoreURL
       ),
       installationMediaIdentity: try machine.installationMediaURL.map(
+        identity(of:)
+      ),
+      setupConfigurationMediaIdentity: try machine.setupConfigurationMediaURL.map(
         identity(of:)
       )
     )

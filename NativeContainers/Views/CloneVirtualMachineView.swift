@@ -31,6 +31,9 @@ struct CloneVirtualMachineView: View {
           case .linux:
             Text("Clone Linux VM")
               .font(.title2.bold())
+          case .windows:
+            Text("Clone Windows VM")
+              .font(.title2.bold())
           }
           Text("Create a separate, bootable copy of \(machine.name)")
             .foregroundStyle(.secondary)
@@ -59,6 +62,11 @@ struct CloneVirtualMachineView: View {
         case .linux:
           Label(
             "The clone receives fresh platform and network identities.",
+            systemImage: "network"
+          )
+        case .windows:
+          Label(
+            "The clone receives fresh platform, network, and guest-agent identities. Windows activation and the guest computer identity are not reset.",
             systemImage: "network"
           )
         }
