@@ -25,6 +25,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
   private static let inputCommandMaximumBytes = 4 * 1_024
   private static let inputTextMaximumCharacters = 256
   private static let runRequestMaximumBytes = 8 * 1_024
+  private static let runRequestMaximumSharedDirectoryCount = 8
   private static let visualHoldMaximumSeconds = 2 * 60 * 60
 
   @Test(
@@ -92,13 +93,19 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
 
     let library = VirtualMachineLibrary(rootURL: libraryRoot)
     let creator = LinuxVirtualMachineCreationService(library: library)
+    let savedStateService = LinuxVirtualMachineSavedStateService(
+      store: LinuxVirtualMachineSavedStateStore()
+    )
     let runtime = LinuxVirtualMachineRuntimeService(
       leasingStore: library,
       installationStore: library,
       engine: AppleLinuxVirtualMachineRuntimeEngine(),
-      savedStateService: LinuxVirtualMachineSavedStateService(
-        store: LinuxVirtualMachineSavedStateStore()
-      )
+      savedStateService: savedStateService
+    )
+    let sharedDirectoryService = LinuxVirtualMachineSharedDirectoryService(
+      leasingStore: library,
+      persistence: library,
+      savedStateService: savedStateService
     )
     let resources = try VirtualMachineResources(
       cpuCount: min(4, max(1, ProcessInfo.processInfo.processorCount)),
@@ -116,6 +123,30 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       machineID = machine.id
       #expect(machine.installState == .readyToInstall)
       #expect(machine.linuxConfiguration?.installationMediaPath != nil)
+
+      var sharedDirectoryConfiguration =
+        LinuxVirtualMachineSharedDirectoryConfiguration.empty
+      for directory in configuration.sharedDirectories {
+        sharedDirectoryConfiguration = try await sharedDirectoryService.add(
+          to: machine.id,
+          request: LinuxVirtualMachineSharedDirectoryRequest(
+            sourceURL: URL(
+              filePath: directory.sourcePath,
+              directoryHint: .isDirectory
+            ),
+            guestName: directory.guestName,
+            readOnly: directory.readOnly
+          )
+        )
+      }
+      #expect(
+        sharedDirectoryConfiguration.directories.count
+          == configuration.sharedDirectories.count
+      )
+      #expect(
+        sharedDirectoryConfiguration.directories.filter(\.readOnly).count
+          == configuration.sharedDirectories.filter(\.readOnly).count
+      )
 
       try await runtime.start(id: machine.id)
       var snapshot = runtime.snapshot(for: machine.id)
@@ -185,8 +216,11 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       try FileManager.default.removeItem(at: libraryRoot)
       let installationMediaResult =
         installationMediaWasEjected ? "ejected" : "attached"
+      let virtioFSResult =
+        sharedDirectoryConfiguration.directories.isEmpty
+        ? "not_requested" : "attached"
       print(
-        "\(Self.outputMarker)id=\(machine.id.uuidString.lowercased()) iso_sha256=\(actualSHA256) installation_media=\(installationMediaResult) running=confirmed pause_resume=confirmed balloon=confirmed cleanup=complete"
+        "\(Self.outputMarker)id=\(machine.id.uuidString.lowercased()) iso_sha256=\(actualSHA256) installation_media=\(installationMediaResult) virtiofs=\(virtioFSResult) shared_directories=\(sharedDirectoryConfiguration.directories.count) running=confirmed pause_resume=confirmed balloon=confirmed cleanup=complete"
       )
     } catch {
       if let machineID {
@@ -272,7 +306,19 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       isoSHA256: String(repeating: "a", count: 64),
       visualHoldSeconds: Self.visualHoldMaximumSeconds,
       probesGuestInput: true,
-      requiresInstallationMediaEjection: true
+      requiresInstallationMediaEjection: true,
+      sharedDirectories: [
+        LiveLinuxVirtualMachineSharedDirectoryRequest(
+          sourcePath: "/private/tmp/reviewed-read-only",
+          guestName: "Reference",
+          readOnly: true
+        ),
+        LiveLinuxVirtualMachineSharedDirectoryRequest(
+          sourcePath: "/private/tmp/reviewed-read-write",
+          guestName: "Workspace",
+          readOnly: false
+        ),
+      ]
     )
     try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
     try FileManager.default.setAttributes(
@@ -289,6 +335,96 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     )
     #expect(configuration.probesGuestInput)
     #expect(configuration.requiresInstallationMediaEjection)
+    #expect(configuration.sharedDirectories.count == 2)
+    #expect(configuration.sharedDirectories[0].guestName == "Reference")
+    #expect(configuration.sharedDirectories[0].readOnly)
+    #expect(configuration.sharedDirectories[1].guestName == "Workspace")
+    #expect(!configuration.sharedDirectories[1].readOnly)
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: requestURL.nativeContainersPOSIXPath
+      )
+    )
+  }
+
+  @Test("Legacy live run request defaults to no shared directories")
+  func legacyRunRequestDefaultsToNoSharedDirectories() throws {
+    let rootURL = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-live-request-test-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false
+    )
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let requestURL = rootURL.appending(
+      path: "request.json",
+      directoryHint: .notDirectory
+    )
+    let request = """
+      {
+        "isoPath": "/private/tmp/reviewed.iso",
+        "isoSHA256": "\(String(repeating: "a", count: 64))",
+        "visualHoldSeconds": 0,
+        "probesGuestInput": false,
+        "requiresInstallationMediaEjection": false
+      }
+      """
+    try Data(request.utf8).write(to: requestURL, options: .atomic)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: requestURL.nativeContainersPOSIXPath
+    )
+
+    let configuration = try Self.loadRunRequest(at: requestURL)
+
+    #expect(configuration.sharedDirectories.isEmpty)
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: requestURL.nativeContainersPOSIXPath
+      )
+    )
+  }
+
+  @Test("Live run request rejects relative shared-directory paths")
+  func liveRunRequestRejectsRelativeSharedDirectoryPaths() throws {
+    let rootURL = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-live-request-test-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false
+    )
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let requestURL = rootURL.appending(
+      path: "request.json",
+      directoryHint: .notDirectory
+    )
+    let request = LiveLinuxVirtualMachineRunRequest(
+      isoPath: "/private/tmp/reviewed.iso",
+      isoSHA256: String(repeating: "a", count: 64),
+      visualHoldSeconds: 0,
+      probesGuestInput: false,
+      requiresInstallationMediaEjection: false,
+      sharedDirectories: [
+        LiveLinuxVirtualMachineSharedDirectoryRequest(
+          sourcePath: "relative/path",
+          guestName: "Workspace",
+          readOnly: false
+        )
+      ]
+    )
+    try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: requestURL.nativeContainersPOSIXPath
+    )
+
+    #expect(throws: LiveLinuxVirtualMachineSmokeError.self) {
+      try Self.loadRunRequest(at: requestURL)
+    }
     #expect(
       !FileManager.default.fileExists(
         atPath: requestURL.nativeContainersPOSIXPath
@@ -375,7 +511,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       ] == "1",
       requiresInstallationMediaEjection: environment[
         "NATIVECONTAINERS_LIVE_LINUX_VM_REQUIRE_MEDIA_EJECTION"
-      ] == "1"
+      ] == "1",
+      sharedDirectories: []
     )
   }
 
@@ -431,13 +568,34 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         String(request.visualHoldSeconds)
       )
     }
+    let sharedDirectories = request.sharedDirectories ?? []
+    guard
+      sharedDirectories.count <= Self.runRequestMaximumSharedDirectoryCount
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidSharedDirectories(
+        "at most \(Self.runRequestMaximumSharedDirectoryCount) folders may be requested"
+      )
+    }
+    for directory in sharedDirectories {
+      guard
+        NSString(string: directory.sourcePath).isAbsolutePath,
+        !directory.guestName.trimmingCharacters(
+          in: .whitespacesAndNewlines
+        ).isEmpty
+      else {
+        throw LiveLinuxVirtualMachineSmokeError.invalidSharedDirectories(
+          "each folder needs an absolute source path and a guest name"
+        )
+      }
+    }
     return LiveLinuxVirtualMachineRunConfiguration(
       isoPath: request.isoPath,
       isoSHA256: request.isoSHA256,
       visualHoldSeconds: request.visualHoldSeconds,
       probesGuestInput: request.probesGuestInput,
       requiresInstallationMediaEjection:
-        request.requiresInstallationMediaEjection
+        request.requiresInstallationMediaEjection,
+      sharedDirectories: sharedDirectories
     )
   }
 
@@ -961,6 +1119,7 @@ private struct LiveLinuxVirtualMachineRunRequest: Codable {
   let visualHoldSeconds: Int
   let probesGuestInput: Bool
   let requiresInstallationMediaEjection: Bool
+  let sharedDirectories: [LiveLinuxVirtualMachineSharedDirectoryRequest]?
 }
 
 private struct LiveLinuxVirtualMachineRunConfiguration {
@@ -969,6 +1128,13 @@ private struct LiveLinuxVirtualMachineRunConfiguration {
   let visualHoldSeconds: Int
   let probesGuestInput: Bool
   let requiresInstallationMediaEjection: Bool
+  let sharedDirectories: [LiveLinuxVirtualMachineSharedDirectoryRequest]
+}
+
+private struct LiveLinuxVirtualMachineSharedDirectoryRequest: Codable {
+  let sourcePath: String
+  let guestName: String
+  let readOnly: Bool
 }
 
 private struct LiveLinuxVirtualMachineInputChannel {
@@ -1145,6 +1311,7 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
   case invalidInputCommand(String)
   case invalidRunRequestFile
   case invalidRunRequestSize(Int)
+  case invalidSharedDirectories(String)
   case mediaEjectionRequiresInputChannel
   case mediaEjectionDidNotPersist
   case requiredMediaEjectionMissing
@@ -1186,6 +1353,8 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
       "The one-shot live run request must be a single-link regular file owned by this user with no group or other access."
     case .invalidRunRequestSize(let byteCount):
       "The one-shot live run request has an invalid size (\(byteCount) bytes)."
+    case .invalidSharedDirectories(let reason):
+      "The one-shot live run request has invalid shared folders (\(reason))."
     case .mediaEjectionRequiresInputChannel:
       "Required installation-media ejection needs the live guest-input command channel."
     case .mediaEjectionDidNotPersist:

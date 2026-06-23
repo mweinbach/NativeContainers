@@ -195,11 +195,17 @@ write the equivalent configuration as owner-only mode-0600 JSON to
 `$TMPDIR/nativecontainers-live-linux-vm-run-request.json`). The smoke
 accepts only a current-user, single-link regular file, consumes it once, and
 supports `isoPath`, `isoSHA256`, `visualHoldSeconds`, `probesGuestInput`, and
-`requiresInstallationMediaEjection`. The reviewed run used the command channel
-to complete the Ubuntu installer, request its reboot, authenticate after disk
-boot, persist production ISO ejection, and then complete exact lifecycle and
-bundle cleanup. Audio and the other expanded installed-guest integrations are
-not inferred from that pass.
+`requiresInstallationMediaEjection`. An optional `sharedDirectories` array may
+contain up to eight objects with an absolute `sourcePath`, `guestName`, and
+`readOnly` policy. Each entry goes through the production stopped-VM service,
+security-scoped bookmark validation, sidecar persistence, and runtime VirtioFS
+resolution; a successful start proves host attachment, while guest access still
+requires the documented
+`mount -t virtiofs nativecontainers /mnt/nativecontainers` command. The reviewed
+run used the command channel to complete the Ubuntu installer, request its
+reboot, authenticate after disk boot, persist production ISO ejection, and then
+complete exact lifecycle and bundle cleanup. Audio and the other expanded
+installed-guest integrations are not inferred from that pass.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when
