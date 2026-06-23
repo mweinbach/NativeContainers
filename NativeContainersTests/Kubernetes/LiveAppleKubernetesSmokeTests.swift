@@ -4,16 +4,30 @@ import Testing
 
 @testable import NativeContainers
 
+private let liveKubernetesRunRequestURL =
+  FileManager.default.temporaryDirectory.appending(
+    path: "nativecontainers-live-kubernetes-run-request.json",
+    directoryHint: .notDirectory
+  )
+
 @Suite(.serialized)
 struct LiveAppleKubernetesSmokeTests {
   @Test(
     .enabled(
       if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_KUBERNETES"]
-        == "1",
-      "Set NATIVECONTAINERS_LIVE_KUBERNETES=1 with Apple container services running and kubectl installed."
+        == "1"
+        || FileManager.default.fileExists(
+          atPath: liveKubernetesRunRequestURL.nativeContainersPOSIXPath
+        ),
+      "Set NATIVECONTAINERS_LIVE_KUBERNETES=1 or create the owner-only one-shot run request with Apple container services running and kubectl installed."
     )
   )
   func provisionsWorkloadRestartsAndDeletesPinnedCluster() async throws {
+    if ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_KUBERNETES"]
+      != "1"
+    {
+      try Self.consumeRunRequest(at: liveKubernetesRunRequestURL)
+    }
     let identifier =
       "nativecontainers-k3s-\(UUID().uuidString.lowercased().prefix(8))"
     let temporaryRoot = FileManager.default.temporaryDirectory.appending(
@@ -328,6 +342,57 @@ struct LiveAppleKubernetesSmokeTests {
         diagnostics: diagnostics
       )
     }
+  }
+
+  @Test("Owner-only one-shot Kubernetes request is consumed exactly once")
+  func ownerOnlyRunRequestIsConsumedExactlyOnce() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-kubernetes-request-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: root,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: 0o700]
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    let request = root.appending(path: "request.json", directoryHint: .notDirectory)
+    try Data("{\"schemaVersion\":1}".utf8).write(to: request, options: .atomic)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: request.nativeContainersPOSIXPath
+    )
+
+    try Self.consumeRunRequest(at: request)
+
+    #expect(!FileManager.default.fileExists(atPath: request.nativeContainersPOSIXPath))
+    #expect(throws: LiveKubernetesRunRequestError.self) {
+      try Self.consumeRunRequest(at: request)
+    }
+  }
+
+  private static func consumeRunRequest(at url: URL) throws {
+    var metadata = stat()
+    guard
+      url.nativeContainersPOSIXPath.withCString({ Darwin.lstat($0, &metadata) }) == 0,
+      metadata.st_mode & S_IFMT == S_IFREG,
+      metadata.st_uid == getuid(),
+      metadata.st_nlink == 1,
+      metadata.st_mode & 0o077 == 0,
+      metadata.st_size > 0,
+      metadata.st_size <= 1_024
+    else {
+      throw LiveKubernetesRunRequestError.invalidFile
+    }
+    let data = try Data(contentsOf: url)
+    guard
+      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(object.keys) == ["schemaVersion"],
+      (object["schemaVersion"] as? NSNumber)?.intValue == 1
+    else {
+      throw LiveKubernetesRunRequestError.invalidPayload
+    }
+    try FileManager.default.removeItem(at: url)
   }
 
   private func writeKubeconfig(
@@ -660,6 +725,20 @@ private struct LiveKubernetesCommandError: LocalizedError {
 
   var errorDescription: String? {
     "kubectl \(arguments.joined(separator: " ")) exited \(exitCode): \(detail)"
+  }
+}
+
+private enum LiveKubernetesRunRequestError: LocalizedError {
+  case invalidFile
+  case invalidPayload
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidFile:
+      "The one-shot Kubernetes request must be a bounded, owner-only, single-link regular file."
+    case .invalidPayload:
+      "The one-shot Kubernetes request must contain only schemaVersion 1."
+    }
   }
 }
 
