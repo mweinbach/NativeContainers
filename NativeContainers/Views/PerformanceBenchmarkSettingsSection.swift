@@ -56,6 +56,67 @@ struct PerformanceBenchmarkSettingsSection: View {
       )
       .font(.caption)
       .foregroundStyle(.secondary)
+
+      LabeledContent("Product contract") {
+        Text(contractCoverageSummary)
+          .textSelection(.enabled)
+      }
+
+      DisclosureGroup("Coverage against the feature contract") {
+        VStack(alignment: .leading, spacing: 12) {
+          ForEach(PerformanceBenchmarkContractRequirement.allCases) { requirement in
+            VStack(alignment: .leading, spacing: 4) {
+              HStack(alignment: .firstTextBaseline) {
+                Text(requirement.title)
+                  .fontWeight(.medium)
+                Spacer()
+                Label(
+                  coverageTitle(requirement.coverage),
+                  systemImage: coverageSymbol(requirement.coverage)
+                )
+                .font(.caption)
+                .foregroundStyle(coverageColor(requirement.coverage))
+              }
+              Text(requirement.gap)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+          }
+        }
+        .padding(.top, 8)
+      }
+    }
+  }
+
+  private var contractCoverageSummary: String {
+    let requirements = PerformanceBenchmarkContractRequirement.allCases
+    let complete = requirements.count(where: { $0.coverage == .complete })
+    let partial = requirements.count(where: { $0.coverage == .partial })
+    let missing = requirements.count(where: { $0.coverage == .missing })
+    return "\(complete) complete · \(partial) partial · \(missing) missing"
+  }
+
+  private func coverageTitle(_ coverage: PerformanceBenchmarkContractCoverage) -> String {
+    switch coverage {
+    case .complete: "Complete"
+    case .partial: "Partial"
+    case .missing: "Missing"
+    }
+  }
+
+  private func coverageSymbol(_ coverage: PerformanceBenchmarkContractCoverage) -> String {
+    switch coverage {
+    case .complete: "checkmark.circle.fill"
+    case .partial: "exclamationmark.circle.fill"
+    case .missing: "xmark.circle.fill"
+    }
+  }
+
+  private func coverageColor(_ coverage: PerformanceBenchmarkContractCoverage) -> Color {
+    switch coverage {
+    case .complete: .green
+    case .partial: .orange
+    case .missing: .red
     }
   }
 }

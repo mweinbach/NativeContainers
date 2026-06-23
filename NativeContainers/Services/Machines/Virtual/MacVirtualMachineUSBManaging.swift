@@ -98,20 +98,20 @@ struct UnavailableMacVirtualMachineUSBService: MacVirtualMachineUSBManaging {
   ) {}
 
   func discover(for machineID: UUID) async throws {
-    throw MacVirtualMachineUSBError.hostUnsupported
+    throw MacVirtualMachineUSBError.unavailable(reason)
   }
 
   func attach(
     deviceID: UInt64,
     to target: MacVirtualMachineRuntimeTarget
   ) async throws {
-    throw MacVirtualMachineUSBError.hostUnsupported
+    throw MacVirtualMachineUSBError.unavailable(reason)
   }
 
   func detach(
     deviceID: UInt64,
     from target: MacVirtualMachineRuntimeTarget
   ) async throws {
-    throw MacVirtualMachineUSBError.hostUnsupported
+    throw MacVirtualMachineUSBError.unavailable(reason)
   }
 }

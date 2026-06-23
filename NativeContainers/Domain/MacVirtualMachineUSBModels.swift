@@ -105,6 +105,7 @@ struct MacVirtualMachineUSBSnapshot: Equatable, Sendable {
 
 enum MacVirtualMachineUSBError: LocalizedError, Equatable, Sendable {
   case hostUnsupported
+  case unavailable(String)
   case invalidDeviceDescriptor
   case accessoryNotFound(UInt64)
   case incompatibleAccessory
@@ -121,6 +122,8 @@ enum MacVirtualMachineUSBError: LocalizedError, Equatable, Sendable {
     switch self {
     case .hostUnsupported:
       "USB passthrough requires macOS 27 or later."
+    case .unavailable(let reason):
+      reason
     case .invalidDeviceDescriptor:
       "The USB accessory reported an invalid device descriptor."
     case .accessoryNotFound(let identifier):

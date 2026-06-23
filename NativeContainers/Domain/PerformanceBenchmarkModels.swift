@@ -76,6 +76,77 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
   }
 }
 
+enum PerformanceBenchmarkContractCoverage: String, CaseIterable, Sendable {
+  case complete
+  case partial
+  case missing
+}
+
+enum PerformanceBenchmarkContractRequirement: String, CaseIterable, Identifiable, Sendable {
+  case containerStartup
+  case idleContainerMemory
+  case postStressMemory
+  case bindMountIO
+  case postgreSQLDurability
+  case imagePullBuildAndDisk
+  case containerNetworking
+  case recovery
+
+  var id: Self { self }
+
+  var coverage: PerformanceBenchmarkContractCoverage {
+    switch self {
+    case .containerStartup, .idleContainerMemory, .bindMountIO,
+      .imagePullBuildAndDisk, .containerNetworking:
+      .partial
+    case .postStressMemory, .postgreSQLDurability, .recovery:
+      .missing
+    }
+  }
+
+  var title: LocalizedStringResource {
+    switch self {
+    case .containerStartup:
+      "Cold and warm container startup"
+    case .idleContainerMemory:
+      "1, 10, and 50 idle-container memory"
+    case .postStressMemory:
+      "Post-stress retained memory"
+    case .bindMountIO:
+      "Bind-mount metadata and sequential I/O"
+    case .postgreSQLDurability:
+      "PostgreSQL durability and fsync"
+    case .imagePullBuildAndDisk:
+      "Image pull, build, and disk growth"
+    case .containerNetworking:
+      "NAT and direct-IP networking"
+    case .recovery:
+      "Sleep, wake, and crash recovery"
+    }
+  }
+
+  var gap: LocalizedStringResource {
+    switch self {
+    case .containerStartup:
+      "Cold startup is covered; warm container startup is not."
+    case .idleContainerMemory:
+      "One idle container is sampled; 10- and 50-container resident-memory density is not."
+    case .postStressMemory:
+      "No workload measures memory retained after guest stress and idle-stop."
+    case .bindMountIO:
+      "Sequential write, fsync, and read are covered; metadata operations are not."
+    case .postgreSQLDurability:
+      "No PostgreSQL durability or fsync workload exists."
+    case .imagePullBuildAndDisk:
+      "No-cache build time is covered; pull time and allocated disk growth are not."
+    case .containerNetworking:
+      "Local TCP and guest HTTPS transfer are covered; comparative NAT/direct-IP latency and throughput are not."
+    case .recovery:
+      "No benchmark covers host sleep/wake or process and runtime crash recovery."
+    }
+  }
+}
+
 struct PerformanceBenchmarkSample: Equatable, Sendable {
   let durationNanoseconds: UInt64
   let processedByteCount: Int64?

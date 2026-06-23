@@ -101,7 +101,7 @@ struct MacVirtualMachineUSBModelsTests {
     #expect(snapshot.machineID == machineID)
     #expect(snapshot.discoveryStatus == .unavailable("Unavailable in test"))
     await #expect(
-      throws: MacVirtualMachineUSBError.hostUnsupported
+      throws: MacVirtualMachineUSBError.unavailable("Unavailable in test")
     ) {
       try await service.discover(for: machineID)
     }

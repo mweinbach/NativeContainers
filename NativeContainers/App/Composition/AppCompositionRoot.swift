@@ -296,7 +296,7 @@ enum AppCompositionRoot {
       else {
         return UnavailableMacVirtualMachineUSBService(
           reason:
-            "Accessory Access is unavailable because this signed build does not include its USB entitlement."
+            "Physical USB is blocked in this build because its code signature does not contain com.apple.developer.accessory-access.usb. Discovery and attachment cannot run until Xcode can provision that capability."
         )
       }
       return MacVirtualMachineUSBService(

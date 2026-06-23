@@ -4,6 +4,7 @@ enum ComposeBridgeConformanceStatus: String, CaseIterable, Equatable, Sendable {
   case supported
   case partial
   case unsupported
+  case upstreamBlocked
   case policyBlocked
 }
 

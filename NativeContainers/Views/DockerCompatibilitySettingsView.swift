@@ -317,6 +317,7 @@ struct DockerCompatibilitySettingsSection: View {
     case .supported: "Supported"
     case .partial: "Partial"
     case .unsupported: "Unsupported"
+    case .upstreamBlocked: "Upstream blocked"
     case .policyBlocked: "Policy blocked"
     }
   }
@@ -326,6 +327,7 @@ struct DockerCompatibilitySettingsSection: View {
     case .supported: "checkmark.circle.fill"
     case .partial: "exclamationmark.circle.fill"
     case .unsupported: "xmark.circle.fill"
+    case .upstreamBlocked: "arrow.triangle.branch"
     case .policyBlocked: "lock.circle.fill"
     }
   }
@@ -335,6 +337,7 @@ struct DockerCompatibilitySettingsSection: View {
     case .supported: .green
     case .partial: .orange
     case .unsupported: .red
+    case .upstreamBlocked: .red
     case .policyBlocked: .secondary
     }
   }

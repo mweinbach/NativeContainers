@@ -11,6 +11,7 @@ enum DockerEngineComposeOperation: String, CaseIterable, Hashable, Sendable {
   case containerKill = "Container kill"
   case containerList = "Container list"
   case containerLogs = "Container logs"
+  case containerRename = "Container rename"
   case containerStart = "Container start"
   case containerStop = "Container stop"
   case containerWait = "Container wait"
@@ -32,7 +33,7 @@ struct SocktainerComposeConformanceFixture: Equatable, Sendable {
   let requiredOperations: Set<DockerEngineComposeOperation>
   let evidence: String
   let limitations: [String]
-  let unsupportedReason: String?
+  let upstreamBlockReason: String?
   let policyBlockReason: String?
 
   init(
@@ -41,7 +42,7 @@ struct SocktainerComposeConformanceFixture: Equatable, Sendable {
     requiredOperations: Set<DockerEngineComposeOperation>,
     evidence: String,
     limitations: [String] = [],
-    unsupportedReason: String? = nil,
+    upstreamBlockReason: String? = nil,
     policyBlockReason: String? = nil
   ) {
     self.id = id
@@ -49,7 +50,7 @@ struct SocktainerComposeConformanceFixture: Equatable, Sendable {
     self.requiredOperations = requiredOperations
     self.evidence = evidence
     self.limitations = limitations
-    self.unsupportedReason = unsupportedReason
+    self.upstreamBlockReason = upstreamBlockReason
     self.policyBlockReason = policyBlockReason
   }
 }
@@ -109,17 +110,22 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
           .networkDisconnect, .networkDelete,
         ],
         evidence:
-          "Pinned create/list/inspect/delete routes cover labeled project networks, but Socktainer 1.0.0 returns NotImplemented for connect and disconnect.",
-        limitations: [
-          "Per-service network aliases are not mapped by Socktainer 1.0.0."
-        ]
+          "Pinned create/list/inspect/delete routes cover labeled project networks, but Socktainer 1.0.0 returns NotImplemented for connect and disconnect."
+      ),
+      SocktainerComposeConformanceFixture(
+        id: "compose-network-aliases",
+        title: "Network aliases",
+        requiredOperations: [.containerCreate, .containerInspect],
+        evidence: "The bridge can create and inspect containers, but it drops alias intent.",
+        upstreamBlockReason:
+          "Socktainer 1.0.0 does not map per-service Compose network aliases."
       ),
       SocktainerComposeConformanceFixture(
         id: "compose-healthchecks",
         title: "Health checks",
         requiredOperations: [.containerCreate, .containerInspect],
         evidence: "Create and inspect routes exist, but the health contract is not implemented.",
-        unsupportedReason:
+        upstreamBlockReason:
           "Socktainer 1.0.0 does not map Compose health-check configuration or health state."
       ),
       SocktainerComposeConformanceFixture(
@@ -127,16 +133,31 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
         title: "Restart policies",
         requiredOperations: [.containerCreate, .containerInspect],
         evidence: "Create and inspect routes exist, but restart-policy parity is absent.",
-        unsupportedReason:
+        upstreamBlockReason:
           "Socktainer 1.0.0 does not provide Compose restart-policy behavior."
       ),
       SocktainerComposeConformanceFixture(
-        id: "compose-configs-secrets",
-        title: "Configs and secrets",
+        id: "compose-configs",
+        title: "Configs",
         requiredOperations: [.containerCreate],
-        evidence: "Container creation exists, but Compose config and secret objects are absent.",
-        unsupportedReason:
-          "Socktainer 1.0.0 has no Docker Engine config or secret resource contract."
+        evidence: "Container creation exists, but Compose config objects are absent.",
+        upstreamBlockReason:
+          "Socktainer 1.0.0 has no Docker Engine config resource contract."
+      ),
+      SocktainerComposeConformanceFixture(
+        id: "compose-secrets",
+        title: "Secrets",
+        requiredOperations: [.containerCreate],
+        evidence: "Container creation exists, but Compose secret objects are absent.",
+        upstreamBlockReason:
+          "Socktainer 1.0.0 has no Docker Engine secret resource contract."
+      ),
+      SocktainerComposeConformanceFixture(
+        id: "compose-recreation",
+        title: "Container recreation",
+        requiredOperations: [.containerRename, .networkConnect, .networkDisconnect],
+        evidence:
+          "Compose replacement needs rename plus network attachment changes that the pinned bridge does not implement."
       ),
       SocktainerComposeConformanceFixture(
         id: "compose-project-lifecycle",
@@ -145,7 +166,7 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
         evidence:
           "NativeContainers renders a stable full/active model, stores opaque reviewed plans, revalidates source/binary/environment/inventory at commit time, and journals exact-ID mutations.",
         limitations: [
-          "Execution covers fresh and contiguous-prefix create-missing Up through a frozen external-resource overlay, exact-ID Start/Stop, separately typed declared/orphan Down, and reviewed named-volume/network deletion. Recreation remains blocked while Socktainer lacks rename and network connect/disconnect routes."
+          "Execution covers fresh and contiguous-prefix create-missing Up through a frozen external-resource overlay, exact-ID Start/Stop, separately typed declared/orphan Down, and reviewed named-volume/network deletion. Scale-down and replacement are outside this executable subset."
         ]
       ),
     ]
@@ -181,11 +202,11 @@ struct SocktainerComposeConformanceService: ComposeBridgeConformanceReporting {
     if let reason = fixture.policyBlockReason {
       status = .policyBlocked
       summary = reason
-    } else if let reason = fixture.unsupportedReason {
-      status = .unsupported
+    } else if let reason = fixture.upstreamBlockReason {
+      status = .upstreamBlocked
       summary = reason
     } else if !missing.isEmpty {
-      status = .unsupported
+      status = .upstreamBlocked
       summary = "The pinned route manifest is missing: \(missing.joined(separator: ", "))."
     } else if !fixture.limitations.isEmpty {
       status = .partial

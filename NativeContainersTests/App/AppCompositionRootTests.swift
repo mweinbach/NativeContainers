@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import NativeContainers
@@ -85,6 +86,15 @@ struct AppCompositionRootTests {
       #expect(
         services.virtualMachineUSB is UnavailableMacVirtualMachineUSBService
       )
+      let snapshot = services.virtualMachineUSB.snapshot(for: UUID())
+      guard case .unavailable(let reason) = snapshot.discoveryStatus else {
+        Issue.record("Expected the USB service to publish its activation blocker.")
+        return
+      }
+      if #available(macOS 27.0, *) {
+        #expect(reason.contains("com.apple.developer.accessory-access.usb"))
+        #expect(reason.contains("code signature"))
+      }
     }
     #expect(services.linuxVirtualMachineRuntime is LinuxVirtualMachineRuntimeService)
     #expect(services.virtualMachineName is MacVirtualMachineNameService)

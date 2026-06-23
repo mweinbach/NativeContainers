@@ -7,6 +7,18 @@ import Testing
 
 struct PerformanceBenchmarkServiceTests {
   @Test
+  func productContractPublishesEveryIncompleteRequirement() {
+    let requirements = PerformanceBenchmarkContractRequirement.allCases
+
+    #expect(requirements.count == 8)
+    #expect(requirements.count(where: { $0.coverage == .complete }) == 0)
+    #expect(requirements.count(where: { $0.coverage == .partial }) == 5)
+    #expect(requirements.count(where: { $0.coverage == .missing }) == 3)
+    #expect(requirements.contains(.postgreSQLDurability))
+    #expect(requirements.contains(.recovery))
+  }
+
+  @Test
   func settingsSuiteExcludesMutatingLiveLanes() {
     #expect(
       PerformanceBenchmarkKind.settingsSuiteCases == [

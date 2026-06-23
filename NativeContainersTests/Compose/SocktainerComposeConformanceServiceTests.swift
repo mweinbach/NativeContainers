@@ -13,15 +13,25 @@ struct SocktainerComposeConformanceServiceTests {
     #expect(report.sourceRevision == "876c2fc")
     #expect(report.results.map(\.id).count == Set(report.results.map(\.id)).count)
     #expect(report.supportedCount == 4)
-    #expect(report.gapCount == 5)
+    #expect(report.gapCount == 8)
     #expect(report.projectLifecycleIsEligible)
 
     #expect(try result("compose-project-labels", in: report).status == .supported)
     #expect(try result("compose-container-lifecycle", in: report).status == .supported)
     let networks = try result("compose-project-networks", in: report)
-    #expect(networks.status == .unsupported)
+    #expect(networks.status == .upstreamBlocked)
     #expect(networks.missingOperations == ["Network connect", "Network disconnect"])
-    #expect(try result("compose-healthchecks", in: report).status == .unsupported)
+    #expect(try result("compose-network-aliases", in: report).status == .upstreamBlocked)
+    #expect(try result("compose-healthchecks", in: report).status == .upstreamBlocked)
+    #expect(try result("compose-configs", in: report).status == .upstreamBlocked)
+    #expect(try result("compose-secrets", in: report).status == .upstreamBlocked)
+    let recreation = try result("compose-recreation", in: report)
+    #expect(recreation.status == .upstreamBlocked)
+    #expect(
+      recreation.missingOperations == [
+        "Container rename", "Network connect", "Network disconnect",
+      ]
+    )
     #expect(try result("compose-project-lifecycle", in: report).status == .partial)
   }
 
@@ -39,7 +49,7 @@ struct SocktainerComposeConformanceServiceTests {
     let report = SocktainerComposeConformanceService(manifest: manifest).report()
     let volumes = try result("compose-named-volumes", in: report)
 
-    #expect(volumes.status == .unsupported)
+    #expect(volumes.status == .upstreamBlocked)
     #expect(volumes.missingOperations == ["Volume create"])
     #expect(volumes.summary.contains("Volume create"))
   }
@@ -50,7 +60,7 @@ struct SocktainerComposeConformanceServiceTests {
     let health = try result("compose-healthchecks", in: report)
 
     #expect(health.missingOperations.isEmpty)
-    #expect(health.status == .unsupported)
+    #expect(health.status == .upstreamBlocked)
     #expect(health.summary.contains("health-check"))
   }
 
