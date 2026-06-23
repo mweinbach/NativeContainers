@@ -2,15 +2,27 @@ import SwiftUI
 
 @main
 struct NativeContainersApp: App {
-  @State private var model = AppModel(services: AppCompositionRoot.live())
+  @State private var model: AppModel
+  @State private var menuBarQuickControls: MenuBarQuickControlsController
 
-  @AppStorage(AppPreferenceKey.menuBarExtraInserted)
-  private var isMenuBarExtraInserted = true
+  init() {
+    let model = AppModel(services: AppCompositionRoot.live())
+    _model = State(initialValue: model)
+    _menuBarQuickControls = State(
+      initialValue: MenuBarQuickControlsController(model: model)
+    )
+  }
 
   var body: some Scene {
     Window("NativeContainers", id: "main") {
       RootView(model: model)
         .frame(minWidth: 940, minHeight: 620)
+        .background {
+          MenuBarQuickControlsInstaller(
+            model: model,
+            controller: menuBarQuickControls
+          )
+        }
     }
     .defaultSize(width: 1180, height: 760)
     .commands {
@@ -60,15 +72,5 @@ struct NativeContainersApp: App {
         .frame(width: 680, height: 700)
     }
 
-    MenuBarExtra(
-      "NativeContainers",
-      systemImage: "shippingbox.fill",
-      isInserted: AppExecutionContext.current.allowsMenuBarExtra
-        ? $isMenuBarExtraInserted
-        : .constant(false)
-    ) {
-      MenuBarQuickControlsView(model: model)
-    }
-    .menuBarExtraStyle(.window)
   }
 }

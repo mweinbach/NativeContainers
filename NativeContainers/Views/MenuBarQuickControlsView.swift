@@ -2,6 +2,8 @@ import SwiftUI
 
 struct MenuBarQuickControlsView: View {
   let model: AppModel
+  let openMainWindow: (WorkspaceRoute) -> Void
+  let openSettings: () -> Void
 
   var body: some View {
     VStack(spacing: 0) {
@@ -24,11 +26,18 @@ struct MenuBarQuickControlsView: View {
 
       Divider()
 
-      MenuBarContainerQuickControls(model: model)
+      MenuBarContainerQuickControls(
+        model: model,
+        openMainWindow: openMainWindow
+      )
 
       Divider()
 
-      MenuBarQuickControlsFooter(model: model)
+      MenuBarQuickControlsFooter(
+        model: model,
+        openMainWindow: openMainWindow,
+        openSettings: openSettings
+      )
     }
     .frame(width: 360)
     .task {
@@ -133,6 +142,7 @@ private struct MenuBarRuntimeAvailabilityIndicator: View {
 
 private struct MenuBarContainerQuickControls: View {
   let model: AppModel
+  let openMainWindow: (WorkspaceRoute) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -151,7 +161,8 @@ private struct MenuBarContainerQuickControls: View {
                 containerID: container.id,
                 imageReference: container.imageReference,
                 state: container.state,
-                appIsRefreshing: model.isRefreshing
+                appIsRefreshing: model.isRefreshing,
+                openMainWindow: openMainWindow
               )
             }
           }
@@ -202,8 +213,8 @@ private struct MenuBarContainerQuickControlRow: View {
   let imageReference: String
   let state: RuntimeState
   let appIsRefreshing: Bool
+  let openMainWindow: (WorkspaceRoute) -> Void
 
-  @Environment(\.openWindow) private var openWindow
   @State private var activeActions: Set<ContainerQuickAction> = []
 
   var body: some View {
@@ -291,8 +302,7 @@ private struct MenuBarContainerQuickControlRow: View {
   }
 
   private func openContainer() {
-    _ = model.navigate(to: .container(containerID))
-    openWindow(id: "main")
+    openMainWindow(.container(containerID))
   }
 
   private func perform(_ action: ContainerQuickAction) {
@@ -330,14 +340,13 @@ private enum ContainerQuickAction: Hashable {
 
 private struct MenuBarQuickControlsFooter: View {
   let model: AppModel
-
-  @Environment(\.openWindow) private var openWindow
+  let openMainWindow: (WorkspaceRoute) -> Void
+  let openSettings: () -> Void
 
   var body: some View {
     HStack(spacing: 8) {
       Button("Open NativeContainers", systemImage: "macwindow") {
-        _ = model.navigate(to: .overview)
-        openWindow(id: "main")
+        openMainWindow(.overview)
       }
 
       Spacer()
@@ -351,7 +360,7 @@ private struct MenuBarQuickControlsFooter: View {
       .accessibilityLabel("Refresh all resources")
       .disabled(model.isRefreshing)
 
-      SettingsLink {
+      Button(action: openSettings) {
         Image(systemName: "gearshape")
       }
       .help("Open Settings")
@@ -362,5 +371,9 @@ private struct MenuBarQuickControlsFooter: View {
 }
 
 #Preview("Menu Bar Quick Controls") {
-  MenuBarQuickControlsView(model: .preview)
+  MenuBarQuickControlsView(
+    model: .preview,
+    openMainWindow: { _ in },
+    openSettings: {}
+  )
 }

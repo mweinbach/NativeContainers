@@ -1,10 +1,6 @@
 import Foundation
 
 struct AppExecutionContext: Sendable {
-  // MenuBarExtra continuously invalidates the app graph on macOS 27.
-  // Keep newer runtimes disabled until the framework behavior is revalidated.
-  private static let latestMenuBarExtraCompatibleMajorVersion = 26
-
   let isRunningTests: Bool
   let isRunningPreviews: Bool
   let operatingSystemVersion: OperatingSystemVersion
@@ -17,12 +13,8 @@ struct AppExecutionContext: Sendable {
     !isRunningTests && !isRunningPreviews
   }
 
-  var supportsMenuBarExtra: Bool {
-    operatingSystemVersion.majorVersion <= Self.latestMenuBarExtraCompatibleMajorVersion
-  }
-
-  var allowsMenuBarExtra: Bool {
-    allowsPersistentSystemScenes && supportsMenuBarExtra
+  var allowsMenuBarControls: Bool {
+    allowsPersistentSystemScenes
   }
 
   init(

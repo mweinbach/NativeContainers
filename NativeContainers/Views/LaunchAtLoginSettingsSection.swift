@@ -10,9 +10,7 @@ struct AppBehaviorSettingsSection: View {
     @Bindable var launchAtLogin = launchAtLogin
 
     Section("App behavior") {
-      if AppExecutionContext.current.supportsMenuBarExtra {
-        Toggle("Show menu bar controls", isOn: $isMenuBarExtraInserted)
-      }
+      Toggle("Show menu bar controls", isOn: $isMenuBarExtraInserted)
 
       Toggle("Launch at login", isOn: $launchAtLogin.isEnabled)
         .disabled(!launchAtLogin.status.canChange || launchAtLogin.isUpdating)
