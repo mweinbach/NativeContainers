@@ -8,6 +8,10 @@ must leave a usable, test-backed product slice.
 - [x] Native macOS app and unit-test targets build in Xcode.
 - [x] Add and signing-verify the required Virtualization entitlement through Xcode.
 - [x] Direct Apple client adapter reports container system health.
+- [x] Explicit external-runtime distribution contract for Apple `container`
+      1.0.0: official signed package prerequisite, exact path/version/signature
+      validation, bounded service recovery, container-plus-machine endpoint
+      verification, install handoff, archive exclusion, and source drift gate.
 - [x] Live inventories for containers, images, volumes, and Linux machines.
 - [x] Stable domain models and mockable service protocols.
 - [x] Extract inventory, creation, lifecycle, inspection/tooling, terminal,
@@ -354,6 +358,8 @@ must leave a usable, test-backed product slice.
   - [x] Arm64-only versioned archive with hardened runtime on the app and
         embedded build worker, constrained entitlements, exact layout checks,
         and a repeatable local validator.
+  - [x] Keep Apple’s signed 1.0.0 system runtime external, expose a reviewed
+        install/start recovery path, and reject runtime executables in archives.
   - [ ] Developer ID Application signing, notarization submission, accepted
         ticket stapling, and strict Gatekeeper validation.
   - [ ] Signed updater with rollback and version-policy tests.
@@ -401,6 +407,9 @@ Potential parity gaps are tracked rather than hidden:
 
 - Apple’s container stack is OCI/Docker-image and Dockerfile compatible but has
   no Docker Engine API. Docker CLI/Compose requires a separate bridge.
+- Apple’s public clients and service launcher use fixed
+  `com.apple.container.*` Mach labels. NativeContainers requires Apple’s signed
+  system installation rather than maintaining a namespaced client/service fork.
 - Physical bridged networking and some low-level VM controls require restricted
   entitlements. NAT remains the portable default; public vmnet shared and
   host-only logical networks provide advanced same-process modes without

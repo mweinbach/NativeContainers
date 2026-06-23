@@ -14,13 +14,20 @@ This repository is intentionally split into two runtime lanes:
   [`Virtualization.framework`](https://developer.apple.com/documentation/virtualization)
   directly, including `VZVirtualMachineView` for native guest display.
 
-The app targets Apple silicon and macOS 26 or newer. The current development
-host is macOS 27 with Xcode 27; Apple `container` 1.0.0 is installed and its
-services are running.
+The app targets Apple silicon and macOS 26 or newer. The container lane requires
+Apple `container` 1.0.0 from Apple’s
+[signed installer](https://github.com/apple/container/releases/tag/1.0.0).
+NativeContainers does not bundle or silently install that system runtime. When
+the services are unavailable, the Overview links to Apple’s exact release,
+validates the root-owned Apple-signed CLI at `/usr/local/bin/container`, starts
+the official services, and verifies both container and machine APIs before
+refreshing app state.
 
 ## Status
 
-Foundation work is underway. See:
+Most planned management workflows are implemented and test-backed. Public
+release signing, notarization, updater work, live accessibility evidence, and
+the remaining destructive VM verification passes are still open. See:
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Distribution](docs/DISTRIBUTION.md)

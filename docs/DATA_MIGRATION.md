@@ -65,6 +65,7 @@ owned by an app-update migration:
 
 - Apple's `com.apple.container` runtime inventory, images, volumes, networks,
   machines, builder bundle, and service configuration;
+- Apple’s signed `container` installer payload and package receipt under `/usr/local`;
 - registry credentials in Apple's shared Keychain security domain;
 - the product-specific Docker CLI context, the user's Docker configuration, and
   the `~/.socktainer` compatibility socket/process workspace;

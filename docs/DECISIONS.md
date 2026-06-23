@@ -46,13 +46,18 @@ constraints are proven. Apple container networking remains owned by its runtime.
 
 ## ADR-006: Bundle a namespaced, version-matched runtime for distribution
 
-**Status:** Accepted — 2026-06-20
+**Status:** Superseded by ADR-088 — 2026-06-23
 
 The foundation talks to the installed Apple 1.0.0 services so API integration
 can be proven immediately. The shipping app will embed a namespaced build of
 the matching Apple services/helpers and use app-owned Mach service labels,
 sockets, and data roots. This avoids collisions with the standalone CLI and
 prevents unsupported client/server drift.
+
+The implementation audit in ADR-088 found that this would require a maintained
+fork of both Apple’s public clients and its installed service graph, not merely
+an alternate app-bundle layout. NativeContainers now uses the official signed
+system runtime as an explicit prerequisite instead.
 
 ## ADR-007: Treat Docker Engine compatibility as a plugin
 
@@ -2521,3 +2526,54 @@ completion if only the final directory flush fails. The resulting restricted-
 PAX tar contains the EXT4 root filesystem only; external volumes, bind mounts,
 runtime/VM state, replacement, and an unsupported import path remain explicit
 non-features.
+
+## ADR-088: Require Apple’s signed system runtime for the container lane
+
+**Status:** Accepted — 2026-06-23
+
+NativeContainers distributes the app and its private build worker, not a fork of
+Apple’s container runtime. The container and persistent-machine lanes require
+Apple `container` 1.0.0 installed from Apple’s signed package under
+`/usr/local`. The app links the matching 1.0.0 Swift clients and treats Apple’s
+runtime inventory, service configuration, package receipt, executables, and
+user data as external authorities.
+
+This boundary follows the upstream product. Apple’s signed installer places the
+CLI, API server, four service/plugin executables, configuration, update script,
+and uninstaller under `/usr/local` with administrator authorization. Its public
+`ClientHealthCheck`, `ContainerClient`, image/volume clients, and
+`MachineClient` connect to fixed `com.apple.container.*` Mach services; the
+upstream `system start` command registers the same fixed API-server label.
+Changing only an app root or install root does not namespace that protocol.
+Embedding an isolated copy would therefore require NativeContainers to own and
+continuously rebase a fork of the clients, launchd graph, runtime plugins,
+updater, signing, and compatibility surface. That is not the shipped product.
+The pinned evidence is Apple’s 1.0.0
+[installation contract](https://github.com/apple/container/blob/1.0.0/README.md#initial-install),
+[installer layout](https://github.com/apple/container/blob/1.0.0/Makefile),
+[service launcher](https://github.com/apple/container/blob/1.0.0/Sources/ContainerCommands/System/SystemStart.swift),
+and fixed-label
+[container](https://github.com/apple/container/blob/1.0.0/Sources/Services/ContainerAPIService/Client/ContainerClient.swift),
+[health](https://github.com/apple/container/blob/1.0.0/Sources/Services/ContainerAPIService/Client/ClientHealthCheck.swift),
+and
+[machine](https://github.com/apple/container/blob/1.0.0/Sources/Services/MachineAPIService/Client/MachineClient.swift)
+clients.
+
+The app may help an already-authorized user recover the official runtime, but
+it never downloads an installer, elevates privileges, invokes `installer`,
+updates, downgrades, uninstalls, or re-signs Apple code. Overview links to the
+exact Apple 1.0.0 release. Before invoking the fixed CLI, the app requires a
+root-owned, single-link, non-group/world-writable executable at
+`/usr/local/bin/container` whose code signature matches Apple’s reviewed team
+and signing identifier. It accepts only the pinned semantic version, runs
+`system start --enable-kernel-install`, bounds output and execution time, and
+then verifies both the container API health endpoint and machine API endpoint.
+
+The app archive validator rejects Apple runtime executable names anywhere in
+the bundle. A separate source-contract validator keeps the package version,
+installer receipt, executable path, release URL, signing identity, docs, and
+archive rule aligned. Upgrading the supported Apple runtime is an explicit
+product change: update the package pins and contract together, review upstream
+protocol changes, run deterministic coverage, repeat the live container,
+machine, build, Compose, and Kubernetes gates, and produce a new signed release
+candidate.

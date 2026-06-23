@@ -51,6 +51,22 @@ worker="$app/Contents/Helpers/NativeContainersBuildWorker"
 [[ -f "$executable" ]] || fail "main executable is missing"
 [[ -f "$worker" ]] || fail "embedded build worker is missing"
 
+embedded_runtime_payloads=$(
+  find "$app/Contents" -type f \( \
+    -name container -o \
+    -name container-apiserver -o \
+    -name container-core-images -o \
+    -name container-network-vmnet -o \
+    -name container-runtime-linux -o \
+    -name machine-apiserver -o \
+    -name update-container.sh -o \
+    -name uninstall-container.sh \
+  \) -print
+)
+[[ -z "$embedded_runtime_payloads" ]] ||
+  fail "Apple container runtime must remain an external prerequisite; found embedded payloads: $embedded_runtime_payloads"
+note "Apple container runtime is not embedded in the app"
+
 if [[ -n "$archive" ]]; then
   app_dsym="$archive/dSYMs/NativeContainers.app.dSYM/Contents/Resources/DWARF/NativeContainers"
   worker_dsym="$archive/dSYMs/NativeContainersBuildWorker.dSYM/Contents/Resources/DWARF/NativeContainersBuildWorker"

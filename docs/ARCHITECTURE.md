@@ -87,8 +87,10 @@ The adapter maps those values into small `Sendable`, `Codable`, `Equatable`
 domain records. The rest of the app does not import Apple’s client products.
 This keeps UI tests fast and isolates package source changes.
 
-The installed Apple services remain the authority for runtime state. The app
-does not create a second database of containers, images, networks, or volumes.
+The official Apple `container` 1.0.0 installation remains the authority for
+runtime state. It is a separately installed, Apple-signed system prerequisite;
+the app does not bundle its executables or create a second database of
+containers, images, networks, or volumes.
 
 Stopped-container filesystem export crosses a dedicated
 `ContainerFilesystemExporting` facet backed by the pinned public
@@ -585,11 +587,15 @@ pipe read can wait for the entire requested buffer or until EOF; the input lease
 is intentionally open, and the worker stays alive during a solve, so using it
 would deadlock request dispatch or buffer progress until the build had ended.
 
-During foundation development the GUI connects to a matching installed Apple
-`container` 1.0.0 service. A distributable product must embed a version-matched,
-namespaced build of Apple’s Apache-licensed services and helpers so it can
-coexist with the standalone CLI and cannot drift across an incompatible XPC
-protocol. The UI adapter stays the same across those deployment modes.
+The distributable GUI connects only to the matching official Apple `container`
+1.0.0 installation. Apple’s public clients and `system start` implementation
+use fixed `com.apple.container.*` Mach service labels, while Apple’s signed
+installer owns the multi-binary runtime under `/usr/local`. NativeContainers
+therefore does not embed or re-sign those services. Overview can link to Apple’s
+exact signed release and recover stopped services only after validating the
+root-owned CLI’s path, signature, signing team, identifier, and exact version.
+It verifies both container and machine APIs after startup before inventory is
+treated as available. ADR-088 records the distribution and upgrade boundary.
 
 Docker CLI and Compose compatibility are a separate service boundary. Apple’s
 core project intentionally exposes OCI/Dockerfile compatibility rather than the
