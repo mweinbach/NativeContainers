@@ -107,6 +107,19 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       persistence: library,
       savedStateService: savedStateService
     )
+    let computeService = LinuxVirtualMachineComputeService(
+      leasingStore: library,
+      persistence: library,
+      savedStateService: savedStateService,
+      platformLimits: AppleVirtualMachineComputeLimits.current()
+    )
+    let diskResizeService = VirtualMachineDiskImageResizeService(
+      store: library,
+      macSavedStates: MacVirtualMachineSavedStateService(
+        store: MacVirtualMachineSavedStateStore()
+      ),
+      linuxSavedStates: savedStateService
+    )
     let resources = try VirtualMachineResources(
       cpuCount: min(4, max(1, ProcessInfo.processInfo.processorCount)),
       memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
@@ -151,6 +164,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       try await runtime.start(id: machine.id)
       var snapshot = runtime.snapshot(for: machine.id)
       let target = try #require(snapshot.target)
+      var activeTarget = target
       #expect(snapshot.state == .running)
       #expect(snapshot.hasInstallationMedia)
       let console = try #require(runtime.console(for: target))
@@ -204,7 +218,83 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       )
       try runtime.setMemoryBalloonTarget(resources.memoryBytes, for: target)
 
-      try await runtime.forceStop(target: target)
+      var coldReconfigurationResult = "not_requested"
+      if let coldReconfiguration = configuration.coldReconfiguration {
+        try runtime.requestStop(target: activeTarget)
+        try await Self.waitForStoppedRuntime(
+          runtime,
+          machineID: machine.id
+        )
+        snapshot = runtime.snapshot(for: machine.id)
+        #expect(snapshot.state == .stopped)
+        #expect(snapshot.target == nil)
+
+        let computeSnapshot = try await computeService.setConfiguration(
+          VirtualMachineComputeConfiguration(
+            cpuCount: coldReconfiguration.cpuCount,
+            memoryBytes: coldReconfiguration.memoryBytes
+          ),
+          for: machine.id
+        )
+        #expect(
+          computeSnapshot.configuration.cpuCount
+            == coldReconfiguration.cpuCount
+        )
+        #expect(
+          computeSnapshot.configuration.memoryBytes
+            == coldReconfiguration.memoryBytes
+        )
+        let resizeResult = try await diskResizeService.grow(
+          machineID: machine.id,
+          guest: .linux,
+          to: coldReconfiguration.diskBytes
+        )
+        #expect(resizeResult.didResize)
+        #expect(
+          resizeResult.previousLogicalBytes == resources.diskBytes
+        )
+        #expect(
+          resizeResult.newLogicalBytes == coldReconfiguration.diskBytes
+        )
+        let persisted = try #require(
+          try await library.list().first(where: { $0.id == machine.id })
+        )
+        #expect(persisted.resources.cpuCount == coldReconfiguration.cpuCount)
+        #expect(
+          persisted.resources.memoryBytes == coldReconfiguration.memoryBytes
+        )
+        #expect(persisted.resources.diskBytes == coldReconfiguration.diskBytes)
+
+        try await runtime.start(id: machine.id)
+        snapshot = runtime.snapshot(for: machine.id)
+        activeTarget = try #require(snapshot.target)
+        #expect(snapshot.state == .running)
+        #expect(!snapshot.hasInstallationMedia)
+        let restartedConsole = try #require(
+          runtime.console(for: activeTarget)
+        )
+        #expect(
+          snapshot.memoryBalloon?.configuredMemoryBytes
+            == coldReconfiguration.memoryBytes
+        )
+        try await presentVisualConsole(
+          restartedConsole,
+          seconds: coldReconfiguration.visualHoldSeconds,
+          probesGuestInput: true,
+          performsBootInputProbe: false,
+          onEjectInstallationMedia: {
+            _ = try await runtime.ejectInstallationMedia(
+              target: activeTarget
+            )
+          }
+        )
+        snapshot = runtime.snapshot(for: machine.id)
+        #expect(snapshot.state == .running)
+        #expect(restartedConsole.virtualMachine.state == .running)
+        coldReconfigurationResult = "confirmed"
+      }
+
+      try await runtime.forceStop(target: activeTarget)
       snapshot = runtime.snapshot(for: machine.id)
       #expect(snapshot.state == .stopped)
       #expect(snapshot.target == nil)
@@ -220,7 +310,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         sharedDirectoryConfiguration.directories.isEmpty
         ? "not_requested" : "attached"
       print(
-        "\(Self.outputMarker)id=\(machine.id.uuidString.lowercased()) iso_sha256=\(actualSHA256) installation_media=\(installationMediaResult) virtiofs=\(virtioFSResult) shared_directories=\(sharedDirectoryConfiguration.directories.count) running=confirmed pause_resume=confirmed balloon=confirmed cleanup=complete"
+        "\(Self.outputMarker)id=\(machine.id.uuidString.lowercased()) iso_sha256=\(actualSHA256) installation_media=\(installationMediaResult) virtiofs=\(virtioFSResult) shared_directories=\(sharedDirectoryConfiguration.directories.count) cold_reconfiguration=\(coldReconfigurationResult) running=confirmed pause_resume=confirmed balloon=confirmed cleanup=complete"
       )
     } catch {
       if let machineID {
@@ -358,7 +448,13 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
           guestName: "Workspace",
           readOnly: false
         ),
-      ]
+      ],
+      coldReconfiguration: LiveLinuxVirtualMachineColdReconfigurationRequest(
+        cpuCount: 2,
+        memoryBytes: 6 * VirtualMachineResources.bytesPerGiB,
+        diskBytes: 72 * VirtualMachineResources.bytesPerGiB,
+        visualHoldSeconds: 600
+      )
     )
     try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
     try FileManager.default.setAttributes(
@@ -380,6 +476,16 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     #expect(configuration.sharedDirectories[0].readOnly)
     #expect(configuration.sharedDirectories[1].guestName == "Workspace")
     #expect(!configuration.sharedDirectories[1].readOnly)
+    #expect(configuration.coldReconfiguration?.cpuCount == 2)
+    #expect(
+      configuration.coldReconfiguration?.memoryBytes
+        == 6 * VirtualMachineResources.bytesPerGiB
+    )
+    #expect(
+      configuration.coldReconfiguration?.diskBytes
+        == 72 * VirtualMachineResources.bytesPerGiB
+    )
+    #expect(configuration.coldReconfiguration?.visualHoldSeconds == 600)
     #expect(
       !FileManager.default.fileExists(
         atPath: requestURL.nativeContainersPOSIXPath
@@ -420,6 +526,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     let configuration = try Self.loadRunRequest(at: requestURL)
 
     #expect(configuration.sharedDirectories.isEmpty)
+    #expect(configuration.coldReconfiguration == nil)
     #expect(
       !FileManager.default.fileExists(
         atPath: requestURL.nativeContainersPOSIXPath
@@ -454,7 +561,53 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
           guestName: "Workspace",
           readOnly: false
         )
-      ]
+      ],
+      coldReconfiguration: nil
+    )
+    try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: requestURL.nativeContainersPOSIXPath
+    )
+
+    #expect(throws: LiveLinuxVirtualMachineSmokeError.self) {
+      try Self.loadRunRequest(at: requestURL)
+    }
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: requestURL.nativeContainersPOSIXPath
+      )
+    )
+  }
+
+  @Test("Cold reconfiguration requires input and persisted media ejection")
+  func coldReconfigurationRequiresInputAndPersistedMediaEjection() throws {
+    let rootURL = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-live-request-test-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false
+    )
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let requestURL = rootURL.appending(
+      path: "request.json",
+      directoryHint: .notDirectory
+    )
+    let request = LiveLinuxVirtualMachineRunRequest(
+      isoPath: "/private/tmp/reviewed.iso",
+      isoSHA256: String(repeating: "a", count: 64),
+      visualHoldSeconds: 0,
+      probesGuestInput: false,
+      requiresInstallationMediaEjection: false,
+      sharedDirectories: nil,
+      coldReconfiguration: LiveLinuxVirtualMachineColdReconfigurationRequest(
+        cpuCount: 2,
+        memoryBytes: 6 * VirtualMachineResources.bytesPerGiB,
+        diskBytes: 72 * VirtualMachineResources.bytesPerGiB,
+        visualHoldSeconds: 600
+      )
     )
     try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
     try FileManager.default.setAttributes(
@@ -552,7 +705,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       requiresInstallationMediaEjection: environment[
         "NATIVECONTAINERS_LIVE_LINUX_VM_REQUIRE_MEDIA_EJECTION"
       ] == "1",
-      sharedDirectories: []
+      sharedDirectories: [],
+      coldReconfiguration: nil
     )
   }
 
@@ -628,6 +782,21 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         )
       }
     }
+    if let coldReconfiguration = request.coldReconfiguration {
+      guard request.probesGuestInput,
+        request.requiresInstallationMediaEjection,
+        coldReconfiguration.cpuCount > 0,
+        coldReconfiguration.memoryBytes > 0,
+        coldReconfiguration.diskBytes > 0,
+        (1...Self.visualHoldMaximumSeconds).contains(
+          coldReconfiguration.visualHoldSeconds
+        )
+      else {
+        throw LiveLinuxVirtualMachineSmokeError.invalidColdReconfiguration(
+          "it requires guest input, persisted media ejection, positive resource targets, and a bounded post-restart hold"
+        )
+      }
+    }
     return LiveLinuxVirtualMachineRunConfiguration(
       isoPath: request.isoPath,
       isoSHA256: request.isoSHA256,
@@ -635,14 +804,30 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       probesGuestInput: request.probesGuestInput,
       requiresInstallationMediaEjection:
         request.requiresInstallationMediaEjection,
-      sharedDirectories: sharedDirectories
+      sharedDirectories: sharedDirectories,
+      coldReconfiguration: request.coldReconfiguration
     )
+  }
+
+  private static func waitForStoppedRuntime(
+    _ runtime: any LinuxVirtualMachineRuntimeManaging,
+    machineID: UUID
+  ) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(45))
+    while runtime.snapshot(for: machineID).state != .stopped {
+      guard clock.now < deadline else {
+        throw LiveLinuxVirtualMachineSmokeError.coldStopTimedOut(machineID)
+      }
+      try await Task.sleep(for: .milliseconds(200))
+    }
   }
 
   private func presentVisualConsole(
     _ console: LinuxVirtualMachineConsole,
     seconds: Int,
     probesGuestInput: Bool,
+    performsBootInputProbe: Bool = true,
     onEjectInstallationMedia: @escaping () async throws -> Void
   ) async throws {
     let content = NSHostingView(
@@ -691,7 +876,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       "NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_READY window=\(window.windowNumber) seconds=\(seconds)"
     )
 
-    if probesGuestInput {
+    if probesGuestInput && performsBootInputProbe {
       try await performGuestInputProbe(
         in: content,
         window: window,
@@ -700,7 +885,9 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       )
     }
     let remainingSeconds =
-      seconds - (probesGuestInput ? Self.inputProbeDurationSeconds : 0)
+      seconds
+      - (probesGuestInput && performsBootInputProbe
+        ? Self.inputProbeDurationSeconds : 0)
     if remainingSeconds > 0 {
       if let inputChannel {
         try await processGuestInputCommands(
@@ -1247,6 +1434,7 @@ private struct LiveLinuxVirtualMachineRunRequest: Codable {
   let probesGuestInput: Bool
   let requiresInstallationMediaEjection: Bool
   let sharedDirectories: [LiveLinuxVirtualMachineSharedDirectoryRequest]?
+  let coldReconfiguration: LiveLinuxVirtualMachineColdReconfigurationRequest?
 }
 
 private struct LiveLinuxVirtualMachineRunConfiguration {
@@ -1256,6 +1444,14 @@ private struct LiveLinuxVirtualMachineRunConfiguration {
   let probesGuestInput: Bool
   let requiresInstallationMediaEjection: Bool
   let sharedDirectories: [LiveLinuxVirtualMachineSharedDirectoryRequest]
+  let coldReconfiguration: LiveLinuxVirtualMachineColdReconfigurationRequest?
+}
+
+private struct LiveLinuxVirtualMachineColdReconfigurationRequest: Codable {
+  let cpuCount: Int
+  let memoryBytes: UInt64
+  let diskBytes: UInt64
+  let visualHoldSeconds: Int
 }
 
 private struct LiveLinuxVirtualMachineSharedDirectoryRequest: Codable {
@@ -1457,6 +1653,8 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
   case invalidRunRequestFile
   case invalidRunRequestSize(Int)
   case invalidSharedDirectories(String)
+  case invalidColdReconfiguration(String)
+  case coldStopTimedOut(UUID)
   case mediaEjectionRequiresInputChannel
   case mediaEjectionDidNotPersist
   case requiredMediaEjectionMissing
@@ -1500,6 +1698,10 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
       "The one-shot live run request has an invalid size (\(byteCount) bytes)."
     case .invalidSharedDirectories(let reason):
       "The one-shot live run request has invalid shared folders (\(reason))."
+    case .invalidColdReconfiguration(let reason):
+      "The one-shot live run request has an invalid cold reconfiguration (\(reason))."
+    case .coldStopTimedOut(let machineID):
+      "Virtual machine \(machineID.uuidString) did not stop before the cold reconfiguration deadline."
     case .mediaEjectionRequiresInputChannel:
       "Required installation-media ejection needs the live guest-input command channel."
     case .mediaEjectionDidNotPersist:
