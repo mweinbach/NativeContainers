@@ -223,6 +223,7 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
   func close() {
     eventHandler = nil
     virtualMachine.delegate = nil
+    console?.invalidate()
     sharedDirectoryAccess.release()
   }
 

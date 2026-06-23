@@ -24,7 +24,10 @@ struct VirtualMachineConsoleView: NSViewRepresentable {
     _ view: VZVirtualMachineView,
     coordinator: Coordinator
   ) {
-    let virtualMachine = console.virtualMachine
+    guard let virtualMachine = console.virtualMachine else {
+      detach(view, coordinator: coordinator)
+      return
+    }
     if #available(macOS 27.0, *) {
       let adaptor: VZVirtualMachineViewAdaptor
       let identifier = ObjectIdentifier(virtualMachine)
@@ -43,6 +46,19 @@ struct VirtualMachineConsoleView: NSViewRepresentable {
     }
     view.capturesSystemKeys = capturesSystemKeys
     view.automaticallyReconfiguresDisplay = automaticallyReconfiguresDisplay
+  }
+
+  private func detach(
+    _ view: VZVirtualMachineView,
+    coordinator: Coordinator
+  ) {
+    if #available(macOS 27.0, *) {
+      view.adaptor = nil
+    } else {
+      view.virtualMachine = nil
+    }
+    coordinator.adaptorStorage = nil
+    coordinator.virtualMachineIdentifier = nil
   }
 
   static func dismantleNSView(

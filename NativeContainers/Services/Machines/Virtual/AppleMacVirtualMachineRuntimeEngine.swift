@@ -243,6 +243,7 @@ final class AppleMacVirtualMachineRuntimeEngine: MacVirtualMachineRuntimeEngine 
     func close() {
       eventHandler = nil
       virtualMachine.delegate = nil
+      console?.invalidate()
       usbController?.close()
       sharedDirectoryAccess.release()
     }

@@ -3,7 +3,7 @@
 @MainActor
 final class VirtualMachineConsole {
   let target: VirtualMachineRuntimeTarget
-  let virtualMachine: VZVirtualMachine
+  private(set) var virtualMachine: VZVirtualMachine?
 
   init(
     target: VirtualMachineRuntimeTarget,
@@ -11,6 +11,10 @@ final class VirtualMachineConsole {
   ) {
     self.target = target
     self.virtualMachine = virtualMachine
+  }
+
+  func invalidate() {
+    virtualMachine = nil
   }
 }
 

@@ -173,7 +173,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       #expect(snapshot.state == .running)
       #expect(snapshot.hasInstallationMedia)
       let console = try #require(runtime.console(for: target))
-      #expect(console.virtualMachine.state == .running)
+      #expect(console.virtualMachine?.state == .running)
 
       var installationMediaWasEjected = false
       if visualHoldSeconds > 0 {
@@ -200,7 +200,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       }
       snapshot = runtime.snapshot(for: machine.id)
       #expect(snapshot.state == .running)
-      #expect(console.virtualMachine.state == .running)
+      #expect(console.virtualMachine?.state == .running)
       #expect(snapshot.hasInstallationMedia == !installationMediaWasEjected)
       if configuration.requiresInstallationMediaEjection,
         !installationMediaWasEjected
@@ -210,11 +210,11 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
 
       try await runtime.pause(target: target)
       #expect(runtime.snapshot(for: machine.id).state == .paused)
-      #expect(console.virtualMachine.state == .paused)
+      #expect(console.virtualMachine?.state == .paused)
 
       try await runtime.resume(target: target)
       #expect(runtime.snapshot(for: machine.id).state == .running)
-      #expect(console.virtualMachine.state == .running)
+      #expect(console.virtualMachine?.state == .running)
 
       let reducedMemory = 4 * VirtualMachineResources.bytesPerGiB
       try runtime.setMemoryBalloonTarget(reducedMemory, for: target)
@@ -297,7 +297,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         )
         snapshot = runtime.snapshot(for: machine.id)
         #expect(snapshot.state == .running)
-        #expect(restartedConsole.virtualMachine.state == .running)
+        #expect(restartedConsole.virtualMachine?.state == .running)
         coldReconfigurationResult =
           "confirmed cold_cpu_count=\(coldReconfiguration.cpuCount) cold_memory_bytes=\(coldReconfiguration.memoryBytes) cold_disk_bytes=\(coldReconfiguration.diskBytes)"
       }
@@ -421,7 +421,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         )
         snapshot = runtime.snapshot(for: machine.id)
         #expect(snapshot.state == .running)
-        #expect(restoredStateConsole.virtualMachine.state == .running)
+        #expect(restoredStateConsole.virtualMachine?.state == .running)
         lifecycleVerificationResult =
           "confirmed snapshot_id=\(diskSnapshot.id.uuidString.lowercased()) saved_state_bytes=\(savedStateSummary.stateSizeBytes)"
       }
