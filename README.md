@@ -189,7 +189,8 @@ to the advertised `command` path; each accepted command appears as
 persist installation completion and detach the ISO. `finish` ends the visual
 hold early and continues the lifecycle and cleanup assertions. `open-terminal`
 sends an allowlisted Control-Option-T shortcut with explicit AppKit modifier
-press/release transitions.
+press/release transitions, including the left-device bits required by the
+nested virtual-machine view.
 
 For an Xcode MCP run that cannot inherit test-scheme environment variables,
 write the equivalent configuration as owner-only mode-0600 JSON to
@@ -208,8 +209,12 @@ run completed the Ubuntu installer, rebooted and authenticated from disk,
 persisted production ISO ejection, mounted that exact tag, created a host-visible
 file through the read-write share, and confirmed the equivalent read-only write
 was denied with no host file. It then completed exact lifecycle and bundle
-cleanup. Audio and the other expanded installed-guest integrations are not
-inferred from that pass.
+cleanup. A separate hash-pinned Ubuntu live-desktop run exposed the configured
+`virtio 1.0 sound Stereo` PipeWire sink and ALSA `VirtIO SoundCard` /
+`virtio-snd` device, then completed a bounded 48-kHz `speaker-test` without a
+device error. That proves the guest playback path, not human-audible host output
+or microphone input; the other expanded installed-guest integrations are not
+inferred from either pass.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when

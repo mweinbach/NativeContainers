@@ -1913,11 +1913,23 @@ Updated: 2026-06-22.
   Xcode result then confirmed pause/resume, balloon requests, exact force stop,
   manifest deletion, and complete isolated-library cleanup. Both host fixtures,
   every marker/input channel, and the test-host process were removed afterward.
-- The live run also exposed that modifier flags embedded only in key-down/up
-  events were not enough for the nested `VZVirtualMachineView`. The harness now
-  emits explicit AppKit `flagsChanged` press/release transitions around Shift,
-  Control, and Option chords. Three focused Xcode tests cover the terminal mount
-  protocol, transition ordering, media ejection, and linked-command rejection.
+- A separate live-desktop run passed 1/1 for VM ID
+  `d837b100-6a7a-48b5-a11e-2531f3e471c2` after 475.564 seconds. In the native
+  console, `wpctl status` exposed `virtio 1.0 sound Stereo`, `aplay -l` exposed
+  card 0 `VirtIO SoundCard` with the `virtio-snd` playback device, and a bounded
+  mono 48-kHz `speaker-test` opened the default device, completed a sine period,
+  and returned without a device error. This verifies the Linux guest's Virtio
+  playback path; no audio capture or human listening assertion is used to claim
+  that the host output was audible.
+- The live runs also exposed that modifier flags embedded only in key-down/up
+  events were not enough for the nested `VZVirtualMachineView`, and that generic
+  flags alone were still insufficient on explicit `flagsChanged` events. The
+  harness now carries AppKit's left-device bits through each Shift, Control, and
+  Option press/release transition and the chord's key-down/up events. VM ID
+  `904304a6-bcfb-4add-8bff-e9e1de312347` passed 1/1 after 204.246 seconds while
+  the synthetic Control-Option-T command opened Terminal and `echo MODIFIEROK`
+  arrived and printed with uppercase preserved. The transition test asserts
+  both device-independent semantics and exact device-bearing flag values.
 - After the VirtioFS and modifier changes, the complete Xcode plan reports 1,150
   outcomes: 1,119 passed, 31 explicit live/destructive gates skipped, zero
   failed, and zero unrun. Build-for-testing passed in 2.422 seconds and the
@@ -1969,28 +1981,32 @@ Updated: 2026-06-22.
   first-run desktop, keyboard and pointer delivery, persisted production ISO
   ejection, installed-guest mounting of the production VirtioFS tag,
   host-visible read-write mutation, read-only denial, and native runtime control
-  in the production console. It does not infer audio behavior or any broader
-  installed-guest integration not exercised by those exact runs.
+  in the production console. The separate live-desktop pass additionally proves
+  guest enumeration and successful stream opening through the Virtio audio
+  output path. It does not infer audible host playback, microphone input, or any
+  broader installed-guest integration not exercised by those exact runs.
 
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, capability availability,
 hash-pinned Ubuntu ARM64 graphical installation, virtual-disk boot,
 authenticated installed desktop, input, media ejection, and core runtime
-controls plus read-only/read-write VirtioFS guest semantics are verified. Audio,
-CPU/memory cold reconfiguration, disk growth plus guest partition/filesystem
-expansion, snapshot rollback, suspend/restore, clone and portable-copy boot,
-shared and host-only packet flow, and graceful/watchdog stop still need
-installed-guest live passes. Installing, booting, saving/restoring, growing the
-disk, expanding the macOS container, and clone-booting macOS are not claimed as
-live-verified until a local IPSW and disposable installed guest are available
-for that destructive integration pass.
+controls plus read-only/read-write VirtioFS guest semantics and the guest-side
+Virtio audio playback path are verified. Audible host playback, CPU/memory cold
+reconfiguration, disk growth plus guest partition/filesystem expansion,
+snapshot rollback, suspend/restore, clone and portable-copy boot, shared and
+host-only packet flow, and graceful/watchdog stop still need installed-guest
+live passes. Installing, booting, saving/restoring, growing the disk, expanding
+the macOS container, and clone-booting macOS are not claimed as live-verified
+until a local IPSW and disposable installed guest are available for that
+destructive integration pass.
 
 ## Next implementation slice
 
 1. Reuse the verified hash-pinned Ubuntu 26.04 ARM64 install/disk-boot workflow
-   to verify audio; change CPU/memory, grow the virtual disk, expand the guest
-   partition and file system, and verify the next boot; create a named disk
+   to capture or human-confirm host-audible playback; change CPU/memory, grow the
+   virtual disk, expand the guest partition and file system, and verify the next
+   boot; create a named disk
    checkpoint, mutate guest storage, restore it, and verify both data rollback
    and retained virtual capacity; suspend and restore the installed session,
    request a lower memory target under guest load, restore the full target,

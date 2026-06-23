@@ -155,6 +155,10 @@ must leave a usable, test-backed product slice.
       keyboard and pointer input through the production native window,
       pause/resume, memory-balloon requests, force stop, and isolated-bundle
       cleanup.
+- [x] Guest-side Linux audio output-path verification through the production
+      Virtio sound configuration: PipeWire and ALSA enumerate the expected
+      `virtio-snd` device and a bounded 48-kHz playback probe completes without
+      a device error. Host-audible confirmation remains a separate manual gate.
 - [x] One typed, system-restorable GUI Linux console window per VM, with
       repeated-open deduplication, current-manifest revalidation, and inert
       restoration that never starts the guest.

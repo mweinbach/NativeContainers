@@ -31,8 +31,9 @@ Last updated: 2026-06-22.
   desktop, and then detached the now-unused ISO through the production runtime.
   The manifest persisted `installState: stopped` with no installation-media
   path before the same run passed pause/resume, memory-balloon, force-stop, and
-  exact isolated-bundle cleanup. Audio and the broader installed-guest feature
-  matrix remain separate live checks.
+  exact isolated-bundle cleanup. A separate live-desktop run verifies guest-side
+  Virtio audio enumeration and playback-stream opening; audible host output and
+  the broader installed-guest feature matrix remain separate live checks.
 
 ## Apple container stack
 
@@ -670,6 +671,19 @@ The installed Apple documentation confirms:
   for modifier press/release state before they reach the nested
   `VZVirtualMachineView`; modifier bits attached only to key-down/up events did
   not produce reliable Shift, Control, or Option behavior in the live guest.
+  Those synthetic events must also preserve AppKit's left-device modifier bits
+  (`NX_DEVICELSHIFTKEYMASK`, `NX_DEVICELCTLKEYMASK`, and
+  `NX_DEVICELALTKEYMASK`) alongside the device-independent flags. A follow-up
+  live pass proved both paths: Control-Option-T opened Terminal and uppercase
+  command text remained uppercase.
+- A hash-pinned Ubuntu 26.04 live-desktop pass enumerated the configured audio
+  path at both session and kernel-facing layers: PipeWire exposed the
+  `virtio 1.0 sound Stereo` sink, while ALSA exposed card 0 `VirtIO SoundCard`
+  and device 0 `virtio-snd`. A bounded mono 48-kHz `speaker-test` opened the
+  default device and completed without a playback-device error. This verifies
+  guest enumeration and stream opening through the Virtio sound configuration;
+  without an audio capture or a human listening check, it does not prove that
+  host output was audible and says nothing about microphone input.
 - Linux clipboard integration is separate: it uses the SPICE agent and requires
   guest support.
 - Apple's GUI Linux sample uses `VZGenericPlatformConfiguration`, a persistent
