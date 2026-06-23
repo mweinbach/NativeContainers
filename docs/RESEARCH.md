@@ -684,6 +684,22 @@ The installed Apple documentation confirms:
   guest enumeration and stream opening through the Virtio sound configuration;
   without an audio capture or a human listening check, it does not prove that
   host output was audible and says nothing about microphone input.
+- The same consumed-once live request can now describe an optional cold phase.
+  After required production media ejection, the harness asks the production
+  runtime for a guest stop, waits for exact ownership release, and invokes the
+  same `LinuxVirtualMachineComputeService` and
+  `VirtualMachineDiskImageResizeService` used by the app. An installed Ubuntu
+  pass changed 4 CPUs / 8 GiB / 64 GiB to 2 CPUs / 6 GiB / 72 GiB. The
+  manifest and sparse RAW image reached 77,309,411,328 bytes with the growth
+  journal removed before restart; `nproc`, `/proc/meminfo`, and `lsblk -b`
+  independently reflected the cold configuration. DiskImageKit intentionally
+  changes only the virtual block device: root `vda2` remained
+  67,590,160,384 bytes until guest `growpart` extended it to
+  76,181,126,656 bytes and online `resize2fs` grew ext4 to 18,898,907
+  4-KiB blocks. A second guest reboot preserved the compute topology, virtual
+  disk, partition, and filesystem sizes. This validates the product's explicit
+  guest-follow-up wording rather than implying that the host app edits Linux
+  partition tables or filesystems.
 - Linux clipboard integration is separate: it uses the SPICE agent and requires
   guest support.
 - Apple's GUI Linux sample uses `VZGenericPlatformConfiguration`, a persistent

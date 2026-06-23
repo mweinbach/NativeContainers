@@ -159,6 +159,10 @@ must leave a usable, test-backed product slice.
       Virtio sound configuration: PipeWire and ALSA enumerate the expected
       `virtio-snd` device and a bounded 48-kHz playback probe completes without
       a device error. Host-audible confirmation remains a separate manual gate.
+- [x] Installed Ubuntu cold-reconfiguration verification through the production
+      compute and DiskImageKit services: CPU, memory, and disk targets persist
+      into a cold boot; guest `growpart` plus online `resize2fs` consume the new
+      capacity; and the expanded root filesystem survives another reboot.
 - [x] One typed, system-restorable GUI Linux console window per VM, with
       repeated-open deduplication, current-manifest revalidation, and inert
       restoration that never starts the guest.

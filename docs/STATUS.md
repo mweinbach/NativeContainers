@@ -1930,13 +1930,31 @@ Updated: 2026-06-22.
   the synthetic Control-Option-T command opened Terminal and `echo MODIFIEROK`
   arrived and printed with uppercase preserved. The transition test asserts
   both device-independent semantics and exact device-bearing flag values.
-- After the VirtioFS and modifier changes, the complete Xcode plan reports 1,150
-  outcomes: 1,119 passed, 31 explicit live/destructive gates skipped, zero
-  failed, and zero unrun. Build-for-testing passed in 2.422 seconds and the
-  normal `NativeContainers` / `My Mac` build passed in 3.713 seconds. Xcode
-  reports zero diagnostics in the changed test file, zero warning-level build
-  entries, and zero warning-level Issue Navigator items; strict Swift formatting,
-  both repository contract validators, and diff whitespace validation pass.
+- The installed cold-reconfiguration run passed 1/1 for VM ID
+  `fd41647b-54a4-4b41-9392-3f973f6c3168` after 1,559.686 seconds. Installed
+  Ubuntu first reported 4 CPUs and a 68,719,476,736-byte `vda`; production
+  media ejection persisted before `requestStop` completed in under four
+  seconds. `LinuxVirtualMachineComputeService` then committed 2 CPUs and
+  6,442,450,944 bytes of memory, while
+  `VirtualMachineDiskImageResizeService` grew the sparse RAW image and
+  manifest from 68,719,476,736 to 77,309,411,328 bytes with no pending
+  journal. On the cold start, `nproc` returned 2, `MemTotal` reflected the
+  6-GiB configuration, and `lsblk -b` reported the exact 77,309,411,328-byte
+  disk while root partition `vda2` remained 67,590,160,384 bytes. Guest
+  `growpart` expanded `vda2` to 76,181,126,656 bytes and online `resize2fs`
+  completed at 18,898,907 4-KiB blocks. A further guest reboot preserved the
+  2-CPU topology, reduced memory, expanded partition, and expanded root
+  filesystem. The result then force-stopped the exact active generation,
+  deleted its manifest and sparse image, removed both command channels and
+  markers, and reported `cold_reconfiguration=confirmed` with no residue.
+- After the cold-reconfiguration harness and result-marker changes, the four
+  focused request tests pass. The complete Xcode plan reports 1,151 outcomes:
+  1,120 passed, 31 explicit live/destructive gates skipped, zero failed, and
+  zero unrun. Build-for-testing passed in 4.111 seconds and the normal
+  `NativeContainers` / `My Mac` build passed in 3.999 seconds. Xcode reports
+  zero diagnostics in the changed test file and zero warning-level Issue
+  Navigator items; strict Swift formatting, both repository contract
+  validators, and diff whitespace validation pass.
 - One intermediate corrected-sequence attempt failed safely after 219.366
   seconds because the allowlisted text channel rejected `!` before any disk
   write. Xcode reported `.unsupportedInputCharacter("!")`, force-stopped the
@@ -1983,8 +2001,11 @@ Updated: 2026-06-22.
   host-visible read-write mutation, read-only denial, and native runtime control
   in the production console. The separate live-desktop pass additionally proves
   guest enumeration and successful stream opening through the Virtio audio
-  output path. It does not infer audible host playback, microphone input, or any
-  broader installed-guest integration not exercised by those exact runs.
+  output path. The installed cold pass additionally proves production
+  CPU/memory persistence, DiskImageKit growth, manual guest partition and
+  filesystem expansion, and reboot persistence. It does not infer audible host
+  playback, microphone input, or any broader installed-guest integration not
+  exercised by those exact runs.
 
 ## Remaining live verification gap
 
@@ -1992,28 +2013,25 @@ The entitlement, signing configuration, build, capability availability,
 hash-pinned Ubuntu ARM64 graphical installation, virtual-disk boot,
 authenticated installed desktop, input, media ejection, and core runtime
 controls plus read-only/read-write VirtioFS guest semantics and the guest-side
-Virtio audio playback path are verified. Audible host playback, CPU/memory cold
-reconfiguration, disk growth plus guest partition/filesystem expansion,
-snapshot rollback, suspend/restore, clone and portable-copy boot, shared and
-host-only packet flow, and graceful/watchdog stop still need installed-guest
-live passes. Installing, booting, saving/restoring, growing the disk, expanding
-the macOS container, and clone-booting macOS are not claimed as live-verified
-until a local IPSW and disposable installed guest are available for that
-destructive integration pass.
+Virtio audio playback path, CPU/memory cold reconfiguration, disk growth,
+guest partition/filesystem expansion, and graceful guest stop are verified.
+Audible host playback, snapshot rollback, suspend/restore, clone and
+portable-copy boot, shared and host-only packet flow, and watchdog stop still
+need installed-guest live passes. Installing, booting, saving/restoring, growing
+the disk, expanding the macOS container, and clone-booting macOS are not claimed
+as live-verified until a local IPSW and disposable installed guest are available
+for that destructive integration pass.
 
 ## Next implementation slice
 
 1. Reuse the verified hash-pinned Ubuntu 26.04 ARM64 install/disk-boot workflow
-   to capture or human-confirm host-audible playback; change CPU/memory, grow the
-   virtual disk, expand the guest partition and file system, and verify the next
-   boot; create a named disk
+   to capture or human-confirm host-audible playback; create a named disk
    checkpoint, mutate guest storage, restore it, and verify both data rollback
    and retained virtual capacity; suspend and restore the installed session,
    request a lower memory target under guest load, restore the full target,
    record host observations without treating the request as guaranteed
    reclamation, verify shared and host-only vmnet connectivity, clone and
-   portable-round-trip it, and exercise both graceful and watchdog force-stop
-   paths.
+   portable-round-trip it, and exercise the watchdog force-stop fallback.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, CPU/memory reconfiguration, disk growth plus APFS
    container expansion, cooperative lower/full runtime memory targets,

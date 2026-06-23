@@ -220,7 +220,12 @@ cleanup. A separate hash-pinned Ubuntu live-desktop run exposed the configured
 `virtio-snd` device, then completed a bounded 48-kHz `speaker-test` without a
 device error. That proves the guest playback path, not human-audible host output
 or microphone input; the other expanded installed-guest integrations are not
-inferred from either pass.
+inferred from either pass. A further installed-guest run used the optional cold
+phase to persist 2 CPUs, 6 GiB of memory, and a 72-GiB disk through the
+production services. Ubuntu reported those CPU, memory, and block-device
+changes, then `growpart` and online `resize2fs` expanded root partition `vda2`;
+the exact sizes survived another guest reboot before lifecycle and bundle
+cleanup completed.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when
