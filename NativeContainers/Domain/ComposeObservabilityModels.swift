@@ -14,6 +14,7 @@ enum ComposeLabelKey {
   static let configFiles = "com.docker.compose.project.config_files"
   static let nativePrefix = "com.nativecontainers.compose."
   static let inputSeal = "com.nativecontainers.compose.input-seal"
+  static let inputDescriptors = "com.nativecontainers.compose.input-descriptors"
   static let reviewedConfigHash = "com.nativecontainers.compose.reviewed-config-hash"
 }
 

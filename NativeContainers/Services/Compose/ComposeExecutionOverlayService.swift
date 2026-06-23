@@ -104,7 +104,8 @@ struct ComposeExecutionOverlayService: ComposeExecutionOverlayPreparing {
     )
     project["services"] = try overlaidServices(
       services,
-      desired: plan.desiredState.activeServices
+      desired: plan.desiredState.activeServices,
+      reviewedInputs: reviewedInputs
     )
     try overlayInputSources(
       project: &project,
@@ -142,7 +143,8 @@ struct ComposeExecutionOverlayService: ComposeExecutionOverlayPreparing {
 
   private func overlaidServices(
     _ services: JSONObject,
-    desired: [ComposeDesiredService]
+    desired: [ComposeDesiredService],
+    reviewedInputs: ComposeReviewedInputPayload
   ) throws -> JSONObject {
     let desiredByName = Dictionary(
       uniqueKeysWithValues: desired.map { ($0.name, $0) }
@@ -163,10 +165,124 @@ struct ComposeExecutionOverlayService: ComposeExecutionOverlayPreparing {
         }
         labels[ComposeLabelKey.inputSeal] = inputSeal
         labels[ComposeLabelKey.reviewedConfigHash] = configurationHash
+        let descriptors = try inputDescriptors(
+          service: service,
+          bindings: reviewedInputs.bindings
+        )
+        if !descriptors.isEmpty {
+          labels[ComposeLabelKey.inputDescriptors] = try encodeInputDescriptors(descriptors)
+        }
         service["labels"] = labels
       }
       result[entry.key] = service
     }
+  }
+
+  private struct InputDescriptor: Codable {
+    let kind: String
+    let sourceKind: String
+    let target: String
+    let uid: UInt32?
+    let gid: UInt32?
+    let mode: UInt16?
+  }
+
+  private func inputDescriptors(
+    service: JSONObject,
+    bindings: [ComposeProjectInputBinding]
+  ) throws -> [InputDescriptor] {
+    var bindingByKey: [String: ComposeProjectInputBinding] = [:]
+    for binding in bindings {
+      bindingByKey["\(binding.kind.rawValue):\(binding.name)"] = binding
+    }
+
+    var result: [InputDescriptor] = []
+    for kind in [ComposeProjectInputKind.config, .secret] {
+      let key = kind == .config ? "configs" : "secrets"
+      for value in service[key] as? [Any] ?? [] {
+        let attachment: JSONObject
+        if let source = value as? String {
+          attachment = ["source": source]
+        } else if let object = value as? JSONObject {
+          attachment = object
+        } else {
+          throw ComposeProjectLifecycleError.stalePlan
+        }
+        guard let source = attachment["source"] as? String,
+          let binding = bindingByKey["\(kind.rawValue):\(source)"]
+        else {
+          throw ComposeProjectLifecycleError.stalePlan
+        }
+        let rawTarget = attachment["target"] as? String ?? source
+        let target: String
+        if rawTarget.hasPrefix("/") {
+          target = rawTarget
+        } else if kind == .secret {
+          target = "/run/secrets/\(rawTarget)"
+        } else {
+          target = "/\(rawTarget)"
+        }
+        guard target.utf8.count <= 4_096,
+          target != "/",
+          (target as NSString).standardizingPath == target
+        else {
+          throw ComposeProjectLifecycleError.stalePlan
+        }
+        result.append(
+          InputDescriptor(
+            kind: kind.rawValue,
+            sourceKind: binding.sourceKind.rawValue,
+            target: target,
+            uid: try parseIdentifier(attachment["uid"]),
+            gid: try parseIdentifier(attachment["gid"]),
+            mode: try parseMode(attachment["mode"])
+          )
+        )
+      }
+    }
+    guard Set(result.map(\.target)).count == result.count else {
+      throw ComposeProjectLifecycleError.stalePlan
+    }
+    return result.sorted { composeStringOrder($0.target, $1.target) }
+  }
+
+  private func parseIdentifier(_ value: Any?) throws -> UInt32? {
+    guard let value else { return nil }
+    if let number = value as? NSNumber, number.int64Value >= 0,
+      number.int64Value <= UInt32.max
+    {
+      return UInt32(number.int64Value)
+    }
+    if let string = value as? String, let identifier = UInt32(string) {
+      return identifier
+    }
+    throw ComposeProjectLifecycleError.stalePlan
+  }
+
+  private func parseMode(_ value: Any?) throws -> UInt16? {
+    guard let value else { return nil }
+    let parsed: UInt16?
+    if let number = value as? NSNumber, number.intValue >= 0 {
+      parsed = UInt16(exactly: number.intValue)
+    } else if let string = value as? String {
+      parsed = UInt16(string, radix: string.hasPrefix("0") ? 8 : 10)
+    } else {
+      parsed = nil
+    }
+    guard let parsed, parsed <= 0o7777 else {
+      throw ComposeProjectLifecycleError.stalePlan
+    }
+    return parsed
+  }
+
+  private func encodeInputDescriptors(_ descriptors: [InputDescriptor]) throws -> String {
+    let data = try JSONEncoder().encode(descriptors)
+    guard data.count <= 48 * 1_024 else {
+      throw ComposeProjectLifecycleError.configOutputInvalid(
+        "Reviewed Compose input descriptors exceed the bounded label payload."
+      )
+    }
+    return data.base64EncodedString()
   }
 
   private func overlayInputSources(

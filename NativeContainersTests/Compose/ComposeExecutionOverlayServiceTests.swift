@@ -164,6 +164,20 @@ struct ComposeExecutionOverlayServiceTests {
       labels[ComposeLabelKey.reviewedConfigHash] as? String
         == rendered.serviceConfigurationHashes["web"]
     )
+    let descriptorValue = try #require(labels[ComposeLabelKey.inputDescriptors] as? String)
+    let descriptorData = try #require(Data(base64Encoded: descriptorValue))
+    let descriptors = try #require(
+      JSONSerialization.jsonObject(with: descriptorData) as? [[String: Any]]
+    )
+    #expect(descriptors.count == 2)
+    #expect(descriptors[0]["kind"] as? String == "config")
+    #expect(descriptors[0]["sourceKind"] as? String == "file")
+    #expect(descriptors[0]["target"] as? String == "/etc/app.conf")
+    #expect((descriptors[0]["uid"] as? NSNumber)?.uint32Value == 1_000)
+    #expect((descriptors[0]["mode"] as? NSNumber)?.uint16Value == 0o440)
+    #expect(descriptors[1]["kind"] as? String == "secret")
+    #expect(descriptors[1]["sourceKind"] as? String == "environment")
+    #expect(descriptors[1]["target"] as? String == "/run/secrets/api-token")
     #expect((app["file"] as? String)?.hasPrefix(root.path) == true)
     #expect(token["environment"] as? String == "DEMO_API_TOKEN")
     #expect(!String(decoding: result.data, as: UTF8.self).contains("super-secret-value"))
