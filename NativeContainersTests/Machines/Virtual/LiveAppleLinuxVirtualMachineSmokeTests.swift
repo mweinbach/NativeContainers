@@ -648,6 +648,26 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         matching: "02:00:00:00:00:0b"
       ) == nil
     )
+
+    var subnetAddress = in_addr()
+    var subnetMask = in_addr()
+    #expect(
+      "192.168.128.1".withCString {
+        inet_pton(AF_INET, $0, &subnetAddress)
+      } == 1
+    )
+    #expect(
+      "255.255.255.0".withCString {
+        inet_pton(AF_INET, $0, &subnetMask)
+      } == 1
+    )
+    let probeAddresses = try Self.hostOnlyProbeAddresses(
+      subnetAddress: subnetAddress,
+      subnetMask: subnetMask
+    )
+    #expect(probeAddresses.count == 253)
+    #expect(probeAddresses.first == "192.168.128.2")
+    #expect(probeAddresses.last == "192.168.128.254")
   }
 
   @Test("Live input command rejects symbolic and hard links")
@@ -1269,11 +1289,20 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       &subnetMask
     )
     let subnet = "\(ipv4String(subnetAddress))/\(ipv4String(subnetMask))"
+    let probeAddresses = try hostOnlyProbeAddresses(
+      subnetAddress: subnetAddress,
+      subnetMask: subnetMask
+    )
     let commands = FoundationHostCommandExecutor()
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: .seconds(timeoutSeconds))
+    var nextProbeDeadline = clock.now
 
     while clock.now < deadline {
+      if clock.now >= nextProbeDeadline {
+        await probeHostOnlyAddresses(probeAddresses)
+        nextProbeDeadline = clock.now.advanced(by: .seconds(10))
+      }
       let arp = try await commands.execute(
         executableURL: URL(filePath: "/usr/sbin/arp"),
         arguments: ["-an"],
@@ -1305,6 +1334,48 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       macAddress: normalizedMACAddress,
       subnet: subnet
     )
+  }
+
+  private static func hostOnlyProbeAddresses(
+    subnetAddress: in_addr,
+    subnetMask: in_addr
+  ) throws -> [String] {
+    let hostAddress = UInt32(bigEndian: subnetAddress.s_addr)
+    let hostMask = UInt32(bigEndian: subnetMask.s_addr)
+    let networkAddress = hostAddress & hostMask
+    let broadcastAddress = networkAddress | ~hostMask
+    guard broadcastAddress > networkAddress + 1,
+      broadcastAddress - networkAddress <= 1_024
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.customNetworkUnavailable(
+        "the reserved subnet is empty or exceeds the 1,024-address probe limit"
+      )
+    }
+
+    return (networkAddress + 1..<broadcastAddress).compactMap { address in
+      guard address != hostAddress else { return nil }
+      return ipv4String(in_addr(s_addr: address.bigEndian))
+    }
+  }
+
+  private static func probeHostOnlyAddresses(_ addresses: [String]) async {
+    let batchSize = 32
+    for startIndex in stride(from: 0, to: addresses.count, by: batchSize) {
+      let endIndex = min(startIndex + batchSize, addresses.count)
+      let batch = addresses[startIndex..<endIndex]
+      await withTaskGroup(of: Void.self) { group in
+        for address in batch {
+          group.addTask {
+            _ = try? await FoundationHostCommandExecutor().execute(
+              executableURL: URL(filePath: "/sbin/ping"),
+              arguments: ["-c", "1", "-W", "100", address],
+              environment: nil,
+              timeout: .seconds(2)
+            )
+          }
+        }
+      }
+    }
   }
 
   private static func arpPeerAddress(
