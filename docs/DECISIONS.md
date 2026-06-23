@@ -1238,11 +1238,13 @@ revalidation, refresh, and error behavior in the menu bar and main window.
 Force Stop remains a named destructive action inside the row's secondary menu,
 including while graceful Stop is in flight or inventory reports `stopping`.
 
-Because NativeContainers also owns regular Window and Settings scenes, its
-`MenuBarExtra` uses an explicit persistent insertion binding. Removing the extra
-does not terminate the app, and Settings remains the recovery path for showing
-it again. Main-window navigation uses SwiftUI's environment-provided
-`OpenWindowAction` and the existing `WorkspaceRoute` authority.
+Because NativeContainers also owns regular Window and Settings scenes, an
+app-scoped AppKit controller owns the optional status item and observes the
+persisted visibility preference. Removing the item does not terminate the app,
+and Settings remains the recovery path for showing it again. A zero-layout
+SwiftUI installer captures the environment-provided `OpenWindowAction` and
+`OpenSettingsAction` only after the main scene exists, while navigation keeps
+the existing `WorkspaceRoute` authority.
 
 Launch at login uses only `SMAppService.mainApp`. A focused protocol and stable
 observable model map system status into disabled, enabled, approval-required,
@@ -1595,7 +1597,7 @@ than being inferred from catalog extraction.
 
 ## ADR-057: Gate menu-bar insertion to verified macOS runtimes
 
-**Status:** Accepted — 2026-06-21
+**Status:** Superseded by ADR-089 — 2026-06-23
 
 The SwiftUI `MenuBarExtra` remains the supported menu-bar implementation and
 continues to reuse the app-scoped control plane defined by ADR-044. On the
@@ -2577,3 +2579,30 @@ product change: update the package pins and contract together, review upstream
 protocol changes, run deterministic coverage, repeat the live container,
 machine, build, Compose, and Kubernetes gates, and produce a new signed release
 candidate.
+
+## ADR-089: Host menu-bar controls in an AppKit status item
+
+**Status:** Accepted — 2026-06-23
+
+The macOS 27 SwiftUI `MenuBarExtra` scene repeatedly invalidates the app graph
+and can hold the main thread near 100% CPU. Disabling that scene restored idle
+behavior but made a completed product control unavailable on the current host.
+NativeContainers therefore removes `MenuBarExtra` and owns one
+`NSStatusItem`/`NSPopover` pair through an app-scoped MainActor controller. The
+popover hosts the existing `MenuBarQuickControlsView` in `NSHostingController`;
+it does not duplicate inventory, lifecycle, routing, or error authority.
+
+AppKit activation begins only from a SwiftUI installer after the main Window
+scene exists. Constructing `NativeContainersApp` performs no status-bar work,
+and hosted tests and Previews remain blocked by `AppExecutionContext`. This
+ordering also prevents UserDefaults/AppKit initialization reentrancy. Visibility
+changes are serialized, and the status item is installed or removed from the
+same persisted App Behavior preference on every supported macOS release.
+
+The installer captures SwiftUI's `OpenWindowAction` and `OpenSettingsAction` and
+passes narrow closures to the controller. Container rows still navigate through
+`AppModel` and exact `WorkspaceRoute` values before opening the unique main
+window. The status item retains no resource snapshot of its own, and its popover
+receives the shared model only when presented. ADR-057 remains the historical
+record of the macOS 27 regression and disabled-scene mitigation, but its runtime
+gate is superseded by this bridge.

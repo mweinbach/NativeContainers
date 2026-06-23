@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-06-22.
+Updated: 2026-06-23.
 
 ## Verified
 
@@ -13,28 +13,29 @@ Updated: 2026-06-22.
   worker, both strictly signed by team `6UHAW5UAT4` with hardened runtime. The
   archive validator confirms that the app carries only microphone input and
   virtualization while the worker carries no app capability.
-- The current full app-hosted Xcode run contains 1,143 expanded outcomes: all
-  1,112 deterministic outcomes passed, with 31 destructive or external-service
+- The current full app-hosted Xcode run contains 1,164 expanded outcomes: all
+  1,133 deterministic outcomes passed, with 31 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
   tests. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
   PTY, stopped-filesystem export, GUI Linux VZ boot/control, image behavior,
   Compose lifecycle, and disposable local-registry paths; none run against
   public services by default.
-- The latest window-level app verification launched through Xcode as PID 48034.
+- The most recent isolated window-level app verification launched through Xcode as PID 48034.
   LLDB confirmed its visible main window was titled `Overview`, and Xcode
   stopped that exact process. No app or build-worker process remained.
 - A native menu-bar control plane shares the app-scoped `AppModel`, inventory,
   lifecycle services, routing, and error state instead of introducing a second
   poller. It reports runtime and machine counts, exposes bounded container
   Start/Stop/Restart/Force Stop actions, and deep-links into the unique main
-  window. App Behavior settings persist menu-bar visibility on verified
-  runtimes and route launch at login through an injectable
-  `SMAppService.mainApp` adapter with explicit approval, unavailable, and
-  failure reconciliation states. Persistent system scenes are suppressed in
-  hosted tests and Preview agents. The `MenuBarExtra` insertion binding and its
-  setting are also suppressed on macOS 27 and later pending framework
-  revalidation, avoiding the observed SwiftUI app-graph invalidation loop.
+  window. An app-scoped AppKit `NSStatusItem` and `NSPopover` host the existing
+  SwiftUI quick-controls view, avoiding the macOS 27 `MenuBarExtra` app-graph
+  loop without disabling the feature. App Behavior settings persist menu-bar
+  visibility across the deployment range and route launch at login through an
+  injectable `SMAppService.mainApp` adapter with explicit approval, unavailable,
+  and failure reconciliation states. Persistent system scenes are suppressed
+  in hosted tests and Preview agents; constructing the app performs no AppKit
+  status-bar work before the main scene exists.
 - The app target is automatically Apple Development signed with
   `com.apple.security.virtualization` and the microphone-specific
   `com.apple.security.device.audio-input`; `ENABLE_APP_SANDBOX` remains `NO` as
@@ -188,14 +189,16 @@ Updated: 2026-06-22.
   pausing while a device remains attached. The new controller topology advances
   the saved-state configuration version. Deterministic descriptor, service,
   runtime, model, and app-composition tests pass, and ready/unavailable previews
-  render without clipping.
-- Live USB activation remains fail-closed. Apple's documented
+  render without clipping. This is implementation evidence, not product
+  availability.
+- Product USB activation remains blocked and fail-closed. Apple's documented
   `com.apple.developer.accessory-access.usb` capability is distinct from the
   existing sandbox USB-device entitlement. Xcode MCP's capability action does
   not yet recognize the macOS 27 key, and the freshly signed product does not
-  contain it. The composition root checks the signed process and injects an
-  unavailable service rather than attempting an unauthorized AccessoryAccess
-  connection or editing the entitlement file outside Xcode.
+  contain it. The composition root checks the signed process, publishes that
+  exact code-signature blocker in the USB panel, and injects an unavailable
+  service rather than attempting an unauthorized AccessoryAccess connection or
+  editing the entitlement file outside Xcode.
 - Installed macOS VM bundles can persist shared host directories in a private,
   bounded `SharedDirectories.json` capability sidecar. A focused orchestration
   service acquires the runtime lease, rejects running or checkpointed VMs, and
@@ -2090,3 +2093,42 @@ for that destructive integration pass.
   inferred. Xcode’s Stop action was issued for that preview launch. No device
   interaction session was opened and no project capability, entitlement, build
   setting, scheme, or destination was changed.
+
+## Capability availability and contract checkpoint
+
+- The macOS 27 menu-bar control is available again without the looping SwiftUI
+  scene. `MenuBarExtra` is removed; one app-scoped `NSStatusItem` presents the
+  existing quick-controls view in an `NSPopover` and continues to use the shared
+  `AppModel`, lifecycle services, routes, errors, and visibility preference. A
+  post-launch installer captures window and Settings actions only after the main
+  scene exists. The app-hosted controller test creates a real status item on
+  macOS 27, confirms that construction alone has no AppKit side effect, and
+  removes the item cleanly.
+- Physical USB is classified as **Blocked**, not complete. The current signed
+  target still lacks `com.apple.developer.accessory-access.usb`; Xcode MCP exposes
+  no capability action for that key. Composition now publishes the exact
+  code-signature blocker, and rejected service actions preserve the same reason.
+  No entitlement, capability, signing setting, scheme, or destination was
+  changed.
+- Settings and the feature matrix now enumerate all eight performance-contract
+  requirements: zero complete, five partial, and three missing. Existing local
+  and opt-in lanes remain intact, while warm container start, 10/50-container
+  density, post-stress retention, bind-mount metadata, PostgreSQL durability,
+  image-pull/disk-growth, comparative NAT/direct-IP, and sleep/wake/crash gaps
+  remain explicitly open as applicable.
+- The pinned Compose report now presents recreation, network aliases, health
+  checks, restart policies, configs, and secrets as separate upstream-blocked
+  results. The report has four supported fixtures and eight gaps; fresh and
+  create-missing Up remain distinct from replacement. Persistent Apple-machine
+  snapshots/backups and build-time SSH are separate upstream-blocked feature
+  rows because Apple container 1.0 exposes neither mutation contract.
+- `scripts/validate-capability-claims.sh` binds those states to source and docs.
+  It passes together with the runtime-distribution, accessibility, and
+  data-migration validators and diff whitespace checks. Strict formatting passes
+  for every changed Swift file.
+- The complete Xcode test plan reports 1,164 outcomes: 1,133 passed, 31 explicit
+  live/destructive gates skipped, and zero failed or unrun. Build-for-testing
+  completed in 17.648 seconds; the final normal `NativeContainers` / `My Mac`
+  build completed in 6.326 seconds with no warning-level build-log entries.
+  A pre-existing app process prevented an isolated current-head window launch,
+  so it was left untouched and no visual or idle-CPU claim is inferred from it.

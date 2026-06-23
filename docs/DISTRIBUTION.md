@@ -59,7 +59,13 @@ scripts/validate-runtime-distribution-contract.sh
    scripts/validate-runtime-distribution-contract.sh
    ```
 
-2. Validate the source accessibility contract and release evidence matrix:
+2. Validate that availability and coverage claims still match source:
+
+   ```sh
+   scripts/validate-capability-claims.sh
+   ```
+
+3. Validate the source accessibility contract and release evidence matrix:
 
    ```sh
    scripts/validate-accessibility-contract.sh
@@ -68,18 +74,18 @@ scripts/validate-runtime-distribution-contract.sh
    This source check does not close the live assistive-technology gate in
    [`ACCESSIBILITY_QA.md`](ACCESSIBILITY_QA.md).
 
-3. Validate that the durable-store inventory and schema contract still match
+4. Validate that the durable-store inventory and schema contract still match
    source:
 
    ```sh
    scripts/validate-data-migration-contract.sh
    ```
 
-4. Select the shared `NativeContainers` scheme and `Any Mac (arm64)`.
-5. Choose **Product > Archive**. If Xcode offers to add Intel to the custom
+5. Select the shared `NativeContainers` scheme and `Any Mac (arm64)`.
+6. Choose **Product > Archive**. If Xcode offers to add Intel to the custom
    architecture list, choose **Build** to keep the Apple-silicon product
    contract.
-6. Validate the resulting archive:
+7. Validate the resulting archive:
 
    ```sh
    scripts/validate-distribution-artifact.sh \

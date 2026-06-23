@@ -39,6 +39,16 @@ the remaining destructive VM verification passes are still open. See:
 - [Architecture decisions](docs/DECISIONS.md)
 - [Current status](docs/STATUS.md)
 
+The feature matrix is also the availability contract. In particular, physical
+USB is implemented but blocked in the current signed build by the unavailable
+AccessoryAccess USB entitlement. Compose recreation, aliases, health checks,
+restart policies, configs, and secrets are upstream-blocked by the pinned
+bridge; persistent Apple-machine snapshots and Dockerfile SSH mounts are absent
+from Apple container 1.0's public clients. Performance work comprises useful
+local and opt-in lanes, but none of the eight original benchmark requirements is
+fully covered yet. Menu-bar controls use an AppKit status item on macOS 27 and
+later rather than the looping SwiftUI `MenuBarExtra` scene.
+
 The current foundation includes native container lifecycle and inspection,
 exec/copy and interactive PTY workflows, stopped-container root-filesystem
 export through Apple's public client with identity-pinned, create-new-only tar

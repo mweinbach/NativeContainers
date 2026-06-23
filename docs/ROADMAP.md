@@ -116,13 +116,23 @@ must leave a usable, test-backed product slice.
       metadata paths, supported-key allowlist, attachment proofs, and contiguous
       replica-prefix guard; enable create-missing Up while keeping recreation
       blocked on Socktainer 1.0.0.
+- [ ] Compose container recreation after the pinned bridge implements container
+      rename plus network connect/disconnect. Fresh and create-missing Up do not
+      authorize replacement or scale-down.
+- [ ] Compose per-service network aliases after Socktainer maps alias intent into
+      container creation and inspection.
+- [ ] Compose health checks and restart policies after the pinned bridge exposes
+      both configuration and authoritative runtime state.
+- [ ] Compose configs and secrets after the bridge exposes Docker Engine resource
+      contracts for each object type. Image-build secrets are a separate,
+      already-supported capability.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [x] SSH agent forwarding and safe host-directory sharing.
 - [x] Native menu-bar quick controls backed by the shared app inventory and
-      exact container lifecycle services, including explicit Force Stop.
-      Insertion is policy-disabled on macOS 27 and later until the verified
-      SwiftUI app-graph invalidation regression is fixed and revalidated.
+      exact container lifecycle services, including explicit Force Stop. An
+      AppKit status item and SwiftUI-hosted popover replace `MenuBarExtra`, so the
+      controls remain available on macOS 27 and later without its app-graph loop.
 - [x] Native completion notifications for image builds, restore-image
       preparation, and macOS installation, with system-owned permission state
       and typed workspace routing from notification responses.
@@ -144,7 +154,9 @@ must leave a usable, test-backed product slice.
       these controls.
 - [x] Native login-shell terminal and bounded shell-command runner with
       stopped-machine auto-start, mapped-user execution, and explicit KILL.
-- [ ] Persistent machine snapshots/backups where the Apple runtime supports it.
+- [ ] Persistent Apple-machine snapshots/backups after the runtime exposes a
+      create/restore or backup API. Apple 1.0's `MachineSnapshot` is an inventory
+      record; its `MachineClient` has no persistent snapshot mutation route.
 - [x] Transactional general-purpose GUI Linux VM bundle foundation through
       Virtualization.framework: durable EFI/NVRAM and machine identity, copied
       ISO media, stable MAC identity, secure artifact resolution, and a
@@ -371,7 +383,7 @@ must leave a usable, test-backed product slice.
         disk-write, and daily metric payloads, with bounded private retention,
         explicit JSON export/deletion, hosted-process suppression, and matching
         app/build-worker dSYM enforcement in the archive gate.
-- [x] Complete performance benchmark coverage.
+- [ ] Complete product-contract performance benchmark coverage.
   - [x] User-initiated local baselines for warm Apple inventory, private
         temporary-file write/read I/O, and Network.framework localhost TCP,
         with warmups, median/P95 reporting, bounded cancellation, and no
@@ -400,6 +412,19 @@ must leave a usable, test-backed product slice.
   - [x] Idle-container CPU, memory, network, block-I/O, and process accounting
         behind a seventh explicit live gate, with a bounded settling/sample
         window, authoritative counter pairs, and exact cleanup.
+  - [ ] Add warm container-start measurement alongside the existing cold-start
+        lane.
+  - [ ] Measure resident memory at 1, 10, and 50 idle containers plus retained
+        memory after guest stress and idle-stop; the current lane samples one
+        fresh idle container only.
+  - [ ] Add bind-mount metadata workloads; the current VirtioFS lane covers
+        sequential write, fsync, and immediate read only.
+  - [ ] Add a PostgreSQL durability/fsync workload.
+  - [ ] Add image-pull timing and allocated-disk growth; the current image lane
+        measures a no-cache build only.
+  - [ ] Add comparative NAT/direct-IP latency and throughput; localhost TCP and
+        guest HTTPS transfer do not satisfy that contract.
+  - [ ] Add host sleep/wake and app/runtime crash-recovery benchmarks.
 
 ## Public-API constraint log
 
@@ -410,6 +435,16 @@ Potential parity gaps are tracked rather than hidden:
 - Apple’s public clients and service launcher use fixed
   `com.apple.container.*` Mach labels. NativeContainers requires Apple’s signed
   system installation rather than maintaining a namespaced client/service fork.
+- Apple container 1.0 exposes neither persistent machine snapshot mutations nor
+  a builder SSH/session-attachable contract, so Apple-machine backup and
+  Dockerfile SSH mounts remain upstream-blocked.
+- Socktainer 1.0.0 lacks container rename, network connect/disconnect, aliases,
+  health/restart semantics, and config/secret resources. Compose recreation and
+  those canonical features remain upstream-blocked rather than partially
+  emulated.
+- AccessoryAccess USB requires
+  `com.apple.developer.accessory-access.usb`; the signed target cannot activate
+  physical USB until Xcode can provision that entitlement.
 - Physical bridged networking and some low-level VM controls require restricted
   entitlements. NAT remains the portable default; public vmnet shared and
   host-only logical networks provide advanced same-process modes without
