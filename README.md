@@ -188,8 +188,8 @@ to the advertised `command` path; each accepted command appears as
 `stage=command-<id>` in the marker. `eject-media` uses the production runtime to
 persist installation completion and detach the ISO. `finish` ends the visual
 hold early and continues the lifecycle and cleanup assertions. `open-terminal`
-sends the allowlisted Control-Option-T shortcut used by the installed Linux
-mount probe.
+sends an allowlisted Control-Option-T shortcut with explicit AppKit modifier
+press/release transitions.
 
 For an Xcode MCP run that cannot inherit test-scheme environment variables,
 write the equivalent configuration as owner-only mode-0600 JSON to
@@ -204,10 +204,12 @@ security-scoped bookmark validation, sidecar persistence, and runtime VirtioFS
 resolution; a successful start proves host attachment, while guest access still
 requires the documented
 `mount -t virtiofs nativecontainers /mnt/nativecontainers` command. The reviewed
-run used the command channel to complete the Ubuntu installer, request its
-reboot, authenticate after disk boot, persist production ISO ejection, and then
-complete exact lifecycle and bundle cleanup. Audio and the other expanded
-installed-guest integrations are not inferred from that pass.
+run completed the Ubuntu installer, rebooted and authenticated from disk,
+persisted production ISO ejection, mounted that exact tag, created a host-visible
+file through the read-write share, and confirmed the equivalent read-only write
+was denied with no host file. It then completed exact lifecycle and bundle
+cleanup. Audio and the other expanded installed-guest integrations are not
+inferred from that pass.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when

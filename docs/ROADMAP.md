@@ -177,7 +177,9 @@ must leave a usable, test-backed product slice.
       service that preserves bundle, machine, network, and storage identity.
 - [x] Persistent GUI Linux VirtioFS shared folders through security-scoped
       bookmarks, stopped-only lease-backed editing, one stable
-      `nativecontainers` mount tag, and exact in-guest mount guidance.
+      `nativecontainers` mount tag, exact in-guest mount guidance, and installed
+      Ubuntu verification of read-only denial plus host-visible read-write
+      mutation.
 - [x] Persistent GUI Linux automatic NAT, shared VM, and host-only networking
       through the app-owned vmnet pool, with stopped-only lease-backed edits,
       cold-start application, same-host clone retention, and portable reset to

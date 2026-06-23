@@ -657,6 +657,19 @@ The installed Apple documentation confirms:
   to the user: the host app cannot execute or script it. The guest runs
   `mount -t virtiofs <tag> <directory>` after creating its mount point, so the
   product must show an exact command rather than claim automatic mounting.
+- A hash-pinned Ubuntu 26.04 installed-guest pass exercised that public contract
+  end to end. Two folders were persisted through the production stopped-VM
+  service and resolved into one `VZMultipleDirectoryShare`; installed Ubuntu
+  mounted `nativecontainers` and observed the named child directories. Matching
+  the read-write folder's host marker and running `touch` from its directory
+  created the expected host file. The equivalent operation in the read-only
+  folder returned `Permission denied` and left the host unchanged. This proves
+  both guest visibility and `VZSharedDirectory.readOnly` enforcement without a
+  hidden guest agent or automatic mount claim.
+- Synthetic AppKit key events need explicit `flagsChanged(with:)` transitions
+  for modifier press/release state before they reach the nested
+  `VZVirtualMachineView`; modifier bits attached only to key-down/up events did
+  not produce reliable Shift, Control, or Option behavior in the live guest.
 - Linux clipboard integration is separate: it uses the SPICE agent and requires
   guest support.
 - Apple's GUI Linux sample uses `VZGenericPlatformConfiguration`, a persistent

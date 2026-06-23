@@ -1899,6 +1899,32 @@ Updated: 2026-06-22.
   running. The Xcode result passed 1/1 after 1,263.100 seconds and then proved
   pause/resume, balloon requests, exact force stop, manifest deletion, empty
   library cleanup, and removal of the test host, marker, and input channel.
+- The installed-guest VirtioFS run passed 1/1 for VM ID
+  `ba1a3b9c-80e2-41d2-a754-f58180dc00f0` after 1,609.930 seconds. Before start,
+  the one-shot request added one read-only and one read-write host directory
+  through `LinuxVirtualMachineSharedDirectoryService`; the runtime then resolved
+  both security-scoped bookmarks into the production `nativecontainers`
+  multiple-directory share. After the graphical install, disk reboot, login,
+  first-run completion, and production ISO ejection, installed Ubuntu mounted
+  that exact tag. A guest operation matched the read-write marker and created a
+  single-link regular `guest-write.txt` on the reviewed host directory. The
+  equivalent operation against the read-only marker returned `Permission
+  denied`, and host inspection confirmed that no file appeared there. The same
+  Xcode result then confirmed pause/resume, balloon requests, exact force stop,
+  manifest deletion, and complete isolated-library cleanup. Both host fixtures,
+  every marker/input channel, and the test-host process were removed afterward.
+- The live run also exposed that modifier flags embedded only in key-down/up
+  events were not enough for the nested `VZVirtualMachineView`. The harness now
+  emits explicit AppKit `flagsChanged` press/release transitions around Shift,
+  Control, and Option chords. Three focused Xcode tests cover the terminal mount
+  protocol, transition ordering, media ejection, and linked-command rejection.
+- After the VirtioFS and modifier changes, the complete Xcode plan reports 1,150
+  outcomes: 1,119 passed, 31 explicit live/destructive gates skipped, zero
+  failed, and zero unrun. Build-for-testing passed in 2.422 seconds and the
+  normal `NativeContainers` / `My Mac` build passed in 3.713 seconds. Xcode
+  reports zero diagnostics in the changed test file, zero warning-level build
+  entries, and zero warning-level Issue Navigator items; strict Swift formatting,
+  both repository contract validators, and diff whitespace validation pass.
 - One intermediate corrected-sequence attempt failed safely after 219.366
   seconds because the allowlisted text channel rejected `!` before any disk
   write. Xcode reported `.unsupportedInputCharacter("!")`, force-stopped the
@@ -1941,32 +1967,32 @@ Updated: 2026-06-22.
   GRUB, live-desktop and installer frames, completed graphical installation,
   reboot from the virtual disk, installed login and authenticated GNOME
   first-run desktop, keyboard and pointer delivery, persisted production ISO
-  ejection, and native runtime control in the production console. It does not
-  infer audio behavior or any broader installed-guest integration not exercised
-  by those exact runs.
+  ejection, installed-guest mounting of the production VirtioFS tag,
+  host-visible read-write mutation, read-only denial, and native runtime control
+  in the production console. It does not infer audio behavior or any broader
+  installed-guest integration not exercised by those exact runs.
 
 ## Remaining live verification gap
 
 The entitlement, signing configuration, build, capability availability,
 hash-pinned Ubuntu ARM64 graphical installation, virtual-disk boot,
 authenticated installed desktop, input, media ejection, and core runtime
-controls are verified. Audio, read-only/read-write guest mounts, CPU/memory
-cold reconfiguration, disk growth plus guest partition/filesystem expansion,
-snapshot rollback, suspend/restore, clone and portable-copy boot, shared and
-host-only packet flow, and graceful/watchdog stop still need installed-guest
-live passes. Installing, booting, saving/restoring, growing the disk, expanding
-the macOS container, and clone-booting macOS are not claimed as live-verified
-until a local IPSW and disposable installed guest are available for that
-destructive integration pass.
+controls plus read-only/read-write VirtioFS guest semantics are verified. Audio,
+CPU/memory cold reconfiguration, disk growth plus guest partition/filesystem
+expansion, snapshot rollback, suspend/restore, clone and portable-copy boot,
+shared and host-only packet flow, and graceful/watchdog stop still need
+installed-guest live passes. Installing, booting, saving/restoring, growing the
+disk, expanding the macOS container, and clone-booting macOS are not claimed as
+live-verified until a local IPSW and disposable installed guest are available
+for that destructive integration pass.
 
 ## Next implementation slice
 
 1. Reuse the verified hash-pinned Ubuntu 26.04 ARM64 install/disk-boot workflow
-   to verify audio and mount a read-only and read-write host folder; change
-   CPU/memory, grow the virtual disk, expand the guest partition and file system,
-   and verify the next boot; create a named disk checkpoint, mutate guest
-   storage, restore it, and verify both data rollback and retained virtual
-   capacity; suspend and restore the installed session,
+   to verify audio; change CPU/memory, grow the virtual disk, expand the guest
+   partition and file system, and verify the next boot; create a named disk
+   checkpoint, mutate guest storage, restore it, and verify both data rollback
+   and retained virtual capacity; suspend and restore the installed session,
    request a lower memory target under guest load, restore the full target,
    record host observations without treating the request as guaranteed
    reclamation, verify shared and host-only vmnet connectivity, clone and
