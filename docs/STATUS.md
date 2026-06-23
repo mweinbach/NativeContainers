@@ -2043,3 +2043,50 @@ for that destructive integration pass.
 4. Provision a Developer ID Application identity, run Xcode's Developer ID
    distribution and notarization flow, then pass the strict stapled-product
    validator before calling the app publicly distributable.
+
+## External Apple runtime distribution checkpoint
+
+- ADR-006’s proposed namespaced embedded runtime is superseded by ADR-088. The
+  pinned Apple 1.0.0 source and installed package show that the supported runtime
+  is an administrator-installed, multi-binary package under `/usr/local`, while
+  `ClientHealthCheck`, `ContainerClient`, the image/volume clients,
+  `MachineClient`, and `system start` use fixed `com.apple.container.*` Mach
+  services. Shipping an isolated copy would require a maintained client,
+  service, launchd, plugin, updater, and signing fork rather than a different app
+  bundle layout. NativeContainers now makes Apple’s signed 1.0.0 system runtime
+  an explicit external prerequisite.
+- Overview links to Apple’s exact signed 1.0.0 release and exposes a separate
+  **Start Apple Runtime** recovery action. The action requires the fixed
+  `/usr/local/bin/container` path to be a root-owned, single-link,
+  non-group/world-writable regular executable with Apple team `UPBK2H6LZM` and
+  signing identifier `com.apple.container.cli`. It accepts only version 1.0.0,
+  bounds command output and startup time, invokes
+  `system start --enable-kernel-install`, and refreshes app inventory only after
+  both container and machine endpoints respond. It never downloads an
+  installer, requests elevation, invokes `installer`, updates, uninstalls, or
+  re-signs Apple code.
+- A repeatable runtime-distribution source gate keeps the Swift package pin,
+  runtime version, package receipt, executable path, release URL, signing
+  identity, architecture docs, migration authority, roadmap, and archive rule
+  aligned. The artifact validator now rejects Apple CLI, API-server, plugin,
+  updater, or uninstaller payloads anywhere in the app. It passes against the
+  current Xcode-built development app, and a private cloned app with an injected
+  `Contents/Helpers/container` payload fails with the expected external-runtime
+  error.
+- On the exact `aa3ed1e` tree, the installed receipt is
+  `com.apple.container-installer` 1.0.0 under `/usr/local` and the running API
+  server reports 1.0.0 commit `ee848e3ebfd7c73b04dd419683be54fb450b8779`.
+  The live service was not stopped merely to exercise recovery; the focused
+  command/version/re-probe and AppModel coverage passes 10/10 without mutating
+  the user runtime. The full Xcode plan reports 1,162 outcomes: 1,131 passed,
+  zero failed or unrun, and 31 explicit live/destructive gates skipped.
+  Build-for-testing completed in 4.823 seconds and the normal
+  `NativeContainers` / `My Mac` build completed in 3.625 seconds with no warning
+  log or Issue Navigator entries. The runtime-distribution, accessibility, and
+  data-migration validators, strict formatting for every changed Swift file,
+  and diff whitespace checks pass.
+- The runtime-unavailable SwiftUI preview compiled but Xcode’s preview host did
+  not launch the app within its 30-second window, so no rendered-image claim is
+  inferred. Xcode’s Stop action was issued for that preview launch. No device
+  interaction session was opened and no project capability, entitlement, build
+  setting, scheme, or destination was changed.
