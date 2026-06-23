@@ -28,6 +28,7 @@ struct ContainerBuilderController {
     let resources: ContainerConfiguration.Resources
     let managedEnvironment: [String]
     let useRosetta: Bool
+    let forwardsSSHAgent: Bool
     let exportsRoot: URL
     let builtinNetworkID: String
 
@@ -73,7 +74,10 @@ struct ContainerBuilderController {
       guard let existing else { preconditionFailure("Start requires an existing builder") }
       _ = try await requireUnchangedBuilder(existing, allowedStates: [.stopped])
       try await emit("Starting existing Apple BuildKit container")
-      try await startBuilderProcess(id: Builder.builderContainerId)
+      try await startBuilderProcess(
+        id: Builder.builderContainerId,
+        forwardsSSHAgent: resolved.forwardsSSHAgent
+      )
     case .stopDeleteCreate:
       guard let existing else { preconditionFailure("Recreate requires an existing builder") }
       _ = try await requireUnchangedBuilder(existing, allowedStates: [.running])
@@ -199,15 +203,77 @@ struct ContainerBuilderController {
   private func resolveBuilderImage(
     _ resolved: ResolvedConfiguration
   ) async throws -> ClientImage {
-    try await emit("Resolving Apple’s BuildKit image")
-    let image = try await ClientImage.fetch(
-      reference: resolved.system.build.image,
-      platform: Platform(from: "linux/arm64/v8"),
-      containerSystemConfig: resolved.system,
-      progressUpdate: progressHandler(phase: .preparingBuilder)
+    let resolution = ContainerBuilderImageIntegrityPolicy.resolution(
+      configuredReference: resolved.system.build.image,
+      nativeReference: BuildConfig.nativeContainersImageReference,
+      nativeDigest: BuildConfig.nativeContainersImageDigest
     )
-    try Task.checkCancellation()
-    return image
+    switch resolution {
+    case .fetchNormally:
+      try await emit("Resolving Apple’s BuildKit image")
+      let image = try await ClientImage.fetch(
+        reference: resolved.system.build.image,
+        platform: Platform(from: "linux/arm64/v8"),
+        containerSystemConfig: resolved.system,
+        progressUpdate: progressHandler(phase: .preparingBuilder)
+      )
+      try Task.checkCancellation()
+      return image
+
+    case .requirePinnedLocal(let expectedDigest):
+      try await emit("Resolving the pinned NativeContainers BuildKit image")
+      let image: ClientImage
+      do {
+        image = try await ClientImage.get(
+          reference: resolved.system.build.image,
+          containerSystemConfig: resolved.system
+        )
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        throw ContainerBuildWorkerError.make(
+          code: "builder-image-missing",
+          message:
+            "The pinned NativeContainers builder image is not loaded. Restart the verified runtime to import its packaged OCI archive."
+        )
+      }
+      let resolvedManifestDigest: String
+      do {
+        resolvedManifestDigest = try await image.resolvedDigest()
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        throw ContainerBuildWorkerError.make(
+          code: "builder-image-resolution-failed",
+          message:
+            "The pinned NativeContainers builder image manifest could not be resolved from the local image store."
+        )
+      }
+      if let integrityError = ContainerBuilderImageIntegrityPolicy.validate(
+        resolution: .requirePinnedLocal(expectedDigest: expectedDigest),
+        observation: ContainerBuilderImageDigestObservation(
+          topLevelDigest: image.descriptor.digest,
+          resolvedManifestDigest: resolvedManifestDigest
+        )
+      ) {
+        switch integrityError {
+        case .missingPinnedImage:
+          throw ContainerBuildWorkerError.make(
+            code: "builder-image-missing",
+            message:
+              "The pinned NativeContainers builder image is not loaded. Restart the verified runtime to import its packaged OCI archive."
+          )
+        case .digestMismatch(let expected, let actual):
+          throw ContainerBuildWorkerError.make(
+            code: "builder-image-digest-mismatch",
+            message:
+              "The pinned NativeContainers builder image digest does not match the verified release. Expected \(expected), got \(actual)."
+          )
+        }
+      }
+      try Task.checkCancellation()
+      return image
+    }
   }
 
   private func createBuilder(
@@ -263,6 +329,7 @@ struct ContainerBuilderController {
       ),
     ]
     configuration.rosetta = resolved.useRosetta
+    configuration.ssh = resolved.forwardsSSHAgent
     configuration.networks = [
       AttachmentConfiguration(
         network: resolved.builtinNetworkID,
@@ -302,18 +369,26 @@ struct ContainerBuilderController {
     }
     do {
       _ = try await requireUnchangedBuilder(created, allowedStates: [.stopped])
-      try await startBuilderProcess(id: Builder.builderContainerId)
+      try await startBuilderProcess(
+        id: Builder.builderContainerId,
+        forwardsSSHAgent: resolved.forwardsSSHAgent
+      )
     } catch {
       await cleanUpFailedBuilder(created)
       throw error
     }
   }
 
-  private func startBuilderProcess(id: String) async throws {
+  private func startBuilderProcess(
+    id: String,
+    forwardsSSHAgent: Bool
+  ) async throws {
     let io = try ProcessIO.create(tty: false, interactive: false, detach: true)
     defer { try? io.close() }
     var dynamicEnvironment: [String: String] = [:]
-    if let socket = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"] {
+    if forwardsSSHAgent,
+      let socket = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"]
+    {
       dynamicEnvironment["SSH_AUTH_SOCK"] = socket
     }
     let process = try await client.bootstrap(
@@ -437,7 +512,8 @@ struct ContainerBuilderController {
       memoryBytes: resolved.resources.memoryInBytes,
       rosettaEnabled: resolved.useRosetta,
       managedColorEnvironment: resolved.managedEnvironment,
-      dns: resolved.builderDNS
+      dns: resolved.builderDNS,
+      sshAgentForwarding: resolved.forwardsSSHAgent
     )
   }
 
@@ -507,6 +583,18 @@ struct ContainerBuilderController {
     _ requested: ContainerBuilderConfiguration
   ) async throws -> ResolvedConfiguration {
     try validate(requested)
+    if requested.forwardsSSHAgent {
+      guard
+        let socket = ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"],
+        socket.hasPrefix("/"),
+        !socket.contains("\0")
+      else {
+        throw ContainerBuildWorkerError.make(
+          code: "ssh-agent-unavailable",
+          message: "The reviewed SSH agent socket is unavailable to the build worker."
+        )
+      }
+    }
     let health = try await ClientHealthCheck.ping(timeout: .seconds(10))
     let applicationRoot = FilePath(health.appRoot.path(percentEncoded: false))
     let installRoot = FilePath(health.installRoot.path(percentEncoded: false))
@@ -541,6 +629,7 @@ struct ContainerBuilderController {
       resources: resources,
       managedEnvironment: managedEnvironment,
       useRosetta: system.build.rosetta,
+      forwardsSSHAgent: requested.forwardsSSHAgent,
       exportsRoot: health.appRoot.appendingPathComponent(Self.resourceDirectoryName),
       builtinNetworkID: network.id
     )

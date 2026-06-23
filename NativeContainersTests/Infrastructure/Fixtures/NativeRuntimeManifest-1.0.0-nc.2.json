@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "runtimeVersion": "1.0.0-nc.2",
+  "runtimeForkTag": "1.0.0-nc.2",
+  "runtimeUpstreamTag": "1.0.0",
+  "runtimeUpstreamRevision": "ee848e3ebfd7c73b04dd419683be54fb450b8779",
+  "builderShimVersion": "0.12.0-nc.2",
+  "builderShimSourceRevision": "f66f1680fe6b74d814fb5527247e7d81227fcecb",
+  "builderImageReference": "nativecontainers.local/container-builder-shim:0.12.0-nc.2-release",
+  "builderImageDigest": "sha256:b3574dc6b867fc91d1ed1d2941c74811961e2645ffa4c1fc68c19ae69e5fdbff",
+  "builderArchiveFilename": "container-builder-shim-0.12.0-nc.2.oci.tar",
+  "builderArchiveSHA256": "d872daa5ff4534aeb18fb747e015e56cef1cd1b584e05d725b72b624b41a7680",
+  "runtimeConfigPath": "etc/container/config.toml",
+  "runtimeConfigSHA256": "15d02e3707d200579e23f03cf883bc8980a9dc4bfc3ea4f6e09224b17737892a",
+  "installRoot": "/Library/Application Support/NativeContainers/Runtime/1.0.0-nc.2",
+  "defaultUserDataRoot": "~/Library/Application Support/NativeContainers/Container Runtime",
+  "packageIdentifier": "com.nativecontainers.runtime",
+  "signingTeamIdentifier": "6UHAW5UAT4",
+  "machServiceCompatibilityPrefix": "com.apple.container.",
+  "activationPolicy": "mutually-exclusive"
+}
