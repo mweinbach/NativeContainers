@@ -360,7 +360,7 @@ struct ComposeDesiredStateDecoderTests {
   }
 
   @Test
-  func parsesReviewedLocalInputsOnlyBehindTheExplicitSignedBridgeTestGate() throws {
+  func parsesReviewedLocalInputsForProductionExecution() throws {
     let seal = String(repeating: "e", count: 64)
     let canonical = """
       {
@@ -372,21 +372,7 @@ struct ComposeDesiredStateDecoderTests {
       """
     let rendered = renderedConfiguration(full: canonical, active: canonical)
 
-    let blockedReview = try decoder.decode(
-      rendered: rendered,
-      expectedProjectName: "demo",
-      serviceInputSeals: ["web": seal]
-    )
-    #expect(blockedReview.issues.count == 2)
-    #expect(
-      blockedReview.issues.allSatisfy {
-        $0.severity == .blocker && $0.message.contains("signed Socktainer 1.0.0")
-      }
-    )
-
-    let review = try ComposeDesiredStateDecoder(
-      allowsBlockedLocalInputExecutionForTesting: true
-    ).decode(
+    let review = try decoder.decode(
       rendered: rendered,
       expectedProjectName: "demo",
       serviceInputSeals: ["web": seal]
@@ -437,15 +423,18 @@ struct ComposeDesiredStateDecoderTests {
     let review = try decoder.decode(rendered: rendered, expectedProjectName: "demo")
     let messages = review.issues.map(\.message).joined(separator: " ")
 
-    #expect(review.issues.count >= 4)
+    #expect(review.issues.count >= 3)
     #expect(review.issues.allSatisfy { $0.severity == .blocker })
     #expect(!messages.contains(secret))
-    #expect(messages.contains("Restart policies are not supported"))
+    #expect(messages.contains("unsupported build"))
+    #expect(!messages.contains("healthcheck"))
+    #expect(!messages.contains("Restart policies"))
+    #expect(!messages.contains("private-alias"))
     #expect(review.desiredState.activeServices.first?.imageReference == "")
   }
 
   @Test
-  func blocksEveryExplicitRestartPolicyIncludingNo() throws {
+  func acceptsExplicitRestartPolicies() throws {
     let canonical = """
       {
         "name":"demo",
@@ -458,9 +447,7 @@ struct ComposeDesiredStateDecoderTests {
       expectedProjectName: "demo"
     )
 
-    #expect(review.issues.count == 1)
-    #expect(review.issues.first?.severity == .blocker)
-    #expect(review.issues.first?.message == "Restart policies are not supported.")
+    #expect(review.issues.isEmpty)
   }
 
   @Test

@@ -70,6 +70,22 @@ struct SocktainerComposeConformanceServiceTests {
   }
 
   @Test
+  func nativeContainersForkPassesEveryComposeContract() {
+    let report = SocktainerComposeConformanceService(
+      manifest: .nativeContainersFork
+    ).report()
+
+    #expect(report.bridgeVersion == "1.0.0-nc.1")
+    #expect(report.sourceRevision == "e129281")
+    #expect(report.supportedCount == 12)
+    #expect(report.gapCount == 0)
+    #expect(report.projectLifecycleIsEligible)
+    #expect(report.results.allSatisfy { $0.status == .supported })
+    #expect(report.results.allSatisfy { $0.missingOperations.isEmpty })
+    #expect(report.results.allSatisfy { $0.missingScenarioIDs.isEmpty })
+  }
+
+  @Test
   func knownSemanticGapCannotBecomeSupportedFromRoutePresenceAlone() throws {
     let report = SocktainerComposeConformanceService().report()
     let health = try result("compose-healthchecks", in: report)

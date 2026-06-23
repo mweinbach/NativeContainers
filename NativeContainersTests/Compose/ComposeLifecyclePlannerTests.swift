@@ -199,7 +199,7 @@ struct ComposeLifecyclePlannerTests {
   }
 
   @Test
-  func existingUpBlocksWhenReviewedAttachmentsDoNotMatchInventory() {
+  func existingUpPlansReplacementWhenReviewedAttachmentsDoNotMatchInventory() {
     let base = desiredWebState(replicaCount: 1)
     let desired = ComposeDesiredState(
       projectName: base.projectName,
@@ -258,11 +258,10 @@ struct ComposeLifecyclePlannerTests {
       )
     )
 
-    #expect(
-      plan.blockers.contains {
-        $0.code == .observedProjectDrift && $0.subject == "web-1"
-      }
-    )
+    #expect(plan.canExecute)
+    #expect(plan.containerActions.map(\.operation) == [.replace])
+    #expect(plan.containerActions.first?.expectedIdentity?.id == "web-1")
+    #expect(plan.executionStepTokens == ["compose-up-0001"])
   }
 
   @Test
@@ -319,7 +318,7 @@ struct ComposeLifecyclePlannerTests {
   }
 
   @Test
-  func changedInputSealRequiresUnsupportedRecreation() {
+  func changedInputSealPlansExactReplacement() {
     let desired = desiredWebState(
       replicaCount: 1,
       inputSeal: String(repeating: "e", count: 64)
@@ -343,16 +342,13 @@ struct ComposeLifecyclePlannerTests {
       )
     )
 
-    #expect(!plan.canExecute)
-    #expect(
-      plan.blockers.contains {
-        $0.subject == "web-1" && $0.message.contains("replacement remains blocked")
-      }
-    )
+    #expect(plan.canExecute)
+    #expect(plan.containerActions.map(\.operation) == [.replace])
+    #expect(plan.containerActions.first?.expectedIdentity?.id == "web-1")
   }
 
   @Test
-  func createMissingUpRequiresAContiguousExistingReplicaPrefix() {
+  func createMissingUpRepairsANoncontiguousReplicaSet() {
     let desired = desiredWebState(replicaCount: 2)
     let existing = container(
       id: "web-2",
@@ -373,12 +369,44 @@ struct ComposeLifecyclePlannerTests {
       )
     )
 
-    #expect(
-      plan.blockers.contains {
-        $0.code == .executionPolicy && $0.message.contains("contiguous prefix")
-      }
+    #expect(plan.canExecute)
+    #expect(plan.containerActions.map(\.operation) == [.converge, .create])
+    #expect(plan.containerActions.map(\.replicaNumber) == [2, 1])
+  }
+
+  @Test
+  func upPlansExactHighestReplicaScaleDown() {
+    let desired = desiredWebState(replicaCount: 1)
+    let plan = planner.plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      inventory: makeInventory(
+        containers: [
+          container(
+            id: "web-1",
+            service: "web",
+            replica: 1,
+            state: .running,
+            imageDigest: "sha256:web"
+          ),
+          container(
+            id: "web-2",
+            service: "web",
+            replica: 2,
+            state: .running,
+            imageDigest: "sha256:web"
+          ),
+        ],
+        images: [image(reference: "example/web:latest", digest: "sha256:web")]
+      )
     )
-    #expect(!plan.canExecute)
+
+    #expect(plan.canExecute)
+    #expect(plan.containerActions.map(\.operation) == [.converge, .scaleDown])
+    #expect(plan.containerActions.last?.expectedIdentity?.id == "web-2")
+    #expect(plan.executionStepTokens == ["container-0001", "compose-up-0001"])
   }
 
   @Test

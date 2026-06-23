@@ -23,6 +23,8 @@ struct ComposeProjectActionStepID: Equatable, Hashable, RawRepresentable, Sendab
 enum ComposeProjectContainerOperation: String, Equatable, Sendable {
   case create
   case converge
+  case replace
+  case scaleDown
   case start
   case stop
   case removeDeclared
@@ -46,9 +48,14 @@ struct ComposeProjectContainerAction: Equatable, Identifiable, Sendable {
   }
 
   var existingContainerID: String? { expectedIdentity?.id }
-  var createsContainer: Bool { operation == .create }
+  var createsContainer: Bool { operation == .create || operation == .replace }
   var removesContainer: Bool {
-    operation == .removeDeclared || operation == .removeOrphan
+    operation == .replace || operation == .scaleDown || operation == .removeDeclared
+      || operation == .removeOrphan
+  }
+
+  var requiresComposeUp: Bool {
+    operation == .create || operation == .replace || operation == .scaleDown
   }
 }
 
@@ -144,7 +151,7 @@ extension ComposeProjectPlan {
         networkActions.filter { $0.operation == .createManaged }.map(\.stepID.rawValue)
         + volumeActions.filter { $0.operation == .createManaged }.map(\.stepID.rawValue)
         + containerActions.filter { $0.operation == .converge }.map(\.stepID.rawValue)
-      if containerActions.contains(where: { $0.operation == .create }) {
+      if containerActions.contains(where: \.requiresComposeUp) {
         tokens.append(ComposeProjectActionStepID.composeUp().rawValue)
       }
       return tokens

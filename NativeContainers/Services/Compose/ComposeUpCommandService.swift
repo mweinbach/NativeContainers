@@ -71,8 +71,12 @@ struct ComposeUpCommandService: ComposeUpCommandExecuting {
       "--detach",
       "--no-build",
       "--pull", request.plan.options.pullPolicy.rawValue,
-      "--no-recreate",
     ])
+    if !request.plan.containerActions.contains(where: {
+      $0.operation == .replace || $0.operation == .scaleDown
+    }) {
+      arguments.append("--no-recreate")
+    }
 
     let result = try await executeCommand(
       request: request,

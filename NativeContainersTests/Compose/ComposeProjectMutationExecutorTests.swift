@@ -259,6 +259,57 @@ struct ComposeProjectMutationExecutorTests {
   }
 
   @Test
+  func replacementAndScaleDownUseRecreatingComposeUpAndVerifyExactSuccessor() async throws {
+    let predecessor = mutationContainer(
+      id: "web-old",
+      service: "web",
+      replica: 1,
+      state: .stopped
+    )
+    let excess = mutationContainer(
+      id: "web-2",
+      service: "web",
+      replica: 2,
+      state: .running
+    )
+    let successor = mutationContainer(
+      id: "web-new",
+      service: "web",
+      replica: 1,
+      state: .running
+    )
+    let state = ComposeMutationState(snapshots: [
+      mutationSnapshot(predecessor), mutationSnapshot(excess),
+    ])
+    let journal = MutationJournalDouble()
+    let command = SuccessfulReplacementCommandDouble(
+      state: state,
+      removedIDs: [predecessor.id, excess.id],
+      replacement: mutationSnapshot(successor)
+    )
+    let executor = makeExecutor(
+      state: state,
+      journal: journal,
+      commandExecutor: command
+    )
+    let plan = mutationPlan(
+      action: .up,
+      records: [predecessor, excess],
+      createReplicas: ["web": 1],
+      replaceIDs: [predecessor.id],
+      scaleDownIDs: [excess.id]
+    )
+
+    _ = try await executor.execute(mutationRequest(plan))
+
+    #expect(await state.currentRecords == [successor])
+    let invocations = await command.arguments
+    #expect(invocations.count == 2)
+    #expect(invocations.last?.contains("--no-recreate") == false)
+    #expect(await journal.completedStepTokens.last == ["compose-up-0001"])
+  }
+
+  @Test
   func nativeResourceCreationUsesFrozenComposeOwnership() async throws {
     let state = ComposeMutationState(snapshots: [])
     let service = ComposeResourceActionService(
@@ -538,6 +589,11 @@ private actor ComposeMutationState {
   }
 
   func append(_ snapshot: ComposeRuntimeContainerSnapshot) {
+    snapshots.append(snapshot)
+  }
+
+  func replace(removing ids: Set<String>, with snapshot: ComposeRuntimeContainerSnapshot) {
+    snapshots.removeAll { ids.contains($0.record.id) }
     snapshots.append(snapshot)
   }
 
@@ -826,6 +882,47 @@ private actor SuccessfulCreateMissingCommandDouble: HostCommandExecuting {
   }
 }
 
+private actor SuccessfulReplacementCommandDouble: HostCommandExecuting {
+  let state: ComposeMutationState
+  let removedIDs: Set<String>
+  let replacement: ComposeRuntimeContainerSnapshot
+  private(set) var arguments: [[String]] = []
+
+  init(
+    state: ComposeMutationState,
+    removedIDs: Set<String>,
+    replacement: ComposeRuntimeContainerSnapshot
+  ) {
+    self.state = state
+    self.removedIDs = removedIDs
+    self.replacement = replacement
+  }
+
+  func execute(
+    executableURL: URL,
+    arguments: [String],
+    environment: [String: String]?,
+    timeout: Duration
+  ) async throws -> HostCommandResult {
+    self.arguments.append(arguments)
+    if arguments.contains("config") {
+      return HostCommandResult(
+        exitCode: 0,
+        standardOutput: "web \(String(repeating: "c", count: 64))\n",
+        standardError: "",
+        outputWasTruncated: false
+      )
+    }
+    await state.replace(removing: removedIDs, with: replacement)
+    return HostCommandResult(
+      exitCode: 0,
+      standardOutput: "",
+      standardError: "",
+      outputWasTruncated: false
+    )
+  }
+}
+
 private final class MutationWorkspaceDouble: ComposeExecutionWorkspaceManaging,
   @unchecked Sendable
 {
@@ -876,6 +973,8 @@ private func mutationPlan(
   dependencies: [String: [String]] = ["web": []],
   killStuckContainers: Bool = true,
   createReplicas: [String: Int] = [:],
+  replaceIDs: Set<String> = [],
+  scaleDownIDs: Set<String> = [],
   orphanIDs: Set<String> = [],
   volumes: [VolumeRecord] = [],
   networks: [NetworkRecord] = [],
@@ -931,7 +1030,14 @@ private func mutationPlan(
   var containerActions = orderedRecords.enumerated().map { offset, record in
     let operation: ComposeProjectContainerOperation =
       switch action {
-      case .up: .converge
+      case .up:
+        if replaceIDs.contains(record.id) {
+          .replace
+        } else if scaleDownIDs.contains(record.id) {
+          .scaleDown
+        } else {
+          .converge
+        }
       case .start: .start
       case .stop: .stop
       case .down: orphanIDs.contains(record.id) ? .removeOrphan : .removeDeclared

@@ -148,14 +148,14 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
     try validateUpResourceActions(request.plan)
     guard
       request.plan.containerActions.allSatisfy({
-        $0.operation == .converge || $0.operation == .create
+        $0.operation == .converge || $0.requiresComposeUp
       })
     else {
       throw ComposeProjectLifecycleError.observedStateChanged
     }
 
-    let createActions = request.plan.containerActions.filter { $0.operation == .create }
-    if !createActions.isEmpty {
+    let composeActions = request.plan.containerActions.filter(\.requiresComposeUp)
+    if !composeActions.isEmpty {
       try await upCommandService.validate(request)
     }
 
@@ -188,7 +188,7 @@ struct AppleComposeProjectMutationExecutor: ComposeProjectMutationExecuting {
       completedStepTokens: &completedStepTokens
     )
 
-    guard !createActions.isEmpty else { return }
+    guard !composeActions.isEmpty else { return }
     try Task.checkCancellation()
     try await upCommandService.execute(request)
     completedStepTokens.append(ComposeProjectActionStepID.composeUp().rawValue)

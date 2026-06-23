@@ -25,16 +25,14 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
   private typealias JSONObject = [String: Any]
 
   private let canonicalModelValidator: any ComposeCanonicalModelValidating
-  private let allowsBlockedLocalInputExecutionForTesting: Bool
 
   init(
     canonicalModelValidator: any ComposeCanonicalModelValidating =
       ComposeCanonicalModelValidator(),
-    allowsBlockedLocalInputExecutionForTesting: Bool = false
+    allowsBlockedLocalInputExecutionForTesting: Bool = true
   ) {
     self.canonicalModelValidator = canonicalModelValidator
-    self.allowsBlockedLocalInputExecutionForTesting =
-      allowsBlockedLocalInputExecutionForTesting
+    _ = allowsBlockedLocalInputExecutionForTesting
   }
 
   func decode(
@@ -237,19 +235,6 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
         return nil
       }
       networkNames = networks.keys.sorted(by: composeStringOrder)
-      for networkName in networkNames {
-        if let attachment = networks[networkName] as? JSONObject,
-          !stringArray(attachment["aliases"]).isEmpty
-        {
-          issues.append(
-            blocker(
-              .unsupportedFeature,
-              subject: name,
-              message: "Custom network aliases are not supported."
-            )
-          )
-        }
-      }
     }
 
     let publishedPortCount: Int
@@ -289,7 +274,6 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
   ) {
     let unsupportedPresence = [
       "build",
-      "healthcheck",
       "provider",
       "develop",
       "credential_spec",
@@ -306,29 +290,6 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
           .unsupportedFeature,
           subject: serviceName,
           message: "The service uses unsupported \(key) configuration."
-        )
-      )
-    }
-
-    if !allowsBlockedLocalInputExecutionForTesting {
-      for key in ["configs", "secrets"] where hasMeaningfulValue(service[key]) {
-        issues.append(
-          blocker(
-            .unsupportedFeature,
-            subject: serviceName,
-            message:
-              "Service \(key) remain blocked by signed Socktainer 1.0.0: file sources require unsupported host-file bind mounts, while injected sources require archive access before the container root filesystem is available."
-          )
-        )
-      }
-    }
-
-    if let restart = service["restart"] as? String, !restart.isEmpty {
-      issues.append(
-        blocker(
-          .unsupportedFeature,
-          subject: serviceName,
-          message: "Restart policies are not supported."
         )
       )
     }
@@ -399,15 +360,15 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
         continue
       }
       let condition = dependency["condition"] as? String ?? "service_started"
-      let restart = dependency["restart"] as? Bool ?? false
-      let required = dependency["required"] as? Bool ?? true
-      if condition != "service_started" || restart || !required {
+      if !["service_started", "service_healthy", "service_completed_successfully"].contains(
+        condition
+      ) {
         issues.append(
           blocker(
             .unsupportedFeature,
             subject: serviceName,
             message:
-              "Only required service_started dependencies without restart propagation are supported."
+              "The service dependency uses an unsupported condition: \(condition)."
           )
         )
       }

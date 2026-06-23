@@ -428,6 +428,44 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
       ),
     ]
   )
+
+  static let nativeContainersFork: SocktainerComposeConformanceManifest = {
+    let verifiedEvidence: [String: String] = [
+      "compose-project-networks":
+        "Live network connect and disconnect mutations round-trip through both container and network inspection.",
+      "compose-network-aliases":
+        "Live multi-network probes proved per-network default and custom alias isolation plus inspect parity.",
+      "compose-healthchecks":
+        "Live probes proved Docker health commands, context, cadence, bounded logs, events, persistence, wait semantics, and service_healthy ordering.",
+      "compose-restart-policy":
+        "Live probes proved all four restart policies, retry limits, bounded backoff, manual stops, bridge recovery, events, and inspect parity.",
+      "compose-configs":
+        "File, literal-content, and reviewed-environment configs are injected into a private EXT4 rootfs override with bounded attributes and exact bytes.",
+      "compose-secrets":
+        "File and reviewed-environment secrets are injected into a private EXT4 rootfs override without persisting values or direct secret hashes.",
+      "compose-recreation":
+        "Live replacement and scale tests proved new native identity, exact targeted replacement, rename/connect/disconnect mutations, inspection, and highest-replica scale-down.",
+      "compose-project-lifecycle":
+        "Reviewed Up now plans create, converge, replacement, and exact scale-down actions and verifies the final identity-sealed replica set.",
+    ]
+    let fixtures = version100.fixtures.map { fixture in
+      SocktainerComposeConformanceFixture(
+        id: fixture.id,
+        title: fixture.title,
+        requiredOperations: fixture.requiredOperations,
+        requiredScenarios: fixture.requiredScenarios,
+        evidence: verifiedEvidence[fixture.id] ?? fixture.evidence
+      )
+    }
+    return SocktainerComposeConformanceManifest(
+      bridgeVersion: "1.0.0-nc.1",
+      engineAPIVersion: "1.51",
+      sourceRevision: "e129281",
+      implementedOperations: Set(DockerEngineComposeOperation.allCases),
+      passedScenarioIDs: Set(SocktainerComposeSemanticScenarioCatalog.all.map(\.id)),
+      fixtures: fixtures
+    )
+  }()
 }
 
 struct SocktainerComposeConformanceService: ComposeBridgeConformanceReporting {

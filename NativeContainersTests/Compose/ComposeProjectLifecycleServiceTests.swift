@@ -260,7 +260,7 @@ struct ComposeProjectLifecycleServiceTests {
   }
 
   @Test
-  func productionReviewKeepsPreparedInputsDormantBehindTheSignedBridgeBlocker() async throws {
+  func productionReviewPreparesExecutableSealedInputs() async throws {
     let data = Data(
       """
       {"name":"demo","services":{"web":{"image":"nginx:1.27","secrets":[{"source":"token"}]}},"secrets":{"token":{"environment":"DEMO_TOKEN"}}}
@@ -278,7 +278,11 @@ struct ComposeProjectLifecycleServiceTests {
       environmentSHA256: ComposeCommandEnvironment(processEnvironment: [:]).sha256,
       serviceConfigurationHashes: ["web": String(repeating: "a", count: 64)]
     )
-    let renderer = ComposeRendererDouble(results: Array(repeating: rendered, count: 4))
+    let executionHash = String(repeating: "c", count: 64)
+    let renderer = ComposeRendererDouble(
+      results: Array(repeating: rendered, count: 4),
+      executionHashes: [["web": executionHash]]
+    )
     let root = FileManager.default.temporaryDirectory.appending(
       path: "compose-lifecycle-blocked-input-\(UUID().uuidString)",
       directoryHint: .isDirectory
@@ -311,13 +315,11 @@ struct ComposeProjectLifecycleServiceTests {
       )
     )
 
-    #expect(!plan.canExecute)
-    #expect(plan.blockers.contains { $0.message.contains("signed Socktainer 1.0.0") })
-    #expect(plan.executionServiceConfigurationHashes == rendered.serviceConfigurationHashes)
-    #expect(await renderer.hashedConfigurations.isEmpty)
-    await #expect(throws: ComposeProjectLifecycleError.reviewBlocked(1)) {
-      _ = try await service.execute(plan)
-    }
+    #expect(plan.canExecute)
+    #expect(plan.blockers.isEmpty)
+    #expect(plan.executionServiceConfigurationHashes == ["web": executionHash])
+    #expect(await renderer.hashedConfigurations.count == 1)
+    await service.discardReview(planID: plan.id)
   }
 
   private var emptyInventory: ContainerInventory {

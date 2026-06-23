@@ -119,40 +119,35 @@ struct ComposeContainerLifecyclePlanner: Sendable {
       switch options.action {
       case .up:
         guard let service = activeServices[serviceName] else { continue }
-        validateConvergenceReplicaSet(
-          instances: orderedInstances,
-          replicas: replicas,
-          service: service,
-          issues: &issues
-        )
         for instance in orderedInstances {
-          if !attachmentVerifier.hasExactAttachments(
+          guard let replica = replicas[instance.identity.id] else { continue }
+          if replica > service.replicaCount {
+            drafts.append(
+              ContainerActionDraft(
+                operation: .scaleDown,
+                serviceName: serviceName,
+                replicaNumber: replica,
+                expectedIdentity: instance.identity
+              )
+            )
+            continue
+          }
+
+          let hasExactAttachments = attachmentVerifier.hasExactAttachments(
             containerID: instance.record.id,
             service: service,
             desiredState: desired,
             inventory: inventory
-          ) {
-            issues.append(
-              ComposeLifecycleIssue.blocker(
-                .observedProjectDrift,
-                subject: instance.record.id,
-                message:
-                  "The existing container does not have the exact reviewed volume and network attachments."
-              )
-            )
-          }
-          validateExistingContainer(
+          )
+          let matchesConfiguration = existingContainerMatches(
             instance.record,
             service: service,
-            localDigest: localDigests[service.imageReference],
-            context: "Up",
-            requiresNativeStartSafety: false,
-            issues: &issues
+            localDigest: localDigests[service.imageReference]
           )
-          guard let replica = replicas[instance.identity.id] else { continue }
           drafts.append(
             ContainerActionDraft(
-              operation: .converge,
+              operation: hasExactAttachments && matchesConfiguration
+                ? .converge : .replace,
               serviceName: serviceName,
               replicaNumber: replica,
               expectedIdentity: instance.identity
@@ -288,40 +283,6 @@ struct ComposeContainerLifecyclePlanner: Sendable {
     return result
   }
 
-  private func validateConvergenceReplicaSet(
-    instances: [ObservedComposeContainer],
-    replicas: [String: Int],
-    service: ComposeDesiredService,
-    issues: inout [ComposeProjectReviewIssue]
-  ) {
-    if instances.count > service.replicaCount {
-      issues.append(
-        ComposeLifecycleIssue.blocker(
-          .executionPolicy,
-          subject: service.name,
-          message: "Up will not remove extra replicas; review Down before converging this service."
-        )
-      )
-    }
-    validateReplicaRange(
-      replicas,
-      service: service,
-      actionName: "Up",
-      issues: &issues
-    )
-    let expectedPrefix = instances.isEmpty ? Set<Int>() : Set(1...instances.count)
-    if Set(replicas.values) != expectedPrefix {
-      issues.append(
-        ComposeLifecycleIssue.blocker(
-          .executionPolicy,
-          subject: service.name,
-          message:
-            "Create-missing Up requires existing replicas to form the contiguous prefix 1...\(instances.count)."
-        )
-      )
-    }
-  }
-
   private func validateExactReplicaSet(
     instances: [ObservedComposeContainer],
     replicas: [String: Int],
@@ -397,7 +358,7 @@ struct ComposeContainerLifecyclePlanner: Sendable {
           .executionPolicy,
           subject: container.id,
           message:
-            "The reviewed Compose inputs changed or were not sealed on the existing container; replacement remains blocked until exact recreation is supported."
+            "The existing container does not match the reviewed Compose input seal."
         )
       )
     } else if service.inputSeal == nil,
@@ -422,6 +383,26 @@ struct ComposeContainerLifecyclePlanner: Sendable {
         )
       )
     }
+  }
+
+  private func existingContainerMatches(
+    _ container: ContainerRecord,
+    service: ComposeDesiredService,
+    localDigest: String?
+  ) -> Bool {
+    guard
+      container.imageReference == service.imageReference,
+      let imageDigest = container.imageDigest,
+      imageDigest == localDigest
+    else { return false }
+
+    if let inputSeal = service.inputSeal {
+      return container.labels[ComposeLabelKey.inputSeal] == inputSeal
+        && container.labels[ComposeLabelKey.reviewedConfigHash]
+          == service.configurationHash
+    }
+    guard let expectedHash = service.configurationHash else { return true }
+    return container.labels[ComposeLabelKey.configHash] == expectedHash
   }
 
   private func parseBooleanLabel(_ value: String?) -> Bool? {

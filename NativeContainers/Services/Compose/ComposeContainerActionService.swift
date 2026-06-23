@@ -111,7 +111,7 @@ struct ComposeContainerActionService: ComposeContainerActionExecuting {
   ) async throws {
     let identity = try requiredIdentity(for: action)
     switch action.operation {
-    case .create:
+    case .create, .replace, .scaleDown:
       throw ComposeProjectLifecycleError.observedStateChanged
     case .converge, .start:
       try await start(identity)

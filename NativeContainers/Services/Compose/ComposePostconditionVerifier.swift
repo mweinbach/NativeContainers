@@ -86,24 +86,50 @@ struct ComposePostconditionVerifier: ComposePostconditionVerifying {
       $0.labels[ComposeLabelKey.project] == plan.options.projectName
     }
     let observedIDs = Set(plan.observedIdentity.containers.map(\.id))
-    let createActions = plan.containerActions.filter { $0.operation == .create }
+    let creationActions = plan.containerActions.filter {
+      $0.operation == .create || $0.operation == .replace
+    }
     let newContainers = projectContainers.filter { !observedIDs.contains($0.id) }
 
-    guard newContainers.count == createActions.count else {
+    guard newContainers.count == creationActions.count else {
       throw ComposeProjectLifecycleError.postconditionNotMet(
         "Up produced an unexpected number of new project containers."
       )
     }
-    for action in createActions {
-      let matches = newContainers.filter {
+    for action in creationActions {
+      let matches = projectContainers.filter {
         $0.labels[ComposeLabelKey.service] == action.serviceName
           && Int($0.labels[ComposeLabelKey.containerNumber] ?? "")
             == action.replicaNumber
           && $0.labels[ComposeLabelKey.oneOff]?.lowercased() != "true"
       }
-      guard matches.count == 1 else {
+      guard matches.count == 1, let match = matches.first else {
         throw ComposeProjectLifecycleError.postconditionNotMet(
           "Up did not create exactly one reviewed \(action.serviceName) replica."
+        )
+      }
+      if action.operation == .replace {
+        guard let predecessor = action.expectedIdentity,
+          !projectContainers.contains(where: { $0.id == predecessor.id }),
+          match.id != predecessor.id
+        else {
+          throw ComposeProjectLifecycleError.postconditionNotMet(
+            "Up did not replace the reviewed \(action.serviceName) replica."
+          )
+        }
+      } else if observedIDs.contains(match.id) {
+        throw ComposeProjectLifecycleError.postconditionNotMet(
+          "Up reused a predecessor for a reviewed create action."
+        )
+      }
+    }
+
+    for action in plan.containerActions where action.operation == .scaleDown {
+      guard let predecessor = action.expectedIdentity,
+        !projectContainers.contains(where: { $0.id == predecessor.id })
+      else {
+        throw ComposeProjectLifecycleError.postconditionNotMet(
+          "Up did not remove an excess \(action.serviceName) replica."
         )
       }
     }

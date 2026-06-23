@@ -89,6 +89,7 @@ struct ComposeCanonicalModelValidator: ComposeCanonicalModelValidating {
       "entrypoint",
       "environment",
       "hostname",
+      "healthcheck",
       "image",
       "labels",
       "networks",
