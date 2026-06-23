@@ -175,7 +175,7 @@ channel in the visual-ready marker. The channel accepts one tab-delimited,
 at-most-4-KiB command at a time:
 
 ```text
-<id>\tkey\t<tab|shift-tab|escape|space|left|right|down|up|return>
+<id>\tkey\t<tab|shift-tab|escape|space|left|right|down|up|return|open-terminal>
 <id>\tclick\t<x>\t<y>
 <id>\ttext\t<base64-encoded UTF-8>
 <id>\teject-media\t-
@@ -187,7 +187,9 @@ single-link regular temporary sibling owned by the current user and rename it
 to the advertised `command` path; each accepted command appears as
 `stage=command-<id>` in the marker. `eject-media` uses the production runtime to
 persist installation completion and detach the ISO. `finish` ends the visual
-hold early and continues the lifecycle and cleanup assertions.
+hold early and continues the lifecycle and cleanup assertions. `open-terminal`
+sends the allowlisted Control-Option-T shortcut used by the installed Linux
+mount probe.
 
 For an Xcode MCP run that cannot inherit test-scheme environment variables,
 write the equivalent configuration as owner-only mode-0600 JSON to

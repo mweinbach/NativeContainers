@@ -243,6 +243,23 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     #expect(command.summary == "eject-media")
   }
 
+  @Test("Live input protocol accepts terminal mount controls")
+  func inputProtocolAcceptsTerminalMountControls() throws {
+    let shortcut = try Self.parseInputCommand(
+      Data("terminal\tkey\topen-terminal\n".utf8)
+    )
+    let mountCommand =
+      "sudo mount -t virtiofs nativecontainers /mnt/nativecontainers"
+    let encodedMountCommand = Data(mountCommand.utf8).base64EncodedString()
+    let text = try Self.parseInputCommand(
+      Data("mount\ttext\t\(encodedMountCommand)\n".utf8)
+    )
+
+    #expect(shortcut.summary == "key:open-terminal")
+    #expect(text.summary == "text:\(mountCommand.count)-characters")
+    #expect(LiveLinuxVirtualMachineTypingKey("/") != nil)
+  }
+
   @Test("Live input command rejects symbolic and hard links")
   func liveInputCommandRejectsLinkedFiles() throws {
     let rootURL = FileManager.default.temporaryDirectory.appending(
@@ -1178,6 +1195,7 @@ private enum LiveLinuxVirtualMachineInputKey: CustomStringConvertible {
   case downArrow
   case upArrow
   case carriageReturn
+  case openTerminal
 
   init?(commandValue: String) {
     switch commandValue {
@@ -1190,6 +1208,7 @@ private enum LiveLinuxVirtualMachineInputKey: CustomStringConvertible {
     case "down": self = .downArrow
     case "up": self = .upArrow
     case "return": self = .carriageReturn
+    case "open-terminal": self = .openTerminal
     default: return nil
     }
   }
@@ -1204,6 +1223,7 @@ private enum LiveLinuxVirtualMachineInputKey: CustomStringConvertible {
     case .downArrow: 0x7D
     case .upArrow: 0x7E
     case .carriageReturn: 0x24
+    case .openTerminal: 0x11
     }
   }
 
@@ -1218,13 +1238,18 @@ private enum LiveLinuxVirtualMachineInputKey: CustomStringConvertible {
     case .upArrow: String(NSEvent.SpecialKey.upArrow.unicodeScalar)
     case .carriageReturn:
       String(NSEvent.SpecialKey.carriageReturn.unicodeScalar)
+    case .openTerminal: "t"
     }
   }
 
   var charactersIgnoringModifiers: String { characters }
 
   var modifierFlags: NSEvent.ModifierFlags {
-    self == .shiftTab ? .shift : []
+    switch self {
+    case .shiftTab: .shift
+    case .openTerminal: [.control, .option]
+    default: []
+    }
   }
 
   var description: String {
@@ -1238,6 +1263,7 @@ private enum LiveLinuxVirtualMachineInputKey: CustomStringConvertible {
     case .downArrow: "down-arrow"
     case .upArrow: "up-arrow"
     case .carriageReturn: "return"
+    case .openTerminal: "open-terminal"
     }
   }
 }
@@ -1289,6 +1315,10 @@ private struct LiveLinuxVirtualMachineTypingKey {
     case ".":
       keyCode = 0x2F
       characterIgnoringModifiers = "."
+      modifierFlags = []
+    case "/":
+      keyCode = 0x2C
+      characterIgnoringModifiers = "/"
       modifierFlags = []
     default:
       return nil
