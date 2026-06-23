@@ -13,8 +13,8 @@ Updated: 2026-06-23.
   worker, both strictly signed by team `6UHAW5UAT4` with hardened runtime. The
   archive validator confirms that the app carries only microphone input and
   virtualization while the worker carries no app capability.
-- The current full app-hosted Xcode run contains 1,251 test results: all
-  1,217 deterministic results passed, with 34 destructive or external-service
+- The current full app-hosted Xcode run contains 1,269 test results: all
+  1,231 deterministic results passed, with 38 destructive or external-service
   integrations skipped behind explicit live gates and no failures or unrun
   tests. Existing opt-in tests cover Apple runtime
   provisioning, reviewed host-directory and SSH-agent attachments, interactive
@@ -2191,3 +2191,33 @@ for that destructive integration pass.
   The bundled schema-0 placeholder therefore fails closed. Native snapshot and
   build-SSH live tests remain gated until those release credentials produce a
   manually installed notarized package.
+
+## Performance contract benchmark checkpoint
+
+- Seven of the eight performance-contract requirements now have dedicated,
+  executable benchmark lanes. Cold creation and warm restart are separated;
+  runtime-reported idle memory covers exact concurrent counts of 1, 10, and 50;
+  a bounded guest workload records baseline, stressed, and post-idle retention
+  before confirmed stop; and reviewed VirtioFS coverage includes both
+  sequential write/fsync/read and fixed metadata-operation batches.
+- The database lane uses a digest-pinned PostgreSQL 17 image, waits for
+  readiness outside the timed region, runs `pg_test_fsync`, requires `fsync=on`
+  and `synchronous_commit=on`, commits a fixed payload, and issues `CHECKPOINT`.
+  The image lane separately times an absent-reference current-platform HTTPS
+  pull, records Apple runtime allocated-image bytes before and after, and
+  deletes only the exact pulled identity; the existing no-cache build lane
+  remains separate.
+- Comparative networking serves one fixed byte-verified payload from one
+  identity-pinned container. Alternating requests measure per-route latency and
+  throughput through the published localhost port and the container's dedicated
+  IP, preventing different payloads or servers from masquerading as a route
+  comparison. Every new destructive lane has bounded setup, exact cleanup,
+  deterministic doubles, an explicit live environment gate, and provenance
+  output. Sleep/wake and app/runtime crash recovery remains the sole missing
+  performance-contract requirement.
+- Xcode MCP build-for-testing completed in 26.017 seconds with zero errors. The
+  nine focused new contract tests pass, and the complete Xcode plan reports
+  1,269 outcomes: 1,231 passed, 38 explicit live/destructive gates skipped, and
+  zero failures or unrun tests. Strict Swift formatting, no-output whole-module
+  and benchmark-test typechecking, capability/accessibility validators, and
+  diff whitespace checks pass.
