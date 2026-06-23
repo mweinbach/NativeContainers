@@ -5,6 +5,7 @@ import Foundation
 import SwiftUI
 import Testing
 @preconcurrency import Virtualization
+import vmnet
 
 @testable import NativeContainers
 
@@ -96,10 +97,18 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     let savedStateService = LinuxVirtualMachineSavedStateService(
       store: LinuxVirtualMachineSavedStateStore()
     )
+    let vmnetNetworkPool = AppleVirtualMachineVmnetNetworkPool()
+    let runtimeEngine = AppleLinuxVirtualMachineRuntimeEngine(
+      configurationFactory: AppleLinuxVirtualMachineConfigurationFactory(
+        networkDeviceFactory: AppleVirtualMachineNetworkDeviceFactory(
+          vmnetNetworks: vmnetNetworkPool
+        )
+      )
+    )
     let runtime = LinuxVirtualMachineRuntimeService(
       leasingStore: library,
       installationStore: library,
-      engine: AppleLinuxVirtualMachineRuntimeEngine(),
+      engine: runtimeEngine,
       savedStateService: savedStateService
     )
     let sharedDirectoryService = LinuxVirtualMachineSharedDirectoryService(
@@ -302,13 +311,128 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
           "confirmed cold_cpu_count=\(coldReconfiguration.cpuCount) cold_memory_bytes=\(coldReconfiguration.memoryBytes) cold_disk_bytes=\(coldReconfiguration.diskBytes)"
       }
 
+      var extendedVerificationResult = "not_requested"
+      if let extendedVerification = configuration.extendedVerification {
+        if let runningTarget = runtime.snapshot(for: machine.id).target {
+          try runtime.requestStop(target: runningTarget)
+          try await Self.waitForStoppedRuntime(
+            runtime,
+            machineID: machine.id
+          )
+        }
+        snapshot = runtime.snapshot(for: machine.id)
+        #expect(snapshot.state == .stopped)
+        #expect(snapshot.target == nil)
+
+        let transferRoot = FileManager.default.temporaryDirectory.appending(
+          path: "nativecontainers-live-linux-vm-transfer-\(suffix)",
+          directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(
+          at: transferRoot,
+          withIntermediateDirectories: false
+        )
+        try FileManager.default.setAttributes(
+          [.posixPermissions: 0o700],
+          ofItemAtPath: transferRoot.nativeContainersPOSIXPath
+        )
+        defer { try? FileManager.default.removeItem(at: transferRoot) }
+
+        let importedLibraryRoot = transferRoot.appending(
+          path: "Imported",
+          directoryHint: .isDirectory
+        )
+        let importedLibrary = VirtualMachineLibrary(rootURL: importedLibraryRoot)
+        let transferService = VirtualMachineTransferService(
+          exportStore: library,
+          importStore: importedLibrary
+        )
+        let exportedPackageURL = transferRoot.appending(
+          path: "Installed Ubuntu.nativevm",
+          directoryHint: .isDirectory
+        )
+        let exportReceipt = try await transferService.exportVirtualMachine(
+          id: machine.id,
+          to: exportedPackageURL
+        )
+        #expect(exportReceipt.machineID == machine.id)
+        #expect(exportReceipt.destinationURL == exportedPackageURL)
+
+        let imported = try await transferService.importVirtualMachine(
+          from: exportedPackageURL,
+          mode: .preserveIdentity
+        )
+        #expect(imported.id == machine.id)
+        #expect(imported.guest == .linux)
+        #expect(imported.installState == .stopped)
+        #expect(imported.effectiveNetworkConfiguration.attachment == .nat)
+
+        let importedSavedStateService = LinuxVirtualMachineSavedStateService(
+          store: LinuxVirtualMachineSavedStateStore()
+        )
+        let importedNetworkService = LinuxVirtualMachineNetworkService(
+          leasingStore: importedLibrary,
+          persistence: importedLibrary,
+          savedStateService: importedSavedStateService
+        )
+        let networkSnapshot = try await importedNetworkService.setAttachment(
+          .hostOnly,
+          for: imported.id
+        )
+        #expect(networkSnapshot.configuration.attachment == .hostOnly)
+
+        let importedRuntime = LinuxVirtualMachineRuntimeService(
+          leasingStore: importedLibrary,
+          installationStore: importedLibrary,
+          engine: runtimeEngine,
+          savedStateService: importedSavedStateService
+        )
+        do {
+          try await importedRuntime.start(id: imported.id)
+          let importedSnapshot = importedRuntime.snapshot(for: imported.id)
+          let importedTarget = try #require(importedSnapshot.target)
+          #expect(importedSnapshot.state == .running)
+          let importedConsole = try #require(
+            importedRuntime.console(for: importedTarget)
+          )
+          #expect(importedConsole.virtualMachine?.state == .running)
+
+          let importedManifest = try #require(
+            try await importedLibrary.list().first(where: { $0.id == imported.id })
+          )
+          let macAddress = try #require(
+            importedManifest.linuxConfiguration?.macAddress
+          )
+          let peerAddress = try await Self.waitForHostOnlyConnectivity(
+            macAddress: macAddress,
+            networkPool: vmnetNetworkPool,
+            timeoutSeconds: extendedVerification.customNetworkTimeoutSeconds
+          )
+
+          try await importedRuntime.forceStop(target: importedTarget)
+          #expect(importedRuntime.snapshot(for: imported.id).state == .stopped)
+          try await importedLibrary.discardVirtualMachine(id: imported.id)
+          #expect(try await importedLibrary.list().isEmpty)
+          extendedVerificationResult =
+            "confirmed imported_id=\(imported.id.uuidString.lowercased()) host_only_peer=\(peerAddress)"
+        } catch {
+          if let importedTarget = importedRuntime.snapshot(for: imported.id).target {
+            try? await importedRuntime.forceStop(target: importedTarget)
+          }
+          try? await importedLibrary.discardVirtualMachine(id: imported.id)
+          throw error
+        }
+      }
+
       var lifecycleVerificationResult = "not_requested"
       if let lifecycleVerification = configuration.lifecycleVerification {
-        try runtime.requestStop(target: activeTarget)
-        try await Self.waitForStoppedRuntime(
-          runtime,
-          machineID: machine.id
-        )
+        if let runningTarget = runtime.snapshot(for: machine.id).target {
+          try runtime.requestStop(target: runningTarget)
+          try await Self.waitForStoppedRuntime(
+            runtime,
+            machineID: machine.id
+          )
+        }
         snapshot = runtime.snapshot(for: machine.id)
         #expect(snapshot.state == .stopped)
         #expect(snapshot.target == nil)
@@ -426,7 +550,9 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
           "confirmed snapshot_id=\(diskSnapshot.id.uuidString.lowercased()) saved_state_bytes=\(savedStateSummary.stateSizeBytes)"
       }
 
-      try await runtime.forceStop(target: activeTarget)
+      if let runningTarget = runtime.snapshot(for: machine.id).target {
+        try await runtime.forceStop(target: runningTarget)
+      }
       snapshot = runtime.snapshot(for: machine.id)
       #expect(snapshot.state == .stopped)
       #expect(snapshot.target == nil)
@@ -442,7 +568,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         sharedDirectoryConfiguration.directories.isEmpty
         ? "not_requested" : "attached"
       print(
-        "\(Self.outputMarker)id=\(machine.id.uuidString.lowercased()) iso_sha256=\(actualSHA256) installation_media=\(installationMediaResult) virtiofs=\(virtioFSResult) shared_directories=\(sharedDirectoryConfiguration.directories.count) cold_reconfiguration=\(coldReconfigurationResult) lifecycle_verification=\(lifecycleVerificationResult) running=confirmed pause_resume=confirmed balloon=confirmed cleanup=complete"
+        "\(Self.outputMarker)id=\(machine.id.uuidString.lowercased()) iso_sha256=\(actualSHA256) installation_media=\(installationMediaResult) virtiofs=\(virtioFSResult) shared_directories=\(sharedDirectoryConfiguration.directories.count) cold_reconfiguration=\(coldReconfigurationResult) lifecycle_verification=\(lifecycleVerificationResult) extended_verification=\(extendedVerificationResult) running=confirmed pause_resume=confirmed balloon=confirmed cleanup=complete"
       )
     } catch {
       if let machineID {
@@ -503,6 +629,25 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       transitions.releases.map(\.modifierFlags.rawValue) == [
         0x0004_0001, 0,
       ])
+  }
+
+  @Test("Host-only peer discovery normalizes BSD ARP output")
+  func hostOnlyPeerDiscoveryNormalizesBSDARPOutput() throws {
+    let output =
+      "? (192.168.64.7) at 2:0:0:0:0:a on vmnet2 ifscope [ethernet]\n"
+
+    let address = try Self.arpPeerAddress(
+      in: output,
+      matching: "02:00:00:00:00:0a"
+    )
+
+    #expect(address == "192.168.64.7")
+    #expect(
+      try Self.arpPeerAddress(
+        in: output,
+        matching: "02:00:00:00:00:0b"
+      ) == nil
+    )
   }
 
   @Test("Live input command rejects symbolic and hard links")
@@ -592,7 +737,10 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
           snapshotMutationVisualHoldSeconds: 300,
           snapshotRestoreVisualHoldSeconds: 300,
           savedStateRestoreVisualHoldSeconds: 300
-        )
+        ),
+      extendedVerification: LiveLinuxVirtualMachineExtendedVerificationRequest(
+        customNetworkTimeoutSeconds: 120
+      )
     )
     try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
     try FileManager.default.setAttributes(
@@ -637,6 +785,9 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         .savedStateRestoreVisualHoldSeconds == 300
     )
     #expect(
+      configuration.extendedVerification?.customNetworkTimeoutSeconds == 120
+    )
+    #expect(
       !FileManager.default.fileExists(
         atPath: requestURL.nativeContainersPOSIXPath
       )
@@ -678,6 +829,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     #expect(configuration.sharedDirectories.isEmpty)
     #expect(configuration.coldReconfiguration == nil)
     #expect(configuration.lifecycleVerification == nil)
+    #expect(configuration.extendedVerification == nil)
     #expect(
       !FileManager.default.fileExists(
         atPath: requestURL.nativeContainersPOSIXPath
@@ -714,7 +866,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         )
       ],
       coldReconfiguration: nil,
-      lifecycleVerification: nil
+      lifecycleVerification: nil,
+      extendedVerification: nil
     )
     try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
     try FileManager.default.setAttributes(
@@ -760,7 +913,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         diskBytes: 72 * VirtualMachineResources.bytesPerGiB,
         visualHoldSeconds: 600
       ),
-      lifecycleVerification: nil
+      lifecycleVerification: nil,
+      extendedVerification: nil
     )
     try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
     try FileManager.default.setAttributes(
@@ -806,7 +960,52 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
           snapshotMutationVisualHoldSeconds: 300,
           snapshotRestoreVisualHoldSeconds: 300,
           savedStateRestoreVisualHoldSeconds: 300
-        )
+        ),
+      extendedVerification: nil
+    )
+    try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600],
+      ofItemAtPath: requestURL.nativeContainersPOSIXPath
+    )
+
+    #expect(throws: LiveLinuxVirtualMachineSmokeError.self) {
+      try Self.loadRunRequest(at: requestURL)
+    }
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: requestURL.nativeContainersPOSIXPath
+      )
+    )
+  }
+
+  @Test("Extended verification requires input, media ejection, and a bounded timeout")
+  func extendedVerificationRequiresReviewedPrerequisites() throws {
+    let rootURL = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-live-request-test-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false
+    )
+    defer { try? FileManager.default.removeItem(at: rootURL) }
+    let requestURL = rootURL.appending(
+      path: "request.json",
+      directoryHint: .notDirectory
+    )
+    let request = LiveLinuxVirtualMachineRunRequest(
+      isoPath: "/private/tmp/reviewed.iso",
+      isoSHA256: String(repeating: "a", count: 64),
+      visualHoldSeconds: 0,
+      probesGuestInput: false,
+      requiresInstallationMediaEjection: false,
+      sharedDirectories: nil,
+      coldReconfiguration: nil,
+      lifecycleVerification: nil,
+      extendedVerification: LiveLinuxVirtualMachineExtendedVerificationRequest(
+        customNetworkTimeoutSeconds: 10
+      )
     )
     try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
     try FileManager.default.setAttributes(
@@ -906,7 +1105,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       ] == "1",
       sharedDirectories: [],
       coldReconfiguration: nil,
-      lifecycleVerification: nil
+      lifecycleVerification: nil,
+      extendedVerification: nil
     )
   }
 
@@ -1014,6 +1214,18 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         )
       }
     }
+    if let extendedVerification = request.extendedVerification {
+      guard request.probesGuestInput,
+        request.requiresInstallationMediaEjection,
+        (30...300).contains(
+          extendedVerification.customNetworkTimeoutSeconds
+        )
+      else {
+        throw LiveLinuxVirtualMachineSmokeError.invalidExtendedVerification(
+          "it requires guest input, persisted media ejection, and a custom-network timeout from 30 through 300 seconds"
+        )
+      }
+    }
     return LiveLinuxVirtualMachineRunConfiguration(
       isoPath: request.isoPath,
       isoSHA256: request.isoSHA256,
@@ -1023,7 +1235,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         request.requiresInstallationMediaEjection,
       sharedDirectories: sharedDirectories,
       coldReconfiguration: request.coldReconfiguration,
-      lifecycleVerification: request.lifecycleVerification
+      lifecycleVerification: request.lifecycleVerification,
+      extendedVerification: request.extendedVerification
     )
   }
 
@@ -1039,6 +1252,109 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       }
       try await Task.sleep(for: .milliseconds(200))
     }
+  }
+
+  private static func waitForHostOnlyConnectivity(
+    macAddress: String,
+    networkPool: AppleVirtualMachineVmnetNetworkPool,
+    timeoutSeconds: Int
+  ) async throws -> String {
+    let normalizedMACAddress = try normalizeMACAddress(macAddress)
+    let network = try networkPool.network(for: .hostOnly)
+    var subnetAddress = in_addr()
+    var subnetMask = in_addr()
+    vmnet_network_get_ipv4_subnet(
+      network,
+      &subnetAddress,
+      &subnetMask
+    )
+    let subnet = "\(ipv4String(subnetAddress))/\(ipv4String(subnetMask))"
+    let commands = FoundationHostCommandExecutor()
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(timeoutSeconds))
+
+    while clock.now < deadline {
+      let arp = try await commands.execute(
+        executableURL: URL(filePath: "/usr/sbin/arp"),
+        arguments: ["-an"],
+        environment: nil,
+        timeout: .seconds(5)
+      )
+      guard arp.exitCode == 0, !arp.outputWasTruncated else {
+        throw LiveLinuxVirtualMachineSmokeError.customNetworkUnavailable(
+          "arp inspection failed while checking \(subnet)"
+        )
+      }
+      if let peerAddress = try arpPeerAddress(
+        in: arp.standardOutput,
+        matching: normalizedMACAddress
+      ) {
+        let ping = try await commands.execute(
+          executableURL: URL(filePath: "/sbin/ping"),
+          arguments: ["-c", "1", "-W", "1000", peerAddress],
+          environment: nil,
+          timeout: .seconds(5)
+        )
+        if ping.exitCode == 0, !ping.outputWasTruncated {
+          return peerAddress
+        }
+      }
+      try await Task.sleep(for: .milliseconds(500))
+    }
+    throw LiveLinuxVirtualMachineSmokeError.customNetworkPeerNotFound(
+      macAddress: normalizedMACAddress,
+      subnet: subnet
+    )
+  }
+
+  private static func arpPeerAddress(
+    in output: String,
+    matching expectedMACAddress: String
+  ) throws -> String? {
+    for line in output.split(whereSeparator: \.isNewline) {
+      let fields = line.split(whereSeparator: \.isWhitespace).map(String.init)
+      guard
+        let atIndex = fields.firstIndex(of: "at"),
+        fields.indices.contains(atIndex + 1),
+        let candidateMACAddress = try? normalizeMACAddress(fields[atIndex + 1]),
+        candidateMACAddress == expectedMACAddress,
+        let wrappedAddress = fields.first(where: {
+          $0.first == "(" && $0.last == ")" && $0.count > 2
+        })
+      else { continue }
+      return String(wrappedAddress.dropFirst().dropLast())
+    }
+    return nil
+  }
+
+  private static func normalizeMACAddress(_ value: String) throws -> String {
+    let components = value.split(separator: ":", omittingEmptySubsequences: false)
+    guard components.count == 6 else {
+      throw LiveLinuxVirtualMachineSmokeError.invalidMACAddress(value)
+    }
+    let normalized = try components.map { component -> String in
+      guard component.count == 1 || component.count == 2,
+        let byte = UInt8(component, radix: 16)
+      else {
+        throw LiveLinuxVirtualMachineSmokeError.invalidMACAddress(value)
+      }
+      return String(format: "%02x", byte)
+    }
+    return normalized.joined(separator: ":")
+  }
+
+  private static func ipv4String(_ address: in_addr) -> String {
+    var address = address
+    var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+    guard
+      inet_ntop(
+        AF_INET,
+        &address,
+        &buffer,
+        socklen_t(INET_ADDRSTRLEN)
+      ) != nil
+    else { return "unknown" }
+    return String(cString: buffer)
   }
 
   private func presentVisualConsole(
@@ -1655,6 +1971,7 @@ private struct LiveLinuxVirtualMachineRunRequest: Codable {
   let sharedDirectories: [LiveLinuxVirtualMachineSharedDirectoryRequest]?
   let coldReconfiguration: LiveLinuxVirtualMachineColdReconfigurationRequest?
   let lifecycleVerification: LiveLinuxVirtualMachineLifecycleVerificationRequest?
+  let extendedVerification: LiveLinuxVirtualMachineExtendedVerificationRequest?
 }
 
 private struct LiveLinuxVirtualMachineRunConfiguration {
@@ -1666,6 +1983,7 @@ private struct LiveLinuxVirtualMachineRunConfiguration {
   let sharedDirectories: [LiveLinuxVirtualMachineSharedDirectoryRequest]
   let coldReconfiguration: LiveLinuxVirtualMachineColdReconfigurationRequest?
   let lifecycleVerification: LiveLinuxVirtualMachineLifecycleVerificationRequest?
+  let extendedVerification: LiveLinuxVirtualMachineExtendedVerificationRequest?
 }
 
 private struct LiveLinuxVirtualMachineColdReconfigurationRequest: Codable {
@@ -1679,6 +1997,10 @@ private struct LiveLinuxVirtualMachineLifecycleVerificationRequest: Codable {
   let snapshotMutationVisualHoldSeconds: Int
   let snapshotRestoreVisualHoldSeconds: Int
   let savedStateRestoreVisualHoldSeconds: Int
+}
+
+private struct LiveLinuxVirtualMachineExtendedVerificationRequest: Codable {
+  let customNetworkTimeoutSeconds: Int
 }
 
 private struct LiveLinuxVirtualMachineSharedDirectoryRequest: Codable {
@@ -1882,6 +2204,10 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
   case invalidSharedDirectories(String)
   case invalidColdReconfiguration(String)
   case invalidLifecycleVerification(String)
+  case invalidExtendedVerification(String)
+  case invalidMACAddress(String)
+  case customNetworkUnavailable(String)
+  case customNetworkPeerNotFound(macAddress: String, subnet: String)
   case runtimeStopTimedOut(UUID)
   case mediaEjectionRequiresInputChannel
   case mediaEjectionDidNotPersist
@@ -1930,6 +2256,14 @@ private enum LiveLinuxVirtualMachineSmokeError: LocalizedError {
       "The one-shot live run request has an invalid cold reconfiguration (\(reason))."
     case .invalidLifecycleVerification(let reason):
       "The one-shot live run request has an invalid lifecycle verification (\(reason))."
+    case .invalidExtendedVerification(let reason):
+      "The one-shot live run request has an invalid extended verification (\(reason))."
+    case .invalidMACAddress(let value):
+      "The live Linux virtual machine has an invalid MAC address (\(value))."
+    case .customNetworkUnavailable(let reason):
+      "The live host-only network could not be verified (\(reason))."
+    case .customNetworkPeerNotFound(let macAddress, let subnet):
+      "The imported Linux virtual machine at \(macAddress) did not become reachable on host-only subnet \(subnet)."
     case .runtimeStopTimedOut(let machineID):
       "Virtual machine \(machineID.uuidString) did not stop before the live verification deadline."
     case .mediaEjectionRequiresInputChannel:
