@@ -397,6 +397,17 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
           )
           #expect(importedConsole.virtualMachine?.state == .running)
 
+          if let visualHoldSeconds = extendedVerification.visualHoldSeconds {
+            try await presentVisualConsole(
+              importedConsole,
+              seconds: visualHoldSeconds,
+              probesGuestInput: true,
+              performsBootInputProbe: false,
+              stage: "imported-host-only",
+              onEjectInstallationMedia: {}
+            )
+          }
+
           let importedManifest = try #require(
             try await importedLibrary.list().first(where: { $0.id == imported.id })
           )
@@ -779,7 +790,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
           savedStateRestoreVisualHoldSeconds: 300
         ),
       extendedVerification: LiveLinuxVirtualMachineExtendedVerificationRequest(
-        customNetworkTimeoutSeconds: 120
+        customNetworkTimeoutSeconds: 120,
+        visualHoldSeconds: 600
       )
     )
     try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
@@ -827,6 +839,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     #expect(
       configuration.extendedVerification?.customNetworkTimeoutSeconds == 120
     )
+    #expect(configuration.extendedVerification?.visualHoldSeconds == 600)
     #expect(
       !FileManager.default.fileExists(
         atPath: requestURL.nativeContainersPOSIXPath
@@ -1044,7 +1057,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       coldReconfiguration: nil,
       lifecycleVerification: nil,
       extendedVerification: LiveLinuxVirtualMachineExtendedVerificationRequest(
-        customNetworkTimeoutSeconds: 10
+        customNetworkTimeoutSeconds: 10,
+        visualHoldSeconds: nil
       )
     )
     try JSONEncoder().encode(request).write(to: requestURL, options: .atomic)
@@ -1255,14 +1269,19 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       }
     }
     if let extendedVerification = request.extendedVerification {
+      let visualHoldIsValid =
+        extendedVerification.visualHoldSeconds.map {
+          (1...Self.visualHoldMaximumSeconds).contains($0)
+        } ?? true
       guard request.probesGuestInput,
         request.requiresInstallationMediaEjection,
         (30...300).contains(
           extendedVerification.customNetworkTimeoutSeconds
-        )
+        ),
+        visualHoldIsValid
       else {
         throw LiveLinuxVirtualMachineSmokeError.invalidExtendedVerification(
-          "it requires guest input, persisted media ejection, and a custom-network timeout from 30 through 300 seconds"
+          "it requires guest input, persisted media ejection, a custom-network timeout from 30 through 300 seconds, and an optional bounded visual hold"
         )
       }
     }
@@ -2103,6 +2122,7 @@ private struct LiveLinuxVirtualMachineLifecycleVerificationRequest: Codable {
 
 private struct LiveLinuxVirtualMachineExtendedVerificationRequest: Codable {
   let customNetworkTimeoutSeconds: Int
+  let visualHoldSeconds: Int?
 }
 
 private struct LiveLinuxVirtualMachineSharedDirectoryRequest: Codable {
