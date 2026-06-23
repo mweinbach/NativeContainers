@@ -291,7 +291,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         snapshot = runtime.snapshot(for: machine.id)
         #expect(snapshot.state == .running)
         #expect(restartedConsole.virtualMachine.state == .running)
-        coldReconfigurationResult = "confirmed"
+        coldReconfigurationResult =
+          "confirmed cold_cpu_count=\(coldReconfiguration.cpuCount) cold_memory_bytes=\(coldReconfiguration.memoryBytes) cold_disk_bytes=\(coldReconfiguration.diskBytes)"
       }
 
       try await runtime.forceStop(target: activeTarget)
