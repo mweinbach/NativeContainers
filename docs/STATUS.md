@@ -2194,7 +2194,7 @@ for that destructive integration pass.
 
 ## Performance contract benchmark checkpoint
 
-- Seven of the eight performance-contract requirements now have dedicated,
+- All eight performance-contract requirements now have dedicated,
   executable benchmark lanes. Cold creation and warm restart are separated;
   runtime-reported idle memory covers exact concurrent counts of 1, 10, and 50;
   a bounded guest workload records baseline, stressed, and post-idle retention
@@ -2211,13 +2211,20 @@ for that destructive integration pass.
   identity-pinned container. Alternating requests measure per-route latency and
   throughput through the published localhost port and the container's dedicated
   IP, preventing different payloads or servers from masquerading as a route
-  comparison. Every new destructive lane has bounded setup, exact cleanup,
-  deterministic doubles, an explicit live environment gate, and provenance
-  output. Sleep/wake and app/runtime crash recovery remains the sole missing
-  performance-contract requirement.
-- Xcode MCP build-for-testing completed in 26.017 seconds with zero errors. The
-  nine focused new contract tests pass, and the complete Xcode plan reports
-  1,269 outcomes: 1,231 passed, 38 explicit live/destructive gates skipped, and
-  zero failures or unrun tests. Strict Swift formatting, no-output whole-module
-  and benchmark-test typechecking, capability/accessibility validators, and
-  diff whitespace checks pass.
+  comparison.
+- Recovery is split into three non-approximate lanes. Host recovery registers
+  the documented `NSWorkspace` sleep and wake notifications concurrently and
+  times only post-wake verified runtime/inventory revalidation. App recovery
+  SIGKILLs an isolated worker after atomic publication of a private journal,
+  validates ownership/mode/link identity, atomically promotes its staged
+  payload, synchronizes the result, and proves residue removal. Runtime recovery
+  verifies the installed origin and exact launch-service executable before
+  SIGKILL, then requires a replacement PID, unchanged origin, and authoritative
+  inventory; failed recovery attempts invoke bounded start-and-verify cleanup.
+  The real host-sleep and runtime-crash lanes remain explicit operator-controlled
+  gates, while deterministic orchestration, real isolated SIGKILL recovery, and
+  launchctl parsing run in the ordinary suite.
+- The initial Xcode MCP build-for-testing completed in 30.976 seconds with zero
+  errors. Six focused recovery/coverage tests pass, including a real SIGKILL of
+  the isolated worker. Full-suite and repository-validator results are recorded
+  after the remaining completion slices.

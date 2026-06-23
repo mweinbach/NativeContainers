@@ -11,9 +11,9 @@ struct PerformanceBenchmarkServiceTests {
     let requirements = PerformanceBenchmarkContractRequirement.allCases
 
     #expect(requirements.count == 8)
-    #expect(requirements.count(where: { $0.coverage == .complete }) == 7)
+    #expect(requirements.count(where: { $0.coverage == .complete }) == 8)
     #expect(requirements.count(where: { $0.coverage == .partial }) == 0)
-    #expect(requirements.count(where: { $0.coverage == .missing }) == 1)
+    #expect(requirements.count(where: { $0.coverage == .missing }) == 0)
     #expect(requirements.contains(.postgreSQLDurability))
     #expect(requirements.contains(.recovery))
   }
@@ -50,6 +50,21 @@ struct PerformanceBenchmarkServiceTests {
     #expect(
       !PerformanceBenchmarkKind.settingsSuiteCases.contains(
         .idleContainerDensity50
+      )
+    )
+    #expect(
+      !PerformanceBenchmarkKind.settingsSuiteCases.contains(
+        .hostSleepWakeRecovery
+      )
+    )
+    #expect(
+      !PerformanceBenchmarkKind.settingsSuiteCases.contains(
+        .appProcessCrashRecovery
+      )
+    )
+    #expect(
+      !PerformanceBenchmarkKind.settingsSuiteCases.contains(
+        .runtimeCrashRecovery
       )
     )
   }
@@ -1803,6 +1818,93 @@ struct PerformanceBenchmarkServiceTests {
 
     #expect(byteCount == 1_048_576)
   }
+
+  @Test
+  func sleepWakeScenarioTimesOnlyPostWakeRecovery() async throws {
+    let events = HostSleepWakeEventDouble()
+    let recovery = HostSleepWakeRecoveryDouble()
+    let scenario = try HostSleepWakePerformanceBenchmarkScenario(
+      events: events,
+      recovery: recovery,
+      timeout: .seconds(90)
+    )
+
+    try await scenario.prepareIteration()
+    try await scenario.prepareMeasurement()
+    let byteCount = try await scenario.perform()
+    try await scenario.cleanUpIteration()
+
+    #expect(byteCount == nil)
+    #expect(await events.timeouts == [.seconds(90)])
+    #expect(await recovery.verificationCount == 1)
+  }
+
+  @Test
+  func crashRecoveryScenarioRequiresExactOrderedRecoveryAndCleanup() async throws {
+    let cycle = CrashRecoveryBenchmarkCycleDouble()
+    let scenario = try CrashRecoveryPerformanceBenchmarkScenario(
+      kind: .appProcessCrashRecovery,
+      cycle: cycle
+    )
+    let service = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      ),
+      clock: SequencePerformanceClock(values: [100, 250])
+    )
+
+    let report = try await service.run { _ in }
+
+    guard case .measured(let result) = report.outcomes.first else {
+      Issue.record("Expected the ordered crash-recovery cycle to be measured.")
+      return
+    }
+    #expect(result.kind == .appProcessCrashRecovery)
+    #expect(result.samples.map(\.durationNanoseconds) == [150])
+    #expect(
+      await cycle.calls == ["prepare", "crash", "recover", "verify", "cleanup"]
+    )
+  }
+
+  @Test
+  func isolatedAppCrashRecoverySurvivesSIGKILLAndLeavesNoResidue() async throws {
+    let workspace = FileManager.default.temporaryDirectory.appending(
+      path: "NativeContainers-AppCrashRecoveryTests-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: workspace) }
+    let cycle = IsolatedAppProcessCrashRecoveryBenchmarkCycle(
+      workspaceRootURL: workspace
+    )
+
+    try await cycle.prepare()
+    try await cycle.crash()
+    try await cycle.recover()
+    try await cycle.verifyRecovery()
+    try await cycle.cleanUp()
+
+    let residue = try FileManager.default.contentsOfDirectory(
+      at: workspace,
+      includingPropertiesForKeys: nil
+    )
+    #expect(residue.isEmpty)
+  }
+
+  @Test
+  func runtimeCrashRecoveryParserRequiresPublishedProcessIdentifier() {
+    #expect(
+      AppleRuntimeCrashRecoveryBenchmarkCycle.processIdentifier(
+        in: "state = running\n\tpid = 4242\n"
+      ) == 4242
+    )
+    #expect(
+      AppleRuntimeCrashRecoveryBenchmarkCycle.processIdentifier(
+        in: "state = waiting\n"
+      ) == nil
+    )
+  }
 }
 
 @Suite("Live Apple performance benchmarks", .serialized)
@@ -1823,6 +1925,8 @@ struct LiveApplePerformanceBenchmarkTests {
     "__NATIVECONTAINERS_IMAGE_PULL_BENCHMARK__"
   private static let networkComparisonOutputMarker =
     "__NATIVECONTAINERS_NETWORK_COMPARISON_BENCHMARK__"
+  private static let recoveryOutputMarker =
+    "__NATIVECONTAINERS_RECOVERY_BENCHMARK__"
   private static let buildOutputMarker =
     "__NATIVECONTAINERS_IMAGE_BUILD_BENCHMARK__"
   private static let machineOutputMarker =
@@ -3038,6 +3142,171 @@ struct LiveApplePerformanceBenchmarkTests {
     print("\(Self.buildOutputMarker)\(json)")
   }
 
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_HOST_SLEEP"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_HOST_SLEEP=1, start the test, then put the host to sleep and wake it within ten minutes."
+    )
+  )
+  func measuresVerifiedRecoveryAfterRealHostSleepAndWake() async throws {
+    let initialInventory = try await AppleRuntimeInventoryService().loadInventory()
+    let scenario = try HostSleepWakePerformanceBenchmarkScenario()
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      )
+    )
+    let report = try await benchmark.run { _ in }
+    let result = try measuredRecoveryResult(
+      from: report,
+      expected: .hostSleepWakeRecovery
+    )
+    try printRecoveryOutput(
+      report: report,
+      result: result,
+      runtimeVersion: initialInventory.system.version
+    )
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_APP_CRASH"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_APP_CRASH=1 to crash an isolated app-owned worker and verify journal recovery."
+    )
+  )
+  func measuresIsolatedAppProcessCrashRecoveryWithoutResidue() async throws {
+    let workspace = FileManager.default.temporaryDirectory.appending(
+      path: "NativeContainers-LiveAppCrashRecovery-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: workspace) }
+    let cycle = IsolatedAppProcessCrashRecoveryBenchmarkCycle(
+      workspaceRootURL: workspace
+    )
+    let scenario = try CrashRecoveryPerformanceBenchmarkScenario(
+      kind: .appProcessCrashRecovery,
+      cycle: cycle
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 3
+      )
+    )
+    let report = try await benchmark.run { _ in }
+    let result = try measuredRecoveryResult(
+      from: report,
+      expected: .appProcessCrashRecovery
+    )
+    let residue = try FileManager.default.contentsOfDirectory(
+      at: workspace,
+      includingPropertiesForKeys: nil
+    )
+    guard residue.isEmpty else {
+      throw LivePerformanceBenchmarkError.residualHostArtifacts(
+        residue.map(\.lastPathComponent).sorted()
+      )
+    }
+    try printRecoveryOutput(
+      report: report,
+      result: result,
+      runtimeVersion: nil
+    )
+  }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_PERFORMANCE"
+      ] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_PERFORMANCE_RUNTIME_CRASH"
+        ] == "1",
+      "Set NATIVECONTAINERS_LIVE_PERFORMANCE=1 and NATIVECONTAINERS_LIVE_PERFORMANCE_RUNTIME_CRASH=1 to SIGKILL the identity-verified container API service and require launchd plus inventory recovery."
+    )
+  )
+  func measuresIdentityVerifiedRuntimeCrashRecovery() async throws {
+    let initialInventory = try await AppleRuntimeInventoryService().loadInventory()
+    let cycle = try AppleRuntimeCrashRecoveryBenchmarkCycle()
+    let scenario = try CrashRecoveryPerformanceBenchmarkScenario(
+      kind: .runtimeCrashRecovery,
+      cycle: cycle
+    )
+    let benchmark = PerformanceBenchmarkService(
+      scenarios: [scenario],
+      configuration: PerformanceBenchmarkConfiguration(
+        warmupIterations: 0,
+        measuredIterations: 1
+      )
+    )
+    let report = try await benchmark.run { _ in }
+    let result = try measuredRecoveryResult(
+      from: report,
+      expected: .runtimeCrashRecovery
+    )
+    try printRecoveryOutput(
+      report: report,
+      result: result,
+      runtimeVersion: initialInventory.system.version
+    )
+  }
+
+  private func measuredRecoveryResult(
+    from report: PerformanceBenchmarkReport,
+    expected: PerformanceBenchmarkKind
+  ) throws -> PerformanceBenchmarkResult {
+    guard let outcome = report.outcomes.first else {
+      throw LivePerformanceBenchmarkError.missingScenarioResult(expected.rawValue)
+    }
+    switch outcome {
+    case .measured(let result):
+      guard result.kind == expected else {
+        throw LivePerformanceBenchmarkError.missingScenarioResult(expected.rawValue)
+      }
+      return result
+    case .failed(let kind, let message):
+      throw LivePerformanceBenchmarkError.scenarioFailed(
+        kind: kind.rawValue,
+        message: message
+      )
+    }
+  }
+
+  private func printRecoveryOutput(
+    report: PerformanceBenchmarkReport,
+    result: PerformanceBenchmarkResult,
+    runtimeVersion: String?
+  ) throws {
+    let output = LiveRecoveryBenchmarkOutput(
+      generatedAt: report.generatedAt,
+      hostOperatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
+      runtimeVersion: runtimeVersion,
+      kind: result.kind.rawValue,
+      samplesNanoseconds: result.samples.map(\.durationNanoseconds),
+      medianMilliseconds: result.medianDurationMilliseconds,
+      p95Milliseconds: result.p95DurationMilliseconds
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(output)
+    let json = try #require(String(data: encoded, encoding: .utf8))
+    print("\(Self.recoveryOutputMarker)\(json)")
+  }
+
   private func requireNoResidualContainers(
     prefix: String,
     service: AppleContainerService
@@ -3423,6 +3692,16 @@ private struct LiveImageBuildBenchmarkOutput: Encodable {
   let contextPayloadBytes: Int
   let cachePolicy: String
   let outputKind: String
+  let samplesNanoseconds: [UInt64]
+  let medianMilliseconds: Double
+  let p95Milliseconds: Double
+}
+
+private struct LiveRecoveryBenchmarkOutput: Encodable {
+  let generatedAt: Date
+  let hostOperatingSystem: String
+  let runtimeVersion: String?
+  let kind: String
   let samplesNanoseconds: [UInt64]
   let medianMilliseconds: Double
   let p95Milliseconds: Double
@@ -3934,6 +4213,46 @@ private actor CancellingPerformanceScenario: PerformanceBenchmarkScenario {
 
   func cleanUpIteration() async {
     cleanupCount += 1
+  }
+}
+
+private actor HostSleepWakeEventDouble: HostSleepWakeEventAwaiting {
+  private(set) var timeouts: [Duration] = []
+
+  func awaitSleepWake(timeout: Duration) {
+    timeouts.append(timeout)
+  }
+}
+
+private actor HostSleepWakeRecoveryDouble: HostSleepWakeRecoveryVerifying {
+  private(set) var verificationCount = 0
+
+  func verifyRecoveryAfterWake() {
+    verificationCount += 1
+  }
+}
+
+private actor CrashRecoveryBenchmarkCycleDouble: CrashRecoveryBenchmarkCycling {
+  private(set) var calls: [String] = []
+
+  func prepare() {
+    calls.append("prepare")
+  }
+
+  func crash() {
+    calls.append("crash")
+  }
+
+  func recover() {
+    calls.append("recover")
+  }
+
+  func verifyRecovery() {
+    calls.append("verify")
+  }
+
+  func cleanUp() {
+    calls.append("cleanup")
   }
 }
 

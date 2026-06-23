@@ -1,4 +1,6 @@
+import AppKit
 import ContainerResource
+import Darwin
 import Foundation
 import Network
 
@@ -3342,6 +3344,647 @@ enum ImagePullDiskGrowthBenchmarkError: LocalizedError, Equatable, Sendable {
       "The pulled image identity changed before benchmark cleanup."
     case .cleanupNotConfirmed:
       "The exact pulled image reference was not confirmed removed after the benchmark."
+    }
+  }
+}
+
+protocol HostSleepWakeEventAwaiting: Sendable {
+  func awaitSleepWake(timeout: Duration) async throws
+}
+
+protocol HostSleepWakeRecoveryVerifying: Sendable {
+  func verifyRecoveryAfterWake() async throws
+}
+
+struct WorkspaceHostSleepWakeEventSource: HostSleepWakeEventAwaiting {
+  func awaitSleepWake(timeout: Duration) async throws {
+    guard timeout >= .seconds(30), timeout <= .seconds(30 * 60) else {
+      throw RecoveryPerformanceBenchmarkError.invalidSleepWakeTimeout
+    }
+
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      group.addTask {
+        async let sleptAt = Self.nextNotification(
+          named: NSWorkspace.willSleepNotification
+        )
+        async let wokeAt = Self.nextNotification(
+          named: NSWorkspace.didWakeNotification
+        )
+        let (sleep, wake) = try await (sleptAt, wokeAt)
+        guard wake >= sleep else {
+          throw RecoveryPerformanceBenchmarkError.wakeObservedBeforeSleep
+        }
+      }
+      group.addTask {
+        try await Task.sleep(for: timeout)
+        throw RecoveryPerformanceBenchmarkError.sleepWakeTimedOut
+      }
+
+      guard try await group.next() != nil else {
+        throw RecoveryPerformanceBenchmarkError.sleepWakeTimedOut
+      }
+      group.cancelAll()
+    }
+  }
+
+  private static func nextNotification(
+    named name: Notification.Name
+  ) async throws -> ContinuousClock.Instant {
+    for await _ in NSWorkspace.shared.notificationCenter.notifications(
+      named: name,
+      object: NSWorkspace.shared
+    ) {
+      try Task.checkCancellation()
+      return ContinuousClock.now
+    }
+    throw CancellationError()
+  }
+}
+
+struct LiveHostSleepWakeRecoveryVerifier: HostSleepWakeRecoveryVerifying {
+  private let runtime: any ActiveRuntimeConnectionVerifying
+  private let inventory: any ContainerInventoryLoading
+
+  init(
+    runtime: any ActiveRuntimeConnectionVerifying = VerifiedDualRuntimeSetupService(),
+    inventory: any ContainerInventoryLoading = AppleRuntimeInventoryService()
+  ) {
+    self.runtime = runtime
+    self.inventory = inventory
+  }
+
+  func verifyRecoveryAfterWake() async throws {
+    let distribution = try await runtime.verifyActiveRuntimeForConnection()
+    let snapshot = try await inventory.loadInventory()
+    guard !snapshot.system.version.isEmpty,
+      distribution.version == AppleContainerRuntimeSetupService.requiredVersion
+        || distribution.version
+          == NativeRuntimeProductionContractFactory.nativeRuntimeVersion
+    else {
+      throw RecoveryPerformanceBenchmarkError.runtimeRecoveryNotConfirmed
+    }
+  }
+}
+
+actor HostSleepWakePerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
+  nonisolated let kind = PerformanceBenchmarkKind.hostSleepWakeRecovery
+
+  private let events: any HostSleepWakeEventAwaiting
+  private let recovery: any HostSleepWakeRecoveryVerifying
+  private let timeout: Duration
+  private var observedWake = false
+
+  init(
+    events: any HostSleepWakeEventAwaiting = WorkspaceHostSleepWakeEventSource(),
+    recovery: any HostSleepWakeRecoveryVerifying = LiveHostSleepWakeRecoveryVerifier(),
+    timeout: Duration = .seconds(10 * 60)
+  ) throws {
+    guard timeout >= .seconds(30), timeout <= .seconds(30 * 60) else {
+      throw RecoveryPerformanceBenchmarkError.invalidSleepWakeTimeout
+    }
+    self.events = events
+    self.recovery = recovery
+    self.timeout = timeout
+  }
+
+  func prepareIteration() throws {
+    guard !observedWake else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+  }
+
+  func prepareMeasurement() async throws {
+    guard !observedWake else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    try await events.awaitSleepWake(timeout: timeout)
+    observedWake = true
+  }
+
+  func perform() async throws -> Int64? {
+    guard observedWake else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    try await recovery.verifyRecoveryAfterWake()
+    return nil
+  }
+
+  func cleanUpIteration() {
+    observedWake = false
+  }
+}
+
+protocol CrashRecoveryBenchmarkCycling: Sendable {
+  func prepare() async throws
+  func crash() async throws
+  func recover() async throws
+  func verifyRecovery() async throws
+  func cleanUp() async throws
+}
+
+actor CrashRecoveryPerformanceBenchmarkScenario: PerformanceBenchmarkScenario {
+  nonisolated let kind: PerformanceBenchmarkKind
+
+  private enum Phase {
+    case idle
+    case prepared
+    case crashed
+    case recovered
+  }
+
+  private let cycle: any CrashRecoveryBenchmarkCycling
+  private var phase = Phase.idle
+
+  init(
+    kind: PerformanceBenchmarkKind,
+    cycle: any CrashRecoveryBenchmarkCycling
+  ) throws {
+    guard kind == .appProcessCrashRecovery || kind == .runtimeCrashRecovery else {
+      throw RecoveryPerformanceBenchmarkError.invalidCrashRecoveryKind
+    }
+    self.kind = kind
+    self.cycle = cycle
+  }
+
+  func prepareIteration() async throws {
+    guard phase == .idle else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    try await cycle.prepare()
+    phase = .prepared
+  }
+
+  func perform() async throws -> Int64? {
+    guard phase == .prepared else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    try await cycle.crash()
+    phase = .crashed
+    try await cycle.recover()
+    phase = .recovered
+    try await cycle.verifyRecovery()
+    return nil
+  }
+
+  func cleanUpIteration() async throws {
+    defer { phase = .idle }
+    try await cycle.cleanUp()
+  }
+}
+
+actor IsolatedAppProcessCrashRecoveryBenchmarkCycle:
+  CrashRecoveryBenchmarkCycling
+{
+  private struct Iteration {
+    let directoryURL: URL
+    let token: String
+    let payloadURL: URL
+    let journalURL: URL
+    let committedURL: URL
+    var didCrash = false
+    var didRecover = false
+  }
+
+  private let workspaceRootURL: URL
+  private let commands: any HostCommandExecuting
+  private var iteration: Iteration?
+
+  init(
+    workspaceRootURL: URL,
+    commands: any HostCommandExecuting = FoundationHostCommandExecutor()
+  ) {
+    self.workspaceRootURL = workspaceRootURL.standardizedFileURL
+    self.commands = commands
+  }
+
+  func prepare() throws {
+    guard iteration == nil else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    let fileManager = FileManager.default
+    try fileManager.createDirectory(
+      at: workspaceRootURL,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+    try Self.requirePrivateDirectory(workspaceRootURL)
+
+    let directoryURL = workspaceRootURL.appending(
+      path: "app-crash-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try fileManager.createDirectory(
+      at: directoryURL,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: 0o700]
+    )
+    let token = UUID().uuidString.lowercased()
+    let payloadURL = directoryURL.appending(path: "payload", directoryHint: .notDirectory)
+    let journalURL = directoryURL.appending(path: "recovery.journal", directoryHint: .notDirectory)
+    let committedURL = directoryURL.appending(path: "committed", directoryHint: .notDirectory)
+    guard
+      fileManager.createFile(
+        atPath: payloadURL.path,
+        contents: Data(token.utf8),
+        attributes: [.posixPermissions: 0o600]
+      )
+    else {
+      throw RecoveryPerformanceBenchmarkError.appCrashFixturePreparationFailed
+    }
+    try Self.synchronizeFile(payloadURL)
+    iteration = Iteration(
+      directoryURL: directoryURL,
+      token: token,
+      payloadURL: payloadURL,
+      journalURL: journalURL,
+      committedURL: committedURL
+    )
+  }
+
+  func crash() async throws {
+    guard var iteration, !iteration.didCrash else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    let script = #"""
+      set -eu
+      journal="$1"
+      token="$2"
+      partial="${journal}.partial"
+      umask 077
+      /usr/bin/printf '%s\n' "$token" > "$partial"
+      /bin/chmod 600 "$partial"
+      /bin/mv "$partial" "$journal"
+      /bin/kill -KILL $$
+      """#
+    let result = try await commands.execute(
+      executableURL: URL(filePath: "/bin/sh"),
+      arguments: [
+        "-c", script, "nativecontainers-app-crash",
+        iteration.journalURL.path, iteration.token,
+      ],
+      environment: ["PATH": "/usr/bin:/bin", "LC_ALL": "C"],
+      timeout: .seconds(10)
+    )
+    guard result.exitCode == SIGKILL else {
+      throw RecoveryPerformanceBenchmarkError.appWorkerDidNotCrash(result.exitCode)
+    }
+    try Self.requirePrivateRegularFile(iteration.journalURL)
+    guard
+      !FileManager.default.fileExists(
+        atPath: iteration.journalURL.path + ".partial"
+      )
+    else {
+      throw RecoveryPerformanceBenchmarkError.appCrashResiduePresent
+    }
+    iteration.didCrash = true
+    self.iteration = iteration
+  }
+
+  func recover() throws {
+    guard var iteration, iteration.didCrash, !iteration.didRecover else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    try Self.requirePrivateRegularFile(iteration.journalURL)
+    try Self.requirePrivateRegularFile(iteration.payloadURL)
+    let journalToken = try String(contentsOf: iteration.journalURL, encoding: .utf8)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let payloadToken = try String(contentsOf: iteration.payloadURL, encoding: .utf8)
+    guard journalToken == iteration.token, payloadToken == iteration.token else {
+      throw RecoveryPerformanceBenchmarkError.appCrashJournalChanged
+    }
+    guard !FileManager.default.fileExists(atPath: iteration.committedURL.path) else {
+      throw RecoveryPerformanceBenchmarkError.appCrashResiduePresent
+    }
+    guard
+      Darwin.renameatx_np(
+        AT_FDCWD,
+        iteration.payloadURL.path,
+        AT_FDCWD,
+        iteration.committedURL.path,
+        UInt32(RENAME_EXCL)
+      ) == 0
+    else {
+      throw RecoveryPerformanceBenchmarkError.appCrashRecoveryPublishFailed(errno)
+    }
+    try Self.synchronizeFile(iteration.committedURL)
+    try FileManager.default.removeItem(at: iteration.journalURL)
+    try Self.synchronizeDirectory(iteration.directoryURL)
+    iteration.didRecover = true
+    self.iteration = iteration
+  }
+
+  func verifyRecovery() throws {
+    guard let iteration, iteration.didRecover else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    try Self.requirePrivateRegularFile(iteration.committedURL)
+    let committedToken = try String(contentsOf: iteration.committedURL, encoding: .utf8)
+    guard
+      committedToken == iteration.token,
+      !FileManager.default.fileExists(atPath: iteration.payloadURL.path),
+      !FileManager.default.fileExists(atPath: iteration.journalURL.path),
+      !FileManager.default.fileExists(atPath: iteration.journalURL.path + ".partial")
+    else {
+      throw RecoveryPerformanceBenchmarkError.appCrashRecoveryNotConfirmed
+    }
+  }
+
+  func cleanUp() throws {
+    guard let iteration else { return }
+    defer { self.iteration = nil }
+    try FileManager.default.removeItem(at: iteration.directoryURL)
+    guard !FileManager.default.fileExists(atPath: iteration.directoryURL.path) else {
+      throw RecoveryPerformanceBenchmarkError.appCrashResiduePresent
+    }
+  }
+
+  private static func requirePrivateDirectory(_ url: URL) throws {
+    var metadata = stat()
+    guard lstat(url.path, &metadata) == 0,
+      metadata.st_mode & S_IFMT == S_IFDIR,
+      metadata.st_uid == getuid(),
+      metadata.st_mode & 0o077 == 0
+    else {
+      throw RecoveryPerformanceBenchmarkError.unsafeAppCrashWorkspace
+    }
+  }
+
+  private static func requirePrivateRegularFile(_ url: URL) throws {
+    var metadata = stat()
+    guard lstat(url.path, &metadata) == 0,
+      metadata.st_mode & S_IFMT == S_IFREG,
+      metadata.st_uid == getuid(),
+      metadata.st_nlink == 1,
+      metadata.st_mode & 0o077 == 0
+    else {
+      throw RecoveryPerformanceBenchmarkError.unsafeAppCrashArtifact
+    }
+  }
+
+  private static func synchronizeFile(_ url: URL) throws {
+    let descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+    guard descriptor >= 0 else { throw CocoaError(.fileWriteUnknown) }
+    defer { Darwin.close(descriptor) }
+    guard Darwin.fsync(descriptor) == 0 else {
+      throw CocoaError(.fileWriteUnknown)
+    }
+  }
+
+  private static func synchronizeDirectory(_ url: URL) throws {
+    let descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_DIRECTORY)
+    guard descriptor >= 0 else { throw CocoaError(.fileWriteUnknown) }
+    defer { Darwin.close(descriptor) }
+    guard Darwin.fsync(descriptor) == 0 else {
+      throw CocoaError(.fileWriteUnknown)
+    }
+  }
+}
+
+actor AppleRuntimeCrashRecoveryBenchmarkCycle: CrashRecoveryBenchmarkCycling {
+  private struct Iteration {
+    let origin: NativeRuntimeOrigin
+    let service: NativeRuntimeLaunchServiceContract
+    let processIdentifier: Int32
+    var didCrash = false
+    var didRecover = false
+  }
+
+  private let connection: any ActiveRuntimeConnectionVerifying
+  private let inventory: any ContainerInventoryLoading
+  private let commands: any HostCommandExecuting
+  private let controller: any NativeRuntimeGraphControlling
+  private let timeout: Duration
+  private let pollInterval: Duration
+  private var iteration: Iteration?
+
+  init(
+    connection: any ActiveRuntimeConnectionVerifying = VerifiedDualRuntimeSetupService(),
+    inventory: any ContainerInventoryLoading = AppleRuntimeInventoryService(),
+    commands: any HostCommandExecuting = FoundationHostCommandExecutor(),
+    controller: any NativeRuntimeGraphControlling = CommandNativeRuntimeGraphController(
+      commands: NativeRuntimeProductionContractFactory.controlCommands()
+    ),
+    timeout: Duration = .seconds(30),
+    pollInterval: Duration = .milliseconds(100)
+  ) throws {
+    guard timeout >= .seconds(5), timeout <= .seconds(120),
+      pollInterval >= .milliseconds(25), pollInterval <= .seconds(2)
+    else {
+      throw RecoveryPerformanceBenchmarkError.invalidRuntimeRecoveryTiming
+    }
+    self.connection = connection
+    self.inventory = inventory
+    self.commands = commands
+    self.controller = controller
+    self.timeout = timeout
+    self.pollInterval = pollInterval
+  }
+
+  func prepare() async throws {
+    guard iteration == nil else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    let distribution = try await connection.verifyActiveRuntimeForConnection()
+    let services = NativeRuntimeProductionContractFactory.launchServicesByOrigin()
+    guard
+      let service = services[distribution.origin]?.first(where: {
+        $0.label == "com.apple.container.apiserver"
+      })
+    else {
+      throw RecoveryPerformanceBenchmarkError.runtimeServiceUnavailable
+    }
+    let observation = try await inspect(service)
+    iteration = Iteration(
+      origin: distribution.origin,
+      service: service,
+      processIdentifier: observation.processIdentifier
+    )
+  }
+
+  func crash() async throws {
+    guard var iteration, !iteration.didCrash else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    let result = try await commands.execute(
+      executableURL: URL(filePath: "/bin/launchctl"),
+      arguments: [
+        "kill", "SIGKILL",
+        "\(iteration.service.domain)/\(iteration.service.label)",
+      ],
+      environment: nil,
+      timeout: .seconds(10)
+    )
+    guard result.exitCode == 0 else {
+      throw RecoveryPerformanceBenchmarkError.runtimeCrashFailed(
+        Self.commandDetail(result)
+      )
+    }
+    iteration.didCrash = true
+    self.iteration = iteration
+  }
+
+  func recover() async throws {
+    guard var iteration, iteration.didCrash, !iteration.didRecover else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    var lastFailure = "launchd did not publish a replacement process"
+    while clock.now < deadline {
+      do {
+        let observation = try await inspect(iteration.service)
+        guard observation.processIdentifier != iteration.processIdentifier else {
+          throw RecoveryPerformanceBenchmarkError.runtimeProcessDidNotChange
+        }
+        let distribution = try await connection.verifyActiveRuntimeForConnection()
+        guard distribution.origin == iteration.origin else {
+          throw RecoveryPerformanceBenchmarkError.runtimeOriginChanged
+        }
+        _ = try await inventory.loadInventory()
+        iteration.didRecover = true
+        self.iteration = iteration
+        return
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        lastFailure = error.localizedDescription
+      }
+      try await Task.sleep(for: pollInterval)
+    }
+    throw RecoveryPerformanceBenchmarkError.runtimeRecoveryTimedOut(lastFailure)
+  }
+
+  func verifyRecovery() async throws {
+    guard let iteration, iteration.didRecover else {
+      throw RecoveryPerformanceBenchmarkError.invalidIterationState
+    }
+    let observation = try await inspect(iteration.service)
+    guard observation.processIdentifier != iteration.processIdentifier else {
+      throw RecoveryPerformanceBenchmarkError.runtimeProcessDidNotChange
+    }
+    let distribution = try await connection.verifyActiveRuntimeForConnection()
+    guard distribution.origin == iteration.origin else {
+      throw RecoveryPerformanceBenchmarkError.runtimeOriginChanged
+    }
+    _ = try await inventory.loadInventory()
+  }
+
+  func cleanUp() async throws {
+    guard let iteration else { return }
+    defer { self.iteration = nil }
+    guard iteration.didCrash, !iteration.didRecover else { return }
+    try await controller.start(iteration.origin)
+    _ = try await connection.verifyActiveRuntimeForConnection()
+    _ = try await inventory.loadInventory()
+  }
+
+  private func inspect(
+    _ service: NativeRuntimeLaunchServiceContract
+  ) async throws -> (processIdentifier: Int32, executableURL: URL) {
+    let result = try await commands.execute(
+      executableURL: URL(filePath: "/bin/launchctl"),
+      arguments: ["print", "\(service.domain)/\(service.label)"],
+      environment: nil,
+      timeout: .seconds(10)
+    )
+    guard result.exitCode == 0,
+      let executable = LaunchctlNativeRuntimeGraphSnapshotter.programPath(
+        in: result.standardOutput
+      ),
+      URL(filePath: executable).standardizedFileURL
+        == service.executableURL.standardizedFileURL,
+      let processIdentifier = Self.processIdentifier(in: result.standardOutput),
+      processIdentifier > 1
+    else {
+      throw RecoveryPerformanceBenchmarkError.runtimeServiceUnavailable
+    }
+    return (processIdentifier, URL(filePath: executable))
+  }
+
+  static func processIdentifier(in output: String) -> Int32? {
+    for line in output.split(separator: "\n") {
+      let trimmed = line.trimmingCharacters(in: .whitespaces)
+      guard trimmed.hasPrefix("pid =") else { continue }
+      let value = trimmed.dropFirst("pid =".count)
+        .trimmingCharacters(in: .whitespaces)
+      return Int32(value)
+    }
+    return nil
+  }
+
+  private static func commandDetail(_ result: HostCommandResult) -> String {
+    let output = [result.standardError, result.standardOutput]
+      .filter { !$0.isEmpty }
+      .joined(separator: "\n")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return output.isEmpty ? "exit status \(result.exitCode)" : String(output.suffix(2_000))
+  }
+}
+
+enum RecoveryPerformanceBenchmarkError: LocalizedError, Equatable, Sendable {
+  case invalidSleepWakeTimeout
+  case sleepWakeTimedOut
+  case wakeObservedBeforeSleep
+  case invalidCrashRecoveryKind
+  case invalidIterationState
+  case runtimeRecoveryNotConfirmed
+  case appCrashFixturePreparationFailed
+  case appWorkerDidNotCrash(Int32)
+  case unsafeAppCrashWorkspace
+  case unsafeAppCrashArtifact
+  case appCrashJournalChanged
+  case appCrashRecoveryPublishFailed(Int32)
+  case appCrashRecoveryNotConfirmed
+  case appCrashResiduePresent
+  case invalidRuntimeRecoveryTiming
+  case runtimeServiceUnavailable
+  case runtimeCrashFailed(String)
+  case runtimeProcessDidNotChange
+  case runtimeOriginChanged
+  case runtimeRecoveryTimedOut(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidSleepWakeTimeout:
+      "The sleep/wake benchmark timeout must be between 30 seconds and 30 minutes."
+    case .sleepWakeTimedOut:
+      "The host did not complete an observed sleep and wake cycle before the benchmark deadline."
+    case .wakeObservedBeforeSleep:
+      "The host wake notification was observed before the paired sleep notification."
+    case .invalidCrashRecoveryKind:
+      "The crash-recovery scenario requires the app-process or runtime benchmark kind."
+    case .invalidIterationState:
+      "The recovery benchmark iteration is not in a valid state."
+    case .runtimeRecoveryNotConfirmed:
+      "The Apple container runtime and inventory did not recover after host wake."
+    case .appCrashFixturePreparationFailed:
+      "The isolated app-crash benchmark fixture could not be prepared."
+    case .appWorkerDidNotCrash(let status):
+      "The isolated app-owned worker did not terminate through SIGKILL (status \(status))."
+    case .unsafeAppCrashWorkspace:
+      "The app-crash benchmark workspace is not a private owner-controlled directory."
+    case .unsafeAppCrashArtifact:
+      "An app-crash benchmark artifact is not a private owner-controlled regular file."
+    case .appCrashJournalChanged:
+      "The app-crash recovery journal or staged payload changed across the crash boundary."
+    case .appCrashRecoveryPublishFailed(let code):
+      "The app-crash recovery result could not be published atomically (errno \(code))."
+    case .appCrashRecoveryNotConfirmed:
+      "The app-crash recovery result or residue did not match the prepared transaction."
+    case .appCrashResiduePresent:
+      "The app-crash recovery benchmark left unexpected transaction residue."
+    case .invalidRuntimeRecoveryTiming:
+      "The runtime crash-recovery timeout or poll interval is outside the bounded range."
+    case .runtimeServiceUnavailable:
+      "The identity-verified container API launch service is unavailable."
+    case .runtimeCrashFailed(let detail):
+      "The verified container API service could not be crashed: \(detail)"
+    case .runtimeProcessDidNotChange:
+      "The container API service did not publish a replacement process after SIGKILL."
+    case .runtimeOriginChanged:
+      "The active container runtime origin changed during crash recovery."
+    case .runtimeRecoveryTimedOut(let detail):
+      "The container runtime did not recover before the benchmark deadline: \(detail)"
     }
   }
 }

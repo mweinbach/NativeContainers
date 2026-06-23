@@ -20,6 +20,9 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
   case postStressRetainedMemory
   case postgreSQLDurability
   case natDirectNetworkComparison
+  case hostSleepWakeRecovery
+  case appProcessCrashRecovery
+  case runtimeCrashRecovery
 
   static let settingsSuiteCases: [Self] = [
     .warmInventory,
@@ -69,6 +72,12 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "PostgreSQL durability and fsync"
     case .natDirectNetworkComparison:
       "NAT and direct-IP networking"
+    case .hostSleepWakeRecovery:
+      "Host sleep and wake recovery"
+    case .appProcessCrashRecovery:
+      "App-process crash recovery"
+    case .runtimeCrashRecovery:
+      "Container-runtime crash recovery"
     }
   }
 
@@ -112,6 +121,12 @@ enum PerformanceBenchmarkKind: String, CaseIterable, Codable, Hashable, Identifi
       "Runs a fixed transactional PostgreSQL workload with fsync and synchronous_commit enabled, followed by CHECKPOINT."
     case .natDirectNetworkComparison:
       "Measures the same fixed container payload over its published host port and dedicated direct IP."
+    case .hostSleepWakeRecovery:
+      "Observes a real host sleep and wake cycle, then measures verified runtime and inventory recovery after wake."
+    case .appProcessCrashRecovery:
+      "Crashes an isolated app-owned worker after it publishes a recovery journal, then measures exact journal recovery and residue cleanup."
+    case .runtimeCrashRecovery:
+      "Crashes the identity-verified container API service and measures launchd restart plus authoritative runtime recovery."
     }
   }
 }
@@ -137,10 +152,9 @@ enum PerformanceBenchmarkContractRequirement: String, CaseIterable, Identifiable
   var coverage: PerformanceBenchmarkContractCoverage {
     switch self {
     case .containerStartup, .idleContainerMemory, .postStressMemory, .bindMountIO,
-      .postgreSQLDurability, .imagePullBuildAndDisk, .containerNetworking:
+      .postgreSQLDurability, .imagePullBuildAndDisk, .containerNetworking,
+      .recovery:
       .complete
-    case .recovery:
-      .missing
     }
   }
 
@@ -182,7 +196,7 @@ enum PerformanceBenchmarkContractRequirement: String, CaseIterable, Identifiable
     case .containerNetworking:
       "The same verified payload is compared over a published host port and the container’s dedicated direct IP."
     case .recovery:
-      "No benchmark covers host sleep/wake or process and runtime crash recovery."
+      "Separate opt-in lanes observe a real host sleep/wake cycle, crash an isolated app-owned worker across a journal boundary, and crash the identity-verified runtime API service before proving exact recovery."
     }
   }
 }

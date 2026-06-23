@@ -403,7 +403,7 @@ must leave a usable, test-backed product slice.
         disk-write, and daily metric payloads, with bounded private retention,
         explicit JSON export/deletion, hosted-process suppression, and matching
         app/build-worker dSYM enforcement in the archive gate.
-- [ ] Complete product-contract performance benchmark coverage.
+- [x] Complete product-contract performance benchmark coverage.
   - [x] User-initiated local baselines for warm Apple inventory, private
         temporary-file write/read I/O, and Network.framework localhost TCP,
         with warmups, median/P95 reporting, bounded cancellation, and no
@@ -448,7 +448,12 @@ must leave a usable, test-backed product slice.
         no-cache build lane.
   - [x] Add alternating published-NAT/direct-IP latency and throughput samples
         for the same byte-verified container payload.
-  - [ ] Add host sleep/wake and app/runtime crash-recovery benchmarks.
+  - [x] Add host sleep/wake and app/runtime crash-recovery benchmarks. The host
+        lane observes AppKit workspace sleep/wake notifications before timing
+        runtime/inventory revalidation; the app lane SIGKILLs an isolated
+        worker across a private atomic journal; and the runtime lane verifies
+        launch-service ownership before SIGKILL, then requires a replacement
+        PID, unchanged origin, and authoritative inventory recovery.
 
 ## Public-API constraint log
 

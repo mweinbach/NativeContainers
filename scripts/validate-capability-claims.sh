@@ -109,11 +109,11 @@ do
     "performance-contract requirement $requirement"
 done
 require_literal docs/ROADMAP.md \
-  '[ ] Complete product-contract performance benchmark coverage.' \
-  "open complete-performance roadmap item"
+  '[x] Complete product-contract performance benchmark coverage.' \
+  "completed performance roadmap item"
 require_literal docs/FEATURE_MATRIX.md \
-  'Seven of eight contract requirements are complete; sleep/wake and crash recovery remains missing.' \
-  "performance coverage qualification"
+  'all eight contract requirements have executable coverage' \
+  "complete performance coverage qualification"
 require_literal docs/FEATURE_MATRIX.md \
   '| NAT/direct-IP latency and throughput | Complete |' \
   "completed network-performance contract"
@@ -123,6 +123,15 @@ require_literal NativeContainers/Services/Performance/PerformanceBenchmarkScenar
 require_literal NativeContainers/Services/Performance/PerformanceBenchmarkScenarios.swift \
   'actor NATDirectNetworkPerformanceBenchmarkScenario' \
   "NAT/direct-IP benchmark"
+require_literal NativeContainers/Services/Performance/PerformanceBenchmarkScenarios.swift \
+  'actor HostSleepWakePerformanceBenchmarkScenario' \
+  "host sleep-wake recovery benchmark"
+require_literal NativeContainers/Services/Performance/PerformanceBenchmarkScenarios.swift \
+  'actor IsolatedAppProcessCrashRecoveryBenchmarkCycle' \
+  "isolated app crash-recovery benchmark"
+require_literal NativeContainers/Services/Performance/PerformanceBenchmarkScenarios.swift \
+  'actor AppleRuntimeCrashRecoveryBenchmarkCycle' \
+  "runtime crash-recovery benchmark"
 
 require_literal docs/FEATURE_MATRIX.md \
   '| Persistent Apple-machine snapshots/backups | Versioned fork Machine API + crash-safe snapshot catalog/store + native Snapshots UI | Conditional M3 |' \
