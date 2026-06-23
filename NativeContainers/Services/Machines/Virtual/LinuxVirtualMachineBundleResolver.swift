@@ -13,10 +13,16 @@ protocol LinuxVirtualMachineBundleResolving: Sendable {
 struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Sendable {
   private let rootURL: URL
   private let artifactResolver: VirtualMachineBundleArtifactResolver
+  private let windowsGuestToolsCache: WindowsGuestToolsCache
 
-  init(rootURL: URL, fileManager: FileManager = .default) {
+  init(
+    rootURL: URL,
+    fileManager: FileManager = .default,
+    windowsGuestToolsCache: WindowsGuestToolsCache = WindowsGuestToolsCache()
+  ) {
     self.rootURL = rootURL.standardizedFileURL
     artifactResolver = VirtualMachineBundleArtifactResolver(fileManager: fileManager)
+    self.windowsGuestToolsCache = windowsGuestToolsCache
   }
 
   func resolve(_ manifest: VirtualMachineManifest) throws -> ResolvedLinuxVirtualMachine {
@@ -110,6 +116,15 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
         in: bundleURL
       )
     }
+    let guestToolsMediaURL: URL?
+    if let configuration = manifest.windowsConfiguration,
+      configuration.guestToolsMediaAttached,
+      let release = configuration.guestTools
+    {
+      guestToolsMediaURL = try windowsGuestToolsCache.resolve(release)
+    } else {
+      guestToolsMediaURL = nil
+    }
 
     return ResolvedLinuxVirtualMachine(
       manifest: manifest,
@@ -120,7 +135,8 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
       machineIdentifierURL: machineIdentifierURL,
       installationMediaURL: installationMediaURL,
       setupConfigurationMediaURL: setupConfigurationMediaURL,
-      guestAgentSecretURL: guestAgentSecretURL
+      guestAgentSecretURL: guestAgentSecretURL,
+      guestToolsMediaURL: guestToolsMediaURL
     )
   }
 

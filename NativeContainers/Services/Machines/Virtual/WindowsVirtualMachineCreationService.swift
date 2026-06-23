@@ -11,9 +11,15 @@ protocol WindowsVirtualMachineCreating: Sendable {
 
 struct WindowsVirtualMachineCreationService: WindowsVirtualMachineCreating {
   private let library: any VirtualMachineLibraryProtocol
+  private let guestTools: any WindowsGuestToolsReleaseManaging
 
-  init(library: any VirtualMachineLibraryProtocol) {
+  init(
+    library: any VirtualMachineLibraryProtocol,
+    guestTools: any WindowsGuestToolsReleaseManaging =
+      WindowsGuestToolsReleaseManager()
+  ) {
     self.library = library
+    self.guestTools = guestTools
   }
 
   func createWindowsVirtualMachine(
@@ -23,6 +29,12 @@ struct WindowsVirtualMachineCreationService: WindowsVirtualMachineCreating {
     securityMode: WindowsVirtualMachineSecurityMode
   ) async throws -> VirtualMachineManifest {
     try Self.validate(resources)
+    let guestToolsRelease =
+      if securityMode == .productionSecureBoot {
+        try await guestTools.prepareProductionRelease()
+      } else {
+        Optional<WindowsGuestToolsReleaseReference>.none
+      }
     let draft = try await library.createDraft(
       name: name,
       guest: .windows,
@@ -32,7 +44,8 @@ struct WindowsVirtualMachineCreationService: WindowsVirtualMachineCreating {
       return try await library.prepareWindowsVM(
         id: draft.id,
         installationMediaURL: installationMediaURL,
-        securityMode: securityMode
+        securityMode: securityMode,
+        guestTools: guestToolsRelease
       )
     } catch {
       let preparationError = error

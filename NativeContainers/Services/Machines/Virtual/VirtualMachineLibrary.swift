@@ -27,7 +27,8 @@ protocol WindowsVirtualMachinePreparing: Sendable {
   func prepareWindowsVM(
     id: UUID,
     installationMediaURL: URL,
-    securityMode: WindowsVirtualMachineSecurityMode
+    securityMode: WindowsVirtualMachineSecurityMode,
+    guestTools: WindowsGuestToolsReleaseReference?
   ) async throws -> VirtualMachineManifest
 }
 
@@ -67,7 +68,8 @@ extension WindowsVirtualMachinePreparing {
   func prepareWindowsVM(
     id: UUID,
     installationMediaURL: URL,
-    securityMode: WindowsVirtualMachineSecurityMode
+    securityMode: WindowsVirtualMachineSecurityMode,
+    guestTools: WindowsGuestToolsReleaseReference?
   ) async throws -> VirtualMachineManifest {
     throw VirtualMachineModelError.windowsPlatformPreparationUnavailable
   }
@@ -1118,7 +1120,8 @@ actor VirtualMachineLibrary:
   func prepareWindowsVM(
     id: UUID,
     installationMediaURL: URL,
-    securityMode: WindowsVirtualMachineSecurityMode
+    securityMode: WindowsVirtualMachineSecurityMode,
+    guestTools: WindowsGuestToolsReleaseReference?
   ) async throws -> VirtualMachineManifest {
     try bundleStore.ensureRootExists()
     let accessToken = UUID()
@@ -1180,7 +1183,8 @@ actor VirtualMachineLibrary:
           guestAgentSecretPath: WindowsPlatformArtifactURLs.guestAgentSecretManifestPath,
           installationMedia: preparation.installationMedia,
           macAddress: preparation.macAddress,
-          securityMode: securityMode
+          securityMode: securityMode,
+          guestTools: guestTools
         )
       )
       try bundleStore.write(
@@ -1647,6 +1651,7 @@ actor VirtualMachineLibrary:
         installationMediaURL: resolvedMachine.installationMediaURL,
         setupConfigurationMediaURL: resolvedMachine.setupConfigurationMediaURL,
         guestAgentSecretURL: resolvedMachine.guestAgentSecretURL,
+        guestToolsMediaURL: resolvedMachine.guestToolsMediaURL,
         sharedDirectories: try bundleValidator.sharedDirectoryConfiguration(
           in: resolvedMachine.bundleURL
         )

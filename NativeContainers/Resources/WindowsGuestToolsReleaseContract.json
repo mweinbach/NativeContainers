@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0-development",
+  "artifactURL": null,
+  "sha256": null,
+  "byteCount": null,
+  "isMicrosoftSigned": false,
+  "sourceRepositoryURL": "https://github.com/mweinbach/NativeContainersWindowsGuestTools"
+}

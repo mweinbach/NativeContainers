@@ -363,6 +363,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installState = .stopped
     windowsConfiguration?.installationMediaPath = nil
     windowsConfiguration?.setupConfigurationMediaPath = nil
+    windowsConfiguration?.guestToolsMediaAttached = false
     installationOperationID = nil
     installationFailure = nil
     self.updatedAt = updatedAt

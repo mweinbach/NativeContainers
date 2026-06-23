@@ -196,26 +196,28 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
       )
     }
     guard let controller = virtualMachine.usbControllers.first,
-      let device = controller.usbDevices.first
+      !controller.usbDevices.isEmpty
     else {
       throw LinuxVirtualMachineRuntimeError.operationUnavailable(
         "find attached installation media for"
       )
     }
 
-    let operation = Task { @MainActor in
-      try await withCheckedThrowingContinuation {
-        (continuation: CheckedContinuation<Void, any Error>) in
-        controller.detach(device: device) { error in
-          if let error {
-            continuation.resume(throwing: error)
-          } else {
-            continuation.resume()
+    for device in controller.usbDevices {
+      let operation = Task { @MainActor in
+        try await withCheckedThrowingContinuation {
+          (continuation: CheckedContinuation<Void, any Error>) in
+          controller.detach(device: device) { error in
+            if let error {
+              continuation.resume(throwing: error)
+            } else {
+              continuation.resume()
+            }
           }
         }
       }
+      try await operation.value
     }
-    try await operation.value
     hasInstallationMedia = false
     saveRestoreSupport = .unsupported(
       "Restart the VM after finishing installation before suspending it."

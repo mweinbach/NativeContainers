@@ -26,7 +26,9 @@ struct WindowsInstallationMediaMetadata: Codable, Equatable, Sendable {
 
 struct WindowsGuestToolsReleaseReference: Codable, Equatable, Sendable {
   let version: String
+  let artifactURL: URL
   let sha256: String
+  let byteCount: UInt64
   let isMicrosoftSigned: Bool
 }
 
@@ -40,6 +42,7 @@ struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
   var macAddress: String
   let securityMode: WindowsVirtualMachineSecurityMode
   var guestTools: WindowsGuestToolsReleaseReference?
+  var guestToolsMediaAttached: Bool
   var sharesClipboard: Bool
 
   init(
@@ -52,6 +55,7 @@ struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
     macAddress: String,
     securityMode: WindowsVirtualMachineSecurityMode = .productionSecureBoot,
     guestTools: WindowsGuestToolsReleaseReference? = nil,
+    guestToolsMediaAttached: Bool? = nil,
     sharesClipboard: Bool = true
   ) {
     self.efiVariableStorePath = efiVariableStorePath
@@ -63,6 +67,7 @@ struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
     self.macAddress = macAddress
     self.securityMode = securityMode
     self.guestTools = guestTools
+    self.guestToolsMediaAttached = guestToolsMediaAttached ?? (guestTools != nil)
     self.sharesClipboard = sharesClipboard
   }
 }

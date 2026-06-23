@@ -101,6 +101,7 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     let removableMediaURLs = [
       machine.installationMediaURL,
       machine.setupConfigurationMediaURL,
+      machine.guestToolsMediaURL,
     ].compactMap { $0 }
     if !removableMediaURLs.isEmpty {
       let controller = VZXHCIControllerConfiguration()

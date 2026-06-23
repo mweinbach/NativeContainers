@@ -53,6 +53,7 @@ struct LinuxVirtualMachineConfigurationFingerprinter:
     let efiVariableStoreIdentity: FileIdentity
     let installationMediaIdentity: FileIdentity?
     let setupConfigurationMediaIdentity: FileIdentity?
+    let guestToolsMediaIdentity: FileIdentity?
   }
 
   private let descriptorService: any LinuxVirtualMachineConfigurationDescribing
@@ -80,6 +81,9 @@ struct LinuxVirtualMachineConfigurationFingerprinter:
         identity(of:)
       ),
       setupConfigurationMediaIdentity: try machine.setupConfigurationMediaURL.map(
+        identity(of:)
+      ),
+      guestToolsMediaIdentity: try machine.guestToolsMediaURL.map(
         identity(of:)
       )
     )
