@@ -51,7 +51,8 @@ enum ContainerBuilderSnapshotAdapter {
             searchDomains: $0.searchDomains,
             options: $0.options
           )
-        }
+        },
+        sshAgentForwarding: configuration.ssh
       )
     )
   }

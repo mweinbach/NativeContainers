@@ -136,7 +136,11 @@ struct ComposePostconditionVerifier: ComposePostconditionVerifying {
             && $0.imageDigest == imagesByReference[service.imageReference]
         }),
         instances.allSatisfy({
-          service.configurationHash == nil
+          if let inputSeal = service.inputSeal {
+            return $0.labels[ComposeLabelKey.inputSeal] == inputSeal
+              && $0.labels[ComposeLabelKey.reviewedConfigHash] == service.configurationHash
+          }
+          return service.configurationHash == nil
             || $0.labels[ComposeLabelKey.configHash] == service.configurationHash
         }),
         instances.allSatisfy({

@@ -106,7 +106,8 @@ enum ContainerBuildWorkerDiagnostics: Equatable, Sendable {
   case captured(tail: String, wasTruncated: Bool)
   case suppressed
 
-  static let suppressedMessage = "Build output suppressed while secrets were mounted."
+  static let suppressedMessage =
+    "Build output suppressed while sensitive build inputs were active."
 
   var tail: String {
     switch self {
@@ -160,6 +161,7 @@ enum ContainerBuildWorkerProcessError: Error, Equatable, LocalizedError, Sendabl
   case launchFailed(String)
   case requestWriteFailed(String)
   case secretPayloadMismatch
+  case sshAgentUnavailable
   case standardOutputReadFailed(String)
   case standardErrorReadFailed(String)
   case invalidOutputFrame(ContainerBuildWorkerFrameError)
@@ -198,6 +200,8 @@ enum ContainerBuildWorkerProcessError: Error, Equatable, LocalizedError, Sendabl
       "The reviewed build request could not be sent to the worker: \(message)"
     case .secretPayloadMismatch:
       "The build worker secret payload did not match the reviewed control request."
+    case .sshAgentUnavailable:
+      "The reviewed build requires SSH agent forwarding, but SSH_AUTH_SOCK is unavailable."
     case .standardOutputReadFailed(let message):
       "The build worker's control stream failed: \(message)"
     case .standardErrorReadFailed(let message):
@@ -239,6 +243,7 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
   private let executableLocator: any ContainerBuildWorkerExecutableLocating
   private let arguments: [String]
   private let environment: [String: String]
+  private let sshAgentSocket: String?
   private let terminationGracePeriod: Duration
 
   init(
@@ -251,6 +256,10 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
     self.executableLocator = executableLocator
     self.arguments = arguments
     self.environment = ContainerBuildWorkerEnvironment.sanitized(from: environmentSource)
+    let socket = environmentSource["SSH_AUTH_SOCK"]?.trimmingCharacters(
+      in: .whitespacesAndNewlines
+    )
+    self.sshAgentSocket = socket?.hasPrefix("/") == true ? socket : nil
     self.terminationGracePeriod = terminationGracePeriod
   }
 
@@ -267,10 +276,17 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
     let executableURL = try executableLocator.locateBuildWorker().standardizedFileURL
     try Self.validateExecutable(executableURL)
 
+    var requestEnvironment = environment
+    if request.builder.forwardsSSHAgent {
+      guard let sshAgentSocket else {
+        throw ContainerBuildWorkerProcessError.sshAgentUnavailable
+      }
+      requestEnvironment["SSH_AUTH_SOCK"] = sshAgentSocket
+    }
     let session = FoundationBuildWorkerSession(
       executableURL: executableURL,
       arguments: arguments,
-      environment: environment
+      environment: requestEnvironment
     )
     do {
       try session.launch()
@@ -302,7 +318,7 @@ struct ContainerBuildWorkerProcess: ContainerBuildWorkerRunning, Sendable {
     let stdoutReader = WorkerFileHandleReader(handle: session.standardOutput)
     let stderrReader = WorkerFileHandleReader(handle: session.standardError)
     let gracePeriod = terminationGracePeriod
-    let suppressesDiagnostics = !secrets.isEmpty
+    let suppressesDiagnostics = !secrets.isEmpty || request.builder.forwardsSSHAgent
 
     let stdoutTask = Task.detached(priority: .userInitiated) {
       do {

@@ -3,25 +3,44 @@ import Foundation
 protocol ComposeDesiredStateDecoding: Sendable {
   func decode(
     rendered: ComposeRenderedConfiguration,
-    expectedProjectName: String
+    expectedProjectName: String,
+    serviceInputSeals: [String: String]
   ) throws -> ComposeDesiredStateReview
+}
+
+extension ComposeDesiredStateDecoding {
+  func decode(
+    rendered: ComposeRenderedConfiguration,
+    expectedProjectName: String
+  ) throws -> ComposeDesiredStateReview {
+    try decode(
+      rendered: rendered,
+      expectedProjectName: expectedProjectName,
+      serviceInputSeals: [:]
+    )
+  }
 }
 
 struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
   private typealias JSONObject = [String: Any]
 
   private let canonicalModelValidator: any ComposeCanonicalModelValidating
+  private let allowsBlockedLocalInputExecutionForTesting: Bool
 
   init(
     canonicalModelValidator: any ComposeCanonicalModelValidating =
-      ComposeCanonicalModelValidator()
+      ComposeCanonicalModelValidator(),
+    allowsBlockedLocalInputExecutionForTesting: Bool = false
   ) {
     self.canonicalModelValidator = canonicalModelValidator
+    self.allowsBlockedLocalInputExecutionForTesting =
+      allowsBlockedLocalInputExecutionForTesting
   }
 
   func decode(
     rendered: ComposeRenderedConfiguration,
-    expectedProjectName: String
+    expectedProjectName: String,
+    serviceInputSeals: [String: String]
   ) throws -> ComposeDesiredStateReview {
     let full = try decodeObject(rendered.fullConfiguration)
     let active = try decodeObject(rendered.activeConfiguration)
@@ -49,6 +68,13 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
       )
     }
     let fullServiceNames = Set(declaredServiceNames)
+    guard Set(serviceInputSeals.keys).isSubset(of: fullServiceNames),
+      serviceInputSeals.values.allSatisfy(isLowercaseSHA256)
+    else {
+      throw ComposeProjectLifecycleError.configOutputInvalid(
+        "The reviewed Compose input seals did not match the service model."
+      )
+    }
     let serviceDependencies = declaredServiceNames.reduce(
       into: [String: [String]]()
     ) { result, serviceName in
@@ -74,6 +100,7 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
         value: activeServices[serviceName],
         dependencies: serviceDependencies[serviceName] ?? [],
         configurationHash: rendered.serviceConfigurationHashes[serviceName],
+        inputSeal: serviceInputSeals[serviceName],
         issues: &issues
       )
     }
@@ -117,6 +144,7 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
     value: Any?,
     dependencies: [String],
     configurationHash: String?,
+    inputSeal: String?,
     issues: inout [ComposeProjectReviewIssue]
   ) -> ComposeDesiredService? {
     guard isValidLogicalName(name), let service = value as? JSONObject else {
@@ -247,6 +275,7 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
       profiles: profiles.sorted(by: composeStringOrder),
       dependencyNames: dependencies,
       configurationHash: configurationHash,
+      inputSeal: inputSeal,
       volumeNames: Array(Set(volumeNames)).sorted(by: composeStringOrder),
       networkNames: networkNames,
       publishedPortCount: publishedPortCount
@@ -281,22 +310,25 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
       )
     }
 
-    if let restart = service["restart"] as? String, !restart.isEmpty, restart != "no" {
+    if !allowsBlockedLocalInputExecutionForTesting {
+      for key in ["configs", "secrets"] where hasMeaningfulValue(service[key]) {
+        issues.append(
+          blocker(
+            .unsupportedFeature,
+            subject: serviceName,
+            message:
+              "Service \(key) remain blocked by signed Socktainer 1.0.0: file sources require unsupported host-file bind mounts, while injected sources require archive access before the container root filesystem is available."
+          )
+        )
+      }
+    }
+
+    if let restart = service["restart"] as? String, !restart.isEmpty {
       issues.append(
         blocker(
           .unsupportedFeature,
           subject: serviceName,
           message: "Restart policies are not supported."
-        )
-      )
-    }
-
-    for key in ["configs", "secrets"] where hasMeaningfulValue(service[key]) {
-      issues.append(
-        blocker(
-          .unsupportedFeature,
-          subject: serviceName,
-          message: "Service \(key) grants are not supported by the current bridge."
         )
       )
     }
@@ -637,5 +669,12 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
         || $0 == 46
         || $0 == 95
     }
+  }
+
+  private func isLowercaseSHA256(_ value: String) -> Bool {
+    value.count == 64
+      && value.utf8.allSatisfy {
+        ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102)
+      }
   }
 }

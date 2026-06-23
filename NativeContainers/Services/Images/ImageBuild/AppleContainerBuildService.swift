@@ -21,6 +21,10 @@ actor AppleContainerBuildService: ImageBuilding {
   init(
     contextStager: any BuildContextStaging = BuildContextStager(),
     secretManager: any ImageBuildSecretManaging = ImageBuildSecretVault(),
+    sshAgentService: any ContainerSSHAgentForwardingManaging =
+      AppleContainerSSHAgentService(),
+    runtimeCapabilityVerifier: any ImageBuildRuntimeCapabilityVerifying =
+      NativeContainersImageBuildRuntimeCapabilityVerifier(),
     worker: any ContainerBuildWorkerRunning = ContainerBuildWorkerProcess(),
     imageStore: any ImageBuildStoring = AppleImageBuildStore(),
     artifactManager: any ImageBuildArtifactManaging = AppleImageBuildArtifactManager(),
@@ -33,12 +37,15 @@ actor AppleContainerBuildService: ImageBuilding {
     planningService = AppleImageBuildPlanningService(
       contextStager: contextStager,
       secretManager: secretManager,
+      sshAgentService: sshAgentService,
+      runtimeCapabilityVerifier: runtimeCapabilityVerifier,
       imageStore: imageStore,
       outputManager: outputManager
     )
     executionService = AppleImageBuildExecutionService(
       contextStager: contextStager,
       secretManager: secretManager,
+      sshAgentService: sshAgentService,
       worker: worker,
       imageStore: imageStore,
       artifactManager: artifactManager,

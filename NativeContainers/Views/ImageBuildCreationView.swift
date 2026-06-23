@@ -27,6 +27,9 @@ struct ImageBuildCreationView: View {
   @State private var allowsRecreateStoppedBuilder = false
   @State private var allowsStopRunningBuilder = false
   @State private var allowsOutputReplacement = false
+  @State private var forwardSSHAgent = false
+  @State private var sshAgentAvailability: ContainerSSHAgentAvailability?
+  @State private var buildSSHRuntimeIsAvailable: Bool?
   @State private var isChoosingContext = false
   @State private var isChoosingDockerfile = false
   @State private var isChoosingOutputDestination = false
@@ -34,9 +37,18 @@ struct ImageBuildCreationView: View {
   @State private var selectedSecretDraftID: UUID?
   @State private var isConfirmingBuild = false
   @State private var operationTask: Task<Void, Never>?
+  private let sshAgentService: AppleContainerSSHAgentService
+  private let runtimeCapabilityVerifier: any ImageBuildRuntimeCapabilityVerifying
 
-  init(model: ImageBuildModel) {
+  init(
+    model: ImageBuildModel,
+    sshAgentService: AppleContainerSSHAgentService = AppleContainerSSHAgentService(),
+    runtimeCapabilityVerifier: any ImageBuildRuntimeCapabilityVerifying =
+      NativeContainersImageBuildRuntimeCapabilityVerifier()
+  ) {
     _model = State(initialValue: model)
+    self.sshAgentService = sshAgentService
+    self.runtimeCapabilityVerifier = runtimeCapabilityVerifier
   }
 
   var body: some View {
@@ -190,6 +202,14 @@ struct ImageBuildCreationView: View {
         Task { await model.discardPlan() }
       }
     }
+    .task {
+      sshAgentAvailability = sshAgentService.availability()
+      buildSSHRuntimeIsAvailable =
+        (try? await runtimeCapabilityVerifier.verifyBuildSSHSupport()) != nil
+      if sshAgentAvailability?.configuration == nil || buildSSHRuntimeIsAvailable != true {
+        forwardSSHAgent = false
+      }
+    }
   }
 
   private var sourceSection: some View {
@@ -233,6 +253,56 @@ struct ImageBuildCreationView: View {
       Text(cachePolicy.explanation)
         .font(.caption)
         .foregroundStyle(.secondary)
+      DisclosureGroup("SSH agent") {
+        Toggle("Forward SSH agent during build", isOn: $forwardSSHAgent)
+          .disabled(
+            sshAgentAvailability?.configuration == nil || buildSSHRuntimeIsAvailable != true
+          )
+        switch buildSSHRuntimeIsAvailable {
+        case true:
+          Label(
+            "NativeContainers runtime \(NativeContainersImageBuildRuntimeCapabilityVerifier.requiredRuntimeVersion) is active",
+            systemImage: "checkmark.shield"
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        case false:
+          Label(
+            "Activate the separately installed NativeContainers runtime \(NativeContainersImageBuildRuntimeCapabilityVerifier.requiredRuntimeVersion) to use Dockerfile SSH mounts.",
+            systemImage: "shippingbox.and.arrow.backward"
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        case nil:
+          Label("Checking active runtime…", systemImage: "ellipsis.circle")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        switch sshAgentAvailability {
+        case .available(let configuration):
+          Label(
+            "Available at \(configuration.socketPath)",
+            systemImage: "checkmark.circle"
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+          .privacySensitive()
+        case .unavailable(let reason):
+          Label(sshAgentUnavailableMessage(reason), systemImage: "key.slash")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        case nil:
+          Label("Checking SSH agent…", systemImage: "ellipsis.circle")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Text(
+          "Only the reviewed agent ID “default” is forwarded. NativeContainers never accepts private-key files or copies key bytes."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      }
       DisclosureGroup("Registry cache") {
         Toggle("Use a reviewed registry cache", isOn: $usesRemoteCache)
         if usesRemoteCache {
@@ -326,6 +396,9 @@ struct ImageBuildCreationView: View {
             Text(remoteCache.exportMode.title)
           }
         }
+      }
+      if plan.sshAgent != nil {
+        LabeledContent("Build SSH agent", value: "default")
       }
       if let destinationURL = plan.output.destinationURL {
         LabeledContent("Destination") {
@@ -519,6 +592,7 @@ struct ImageBuildCreationView: View {
       pullLatest: pullLatest,
       builderCPUCount: usesCustomBuilderResources ? builderCPUCount : nil,
       builderMemoryMiB: usesCustomBuilderResources ? builderMemoryMiB : nil,
+      sshAgent: forwardSSHAgent ? sshAgentAvailability?.configuration : nil,
       output: makeOutputSelection()
     )
   }
@@ -617,6 +691,11 @@ struct ImageBuildCreationView: View {
         "\(plan.secrets.count) reviewed secret file(s) will be streamed once; BuildKit output will be suppressed."
       )
     }
+    if plan.sshAgent != nil {
+      warnings.append(
+        "The reviewed SSH agent will be available only to Dockerfile SSH mounts for this build."
+      )
+    }
     if plan.replacesExistingTags {
       warnings.append("Existing local tags will move only if their reviewed digests are unchanged.")
     }
@@ -662,6 +741,21 @@ struct ImageBuildCreationView: View {
     case .verifyingPlatforms: "checkmark.shield"
     case .taggingImage: "tag"
     case .completed: "checkmark.circle.fill"
+    }
+  }
+
+  private func sshAgentUnavailableMessage(
+    _ reason: ContainerSSHAgentUnavailableReason
+  ) -> LocalizedStringResource {
+    switch reason {
+    case .environmentMissing:
+      "SSH_AUTH_SOCK is not set."
+    case .pathInvalid:
+      "SSH_AUTH_SOCK is not an absolute local path."
+    case .pathUnavailable:
+      "The SSH agent socket is unavailable."
+    case .notSocket:
+      "SSH_AUTH_SOCK does not point to a Unix socket."
     }
   }
 

@@ -32,15 +32,18 @@ struct OptionalIntegrationServiceModule: Sendable {
         directoryHint: .isDirectory
       )
     )
+    let composeExecutionWorkspace = FileComposeExecutionWorkspace()
     let composeMutationExecutor = AppleComposeProjectMutationExecutor(
       runtimeMutationCoordinator: runtimeMutationCoordinator,
       containers: AppleComposeContainerMutationClient(client: containerClient),
       infrastructure: infrastructure,
       inventory: inventory,
+      executionWorkspace: composeExecutionWorkspace,
       journal: composeJournal
     )
     let composeProjectLifecycle = ComposeProjectLifecycleService(
       configRenderer: composeConfigService,
+      executionWorkspace: composeExecutionWorkspace,
       inventory: inventory,
       executionTool: composeConfigService,
       mutationExecutor: composeMutationExecutor,
@@ -146,6 +149,16 @@ struct DemandStartedComposeProjectLifecycleService: ComposeProjectLifecycleManag
 
   var hasStarted: Bool { module.hasStarted }
 
+  func discoverInputRequirements(
+    directoryURL: URL,
+    options: ComposeProjectReviewOptions
+  ) async throws -> ComposeProjectInputRequirements {
+    try await module.resolve().composeProjectLifecycle.discoverInputRequirements(
+      directoryURL: directoryURL,
+      options: options
+    )
+  }
+
   func review(
     directoryURL: URL,
     options: ComposeProjectReviewOptions
@@ -156,8 +169,28 @@ struct DemandStartedComposeProjectLifecycleService: ComposeProjectLifecycleManag
     )
   }
 
+  func review(
+    directoryURL: URL,
+    options: ComposeProjectReviewOptions,
+    inputs: ComposeProjectReviewInputs
+  ) async throws -> ComposeProjectPlan {
+    try await module.resolve().composeProjectLifecycle.review(
+      directoryURL: directoryURL,
+      options: options,
+      inputs: inputs
+    )
+  }
+
   func execute(_ plan: ComposeProjectPlan) async throws -> ComposeProjectExecutionResult {
     try await module.resolve().composeProjectLifecycle.execute(plan)
+  }
+
+  func discardInputRequirements(_ requirementsID: UUID) async {
+    await module.resolve().composeProjectLifecycle.discardInputRequirements(requirementsID)
+  }
+
+  func discardReview(planID: UUID) async {
+    await module.resolve().composeProjectLifecycle.discardReview(planID: planID)
   }
 
   func pendingRecoverySnapshots() async throws -> [ComposeOperationRecoverySnapshot] {

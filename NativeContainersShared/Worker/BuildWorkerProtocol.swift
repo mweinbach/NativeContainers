@@ -6,7 +6,7 @@ enum ContainerBuildWorkerOperation: String, Codable, Equatable, Sendable {
 }
 
 struct ContainerBuildWorkerRequest: Codable, Equatable, Sendable {
-  static let currentProtocolVersion = 6
+  static let currentProtocolVersion = 7
 
   let protocolVersion: Int
   let operation: ContainerBuildWorkerOperation
@@ -29,12 +29,28 @@ struct ContainerBuildWorkerRequest: Codable, Equatable, Sendable {
 struct ContainerBuilderConfiguration: Codable, Equatable, Sendable {
   let cpuCount: Int?
   let memoryMiB: Int?
+  let forwardsSSHAgent: Bool
   let allowsRecreateStoppedBuilder: Bool
   let allowsStopRunningBuilder: Bool
+
+  init(
+    cpuCount: Int?,
+    memoryMiB: Int?,
+    forwardsSSHAgent: Bool = false,
+    allowsRecreateStoppedBuilder: Bool,
+    allowsStopRunningBuilder: Bool
+  ) {
+    self.cpuCount = cpuCount
+    self.memoryMiB = memoryMiB
+    self.forwardsSSHAgent = forwardsSSHAgent
+    self.allowsRecreateStoppedBuilder = allowsRecreateStoppedBuilder
+    self.allowsStopRunningBuilder = allowsStopRunningBuilder
+  }
 
   static let `default` = ContainerBuilderConfiguration(
     cpuCount: nil,
     memoryMiB: nil,
+    forwardsSSHAgent: false,
     allowsRecreateStoppedBuilder: false,
     allowsStopRunningBuilder: false
   )
@@ -116,6 +132,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
   let remoteCache: ContainerBuildRemoteCacheProfile?
   let pullLatest: Bool
   let secretIDs: [String]
+  let sshAgentIDs: [String]
   let allowsTagReplacement: Bool
 
   init(
@@ -136,6 +153,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
     remoteCache: ContainerBuildRemoteCacheProfile? = nil,
     pullLatest: Bool,
     secretIDs: [String],
+    sshAgentIDs: [String] = [],
     allowsTagReplacement: Bool
   ) {
     self.buildID = buildID
@@ -155,6 +173,7 @@ struct ContainerBuildWorkerBuildRequest: Codable, Equatable, Sendable {
     self.remoteCache = remoteCache
     self.pullLatest = pullLatest
     self.secretIDs = secretIDs
+    self.sshAgentIDs = sshAgentIDs
     self.allowsTagReplacement = allowsTagReplacement
   }
 }

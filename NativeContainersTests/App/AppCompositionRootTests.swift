@@ -10,8 +10,20 @@ struct AppCompositionRootTests {
   func liveGraphExposesFocusedRuntimeFacets() {
     let services = AppCompositionRoot.live()
 
-    #expect(services.inventory is AppleRuntimeInventoryService)
-    #expect(services.appleContainerRuntimeSetup is AppleContainerRuntimeSetupService)
+    #expect(services.inventory is VerifiedRuntimeInventoryService)
+    #expect(services.appleContainerRuntimeSetup is VerifiedDualRuntimeSetupService)
+    #expect(
+      services.runtimeDistribution
+        is NativeRuntimeDistributionManagementService
+    )
+    let verifiedInventory = services.inventory as? VerifiedRuntimeInventoryService
+    let verifiedSetup =
+      services.appleContainerRuntimeSetup as? VerifiedDualRuntimeSetupService
+    if let verifiedInventory, let verifiedSetup {
+      #expect(verifiedInventory.usesRuntimeVerifier(verifiedSetup))
+    } else {
+      Issue.record("Expected the production inventory and setup verification graph.")
+    }
     #expect(services.workloadCreationDefaults is HostResourceDefaultService)
     #expect(services.performanceBenchmarks is PerformanceBenchmarkService)
     #expect(services.kubernetes is AppleKubernetesClusterService)

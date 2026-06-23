@@ -22,8 +22,8 @@ settings:
 
 packages:
   AppleContainer:
-    url: https://github.com/apple/container.git
-    exactVersion: 1.0.0
+    url: https://github.com/mweinbach/container.git
+    exactVersion: 1.0.0-nc.2
   AppleContainerization:
     url: https://github.com/apple/containerization.git
     exactVersion: 0.33.3

@@ -11,6 +11,7 @@ protocol ImageBuildExecuting: Sendable {
 struct AppleImageBuildExecutionService: ImageBuildExecuting {
   private let contextStager: any BuildContextStaging
   private let secretManager: any ImageBuildSecretManaging
+  private let sshAgentService: any ContainerSSHAgentForwardingManaging
   private let worker: any ContainerBuildWorkerRunning
   private let imageStore: any ImageBuildStoring
   private let artifactManager: any ImageBuildArtifactManaging
@@ -21,6 +22,8 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
   init(
     contextStager: any BuildContextStaging,
     secretManager: any ImageBuildSecretManaging,
+    sshAgentService: any ContainerSSHAgentForwardingManaging =
+      AppleContainerSSHAgentService(),
     worker: any ContainerBuildWorkerRunning,
     imageStore: any ImageBuildStoring,
     artifactManager: any ImageBuildArtifactManaging,
@@ -30,6 +33,7 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
   ) {
     self.contextStager = contextStager
     self.secretManager = secretManager
+    self.sshAgentService = sshAgentService
     self.worker = worker
     self.imageStore = imageStore
     self.artifactManager = artifactManager
@@ -52,6 +56,7 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
     let reviewedBuilder = ContainerBuilderConfiguration(
       cpuCount: plan.builderCPUCount,
       memoryMiB: plan.builderMemoryMiB,
+      forwardsSSHAgent: plan.sshAgent != nil,
       allowsRecreateStoppedBuilder: authorization.allowsRecreateStoppedBuilder,
       allowsStopRunningBuilder: authorization.allowsStopRunningBuilder
     )
@@ -62,8 +67,12 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
         logTail: ""
       )
     )
-    let startOutput = try await runtimeMutationCoordinator.perform { [worker] in
-      try await worker.run(
+    let startOutput = try await runtimeMutationCoordinator.perform {
+      [worker, sshAgentService] in
+      if let sshAgent = plan.sshAgent {
+        _ = try sshAgentService.environment(for: sshAgent)
+      }
+      return try await worker.run(
         ContainerBuildWorkerRequest(
           operation: .startBuilder,
           builder: reviewedBuilder
@@ -90,13 +99,16 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
       progress: progress
     )
     let logTail: String
-    if plan.secrets.isEmpty {
+    if plan.secrets.isEmpty, plan.sshAgent == nil {
       logTail = ImageBuildProgressBridge.mergedLogTail(
         startOutput.standardErrorTail,
         buildOutput.standardErrorTail
       )
     } else {
       guard buildOutput.diagnostics == .suppressed else {
+        if plan.secrets.isEmpty {
+          throw ImageBuildError.workerArtifactMismatch
+        }
         throw ImageBuildError.secretBuildFailed
       }
       logTail = ContainerBuildWorkerDiagnostics.suppressedMessage
@@ -193,15 +205,20 @@ struct AppleImageBuildExecutionService: ImageBuildExecuting {
       remoteCache: plan.remoteCache,
       pullLatest: plan.pullLatest,
       secretIDs: secretPayload.ids,
+      sshAgentIDs: plan.sshAgent == nil ? [] : ["default"],
       allowsTagReplacement: authorization.allowsTagReplacement
     )
     do {
+      if let sshAgent = plan.sshAgent {
+        _ = try sshAgentService.environment(for: sshAgent)
+      }
       return try await worker.run(
         ContainerBuildWorkerRequest(
           operation: .build,
           builder: ContainerBuilderConfiguration(
             cpuCount: plan.builderCPUCount,
             memoryMiB: plan.builderMemoryMiB,
+            forwardsSSHAgent: plan.sshAgent != nil,
             allowsRecreateStoppedBuilder: false,
             allowsStopRunningBuilder: false
           ),

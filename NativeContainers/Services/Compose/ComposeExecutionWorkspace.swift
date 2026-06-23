@@ -33,7 +33,16 @@ protocol ComposeExecutionWorkspaceManaging: Sendable {
   func release(_ lease: ComposeExecutionConfigurationLease) throws
 }
 
-struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
+protocol ComposeExecutionInputStaging: Sendable {
+  func stageInputs(
+    projectName: String,
+    files: [ComposeExecutionInputFile]
+  ) throws -> [String: URL]
+}
+
+struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging,
+  ComposeExecutionInputStaging
+{
   static let maximumConfigurationBytes = 4 * 1_024 * 1_024
 
   private let rootURL: URL
@@ -72,6 +81,73 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
         projectsDirectory,
       ]
     }
+  }
+
+  func stageInputs(
+    projectName: String,
+    files: [ComposeExecutionInputFile]
+  ) throws -> [String: URL] {
+    guard isValidComposeProjectName(projectName),
+      files.count <= 160,
+      files.count == Set(files.map(\.id)).count,
+      files.allSatisfy({
+        isLowercaseSHA256($0.id) && isLowercaseSHA256($0.sha256)
+          && $0.data.count <= 1_024 * 1_024
+          && sha256($0.data) == $0.sha256
+      }),
+      files.reduce(0, { $0 + $1.data.count }) <= 4 * 1_024 * 1_024
+    else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The reviewed Compose input payload is invalid."
+      )
+    }
+    guard !files.isEmpty else { return [:] }
+
+    try ensurePrivateDirectories()
+    _ = try validateDirectory(rootURL, requiresOwnerOnlyAccess: true)
+    let projectDirectory = rootURL.appending(
+      path: projectName,
+      directoryHint: .isDirectory
+    )
+    if Darwin.mkdir(projectDirectory.nativeContainersPOSIXPath, mode_t(0o700)) != 0,
+      errno != EEXIST
+    {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The stable input directory could not be created."
+      )
+    }
+    _ = try validateDirectory(projectDirectory, requiresOwnerOnlyAccess: true)
+    let descriptor = Darwin.open(
+      projectDirectory.nativeContainersPOSIXPath,
+      O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+    )
+    guard descriptor >= 0 else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The stable input directory could not be opened safely."
+      )
+    }
+    defer { Darwin.close(descriptor) }
+
+    var result: [String: URL] = [:]
+    for file in files.sorted(by: { composeStringOrder($0.id, $1.id) }) {
+      let fileName = "input-\(file.id).data"
+      _ = try openOrCreateInput(
+        named: fileName,
+        data: file.data,
+        expectedSHA256: file.sha256,
+        directoryDescriptor: descriptor
+      )
+      result[file.id] = projectDirectory.appending(
+        path: fileName,
+        directoryHint: .notDirectory
+      )
+    }
+    guard Darwin.fsync(descriptor) == 0 else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The stable input directory could not be synchronized."
+      )
+    }
+    return result
   }
 
   func prepare(
@@ -259,6 +335,85 @@ struct FileComposeExecutionWorkspace: ComposeExecutionWorkspaceManaging {
       _ = Darwin.unlinkat(directoryDescriptor, fileName, 0)
       throw error
     }
+  }
+
+  private func openOrCreateInput(
+    named fileName: String,
+    data: Data,
+    expectedSHA256: String,
+    directoryDescriptor: Int32
+  ) throws -> ComposeExecutionConfigurationLease.FileIdentity {
+    let descriptor = Darwin.openat(
+      directoryDescriptor,
+      fileName,
+      O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+      mode_t(0o400)
+    )
+    if descriptor < 0 {
+      guard errno == EEXIST else {
+        throw ComposeProjectLifecycleError.workspaceUnsafe(
+          "An immutable Compose input could not be created."
+        )
+      }
+      return try openExistingInput(
+        named: fileName,
+        data: data,
+        expectedSHA256: expectedSHA256,
+        directoryDescriptor: directoryDescriptor
+      )
+    }
+    defer { Darwin.close(descriptor) }
+    do {
+      try writeAll(data, descriptor: descriptor)
+      guard Darwin.fchmod(descriptor, mode_t(0o400)) == 0,
+        Darwin.fcntl(descriptor, F_FULLFSYNC) == 0 || Darwin.fsync(descriptor) == 0
+      else {
+        throw ComposeProjectLifecycleError.workspaceUnsafe(
+          "An immutable Compose input could not be secured and synchronized."
+        )
+      }
+      return try fileIdentity(
+        descriptor: descriptor,
+        expectedByteCount: data.count,
+        expectedSHA256: expectedSHA256
+      )
+    } catch {
+      _ = Darwin.unlinkat(directoryDescriptor, fileName, 0)
+      throw error
+    }
+  }
+
+  private func openExistingInput(
+    named fileName: String,
+    data: Data,
+    expectedSHA256: String,
+    directoryDescriptor: Int32
+  ) throws -> ComposeExecutionConfigurationLease.FileIdentity {
+    let descriptor = Darwin.openat(
+      directoryDescriptor,
+      fileName,
+      O_RDONLY | O_NOFOLLOW | O_CLOEXEC
+    )
+    guard descriptor >= 0 else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The existing immutable Compose input could not be opened safely."
+      )
+    }
+    defer { Darwin.close(descriptor) }
+    var metadata = stat()
+    guard Darwin.fstat(descriptor, &metadata) == 0,
+      metadata.st_mode & mode_t(0o777) == mode_t(0o400)
+    else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "Every stored Compose input must remain mode 0400."
+      )
+    }
+    return try validateRegularFile(
+      metadata,
+      expectedByteCount: data.count,
+      expectedSHA256: expectedSHA256,
+      descriptor: descriptor
+    )
   }
 
   private func openExistingConfiguration(

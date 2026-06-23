@@ -16,6 +16,10 @@ protocol AppleContainerRuntimeSettingUp: Sendable {
   func start() async throws
 }
 
+protocol AppleContainerInstalledRuntimeStarting: Sendable {
+  func startInstalledRuntime() async throws
+}
+
 protocol AppleContainerRuntimeProbing: Sendable {
   func probe() async throws -> AppleContainerRuntimeObservation
 }
@@ -121,7 +125,10 @@ struct SignedAppleContainerExecutableValidator: AppleContainerExecutableValidati
   }
 }
 
-actor AppleContainerRuntimeSetupService: AppleContainerRuntimeSettingUp {
+actor AppleContainerRuntimeSetupService:
+  AppleContainerRuntimeSettingUp,
+  AppleContainerInstalledRuntimeStarting
+{
   static let requiredVersion = AppleContainerRuntimeDistributionContract.requiredVersion
   static let defaultExecutableURL = AppleContainerRuntimeDistributionContract.executableURL
 
@@ -148,8 +155,7 @@ actor AppleContainerRuntimeSetupService: AppleContainerRuntimeSettingUp {
 
   func start() async throws {
     do {
-      let running = try await probe.probe()
-      try validate(version: running.version)
+      try await probeAndValidate()
       return
     } catch is CancellationError {
       throw CancellationError()
@@ -164,6 +170,21 @@ actor AppleContainerRuntimeSetupService: AppleContainerRuntimeSettingUp {
       // An unreachable service is the expected reason to enter the setup path.
     }
 
+    try await startInstalledRuntime()
+    do {
+      try await probeAndValidate()
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch let error as AppleContainerRuntimeSetupError {
+      throw error
+    } catch {
+      throw AppleContainerRuntimeSetupError.verificationFailed(
+        error.localizedDescription
+      )
+    }
+  }
+
+  func startInstalledRuntime() async throws {
     try validator.validate(executableURL: executableURL)
     try await validateInstalledVersion()
 
@@ -183,17 +204,11 @@ actor AppleContainerRuntimeSetupService: AppleContainerRuntimeSettingUp {
     guard result.exitCode == 0 else {
       throw AppleContainerRuntimeSetupError.startFailed(Self.commandDetail(result))
     }
+  }
 
-    do {
-      let running = try await probe.probe()
-      try validate(version: running.version)
-    } catch is CancellationError {
-      throw CancellationError()
-    } catch let error as AppleContainerRuntimeSetupError {
-      throw error
-    } catch {
-      throw AppleContainerRuntimeSetupError.verificationFailed(error.localizedDescription)
-    }
+  private func probeAndValidate() async throws {
+    let running = try await probe.probe()
+    try validate(version: running.version)
   }
 
   private func validateInstalledVersion() async throws {

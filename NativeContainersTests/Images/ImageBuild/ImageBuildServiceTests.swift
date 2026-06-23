@@ -676,6 +676,137 @@ struct ImageBuildServiceTests {
   }
 
   @Test
+  func buildSSHAgentIsReviewedTwiceAndSentOnlyAsDefaultID() async throws {
+    let configuration = ContainerSSHAgentConfiguration(
+      socketPath: "/tmp/nativecontainers-build-agent.sock",
+      sourceIdentity: ContainerSSHAgentSourceIdentity(device: 7, inode: 11)
+    )
+    let sshAgentService = TestBuildSSHAgentService(reviewed: configuration)
+    let plan = makeImageBuildPlan(sshAgent: configuration)
+    let worker = TestContainerBuildWorker()
+    let service = makeBuildService(
+      contextStager: TestBuildContextStager(
+        staged: makeStagedBuildContext(id: plan.id)
+      ),
+      sshAgentService: sshAgentService,
+      runtimeCapabilityVerifier: TestBuildRuntimeCapabilityVerifier(),
+      worker: worker,
+      imageStore: TestImageBuildStore(
+        tagStates: matchingTagStates(for: plan),
+        archiveLoadResult: ImageBuildArchiveLoadResult(
+          images: [
+            ImageBuildStoredImage(
+              reference: stagingReference(for: plan.id),
+              digest: "sha256:built"
+            )
+          ],
+          rejectedMembers: []
+        )
+      ),
+      artifactManager: TestImageBuildArtifactManager()
+    )
+
+    _ = try await service.build(plan, authorization: .none) { _ in }
+
+    #expect(sshAgentService.validationCount == 2)
+    let requests = await worker.requests
+    #expect(requests.map(\.builder.forwardsSSHAgent) == [true, true])
+    #expect(requests[0].build == nil)
+    #expect(requests[1].build?.sshAgentIDs == ["default"])
+    let requestFrame = try JSONEncoder().encode(requests[1])
+    #expect(!String(decoding: requestFrame, as: UTF8.self).contains(configuration.socketPath))
+  }
+
+  @Test
+  func buildSSHAgentIsValidatedAndRetainedDuringReview() async throws {
+    let configuration = ContainerSSHAgentConfiguration(
+      socketPath: "/tmp/nativecontainers-build-agent.sock",
+      sourceIdentity: ContainerSSHAgentSourceIdentity(device: 7, inode: 11)
+    )
+    let sshAgentService = TestBuildSSHAgentService(reviewed: configuration)
+    let staged = makeStagedBuildContext()
+    let service = AppleContainerBuildService(
+      contextStager: TestBuildContextStager(staged: staged),
+      sshAgentService: sshAgentService,
+      runtimeCapabilityVerifier: TestBuildRuntimeCapabilityVerifier(),
+      worker: TestContainerBuildWorker(),
+      imageStore: TestImageBuildStore(),
+      artifactManager: TestImageBuildArtifactManager(),
+      runtimeMutationCoordinator: RuntimeMutationCoordinator(),
+      buildExecutionCoordinator: RuntimeMutationCoordinator()
+    )
+
+    let plan = try await service.prepareBuild(
+      makeImageBuildRequest(sshAgent: configuration)
+    ) { _ in }
+
+    #expect(plan.sshAgent == configuration)
+    #expect(sshAgentService.validationCount == 1)
+    await service.discardBuild(plan)
+  }
+
+  @Test
+  func buildSSHReviewRejectsAnUnverifiedRuntimeBeforeSocketUse() async throws {
+    let configuration = ContainerSSHAgentConfiguration(
+      socketPath: "/tmp/nativecontainers-build-agent.sock",
+      sourceIdentity: ContainerSSHAgentSourceIdentity(device: 7, inode: 11)
+    )
+    let sshAgentService = TestBuildSSHAgentService(reviewed: configuration)
+    let service = AppleContainerBuildService(
+      contextStager: TestBuildContextStager(staged: makeStagedBuildContext()),
+      sshAgentService: sshAgentService,
+      runtimeCapabilityVerifier: TestBuildRuntimeCapabilityVerifier(
+        error: ImageBuildError.buildSSHRequiresNativeContainersRuntime(required: "1.0.0-nc.2")
+      ),
+      worker: TestContainerBuildWorker(),
+      imageStore: TestImageBuildStore(),
+      artifactManager: TestImageBuildArtifactManager(),
+      runtimeMutationCoordinator: RuntimeMutationCoordinator(),
+      buildExecutionCoordinator: RuntimeMutationCoordinator()
+    )
+
+    await #expect(
+      throws: ImageBuildError.buildSSHRequiresNativeContainersRuntime(
+        required: "1.0.0-nc.2"
+      )
+    ) {
+      _ = try await service.prepareBuild(
+        makeImageBuildRequest(sshAgent: configuration)
+      ) { _ in }
+    }
+    #expect(sshAgentService.validationCount == 0)
+  }
+
+  @Test
+  func changedBuildSSHAgentStopsBeforeTheBuildWorkerRequest() async throws {
+    let configuration = ContainerSSHAgentConfiguration(
+      socketPath: "/tmp/nativecontainers-build-agent.sock",
+      sourceIdentity: ContainerSSHAgentSourceIdentity(device: 7, inode: 11)
+    )
+    let sshAgentService = TestBuildSSHAgentService(
+      reviewed: configuration,
+      failsAfterValidationCount: 1
+    )
+    let plan = makeImageBuildPlan(sshAgent: configuration)
+    let worker = TestContainerBuildWorker()
+    let service = makeBuildService(
+      contextStager: TestBuildContextStager(
+        staged: makeStagedBuildContext(id: plan.id)
+      ),
+      sshAgentService: sshAgentService,
+      runtimeCapabilityVerifier: TestBuildRuntimeCapabilityVerifier(),
+      worker: worker,
+      imageStore: TestImageBuildStore(tagStates: matchingTagStates(for: plan)),
+      artifactManager: TestImageBuildArtifactManager()
+    )
+
+    await #expect(throws: ContainerSSHAgentError.changedAfterReview) {
+      _ = try await service.build(plan, authorization: .none) { _ in }
+    }
+    #expect(await worker.requests.map(\.operation) == [.startBuilder])
+  }
+
+  @Test
   func replacementAuthorizationFailsClosedBeforeStartingWorker() async {
     let plan = makeImageBuildPlan(existingDigest: "sha256:reviewed")
     let contextStager = TestBuildContextStager(staged: makeStagedBuildContext(id: plan.id))
@@ -1450,6 +1581,7 @@ private func makeImageBuildRequest(
   pullLatest: Bool = true,
   builderCPUCount: Int? = nil,
   builderMemoryMiB: Int? = nil,
+  sshAgent: ContainerSSHAgentConfiguration? = nil,
   output: ImageBuildOutputSelection = .imageStore
 ) -> ImageBuildRequest {
   ImageBuildRequest(
@@ -1466,6 +1598,7 @@ private func makeImageBuildRequest(
     pullLatest: pullLatest,
     builderCPUCount: builderCPUCount,
     builderMemoryMiB: builderMemoryMiB,
+    sshAgent: sshAgent,
     output: output
   )
 }
@@ -1477,6 +1610,7 @@ private func makeImageBuildPlan(
   secrets: [ImageBuildSecretReview] = [],
   cachePolicy: ImageBuildCachePolicy = .builderInternal,
   remoteCache: ContainerBuildRemoteCacheProfile? = nil,
+  sshAgent: ContainerSSHAgentConfiguration? = nil,
   output: ImageBuildOutputPlan = .imageStore
 ) -> ImageBuildPlan {
   let stagedRoot = URL(
@@ -1516,6 +1650,7 @@ private func makeImageBuildPlan(
     pullLatest: true,
     builderCPUCount: 4,
     builderMemoryMiB: 4_096,
+    sshAgent: sshAgent,
     output: output,
     generatedAt: Date(timeIntervalSince1970: 1_000)
   )
@@ -1552,6 +1687,10 @@ private func makeImageBuildResult(for plan: ImageBuildPlan) -> ImageBuildResult 
 
 private func makeBuildService(
   contextStager: TestBuildContextStager,
+  sshAgentService: any ContainerSSHAgentForwardingManaging =
+    AppleContainerSSHAgentService(),
+  runtimeCapabilityVerifier: any ImageBuildRuntimeCapabilityVerifying =
+    TestBuildRuntimeCapabilityVerifier(),
   worker: TestContainerBuildWorker,
   imageStore: TestImageBuildStore,
   artifactManager: TestImageBuildArtifactManager,
@@ -1561,6 +1700,8 @@ private func makeBuildService(
 ) -> AppleContainerBuildService {
   AppleContainerBuildService(
     contextStager: contextStager,
+    sshAgentService: sshAgentService,
+    runtimeCapabilityVerifier: runtimeCapabilityVerifier,
     worker: worker,
     imageStore: imageStore,
     artifactManager: artifactManager,
@@ -1916,7 +2057,7 @@ private actor TestContainerBuildWorker: ContainerBuildWorkerRunning {
         terminalEvent: terminal,
         result: result,
         diagnostics:
-          secrets.isEmpty
+          secrets.isEmpty && build.sshAgentIDs.isEmpty
           ? .captured(tail: "build diagnostic", wasTruncated: false)
           : .suppressed,
         exitStatus: 0
@@ -1943,6 +2084,68 @@ private actor TestContainerBuildWorker: ContainerBuildWorkerRunning {
     var transferred: [String: Data] = [:]
     try await values.consume { transferred = $0 }
     return transferred
+  }
+}
+
+private struct TestBuildRuntimeCapabilityVerifier:
+  ImageBuildRuntimeCapabilityVerifying
+{
+  let error: ImageBuildError?
+
+  init(error: ImageBuildError? = nil) {
+    self.error = error
+  }
+
+  func verifyBuildSSHSupport() async throws {
+    if let error { throw error }
+  }
+}
+
+private final class TestBuildSSHAgentService:
+  ContainerSSHAgentForwardingManaging, @unchecked Sendable
+{
+  private let reviewed: ContainerSSHAgentConfiguration
+  private let failsAfterValidationCount: Int?
+  private let lock = NSLock()
+  private var storedValidationCount = 0
+
+  init(
+    reviewed: ContainerSSHAgentConfiguration,
+    failsAfterValidationCount: Int? = nil
+  ) {
+    self.reviewed = reviewed
+    self.failsAfterValidationCount = failsAfterValidationCount
+  }
+
+  var validationCount: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return storedValidationCount
+  }
+
+  func availability() -> ContainerSSHAgentAvailability {
+    .available(reviewed)
+  }
+
+  func environment(
+    for reviewedConfiguration: ContainerSSHAgentConfiguration
+  ) throws -> [String: String] {
+    lock.lock()
+    defer { lock.unlock() }
+    guard reviewedConfiguration == reviewed else {
+      throw ContainerSSHAgentError.changedAfterReview
+    }
+    if let failsAfterValidationCount,
+      storedValidationCount >= failsAfterValidationCount
+    {
+      throw ContainerSSHAgentError.changedAfterReview
+    }
+    storedValidationCount += 1
+    return ["SSH_AUTH_SOCK": reviewed.socketPath]
+  }
+
+  func currentEnvironment() throws -> [String: String] {
+    ["SSH_AUTH_SOCK": reviewed.socketPath]
   }
 }
 

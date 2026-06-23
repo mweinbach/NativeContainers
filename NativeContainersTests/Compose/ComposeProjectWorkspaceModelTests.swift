@@ -47,6 +47,61 @@ struct ComposeProjectWorkspaceModelTests {
   }
 
   @Test
+  func environmentBackedInputUsesTwoStageSecureReviewAndIsClearedAfterSubmission() async throws {
+    let service = WorkspaceComposeServiceDouble(requiredEnvironmentVariables: ["DEMO_TOKEN"])
+    let model = ComposeProjectWorkspaceModel(service: service)
+    model.begin()
+    model.selectDirectory(URL(filePath: "/tmp/demo", directoryHint: .isDirectory))
+
+    await model.review()
+
+    #expect(model.plan == nil)
+    #expect(model.inputRequirements?.requiredEnvironmentVariables == ["DEMO_TOKEN"])
+    #expect(!model.canReview)
+
+    model.setInputValue("reviewed-secret", for: "DEMO_TOKEN")
+    #expect(model.canReview)
+    await model.review()
+
+    #expect(model.plan != nil)
+    #expect(model.inputRequirements == nil)
+    #expect(model.inputValues.isEmpty)
+    #expect(await service.submittedEnvironmentValues == ["DEMO_TOKEN": "reviewed-secret"])
+  }
+
+  @Test
+  func discardingPendingInputReviewClearsValuesAndReleasesVaultRequirements() async throws {
+    let service = WorkspaceComposeServiceDouble(requiredEnvironmentVariables: ["DEMO_TOKEN"])
+    let model = ComposeProjectWorkspaceModel(service: service)
+    model.begin()
+    model.selectDirectory(URL(filePath: "/tmp/demo", directoryHint: .isDirectory))
+    await model.review()
+    let requirementsID = try #require(model.inputRequirements?.id)
+    model.setInputValue("reviewed-secret", for: "DEMO_TOKEN")
+
+    await model.discardPendingInputReview()
+
+    #expect(model.inputRequirements == nil)
+    #expect(model.inputValues.isEmpty)
+    #expect(await service.discardedRequirementsIDs == [requirementsID])
+  }
+
+  @Test
+  func discardingACompletedReviewReleasesItsPreparedPlan() async throws {
+    let service = WorkspaceComposeServiceDouble()
+    let model = ComposeProjectWorkspaceModel(service: service)
+    model.begin()
+    model.selectDirectory(URL(filePath: "/tmp/demo", directoryHint: .isDirectory))
+    await model.review()
+    let planID = try #require(model.plan?.id)
+
+    await model.discardPendingInputReview()
+
+    #expect(model.plan == nil)
+    #expect(await service.discardedPlanIDs == [planID])
+  }
+
+  @Test
   func upIntentCannotRetainRemoveVolumes() {
     let model = ComposeProjectWorkspaceModel(service: WorkspaceComposeServiceDouble())
     model.action = .down
@@ -107,10 +162,56 @@ private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
   private(set) var requests: [Request] = []
   private(set) var executedPlans: [ComposeProjectPlan] = []
   private(set) var discardedOperationIDs: [UUID] = []
+  private(set) var submittedEnvironmentValues: [String: String] = [:]
+  private(set) var discardedRequirementsIDs: [UUID] = []
+  private(set) var discardedPlanIDs: [UUID] = []
   private var recoveries: [ComposeOperationRecoverySnapshot]
+  private let requiredEnvironmentVariables: [String]
+  private var requirementsID: UUID?
 
-  init(recoveries: [ComposeOperationRecoverySnapshot] = []) {
+  init(
+    recoveries: [ComposeOperationRecoverySnapshot] = [],
+    requiredEnvironmentVariables: [String] = []
+  ) {
     self.recoveries = recoveries
+    self.requiredEnvironmentVariables = requiredEnvironmentVariables
+  }
+
+  func discoverInputRequirements(
+    directoryURL: URL,
+    options: ComposeProjectReviewOptions
+  ) async throws -> ComposeProjectInputRequirements {
+    let id = UUID()
+    requirementsID = id
+    return ComposeProjectInputRequirements(
+      id: id,
+      source: workspaceSourceSummary(directoryURL: directoryURL),
+      options: options,
+      inputs: requiredEnvironmentVariables.map { variable in
+        ComposeProjectInputRequirement(
+          kind: .secret,
+          name: variable.lowercased(),
+          sourceKind: .environment,
+          environmentVariable: variable,
+          displayPath: nil,
+          byteCount: 0,
+          serviceNames: ["web"]
+        )
+      },
+      issues: []
+    )
+  }
+
+  func review(
+    directoryURL: URL,
+    options: ComposeProjectReviewOptions,
+    inputs: ComposeProjectReviewInputs
+  ) async throws -> ComposeProjectPlan {
+    guard requirementsID == inputs.requirementsID else {
+      throw ComposeProjectLifecycleError.inputRequirementsMismatch
+    }
+    submittedEnvironmentValues = inputs.environmentValues
+    return try await review(directoryURL: directoryURL, options: options)
   }
 
   func review(
@@ -122,22 +223,7 @@ private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
       id: UUID(),
       generatedAt: Date(),
       options: options,
-      source: ComposeProjectSourceSummary(
-        directoryName: directoryURL.lastPathComponent,
-        fileName: "compose.yaml",
-        fileIdentity: ComposeProjectSourceFileIdentity(
-          device: 1,
-          inode: 2,
-          owner: 501,
-          permissions: 0o600,
-          byteCount: 12,
-          modificationSeconds: 1,
-          modificationNanoseconds: 0,
-          changeSeconds: 1,
-          changeNanoseconds: 0,
-          sha256: String(repeating: "a", count: 64)
-        )
-      ),
+      source: workspaceSourceSummary(directoryURL: directoryURL),
       desiredState: ComposeDesiredState(
         projectName: options.projectName,
         declaredServiceNames: [],
@@ -175,6 +261,14 @@ private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
     )
   }
 
+  func discardInputRequirements(_ requirementsID: UUID) async {
+    discardedRequirementsIDs.append(requirementsID)
+  }
+
+  func discardReview(planID: UUID) async {
+    discardedPlanIDs.append(planID)
+  }
+
   func pendingRecoverySnapshots() async throws -> [ComposeOperationRecoverySnapshot] {
     recoveries
   }
@@ -183,6 +277,25 @@ private actor WorkspaceComposeServiceDouble: ComposeProjectLifecycleManaging {
     discardedOperationIDs.append(operationID)
     recoveries.removeAll { $0.operationID == operationID }
   }
+}
+
+private func workspaceSourceSummary(directoryURL: URL) -> ComposeProjectSourceSummary {
+  ComposeProjectSourceSummary(
+    directoryName: directoryURL.lastPathComponent,
+    fileName: "compose.yaml",
+    fileIdentity: ComposeProjectSourceFileIdentity(
+      device: 1,
+      inode: 2,
+      owner: 501,
+      permissions: 0o600,
+      byteCount: 12,
+      modificationSeconds: 1,
+      modificationNanoseconds: 0,
+      changeSeconds: 1,
+      changeNanoseconds: 0,
+      sha256: String(repeating: "a", count: 64)
+    )
+  )
 }
 
 @MainActor

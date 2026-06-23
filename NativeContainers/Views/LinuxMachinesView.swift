@@ -6,15 +6,18 @@ struct LinuxMachinesView: View {
   private let appModel: AppModel
 
   @State private var managementModel: LinuxMachineManagementModel
+  @State private var snapshotModel: LinuxMachineSnapshotModel
   @State private var isPresentingCreation = false
   @State private var pendingDeletion: LinuxMachineRecord?
   @State private var pendingForceStop: LinuxMachineRecord?
   @State private var presentedConfiguration: LinuxMachineRecord?
   @State private var presentedCommand: LinuxMachineRecord?
+  @State private var presentedSnapshots: LinuxMachineRecord?
 
   init(model: AppModel) {
     appModel = model
     _managementModel = State(initialValue: model.makeLinuxMachineManagementModel())
+    _snapshotModel = State(initialValue: model.makeLinuxMachineSnapshotModel())
   }
 
   var body: some View {
@@ -54,6 +57,9 @@ struct LinuxMachinesView: View {
             onConfigure: {
               managementModel.beginConfigurationSession()
               presentedConfiguration = machine
+            },
+            onSnapshots: {
+              presentedSnapshots = machine
             },
             onRunCommand: {
               presentedCommand = machine
@@ -103,6 +109,9 @@ struct LinuxMachinesView: View {
     }
     .sheet(item: $presentedCommand) { machine in
       LinuxMachineCommandView(machine: machine, appModel: appModel)
+    }
+    .sheet(item: $presentedSnapshots) { machine in
+      LinuxMachineSnapshotsView(machine: machine, model: snapshotModel)
     }
     .confirmationDialog(
       "Force-stop Linux machine?",
@@ -224,6 +233,7 @@ struct LinuxMachineRow: View {
   let onStop: () -> Void
   let onForceStop: () -> Void
   let onConfigure: () -> Void
+  let onSnapshots: () -> Void
   let onRunCommand: () -> Void
   let onOpenTerminal: () -> Void
   let onDelete: () -> Void
@@ -269,6 +279,10 @@ struct LinuxMachineRow: View {
         Button("Configure", systemImage: "gearshape") {
           onConfigure()
         }
+        Button("Snapshots", systemImage: "camera.on.rectangle") {
+          onSnapshots()
+        }
+        .disabled(machine.state != .stopped || machine.createdAt == nil)
         Divider()
         Button(
           machine.state == .stopped ? "Start & Open Terminal" : "Open Terminal",
@@ -322,5 +336,200 @@ struct LinuxMachineRow: View {
     case .stopping, .unknown:
       return "Wait for a stable running or stopped state."
     }
+  }
+}
+
+private struct LinuxMachineSnapshotsView: View {
+  @Environment(\.dismiss) private var dismiss
+
+  let machine: LinuxMachineRecord
+  @State var model: LinuxMachineSnapshotModel
+
+  @State private var newSnapshotName = ""
+  @State private var cloneMachineName = ""
+  @State private var snapshotToRestore: LinuxMachineSnapshotRecord?
+  @State private var snapshotToClone: LinuxMachineSnapshotRecord?
+  @State private var snapshotToDelete: LinuxMachineSnapshotRecord?
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        statusSection
+        if let catalog = model.catalog {
+          createSection(catalog)
+          snapshotsSection(catalog)
+          exclusionsSection
+        }
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Snapshots for \(machine.id)")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Done") { dismiss() }
+        }
+        if model.isWorking {
+          ToolbarItem(placement: .primaryAction) {
+            ProgressView().controlSize(.small)
+          }
+        }
+      }
+    }
+    .frame(minWidth: 680, minHeight: 520)
+    .task { await model.load(for: machine) }
+    .confirmationDialog(
+      "Restore this machine snapshot?",
+      isPresented: Binding(
+        get: { snapshotToRestore != nil },
+        set: { if !$0 { snapshotToRestore = nil } }
+      ),
+      presenting: snapshotToRestore
+    ) { snapshot in
+      Button("Restore \(snapshot.name)", role: .destructive) {
+        snapshotToRestore = nil
+        Task { _ = await model.restore(snapshot) }
+      }
+      Button("Cancel", role: .cancel) { snapshotToRestore = nil }
+    } message: { snapshot in
+      Text(
+        "The stopped machine’s current bundle will be replaced through the runtime’s recoverable swap. The snapshot remains independently restorable."
+      )
+    }
+    .confirmationDialog(
+      "Delete this machine snapshot?",
+      isPresented: Binding(
+        get: { snapshotToDelete != nil },
+        set: { if !$0 { snapshotToDelete = nil } }
+      ),
+      presenting: snapshotToDelete
+    ) { snapshot in
+      Button("Delete \(snapshot.name)", role: .destructive) {
+        snapshotToDelete = nil
+        Task { _ = await model.delete(snapshot) }
+      }
+      Button("Cancel", role: .cancel) { snapshotToDelete = nil }
+    }
+  }
+
+  @ViewBuilder
+  private var statusSection: some View {
+    if let errorMessage = model.errorMessage {
+      Section {
+        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+          .foregroundStyle(.orange)
+          .textSelection(.enabled)
+        Button("Retry") { Task { await model.load(for: machine) } }
+      }
+    } else if model.catalog == nil {
+      Section {
+        HStack {
+          ProgressView().controlSize(.small)
+          Text("Loading the stopped-machine snapshot catalog…")
+        }
+      }
+    }
+  }
+
+  private func createSection(_ catalog: LinuxMachineSnapshotCatalog) -> some View {
+    Section("Create snapshot") {
+      TextField("Snapshot name", text: $newSnapshotName)
+        .textFieldStyle(.roundedBorder)
+      Button("Create Snapshot", systemImage: "camera.on.rectangle") {
+        let name = newSnapshotName
+        Task {
+          if await model.create(named: name) {
+            newSnapshotName = ""
+          }
+        }
+      }
+      .disabled(
+        model.isWorking || !catalog.canCreate
+          || newSnapshotName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      )
+      Text("Snapshots require a stopped machine and are limited to eight per machine.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  private func snapshotsSection(_ catalog: LinuxMachineSnapshotCatalog) -> some View {
+    Section("Snapshots") {
+      if catalog.snapshots.isEmpty {
+        ContentUnavailableView(
+          "No Snapshots",
+          systemImage: "camera.on.rectangle",
+          description: Text("Create a stopped-machine snapshot to retain this filesystem state.")
+        )
+      }
+      ForEach(catalog.snapshots) { snapshot in
+        VStack(alignment: .leading, spacing: 8) {
+          HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 3) {
+              Text(snapshot.name).font(.headline)
+              Text(snapshot.createdAt.formatted(date: .abbreviated, time: .shortened))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(byteCount(snapshot.allocatedSize))
+              .font(.caption.monospacedDigit())
+              .foregroundStyle(.secondary)
+          }
+          HStack {
+            Button("Restore", systemImage: "arrow.counterclockwise") {
+              snapshotToRestore = snapshot
+            }
+            Button("Clone", systemImage: "plus.square.on.square") {
+              snapshotToClone = snapshot
+              cloneMachineName = "\(machine.id)-copy"
+            }
+            Spacer()
+            Button("Delete", systemImage: "trash", role: .destructive) {
+              snapshotToDelete = snapshot
+            }
+          }
+          .disabled(model.isWorking)
+          if snapshotToClone?.id == snapshot.id {
+            HStack {
+              TextField("New machine name", text: $cloneMachineName)
+                .textFieldStyle(.roundedBorder)
+              Button("Create Clone") {
+                let name = cloneMachineName
+                Task {
+                  if await model.clone(snapshot, as: name) {
+                    snapshotToClone = nil
+                    cloneMachineName = ""
+                  }
+                }
+              }
+              .buttonStyle(.borderedProminent)
+              Button("Cancel") {
+                snapshotToClone = nil
+                cloneMachineName = ""
+              }
+            }
+          }
+        }
+        .padding(.vertical, 4)
+      }
+    }
+  }
+
+  private var exclusionsSection: some View {
+    Section("Captured data") {
+      Text(
+        "Each snapshot captures the EXT4 root filesystem, machine and boot configuration, and initialization state."
+      )
+      Text(
+        "External home-directory contents, logs, runtime memory, and attached external resources are not captured. Snapshot clones receive a new machine identity, start stopped, are not made default, and have external home mounts disconnected."
+      )
+      .foregroundStyle(.secondary)
+    }
+  }
+
+  private func byteCount(_ value: UInt64) -> String {
+    ByteCountFormatter.string(
+      fromByteCount: Int64(clamping: value),
+      countStyle: .file
+    )
   }
 }

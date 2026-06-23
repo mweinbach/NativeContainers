@@ -1,5 +1,44 @@
+import ContainerAPIClient
 import ContainerizationOCI
 import Foundation
+
+protocol ImageBuildRuntimeCapabilityVerifying: Sendable {
+  func verifyBuildSSHSupport() async throws
+}
+
+struct NativeContainersImageBuildRuntimeCapabilityVerifier:
+  ImageBuildRuntimeCapabilityVerifying
+{
+  static let requiredRuntimeVersion = "1.0.0-nc.2"
+
+  private let activeRuntimeVerifier: any ActiveNativeRuntimeVerifying
+
+  init(
+    activeRuntimeVerifier: any ActiveNativeRuntimeVerifying =
+      ProductionActiveNativeRuntimeVerifier()
+  ) {
+    self.activeRuntimeVerifier = activeRuntimeVerifier
+  }
+
+  func verifyBuildSSHSupport() async throws {
+    do {
+      let verified = try await activeRuntimeVerifier.verifyActiveNativeRuntime()
+      guard
+        verified.origin == .nativeContainers,
+        verified.version == Self.requiredRuntimeVersion,
+        verified.builderArtifact == .pinned
+      else {
+        throw ImageBuildError.buildSSHRequiresNativeContainersRuntime(
+          required: Self.requiredRuntimeVersion
+        )
+      }
+    } catch {
+      throw ImageBuildError.buildSSHRequiresNativeContainersRuntime(
+        required: Self.requiredRuntimeVersion
+      )
+    }
+  }
+}
 
 protocol ImageBuildRequestValidating: Sendable {
   func validate(_ request: ImageBuildRequest) throws
@@ -66,6 +105,8 @@ struct AppleImageBuildPlanningService: ImageBuildPlanning {
   private let validator: any ImageBuildRequestValidating
   private let contextStager: any BuildContextStaging
   private let secretManager: any ImageBuildSecretManaging
+  private let sshAgentService: any ContainerSSHAgentForwardingManaging
+  private let runtimeCapabilityVerifier: any ImageBuildRuntimeCapabilityVerifying
   private let imageStore: any ImageBuildStoring
   private let outputManager: any ImageBuildOutputManaging
 
@@ -73,12 +114,18 @@ struct AppleImageBuildPlanningService: ImageBuildPlanning {
     validator: any ImageBuildRequestValidating = ImageBuildRequestValidator(),
     contextStager: any BuildContextStaging,
     secretManager: any ImageBuildSecretManaging,
+    sshAgentService: any ContainerSSHAgentForwardingManaging =
+      AppleContainerSSHAgentService(),
+    runtimeCapabilityVerifier: any ImageBuildRuntimeCapabilityVerifying =
+      NativeContainersImageBuildRuntimeCapabilityVerifier(),
     imageStore: any ImageBuildStoring,
     outputManager: any ImageBuildOutputManaging
   ) {
     self.validator = validator
     self.contextStager = contextStager
     self.secretManager = secretManager
+    self.sshAgentService = sshAgentService
+    self.runtimeCapabilityVerifier = runtimeCapabilityVerifier
     self.imageStore = imageStore
     self.outputManager = outputManager
   }
@@ -88,6 +135,10 @@ struct AppleImageBuildPlanningService: ImageBuildPlanning {
     progress: @escaping ImageBuildProgressHandler
   ) async throws -> ImageBuildPlan {
     try validator.validate(request)
+    if let sshAgent = request.sshAgent {
+      try await runtimeCapabilityVerifier.verifyBuildSSHSupport()
+      _ = try sshAgentService.environment(for: sshAgent)
+    }
     let secretReviewID = request.secrets.isEmpty ? nil : UUID()
     var stagedContext: StagedBuildContext?
     var outputPlan: ImageBuildOutputPlan?
@@ -169,6 +220,7 @@ struct AppleImageBuildPlanningService: ImageBuildPlanning {
         pullLatest: request.pullLatest,
         builderCPUCount: request.builderCPUCount,
         builderMemoryMiB: request.builderMemoryMiB,
+        sshAgent: request.sshAgent,
         output: preparedOutput,
         generatedAt: Date()
       )

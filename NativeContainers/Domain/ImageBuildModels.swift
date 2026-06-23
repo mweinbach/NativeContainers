@@ -172,6 +172,7 @@ struct ImageBuildRequest: Equatable, Sendable {
   let pullLatest: Bool
   let builderCPUCount: Int?
   let builderMemoryMiB: Int?
+  let sshAgent: ContainerSSHAgentConfiguration?
   let output: ImageBuildOutputSelection
 
   init(
@@ -188,6 +189,7 @@ struct ImageBuildRequest: Equatable, Sendable {
     pullLatest: Bool,
     builderCPUCount: Int?,
     builderMemoryMiB: Int?,
+    sshAgent: ContainerSSHAgentConfiguration? = nil,
     output: ImageBuildOutputSelection = .imageStore
   ) {
     self.contextDirectory = contextDirectory
@@ -203,6 +205,7 @@ struct ImageBuildRequest: Equatable, Sendable {
     self.pullLatest = pullLatest
     self.builderCPUCount = builderCPUCount
     self.builderMemoryMiB = builderMemoryMiB
+    self.sshAgent = sshAgent
     self.output = output
   }
 
@@ -230,6 +233,7 @@ struct ImageBuildPlan: Equatable, Sendable, Identifiable {
   let pullLatest: Bool
   let builderCPUCount: Int?
   let builderMemoryMiB: Int?
+  let sshAgent: ContainerSSHAgentConfiguration?
   let output: ImageBuildOutputPlan
   let generatedAt: Date
 
@@ -254,6 +258,7 @@ struct ImageBuildPlan: Equatable, Sendable, Identifiable {
     pullLatest: Bool,
     builderCPUCount: Int?,
     builderMemoryMiB: Int?,
+    sshAgent: ContainerSSHAgentConfiguration? = nil,
     output: ImageBuildOutputPlan,
     generatedAt: Date
   ) {
@@ -277,6 +282,7 @@ struct ImageBuildPlan: Equatable, Sendable, Identifiable {
     self.pullLatest = pullLatest
     self.builderCPUCount = builderCPUCount
     self.builderMemoryMiB = builderMemoryMiB
+    self.sshAgent = sshAgent
     self.output = output
     self.generatedAt = generatedAt
   }
@@ -291,6 +297,7 @@ struct ImageBuildPlan: Equatable, Sendable, Identifiable {
     ContainerBuilderConfiguration(
       cpuCount: builderCPUCount,
       memoryMiB: builderMemoryMiB,
+      forwardsSSHAgent: sshAgent != nil,
       allowsRecreateStoppedBuilder: false,
       allowsStopRunningBuilder: false
     )
@@ -448,6 +455,7 @@ enum ImageBuildError: LocalizedError, Equatable, Sendable {
   case unsafeArtifact(String)
   case stagingReferenceChanged(String)
   case secretBuildFailed
+  case buildSSHRequiresNativeContainersRuntime(required: String)
   case unsupported
 
   var errorDescription: String? {
@@ -500,6 +508,8 @@ enum ImageBuildError: LocalizedError, Equatable, Sendable {
       "The isolated staging reference “\(reference)” changed outside this build."
     case .secretBuildFailed:
       "The secret-enabled image build failed. Build output was suppressed to protect secret values."
+    case .buildSSHRequiresNativeContainersRuntime(let required):
+      "Build-time SSH requires the verified NativeContainers runtime \(required). Stop the official Apple runtime and activate the separately installed NativeContainers runtime before reviewing this build."
     case .unsupported:
       "Native image builds are unavailable from this service."
     }

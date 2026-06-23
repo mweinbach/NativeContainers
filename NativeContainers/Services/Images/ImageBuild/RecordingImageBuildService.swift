@@ -199,7 +199,7 @@ struct RecordingImageBuildService: ImageBuilding, Sendable {
     case .workerArtifactMismatch, .unsafeArchiveMembers, .ambiguousArchive,
       .missingArtifact, .unsafeArtifact, .stagingReferenceChanged:
       .artifact
-    case .secretBuildFailed:
+    case .secretBuildFailed, .buildSSHRequiresNativeContainersRuntime:
       .builder
     case .emptyTags, .duplicateTags, .archiveReferenceCount, .unexpectedTags,
       .rootFilesystemSinglePlatform, .emptyPlatforms, .duplicatePlatforms,

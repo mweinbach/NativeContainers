@@ -292,6 +292,66 @@ struct ComposeLifecyclePlannerTests {
   }
 
   @Test
+  func inputSealedServiceCanCreateAMissingReplicaFromAReviewedPrefix() {
+    let seal = String(repeating: "e", count: 64)
+    let desired = desiredWebState(replicaCount: 2, inputSeal: seal)
+    let existing = container(
+      id: "web-1",
+      service: "web",
+      state: .stopped,
+      imageDigest: "sha256:web",
+      inputSeal: seal
+    )
+
+    let plan = planner.plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      inventory: makeInventory(
+        containers: [existing],
+        images: [image(reference: "example/web:latest", digest: "sha256:web")]
+      )
+    )
+
+    #expect(plan.canExecute)
+    #expect(plan.containerActions.map(\.operation) == [.converge, .create])
+  }
+
+  @Test
+  func changedInputSealRequiresUnsupportedRecreation() {
+    let desired = desiredWebState(
+      replicaCount: 1,
+      inputSeal: String(repeating: "e", count: 64)
+    )
+    let existing = container(
+      id: "web-1",
+      service: "web",
+      state: .stopped,
+      imageDigest: "sha256:web",
+      inputSeal: String(repeating: "f", count: 64)
+    )
+
+    let plan = planner.plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      inventory: makeInventory(
+        containers: [existing],
+        images: [image(reference: "example/web:latest", digest: "sha256:web")]
+      )
+    )
+
+    #expect(!plan.canExecute)
+    #expect(
+      plan.blockers.contains {
+        $0.subject == "web-1" && $0.message.contains("replacement remains blocked")
+      }
+    )
+  }
+
+  @Test
   func createMissingUpRequiresAContiguousExistingReplicaPrefix() {
     let desired = desiredWebState(replicaCount: 2)
     let existing = container(
@@ -464,7 +524,10 @@ struct ComposeLifecyclePlannerTests {
     )
   }
 
-  private func desiredWebState(replicaCount: Int) -> ComposeDesiredState {
+  private func desiredWebState(
+    replicaCount: Int,
+    inputSeal: String? = nil
+  ) -> ComposeDesiredState {
     ComposeDesiredState(
       projectName: "demo",
       declaredServiceNames: ["web"],
@@ -477,6 +540,7 @@ struct ComposeLifecyclePlannerTests {
           profiles: [],
           dependencyNames: [],
           configurationHash: String(repeating: "a", count: 64),
+          inputSeal: inputSeal,
           volumeNames: [],
           networkNames: [],
           publishedPortCount: 0
@@ -515,7 +579,8 @@ struct ComposeLifecyclePlannerTests {
     replica: Int? = 1,
     oneOff: Bool = false,
     state: RuntimeState = .running,
-    imageDigest: String? = nil
+    imageDigest: String? = nil,
+    inputSeal: String? = nil
   ) -> ContainerRecord {
     var labels = [
       ComposeLabelKey.project: "demo",
@@ -525,6 +590,10 @@ struct ComposeLifecyclePlannerTests {
     ]
     if let replica {
       labels[ComposeLabelKey.containerNumber] = String(replica)
+    }
+    if let inputSeal {
+      labels[ComposeLabelKey.inputSeal] = inputSeal
+      labels[ComposeLabelKey.reviewedConfigHash] = String(repeating: "a", count: 64)
     }
     return ContainerRecord(
       id: id,

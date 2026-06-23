@@ -170,6 +170,156 @@ struct ComposeProjectLifecycleServiceTests {
     #expect(await journal.persistedOperationIDs.isEmpty)
   }
 
+  @Test
+  func reviewStoresExactHashesFromTheFinalSealedInputOverlay() async throws {
+    let data = Data(
+      """
+      {"name":"demo","services":{"web":{"image":"nginx:1.27","secrets":[{"source":"token"}]}},"secrets":{"token":{"environment":"DEMO_TOKEN"}}}
+      """.utf8
+    )
+    let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    let rendered = ComposeRenderedConfiguration(
+      fullConfiguration: data,
+      activeConfiguration: data,
+      fullConfigurationSHA256: digest,
+      activeConfigurationSHA256: digest,
+      composeReleaseVersion: "5.1.4",
+      composeBinarySHA256: String(repeating: "b", count: 64),
+      composeSourceRevision: "source-revision",
+      environmentSHA256: ComposeCommandEnvironment(processEnvironment: [:]).sha256,
+      serviceConfigurationHashes: ["web": String(repeating: "a", count: 64)]
+    )
+    let exactHashes = [
+      ["web": String(repeating: "e", count: 64)],
+      ["web": String(repeating: "f", count: 64)],
+    ]
+    let renderer = ComposeRendererDouble(
+      results: Array(repeating: rendered, count: 8),
+      executionHashes: exactHashes
+    )
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: "compose-lifecycle-hash-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    let service = ComposeProjectLifecycleService(
+      sourceAccess: ComposeSourceAccessDouble(),
+      configRenderer: renderer,
+      desiredStateDecoder: ComposeDesiredStateDecoder(
+        allowsBlockedLocalInputExecutionForTesting: true
+      ),
+      inputVault: ComposeProjectInputVault(
+        sealer: HMACComposeInputSealer(keyData: Data(repeating: 15, count: 32))
+      ),
+      executionWorkspace: FileComposeExecutionWorkspace(rootURL: root),
+      inventory: ComposeInventoryDouble(inventory: emptyInventory)
+    )
+    let options = ComposeProjectReviewOptions(
+      action: .up,
+      projectName: "demo",
+      pullPolicy: .missing
+    )
+
+    let firstRequirements = try await service.discoverInputRequirements(
+      directoryURL: URL(filePath: "/tmp/demo"),
+      options: options
+    )
+    let first = try await service.review(
+      directoryURL: URL(filePath: "/tmp/demo"),
+      options: options,
+      inputs: ComposeProjectReviewInputs(
+        requirementsID: firstRequirements.id,
+        environmentValues: ["DEMO_TOKEN": "first-value"]
+      )
+    )
+    let secondRequirements = try await service.discoverInputRequirements(
+      directoryURL: URL(filePath: "/tmp/demo"),
+      options: options
+    )
+    let second = try await service.review(
+      directoryURL: URL(filePath: "/tmp/demo"),
+      options: options,
+      inputs: ComposeProjectReviewInputs(
+        requirementsID: secondRequirements.id,
+        environmentValues: ["DEMO_TOKEN": "second-value"]
+      )
+    )
+
+    #expect(first.executionServiceConfigurationHashes == exactHashes[0])
+    #expect(second.executionServiceConfigurationHashes == exactHashes[1])
+    #expect(
+      first.desiredState.activeServices.first?.inputSeal
+        != second.desiredState.activeServices.first?.inputSeal)
+    let configurations = await renderer.hashedConfigurations
+    #expect(configurations.count == 2)
+    let firstConfiguration = try #require(configurations.first)
+    let secondConfiguration = try #require(configurations.last)
+    #expect(firstConfiguration != secondConfiguration)
+    #expect(!configurations.joined().contains("first-value"))
+    #expect(!configurations.joined().contains("second-value"))
+  }
+
+  @Test
+  func productionReviewKeepsPreparedInputsDormantBehindTheSignedBridgeBlocker() async throws {
+    let data = Data(
+      """
+      {"name":"demo","services":{"web":{"image":"nginx:1.27","secrets":[{"source":"token"}]}},"secrets":{"token":{"environment":"DEMO_TOKEN"}}}
+      """.utf8
+    )
+    let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    let rendered = ComposeRenderedConfiguration(
+      fullConfiguration: data,
+      activeConfiguration: data,
+      fullConfigurationSHA256: digest,
+      activeConfigurationSHA256: digest,
+      composeReleaseVersion: "5.1.4",
+      composeBinarySHA256: String(repeating: "b", count: 64),
+      composeSourceRevision: "source-revision",
+      environmentSHA256: ComposeCommandEnvironment(processEnvironment: [:]).sha256,
+      serviceConfigurationHashes: ["web": String(repeating: "a", count: 64)]
+    )
+    let renderer = ComposeRendererDouble(results: Array(repeating: rendered, count: 4))
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: "compose-lifecycle-blocked-input-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    let service = ComposeProjectLifecycleService(
+      sourceAccess: ComposeSourceAccessDouble(),
+      configRenderer: renderer,
+      inputVault: ComposeProjectInputVault(
+        sealer: HMACComposeInputSealer(keyData: Data(repeating: 18, count: 32))
+      ),
+      executionWorkspace: FileComposeExecutionWorkspace(rootURL: root),
+      inventory: ComposeInventoryDouble(inventory: emptyInventory)
+    )
+    let options = ComposeProjectReviewOptions(
+      action: .up,
+      projectName: "demo",
+      pullPolicy: .missing
+    )
+    let requirements = try await service.discoverInputRequirements(
+      directoryURL: URL(filePath: "/tmp/demo"),
+      options: options
+    )
+    let plan = try await service.review(
+      directoryURL: URL(filePath: "/tmp/demo"),
+      options: options,
+      inputs: ComposeProjectReviewInputs(
+        requirementsID: requirements.id,
+        environmentValues: ["DEMO_TOKEN": "reviewed-value"]
+      )
+    )
+
+    #expect(!plan.canExecute)
+    #expect(plan.blockers.contains { $0.message.contains("signed Socktainer 1.0.0") })
+    #expect(plan.executionServiceConfigurationHashes == rendered.serviceConfigurationHashes)
+    #expect(await renderer.hashedConfigurations.isEmpty)
+    await #expect(throws: ComposeProjectLifecycleError.reviewBlocked(1)) {
+      _ = try await service.execute(plan)
+    }
+  }
+
   private var emptyInventory: ContainerInventory {
     ContainerInventory(
       system: ContainerSystemInfo(
@@ -264,14 +414,22 @@ private actor ComposeSourceAccessDouble: ComposeProjectSourceAccessing {
   }
 }
 
-private actor ComposeRendererDouble: ComposeConfigRendering {
+private actor ComposeRendererDouble: ComposeConfigRendering,
+  ComposeExecutionServiceHashRendering
+{
   nonisolated let commandEnvironment = ComposeCommandEnvironment(processEnvironment: [:])
 
   private var results: [ComposeRenderedConfiguration]
+  private var executionHashes: [[String: String]]
   private(set) var renderCount = 0
+  private(set) var hashedConfigurations: [String] = []
 
-  init(results: [ComposeRenderedConfiguration]) {
+  init(
+    results: [ComposeRenderedConfiguration],
+    executionHashes: [[String: String]] = []
+  ) {
     self.results = results
+    self.executionHashes = executionHashes
   }
 
   func render(
@@ -283,6 +441,19 @@ private actor ComposeRendererDouble: ComposeConfigRendering {
       throw ComposeProjectLifecycleError.unavailable("No renderer result.")
     }
     return results.removeFirst()
+  }
+
+  func renderExecutionServiceHashes(
+    configurationURL: URL,
+    projectDirectoryURL: URL,
+    options: ComposeProjectReviewOptions,
+    inputEnvironment: [String: String]
+  ) async throws -> [String: String] {
+    hashedConfigurations.append(try String(contentsOf: configurationURL, encoding: .utf8))
+    guard !executionHashes.isEmpty else {
+      throw ComposeProjectLifecycleError.unavailable("No execution hash result.")
+    }
+    return executionHashes.removeFirst()
   }
 }
 

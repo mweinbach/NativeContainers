@@ -25,7 +25,7 @@ struct ContainerBuildWorkerFrameCodecTests {
   }
 
   @Test
-  func protocolVersionSixRoundTripsTypedOutputsAndRemoteCacheWithoutHostDestinations() throws {
+  func protocolVersionSevenRoundTripsReviewedSSHWithoutSocketPaths() throws {
     let buildID = UUID()
     let build = ContainerBuildWorkerBuildRequest(
       buildID: buildID,
@@ -49,9 +49,20 @@ struct ContainerBuildWorkerFrameCodecTests {
       ),
       pullLatest: true,
       secretIDs: [],
+      sshAgentIDs: ["default"],
       allowsTagReplacement: false
     )
-    let request = ContainerBuildWorkerRequest(operation: .build, build: build)
+    let request = ContainerBuildWorkerRequest(
+      operation: .build,
+      builder: ContainerBuilderConfiguration(
+        cpuCount: nil,
+        memoryMiB: nil,
+        forwardsSSHAgent: true,
+        allowsRecreateStoppedBuilder: false,
+        allowsStopRunningBuilder: false
+      ),
+      build: build
+    )
     let encodedRequest = try JSONEncoder().encode(request)
     let decodedRequest = try JSONDecoder().decode(
       ContainerBuildWorkerRequest.self,
@@ -62,8 +73,11 @@ struct ContainerBuildWorkerFrameCodecTests {
     )
     let buildJSON = try #require(requestJSON["build"] as? [String: Any])
 
-    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 6)
+    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 7)
     #expect(decodedRequest == request)
+    #expect(buildJSON["sshAgentIDs"] as? [String] == ["default"])
+    #expect(!String(decoding: encodedRequest, as: UTF8.self).contains("SSH_AUTH_SOCK"))
+    #expect(!String(decoding: encodedRequest, as: UTF8.self).contains("agent.sock"))
     #expect(buildJSON["outputKind"] as? String == "rootFilesystemDirectory")
     let remoteCacheJSON = try #require(buildJSON["remoteCache"] as? [String: Any])
     #expect(
@@ -570,6 +584,40 @@ struct ContainerBuildWorkerProcessTests {
   }
 
   @Test
+  func sshSocketIsInjectedOnlyForReviewedOptIn() async throws {
+    let socketPath = "/tmp/nativecontainers-reviewed-agent.sock"
+    let optedIn = try makeFixtureProcess(
+      events: [.builderReady(message: "ready")],
+      commandsBeforeEvents: [
+        "test \"$SSH_AUTH_SOCK\" = '\(socketPath)' || exit 12"
+      ],
+      environmentSource: ["SSH_AUTH_SOCK": socketPath]
+    )
+    let optedInOutput = try await optedIn.run(makeStartBuilderRequest(forwardsSSHAgent: true))
+    #expect(optedInOutput.diagnostics == .suppressed)
+
+    let optedOut = try makeFixtureProcess(
+      events: [.builderReady(message: "ready")],
+      commandsBeforeEvents: [
+        "test -z \"${SSH_AUTH_SOCK+x}\" || exit 13"
+      ],
+      environmentSource: ["SSH_AUTH_SOCK": socketPath]
+    )
+    let optedOutOutput = try await optedOut.run(makeStartBuilderRequest())
+    #expect(optedOutOutput.diagnostics == .captured(tail: "", wasTruncated: false))
+  }
+
+  @Test
+  func reviewedSSHRequiresAnAvailableWorkerSocket() async throws {
+    let process = try makeFixtureProcess(events: [.builderReady(message: "ready")])
+    await expectProcessError(
+      .sshAgentUnavailable,
+      from: process,
+      request: makeStartBuilderRequest(forwardsSSHAgent: true)
+    )
+  }
+
+  @Test
   func locatorNeverFallsBackOutsideAnApplicationBundle() throws {
     let appLocator = DefaultContainerBuildWorkerExecutableLocator(
       bundleURL: URL(filePath: "/Applications/NativeContainers.app", directoryHint: .isDirectory),
@@ -651,8 +699,19 @@ private actor BuildWorkerEventRecorder {
   }
 }
 
-private func makeStartBuilderRequest() -> ContainerBuildWorkerRequest {
-  ContainerBuildWorkerRequest(operation: .startBuilder)
+private func makeStartBuilderRequest(
+  forwardsSSHAgent: Bool = false
+) -> ContainerBuildWorkerRequest {
+  ContainerBuildWorkerRequest(
+    operation: .startBuilder,
+    builder: ContainerBuilderConfiguration(
+      cpuCount: nil,
+      memoryMiB: nil,
+      forwardsSSHAgent: forwardsSSHAgent,
+      allowsRecreateStoppedBuilder: false,
+      allowsStopRunningBuilder: false
+    )
+  )
 }
 
 private func makeSecretBuildRequestForProcessTests(
@@ -691,7 +750,8 @@ private func makeFixtureProcess(
   commandsBeforeEvents: [String] = [],
   exitStatus: Int32 = 0,
   terminationGracePeriod: Duration = .milliseconds(250),
-  includesHello: Bool = true
+  includesHello: Bool = true,
+  environmentSource: [String: String] = [:]
 ) throws -> ContainerBuildWorkerProcess {
   var commands = commandsBeforeEvents
   let framedEvents = (includesHello ? [.hello()] : []) + events
@@ -707,7 +767,7 @@ private func makeFixtureProcess(
       executableURL: URL(filePath: "/bin/sh")
     ),
     arguments: ["-c", commands.joined(separator: "\n")],
-    environmentSource: [:],
+    environmentSource: environmentSource,
     terminationGracePeriod: terminationGracePeriod
   )
 }
@@ -715,10 +775,11 @@ private func makeFixtureProcess(
 private func expectProcessError(
   _ expected: ContainerBuildWorkerProcessError,
   from process: ContainerBuildWorkerProcess,
+  request: ContainerBuildWorkerRequest = makeStartBuilderRequest(),
   sourceLocation: SourceLocation = #_sourceLocation
 ) async {
   do {
-    _ = try await process.run(makeStartBuilderRequest())
+    _ = try await process.run(request)
     Issue.record("Expected worker process error \(expected).", sourceLocation: sourceLocation)
   } catch let error as ContainerBuildWorkerProcessError {
     #expect(error == expected, sourceLocation: sourceLocation)

@@ -8,7 +8,7 @@ import Testing
 @Suite(.serialized)
 struct AppOwnedBuildCacheStoreTests {
   @Test
-  func protocolV5UsesOnlyClosedCacheModes() throws {
+  func protocolV7UsesOnlyClosedCacheModes() throws {
     let buildID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
     let encoder = JSONEncoder()
 
@@ -43,7 +43,7 @@ struct AppOwnedBuildCacheStoreTests {
       #expect(try JSONDecoder().decode(ContainerBuildWorkerRequest.self, from: encoded) == request)
     }
 
-    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 6)
+    #expect(ContainerBuildWorkerRequest.currentProtocolVersion == 7)
     let receipt = ContainerBuildWorkerCacheReceipt(
       mode: .appOwnedLocalV1,
       handoffToken: UUID(uuidString: "BBBBBBBB-CCCC-DDDD-EEEE-FFFFFFFFFFFF")!,

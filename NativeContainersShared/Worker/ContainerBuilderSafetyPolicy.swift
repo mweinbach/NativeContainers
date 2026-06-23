@@ -93,6 +93,27 @@ struct ContainerBuilderDesiredConfiguration: Codable, Equatable, Sendable {
   let rosettaEnabled: Bool
   let managedColorEnvironment: [String]
   let dns: ContainerBuilderDNSConfiguration?
+  let sshAgentForwarding: Bool
+
+  init(
+    image: String,
+    imageDescriptorDigest: String,
+    cpuCount: Int,
+    memoryBytes: UInt64,
+    rosettaEnabled: Bool,
+    managedColorEnvironment: [String],
+    dns: ContainerBuilderDNSConfiguration?,
+    sshAgentForwarding: Bool = false
+  ) {
+    self.image = image
+    self.imageDescriptorDigest = imageDescriptorDigest
+    self.cpuCount = cpuCount
+    self.memoryBytes = memoryBytes
+    self.rosettaEnabled = rosettaEnabled
+    self.managedColorEnvironment = managedColorEnvironment
+    self.dns = dns
+    self.sshAgentForwarding = sshAgentForwarding
+  }
 }
 
 struct ContainerBuilderSafetySnapshot: Codable, Equatable, Sendable {
@@ -209,6 +230,7 @@ enum ContainerBuilderConfigurationMismatch: String, Codable, Equatable, Sendable
   case arguments = "configuration-arguments"
   case managedColorEnvironment = "configuration-managed-color-environment"
   case dns = "configuration-dns"
+  case sshAgentForwarding = "configuration-ssh-agent-forwarding"
 }
 
 struct ContainerBuilderSafetyDecision: Codable, Equatable, Sendable {
@@ -386,6 +408,9 @@ enum ContainerBuilderSafetyPolicy {
       mismatches.append(.managedColorEnvironment)
     }
     if observed.dns != desired.dns { mismatches.append(.dns) }
+    if observed.sshAgentForwarding != desired.sshAgentForwarding {
+      mismatches.append(.sshAgentForwarding)
+    }
     return mismatches
   }
 }

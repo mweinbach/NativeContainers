@@ -388,7 +388,20 @@ struct ComposeContainerLifecyclePlanner: Sendable {
       )
       return
     }
-    if let expectedHash = service.configurationHash,
+    if let inputSeal = service.inputSeal,
+      container.labels[ComposeLabelKey.inputSeal] != inputSeal
+        || container.labels[ComposeLabelKey.reviewedConfigHash] != service.configurationHash
+    {
+      issues.append(
+        ComposeLifecycleIssue.blocker(
+          .executionPolicy,
+          subject: container.id,
+          message:
+            "The reviewed Compose inputs changed or were not sealed on the existing container; replacement remains blocked until exact recreation is supported."
+        )
+      )
+    } else if service.inputSeal == nil,
+      let expectedHash = service.configurationHash,
       container.labels[ComposeLabelKey.configHash] != expectedHash
     {
       issues.append(

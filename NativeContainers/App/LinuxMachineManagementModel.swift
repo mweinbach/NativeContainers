@@ -173,3 +173,109 @@ final class LinuxMachineManagementModel {
     }.value
   }
 }
+
+@MainActor
+@Observable
+final class LinuxMachineSnapshotModel {
+  private(set) var catalog: LinuxMachineSnapshotCatalog?
+  private(set) var isWorking = false
+  private(set) var errorMessage: String?
+
+  private let service: any LinuxMachineSnapshotManaging
+  private let didMutate: @MainActor @Sendable () async -> Void
+
+  init(
+    service: any LinuxMachineSnapshotManaging,
+    didMutate: @escaping @MainActor @Sendable () async -> Void
+  ) {
+    self.service = service
+    self.didMutate = didMutate
+  }
+
+  func load(for machine: LinuxMachineRecord) async {
+    guard !isWorking else { return }
+    isWorking = true
+    errorMessage = nil
+    catalog = nil
+    defer { isWorking = false }
+    do {
+      catalog = try await service.loadSnapshots(
+        for: LinuxMachineIdentity(machine: machine)
+      )
+    } catch is CancellationError {
+      return
+    } catch {
+      catalog = nil
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  func create(named name: String) async -> Bool {
+    await mutate(refreshesInventory: false) { catalog in
+      try await self.service.createSnapshot(named: name, in: catalog)
+    }
+  }
+
+  func restore(_ snapshot: LinuxMachineSnapshotRecord) async -> Bool {
+    await mutate(refreshesInventory: true) { catalog in
+      try await self.service.restoreSnapshot(snapshot.id, in: catalog)
+    }
+  }
+
+  func clone(_ snapshot: LinuxMachineSnapshotRecord, as machineID: String) async -> Bool {
+    guard let catalog, !isWorking else { return false }
+    isWorking = true
+    errorMessage = nil
+    defer { isWorking = false }
+    do {
+      let result = try await service.cloneSnapshot(
+        snapshot.id,
+        as: machineID,
+        in: catalog
+      )
+      self.catalog = result.sourceCatalog
+      await didMutate()
+      return true
+    } catch is CancellationError {
+      return false
+    } catch {
+      errorMessage = error.localizedDescription
+      return false
+    }
+  }
+
+  func delete(_ snapshot: LinuxMachineSnapshotRecord) async -> Bool {
+    await mutate(refreshesInventory: false) { catalog in
+      try await self.service.deleteSnapshot(snapshot.id, in: catalog)
+    }
+  }
+
+  func clearError() {
+    errorMessage = nil
+  }
+
+  private func mutate(
+    refreshesInventory: Bool,
+    _ operation:
+      @escaping @MainActor @Sendable (
+        LinuxMachineSnapshotCatalog
+      ) async throws -> LinuxMachineSnapshotCatalog
+  ) async -> Bool {
+    guard let catalog, !isWorking else { return false }
+    isWorking = true
+    errorMessage = nil
+    defer { isWorking = false }
+    do {
+      self.catalog = try await operation(catalog)
+      if refreshesInventory {
+        await didMutate()
+      }
+      return true
+    } catch is CancellationError {
+      return false
+    } catch {
+      errorMessage = error.localizedDescription
+      return false
+    }
+  }
+}

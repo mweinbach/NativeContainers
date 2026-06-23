@@ -174,3 +174,301 @@ actor AppleMachineRuntimeClient: LinuxMachineRuntime {
     )
   }
 }
+
+protocol LinuxMachineSnapshotTransport: Sendable {
+  func list(machineID: String) async throws -> MachineSnapshotCatalogV1
+  func create(
+    _ request: MachineSnapshotCreateRequestV1
+  ) async throws -> MachineSnapshotCatalogV1
+  func restore(
+    _ request: MachineSnapshotRestoreRequestV1
+  ) async throws -> MachineSnapshotCatalogV1
+  func clone(
+    _ request: MachineSnapshotCloneRequestV1
+  ) async throws -> MachineSnapshotCloneResultV1
+  func delete(
+    _ request: MachineSnapshotDeleteRequestV1
+  ) async throws -> MachineSnapshotCatalogV1
+}
+
+struct AppleLinuxMachineSnapshotTransport: LinuxMachineSnapshotTransport {
+  func list(machineID: String) async throws -> MachineSnapshotCatalogV1 {
+    try await MachineClient().listSnapshots(machineID: machineID)
+  }
+
+  func create(
+    _ request: MachineSnapshotCreateRequestV1
+  ) async throws -> MachineSnapshotCatalogV1 {
+    try await MachineClient().createSnapshot(request)
+  }
+
+  func restore(
+    _ request: MachineSnapshotRestoreRequestV1
+  ) async throws -> MachineSnapshotCatalogV1 {
+    try await MachineClient().restoreSnapshot(request)
+  }
+
+  func clone(
+    _ request: MachineSnapshotCloneRequestV1
+  ) async throws -> MachineSnapshotCloneResultV1 {
+    try await MachineClient().cloneSnapshot(request)
+  }
+
+  func delete(
+    _ request: MachineSnapshotDeleteRequestV1
+  ) async throws -> MachineSnapshotCatalogV1 {
+    try await MachineClient().deleteSnapshot(request)
+  }
+}
+
+protocol LinuxMachineSnapshotRuntimeVerifying: Sendable {
+  func verifySnapshotSupport() async throws
+}
+
+struct NativeContainersLinuxMachineSnapshotRuntimeVerifier:
+  LinuxMachineSnapshotRuntimeVerifying
+{
+  static let requiredVersion = "1.0.0-nc.2"
+
+  private let activeRuntimeVerifier: any ActiveNativeRuntimeVerifying
+
+  init(
+    activeRuntimeVerifier: any ActiveNativeRuntimeVerifying =
+      ProductionActiveNativeRuntimeVerifier()
+  ) {
+    self.activeRuntimeVerifier = activeRuntimeVerifier
+  }
+
+  func verifySnapshotSupport() async throws {
+    do {
+      let verified = try await activeRuntimeVerifier.verifyActiveNativeRuntime()
+      guard
+        verified.origin == .nativeContainers,
+        verified.version == Self.requiredVersion,
+        verified.builderArtifact == .pinned
+      else {
+        throw LinuxMachineSnapshotError.requiresNativeContainersRuntime(
+          Self.requiredVersion
+        )
+      }
+    } catch {
+      throw LinuxMachineSnapshotError.requiresNativeContainersRuntime(
+        Self.requiredVersion
+      )
+    }
+  }
+}
+
+actor AppleLinuxMachineSnapshotService: LinuxMachineSnapshotManaging {
+  private let machineTransport: any AppleMachineTransport
+  private let snapshotTransport: any LinuxMachineSnapshotTransport
+  private let runtimeVerifier: any LinuxMachineSnapshotRuntimeVerifying
+  private let runtimeMutationCoordinator: RuntimeMutationCoordinator
+
+  init(
+    machineTransport: any AppleMachineTransport = AppleMachineXPCTransport(),
+    snapshotTransport: any LinuxMachineSnapshotTransport =
+      AppleLinuxMachineSnapshotTransport(),
+    runtimeVerifier: any LinuxMachineSnapshotRuntimeVerifying =
+      NativeContainersLinuxMachineSnapshotRuntimeVerifier(),
+    runtimeMutationCoordinator: RuntimeMutationCoordinator = .shared
+  ) {
+    self.machineTransport = machineTransport
+    self.snapshotTransport = snapshotTransport
+    self.runtimeVerifier = runtimeVerifier
+    self.runtimeMutationCoordinator = runtimeMutationCoordinator
+  }
+
+  func loadSnapshots(
+    for target: LinuxMachineIdentity
+  ) async throws -> LinuxMachineSnapshotCatalog {
+    try await runtimeVerifier.verifySnapshotSupport()
+    try await requireStoppedMachine(target)
+    return try map(try await snapshotTransport.list(machineID: target.id), target: target)
+  }
+
+  func createSnapshot(
+    named name: String,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCatalog {
+    let reviewedName = try validateSnapshotName(name, catalog: catalog)
+    guard catalog.canCreate else { throw LinuxMachineSnapshotError.snapshotLimit }
+    return try await runtimeMutationCoordinator.perform { [self] in
+      try await runtimeVerifier.verifySnapshotSupport()
+      try await requireStoppedMachine(catalog.target)
+      let response = try await snapshotTransport.create(
+        MachineSnapshotCreateRequestV1(
+          machineID: catalog.target.id,
+          name: reviewedName,
+          precondition: precondition(for: catalog)
+        )
+      )
+      return try map(response, target: catalog.target)
+    }
+  }
+
+  func restoreSnapshot(
+    _ snapshotID: UUID,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCatalog {
+    try requireSnapshot(snapshotID, in: catalog)
+    return try await runtimeMutationCoordinator.perform { [self] in
+      try await runtimeVerifier.verifySnapshotSupport()
+      try await requireStoppedMachine(catalog.target)
+      let response = try await snapshotTransport.restore(
+        MachineSnapshotRestoreRequestV1(
+          machineID: catalog.target.id,
+          snapshotID: snapshotID,
+          precondition: precondition(for: catalog)
+        )
+      )
+      return try map(response, target: catalog.target)
+    }
+  }
+
+  func cloneSnapshot(
+    _ snapshotID: UUID,
+    as machineID: String,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCloneResult {
+    try requireSnapshot(snapshotID, in: catalog)
+    let cloneID = try validateCloneName(machineID, sourceID: catalog.target.id)
+    return try await runtimeMutationCoordinator.perform { [self] in
+      try await runtimeVerifier.verifySnapshotSupport()
+      try await requireStoppedMachine(catalog.target)
+      let response = try await snapshotTransport.clone(
+        MachineSnapshotCloneRequestV1(
+          machineID: catalog.target.id,
+          snapshotID: snapshotID,
+          cloneMachineID: cloneID,
+          precondition: precondition(for: catalog)
+        )
+      )
+      let clone = AppleLinuxMachineSnapshotMapper.identity(from: response.clone)
+      guard AppleLinuxMachineSnapshotMapper.state(from: response.clone) == .stopped else {
+        throw LinuxMachineSnapshotError.staleMachine(clone.id)
+      }
+      return LinuxMachineSnapshotCloneResult(
+        sourceCatalog: try map(response.sourceCatalog, target: catalog.target),
+        clone: clone
+      )
+    }
+  }
+
+  func deleteSnapshot(
+    _ snapshotID: UUID,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCatalog {
+    try requireSnapshot(snapshotID, in: catalog)
+    return try await runtimeMutationCoordinator.perform { [self] in
+      try await runtimeVerifier.verifySnapshotSupport()
+      try await requireStoppedMachine(catalog.target)
+      let response = try await snapshotTransport.delete(
+        MachineSnapshotDeleteRequestV1(
+          machineID: catalog.target.id,
+          snapshotID: snapshotID,
+          precondition: precondition(for: catalog)
+        )
+      )
+      return try map(response, target: catalog.target)
+    }
+  }
+
+  private func requireStoppedMachine(_ target: LinuxMachineIdentity) async throws {
+    guard target.hasStableCreationIdentity else {
+      throw LinuxMachineSnapshotError.stableIdentityRequired(target.id)
+    }
+    let current: MachineSnapshot
+    do {
+      current = try await machineTransport.inspect(id: target.id)
+    } catch {
+      let machines = try await machineTransport.list()
+      guard machines.contains(where: { $0.id == target.id }) else {
+        throw LinuxMachineSnapshotError.missingMachine(target.id)
+      }
+      throw error
+    }
+    guard AppleLinuxMachineSnapshotMapper.identity(from: current) == target else {
+      throw LinuxMachineSnapshotError.staleMachine(target.id)
+    }
+    guard AppleLinuxMachineSnapshotMapper.state(from: current) == .stopped else {
+      throw LinuxMachineSnapshotError.machineMustBeStopped(target.id)
+    }
+  }
+
+  private nonisolated func validateSnapshotName(
+    _ name: String,
+    catalog: LinuxMachineSnapshotCatalog
+  ) throws -> String {
+    let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !value.isEmpty, value.count <= MachineSnapshotAPIV1.maximumNameLength,
+      !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+    else {
+      throw LinuxMachineSnapshotError.invalidName
+    }
+    guard !catalog.snapshots.contains(where: { $0.name == value }) else {
+      throw LinuxMachineSnapshotError.duplicateName(value)
+    }
+    return value
+  }
+
+  private nonisolated func validateCloneName(
+    _ name: String,
+    sourceID: String
+  ) throws -> String {
+    let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard value != sourceID, value.count <= LinuxMachineCreationRequest.maximumNameLength,
+      value.range(
+        of: #"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"#,
+        options: .regularExpression
+      ) != nil
+    else {
+      throw LinuxMachineSnapshotError.invalidCloneName
+    }
+    return value
+  }
+
+  private nonisolated func requireSnapshot(
+    _ id: UUID,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) throws {
+    guard catalog.snapshots.contains(where: { $0.id == id }) else {
+      throw LinuxMachineSnapshotError.missingSnapshot(id)
+    }
+  }
+
+  private nonisolated func precondition(
+    for catalog: LinuxMachineSnapshotCatalog
+  ) -> MachineSnapshotPreconditionV1 {
+    MachineSnapshotPreconditionV1(
+      machineGeneration: catalog.machineGeneration,
+      catalogRevision: catalog.catalogRevision
+    )
+  }
+
+  private nonisolated func map(
+    _ catalog: MachineSnapshotCatalogV1,
+    target: LinuxMachineIdentity
+  ) throws -> LinuxMachineSnapshotCatalog {
+    guard catalog.schemaVersion == MachineSnapshotAPIV1.schemaVersion,
+      catalog.machineID == target.id,
+      catalog.snapshots.count <= MachineSnapshotAPIV1.maximumSnapshotsPerMachine
+    else {
+      throw LinuxMachineSnapshotError.staleMachine(target.id)
+    }
+    return LinuxMachineSnapshotCatalog(
+      target: target,
+      machineGeneration: catalog.machineGeneration,
+      catalogRevision: catalog.catalogRevision,
+      snapshots: catalog.snapshots.map {
+        LinuxMachineSnapshotRecord(
+          id: $0.id,
+          name: $0.name,
+          createdAt: $0.createdAt,
+          allocatedSize: $0.allocatedSize,
+          capturedMachineGeneration: $0.capturedMachineGeneration
+        )
+      }
+    )
+  }
+}

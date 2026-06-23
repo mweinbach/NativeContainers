@@ -30,7 +30,10 @@ struct ComposeUpCommandService: ComposeUpCommandExecuting {
   func validate(_ request: ComposeProjectMutationRequest) async throws {
     let prepared = try prepare(request)
     var arguments = prepared.baseArguments
-    arguments.append(contentsOf: ["--profile", "*", "config", "--hash", "*"])
+    for profile in request.plan.options.profiles {
+      arguments.append(contentsOf: ["--profile", profile])
+    }
+    arguments.append(contentsOf: ["config", "--hash", "*"])
     let result = try await executeCommand(
       request: request,
       lease: prepared.lease,
@@ -48,7 +51,11 @@ struct ComposeUpCommandService: ComposeUpCommandExecuting {
       )
     }
     let hashes = try serviceHashDecoder.decode(result.standardOutput)
-    guard hashes == request.plan.serviceConfigurationHashes else {
+    let activeNames = Set(request.plan.desiredState.activeServiceNames)
+    let expected = request.plan.executionServiceConfigurationHashes.filter {
+      activeNames.contains($0.key)
+    }
+    guard hashes == expected, Set(expected.keys) == activeNames else {
       throw ComposeProjectLifecycleError.stalePlan
     }
   }
@@ -77,9 +84,11 @@ struct ComposeUpCommandService: ComposeUpCommandExecuting {
       throw ComposeProjectLifecycleError.commandFailed(
         action: .up,
         exitCode: result.exitCode,
-        output: result.outputWasTruncated
-          ? "Compose output exceeded the bounded execution log."
-          : result.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
+        output: request.reviewedInputs.containsSensitiveValues
+          ? "Compose diagnostics were suppressed because the operation contains reviewed inputs."
+          : result.outputWasTruncated
+            ? "Compose output exceeded the bounded execution log."
+            : result.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
       )
     }
   }
@@ -90,9 +99,25 @@ struct ComposeUpCommandService: ComposeUpCommandExecuting {
     lease: ComposeExecutionConfigurationLease,
     baseArguments: [String]
   ) {
+    let stagedFileURLs: [String: URL]
+    if request.reviewedInputs.files.isEmpty {
+      stagedFileURLs = [:]
+    } else {
+      guard let inputStager = executionWorkspace as? any ComposeExecutionInputStaging else {
+        throw ComposeProjectLifecycleError.unavailable(
+          "The configured Compose execution workspace cannot stage reviewed inputs."
+        )
+      }
+      stagedFileURLs = try inputStager.stageInputs(
+        projectName: request.plan.options.projectName,
+        files: request.reviewedInputs.files
+      )
+    }
     let configuration = try executionOverlay.prepare(
       canonicalConfiguration: request.canonicalConfiguration,
-      plan: request.plan
+      plan: request.plan,
+      reviewedInputs: request.reviewedInputs,
+      stagedFileURLs: stagedFileURLs
     )
     let lease = try executionWorkspace.prepare(
       operationID: request.operationID,
@@ -122,21 +147,47 @@ struct ComposeUpCommandService: ComposeUpCommandExecuting {
       result = try await commandExecutor.execute(
         executableURL: request.composeExecutableURL,
         arguments: arguments,
-        environment: request.commandEnvironment.values,
+        environment: request.commandEnvironment.values.merging(
+          request.reviewedInputs.environmentValues,
+          uniquingKeysWith: { base, _ in base }
+        ),
         timeout: timeout
       )
     } catch {
       let commandError = error
       do {
+        try revalidateInputs(request)
         try executionWorkspace.release(lease)
       } catch {
         throw ComposeProjectLifecycleError.partialCompletion(
           "Compose execution failed and its immutable configuration also failed revalidation: \(error.localizedDescription)"
         )
       }
+      if request.reviewedInputs.containsSensitiveValues {
+        throw ComposeProjectLifecycleError.commandFailed(
+          action: .up,
+          exitCode: -1,
+          output:
+            "Compose process diagnostics were suppressed because the operation contains reviewed inputs."
+        )
+      }
       throw commandError
     }
+    try revalidateInputs(request)
     try executionWorkspace.release(lease)
     return result
+  }
+
+  private func revalidateInputs(_ request: ComposeProjectMutationRequest) throws {
+    guard !request.reviewedInputs.files.isEmpty else { return }
+    guard let inputStager = executionWorkspace as? any ComposeExecutionInputStaging else {
+      throw ComposeProjectLifecycleError.workspaceUnsafe(
+        "The reviewed Compose input store became unavailable."
+      )
+    }
+    _ = try inputStager.stageInputs(
+      projectName: request.plan.options.projectName,
+      files: request.reviewedInputs.files
+    )
   }
 }

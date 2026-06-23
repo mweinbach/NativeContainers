@@ -38,6 +38,7 @@ struct VirtualMachineDiskImageMaintenanceServices: Sendable {
 struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
   let appleContainerRuntimeSetup: any AppleContainerRuntimeSettingUp
+  let runtimeDistribution: any NativeRuntimeDistributionManaging
   let launchAtLogin: any LaunchAtLoginManaging
   let notifications: any AppNotificationManaging
   let workloadCreationDefaults: any WorkloadCreationDefaultsProviding
@@ -60,6 +61,7 @@ struct AppServices: Sendable {
   let machineCreator: any MachineCreating
   let machineLifecycle: any MachineLifecycleManaging
   let machineConfiguration: any MachineConfigurationManaging
+  let machineSnapshots: any LinuxMachineSnapshotManaging
   let machineCommands: any MachineCommandRunning
   let machineTerminal: any MachineTerminalOpening
   let images: any ImageManaging
@@ -104,6 +106,8 @@ struct AppServices: Sendable {
     inventory: any ContainerInventoryLoading,
     appleContainerRuntimeSetup: any AppleContainerRuntimeSettingUp =
       UnavailableAppleContainerRuntimeSetupService(),
+    runtimeDistribution: any NativeRuntimeDistributionManaging =
+      UnavailableNativeRuntimeDistributionManagementService(),
     launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     workloadCreationDefaults: any WorkloadCreationDefaultsProviding =
@@ -134,6 +138,8 @@ struct AppServices: Sendable {
     machineLifecycle: any MachineLifecycleManaging,
     machineConfiguration: any MachineConfigurationManaging =
       UnavailableLinuxMachineConfigurationService(),
+    machineSnapshots: any LinuxMachineSnapshotManaging =
+      UnavailableLinuxMachineSnapshotService(),
     machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
     machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
     images: any ImageManaging,
@@ -202,6 +208,7 @@ struct AppServices: Sendable {
   ) {
     self.inventory = inventory
     self.appleContainerRuntimeSetup = appleContainerRuntimeSetup
+    self.runtimeDistribution = runtimeDistribution
     self.launchAtLogin = launchAtLogin
     self.notifications = notifications
     self.workloadCreationDefaults = workloadCreationDefaults
@@ -224,6 +231,7 @@ struct AppServices: Sendable {
     self.machineCreator = machineCreator
     self.machineLifecycle = machineLifecycle
     self.machineConfiguration = machineConfiguration
+    self.machineSnapshots = machineSnapshots
     self.machineCommands = machineCommands
     self.machineTerminal = machineTerminal
     self.images = images
@@ -269,6 +277,8 @@ struct AppServices: Sendable {
     containerService: any ContainerManaging,
     appleContainerRuntimeSetup: any AppleContainerRuntimeSettingUp =
       UnavailableAppleContainerRuntimeSetupService(),
+    runtimeDistribution: any NativeRuntimeDistributionManaging =
+      UnavailableNativeRuntimeDistributionManagementService(),
     containerShell: any ContainerShellDiscovering = UnavailableContainerShellService(),
     terminalPresets: any TerminalPresetManaging = EphemeralTerminalPresetStore(),
     terminalTargets: any TerminalTargetOpening = UnavailableTerminalTargetService(),
@@ -292,6 +302,8 @@ struct AppServices: Sendable {
     machineService: any MachineManaging = AppleMachineManagementService(),
     machineConfiguration: any MachineConfigurationManaging =
       UnavailableLinuxMachineConfigurationService(),
+    machineSnapshots: any LinuxMachineSnapshotManaging =
+      UnavailableLinuxMachineSnapshotService(),
     machineCommands: any MachineCommandRunning = UnavailableLinuxMachineToolService(),
     machineTerminal: any MachineTerminalOpening = UnavailableLinuxMachineToolService(),
     imageBuild: any ImageBuilding,
@@ -356,6 +368,7 @@ struct AppServices: Sendable {
   ) {
     inventory = containerService
     self.appleContainerRuntimeSetup = appleContainerRuntimeSetup
+    self.runtimeDistribution = runtimeDistribution
     self.launchAtLogin = launchAtLogin
     self.notifications = notifications
     self.workloadCreationDefaults = workloadCreationDefaults
@@ -378,6 +391,7 @@ struct AppServices: Sendable {
     machineCreator = machineService
     machineLifecycle = machineService
     self.machineConfiguration = machineConfiguration
+    self.machineSnapshots = machineSnapshots
     self.machineCommands = machineCommands
     self.machineTerminal = machineTerminal
     images = containerService

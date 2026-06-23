@@ -38,6 +38,15 @@ protocol ComposeExecutionToolResolving: Sendable {
   func verifiedExecutableURL() async throws -> URL
 }
 
+protocol ComposeExecutionServiceHashRendering: Sendable {
+  func renderExecutionServiceHashes(
+    configurationURL: URL,
+    projectDirectoryURL: URL,
+    options: ComposeProjectReviewOptions,
+    inputEnvironment: [String: String]
+  ) async throws -> [String: String]
+}
+
 struct UnavailableComposeExecutionToolResolver: ComposeExecutionToolResolving {
   let commandEnvironment = ComposeCommandEnvironment(processEnvironment: [:])
 
@@ -48,7 +57,9 @@ struct UnavailableComposeExecutionToolResolver: ComposeExecutionToolResolving {
   }
 }
 
-struct DockerComposeConfigService: ComposeConfigRendering {
+struct DockerComposeConfigService: ComposeConfigRendering,
+  ComposeExecutionServiceHashRendering
+{
   let commandEnvironment: ComposeCommandEnvironment
 
   private let composeClient: any DockerComposeClientInstalling
@@ -119,6 +130,7 @@ struct DockerComposeConfigService: ComposeConfigRendering {
       "config",
       "--format",
       "json",
+      "--no-interpolate",
       "--no-env-resolution",
     ])
 
@@ -154,7 +166,9 @@ struct DockerComposeConfigService: ComposeConfigRendering {
     options: ComposeProjectReviewOptions
   ) async throws -> [String: String] {
     var arguments = baseArguments(source: source, options: options)
-    arguments.append(contentsOf: ["--profile", "*", "config", "--hash", "*"])
+    arguments.append(contentsOf: [
+      "--profile", "*", "config", "--no-interpolate", "--hash", "*",
+    ])
     let result = try await commandExecutor.execute(
       executableURL: executableURL,
       arguments: arguments,
@@ -173,6 +187,58 @@ struct DockerComposeConfigService: ComposeConfigRendering {
     guard result.standardError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw ComposeProjectLifecycleError.configOutputInvalid(
         "Docker Compose emitted diagnostics while hashing service configuration."
+      )
+    }
+    return try serviceHashDecoder.decode(result.standardOutput)
+  }
+
+  func renderExecutionServiceHashes(
+    configurationURL: URL,
+    projectDirectoryURL: URL,
+    options: ComposeProjectReviewOptions,
+    inputEnvironment: [String: String]
+  ) async throws -> [String: String] {
+    try Self.validate(options)
+    guard configurationURL.isFileURL, projectDirectoryURL.isFileURL else {
+      throw ComposeProjectLifecycleError.configOutputInvalid(
+        "The reviewed execution configuration path is invalid."
+      )
+    }
+    let executableURL = try await composeClient.verifiedExecutableURL()
+    var arguments = [
+      "--project-name", options.projectName,
+      "--project-directory", projectDirectoryURL.nativeContainersPOSIXPath,
+      "--file", configurationURL.nativeContainersPOSIXPath,
+    ]
+    for profile in options.profiles {
+      arguments.append(contentsOf: ["--profile", profile])
+    }
+    arguments.append(contentsOf: ["config", "--hash", "*"])
+    let result: HostCommandResult
+    do {
+      result = try await commandExecutor.execute(
+        executableURL: executableURL,
+        arguments: arguments,
+        environment: commandEnvironment.values.merging(inputEnvironment) { base, _ in base },
+        timeout: .seconds(30)
+      )
+    } catch {
+      throw ComposeProjectLifecycleError.unavailable(
+        "The execution service hashes could not be rendered without exposing reviewed inputs."
+      )
+    }
+    guard !result.outputWasTruncated else {
+      throw ComposeProjectLifecycleError.configOutputTruncated
+    }
+    guard result.exitCode == 0 else {
+      throw ComposeProjectLifecycleError.configCommandFailed(
+        exitCode: result.exitCode,
+        output: "The execution service hashes could not be rendered."
+      )
+    }
+    guard result.standardError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw ComposeProjectLifecycleError.configOutputInvalid(
+        "Docker Compose emitted diagnostics while hashing the execution overlay."
       )
     }
     return try serviceHashDecoder.decode(result.standardOutput)

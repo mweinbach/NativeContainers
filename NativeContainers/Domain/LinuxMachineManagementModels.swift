@@ -335,3 +335,126 @@ enum LinuxMachineManagementError: LocalizedError, Equatable {
     }
   }
 }
+
+struct LinuxMachineSnapshotRecord: Equatable, Sendable, Identifiable {
+  let id: UUID
+  let name: String
+  let createdAt: Date
+  let allocatedSize: UInt64
+  let capturedMachineGeneration: UInt64
+}
+
+struct LinuxMachineSnapshotCatalog: Equatable, Sendable {
+  let target: LinuxMachineIdentity
+  let machineGeneration: UInt64
+  let catalogRevision: UInt64
+  let snapshots: [LinuxMachineSnapshotRecord]
+
+  var canCreate: Bool { snapshots.count < 8 }
+}
+
+struct LinuxMachineSnapshotCloneResult: Equatable, Sendable {
+  let sourceCatalog: LinuxMachineSnapshotCatalog
+  let clone: LinuxMachineIdentity
+}
+
+protocol LinuxMachineSnapshotManaging: Sendable {
+  func loadSnapshots(
+    for target: LinuxMachineIdentity
+  ) async throws -> LinuxMachineSnapshotCatalog
+  func createSnapshot(
+    named name: String,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCatalog
+  func restoreSnapshot(
+    _ snapshotID: UUID,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCatalog
+  func cloneSnapshot(
+    _ snapshotID: UUID,
+    as machineID: String,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCloneResult
+  func deleteSnapshot(
+    _ snapshotID: UUID,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCatalog
+}
+
+enum LinuxMachineSnapshotError: LocalizedError, Equatable, Sendable {
+  case unavailable
+  case requiresNativeContainersRuntime(String)
+  case missingMachine(String)
+  case staleMachine(String)
+  case stableIdentityRequired(String)
+  case machineMustBeStopped(String)
+  case invalidName
+  case duplicateName(String)
+  case snapshotLimit
+  case missingSnapshot(UUID)
+  case invalidCloneName
+
+  var errorDescription: String? {
+    switch self {
+    case .unavailable:
+      "Linux-machine snapshots are unavailable in this app configuration."
+    case .requiresNativeContainersRuntime(let version):
+      "Linux-machine snapshots require the verified NativeContainers runtime \(version)."
+    case .missingMachine(let id):
+      "Linux machine “\(id)” no longer exists."
+    case .staleMachine(let id):
+      "Linux machine “\(id)” changed after this snapshot catalog was reviewed. Refresh and try again."
+    case .stableIdentityRequired(let id):
+      "Linux machine “\(id)” has no stable creation identity, so snapshot mutations were refused."
+    case .machineMustBeStopped(let id):
+      "Stop Linux machine “\(id)” before managing its snapshots."
+    case .invalidName:
+      "Snapshot names must contain 1 to 80 visible characters."
+    case .duplicateName(let name):
+      "A snapshot named “\(name)” already exists for this machine."
+    case .snapshotLimit:
+      "A Linux machine can retain at most eight snapshots."
+    case .missingSnapshot:
+      "The selected machine snapshot no longer exists. Refresh and try again."
+    case .invalidCloneName:
+      "Enter a valid, distinct Linux machine name for the snapshot clone."
+    }
+  }
+}
+
+struct UnavailableLinuxMachineSnapshotService: LinuxMachineSnapshotManaging {
+  func loadSnapshots(
+    for target: LinuxMachineIdentity
+  ) async throws -> LinuxMachineSnapshotCatalog {
+    throw LinuxMachineSnapshotError.unavailable
+  }
+
+  func createSnapshot(
+    named name: String,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCatalog {
+    throw LinuxMachineSnapshotError.unavailable
+  }
+
+  func restoreSnapshot(
+    _ snapshotID: UUID,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCatalog {
+    throw LinuxMachineSnapshotError.unavailable
+  }
+
+  func cloneSnapshot(
+    _ snapshotID: UUID,
+    as machineID: String,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCloneResult {
+    throw LinuxMachineSnapshotError.unavailable
+  }
+
+  func deleteSnapshot(
+    _ snapshotID: UUID,
+    in catalog: LinuxMachineSnapshotCatalog
+  ) async throws -> LinuxMachineSnapshotCatalog {
+    throw LinuxMachineSnapshotError.unavailable
+  }
+}

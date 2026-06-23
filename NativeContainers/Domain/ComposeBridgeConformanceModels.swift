@@ -15,6 +15,8 @@ struct ComposeBridgeConformanceResult: Identifiable, Equatable, Sendable {
   let summary: String
   let evidence: String
   let missingOperations: [String]
+  let requiredScenarioIDs: [String]
+  let missingScenarioIDs: [String]
 }
 
 struct ComposeBridgeConformanceReport: Equatable, Sendable {

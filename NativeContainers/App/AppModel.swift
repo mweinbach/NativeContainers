@@ -108,6 +108,14 @@ final class AppModel {
   )
 
   @ObservationIgnored
+  private lazy var nativeRuntimeDistributionModel =
+    NativeRuntimeDistributionModel(
+      service: services.runtimeDistribution
+    ) { [weak self] in
+      await self?.refresh()
+    }
+
+  @ObservationIgnored
   private lazy var performanceBenchmarkModel = PerformanceBenchmarkModel(
     service: services.performanceBenchmarks
   )
@@ -210,6 +218,8 @@ final class AppModel {
     containerService: any ContainerManaging = AppleContainerService(),
     appleContainerRuntimeSetupService: any AppleContainerRuntimeSettingUp =
       UnavailableAppleContainerRuntimeSetupService(),
+    runtimeDistributionService: any NativeRuntimeDistributionManaging =
+      UnavailableNativeRuntimeDistributionManagementService(),
     containerShellService: any ContainerShellDiscovering = UnavailableContainerShellService(),
     terminalPresetService: any TerminalPresetManaging = EphemeralTerminalPresetStore(),
     terminalTargetService: any TerminalTargetOpening = UnavailableTerminalTargetService(),
@@ -283,6 +293,7 @@ final class AppModel {
       services: AppServices(
         containerService: containerService,
         appleContainerRuntimeSetup: appleContainerRuntimeSetupService,
+        runtimeDistribution: runtimeDistributionService,
         containerShell: containerShellService,
         terminalPresets: terminalPresetService,
         terminalTargets: terminalTargetService,
@@ -635,6 +646,12 @@ final class AppModel {
     }
   }
 
+  func makeLinuxMachineSnapshotModel() -> LinuxMachineSnapshotModel {
+    LinuxMachineSnapshotModel(service: services.machineSnapshots) { [weak self] in
+      await self?.refresh()
+    }
+  }
+
   func makeLinuxMachineCommandModel(
     for machine: LinuxMachineRecord
   ) -> LinuxMachineCommandModel {
@@ -779,6 +796,12 @@ final class AppModel {
 
   func makeAppNotificationSettingsModel() -> AppNotificationSettingsModel {
     appNotificationSettingsModel
+  }
+
+  func makeNativeRuntimeDistributionModel()
+    -> NativeRuntimeDistributionModel
+  {
+    nativeRuntimeDistributionModel
   }
 
   func makePerformanceBenchmarkModel() -> PerformanceBenchmarkModel {

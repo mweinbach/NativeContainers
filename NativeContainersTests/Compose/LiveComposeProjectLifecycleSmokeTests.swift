@@ -100,15 +100,17 @@ struct LiveComposeProjectLifecycleSmokeTests {
       path: "Execution",
       directoryHint: .isDirectory
     )
+    let executionWorkspace = FileComposeExecutionWorkspace(rootURL: executionRootURL)
     let mutationExecutor = AppleComposeProjectMutationExecutor(
       runtimeMutationCoordinator: RuntimeMutationCoordinator(),
       inventory: inventory,
       commandExecutor: commandExecutor,
-      executionWorkspace: FileComposeExecutionWorkspace(rootURL: executionRootURL),
+      executionWorkspace: executionWorkspace,
       journal: journal
     )
     let lifecycle = ComposeProjectLifecycleService(
       configRenderer: configService,
+      executionWorkspace: executionWorkspace,
       inventory: inventory,
       executionTool: configService,
       mutationExecutor: mutationExecutor,
@@ -282,6 +284,190 @@ struct LiveComposeProjectLifecycleSmokeTests {
       throw LiveComposeLifecycleSmokeError(cleanupFailure)
     }
   }
+
+  @Test(
+    .enabled(
+      if:
+        ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_SOCKTAINER"] == "1"
+        && ProcessInfo.processInfo.environment[
+          "NATIVECONTAINERS_LIVE_COMPOSE_LIFECYCLE"
+        ] == "1",
+      "Set both gates with the pinned signed bridge, Apple container 1.0.0, Compose 5.1.4, and Alpine 3.20 to confirm that host-file config/secret mounts remain blocked and clean up exactly."
+    )
+  )
+  func signedBridgeRejectsFileBackedInputsBeforeContainerCreationAndCleansUp() async throws {
+    let processEnvironment = ProcessInfo.processInfo.environment
+    guard
+      let binaryPath = processEnvironment["NATIVECONTAINERS_SOCKTAINER_BINARY"],
+      !binaryPath.isEmpty
+    else {
+      throw LiveComposeLifecycleSmokeError(
+        "NATIVECONTAINERS_SOCKTAINER_BINARY must explicitly name the pinned bridge."
+      )
+    }
+    let binaryURL = URL(filePath: binaryPath)
+    try SocktainerArtifactValidator().validate(artifactURL: binaryURL, release: .pinned)
+    guard
+      await AppleContainerHealthVersionChecker().compatibility(requiredVersion: "1.0.0")
+        == .compatible(version: "1.0.0")
+    else {
+      throw LiveComposeLifecycleSmokeError("Apple container 1.0.0 is not healthy.")
+    }
+
+    let rootURL = URL(filePath: "/tmp", directoryHint: .isDirectory).appending(
+      path: "nc-inputs-\(UUID().uuidString.lowercased().prefix(8))",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: 0o700]
+    )
+    guard chmod(rootURL.nativeContainersPOSIXPath, 0o700) == 0 else {
+      throw LiveComposeLifecycleSmokeError("The private input fixture root could not be secured.")
+    }
+    let projectName = "ncinputs-\(UUID().uuidString.lowercased().prefix(8))"
+    let socketURL =
+      rootURL
+      .appending(path: ".socktainer", directoryHint: .isDirectory)
+      .appending(path: "container.sock", directoryHint: .notDirectory)
+    let temporaryURL = rootURL.appending(path: "tmp", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(
+      at: temporaryURL,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: 0o700]
+    )
+    var isolatedEnvironment = processEnvironment
+    isolatedEnvironment["HOME"] = rootURL.nativeContainersPOSIXPath
+    isolatedEnvironment["DOCKER_CONFIG"] =
+      rootURL.appending(path: ".docker").nativeContainersPOSIXPath
+    isolatedEnvironment["TMPDIR"] = temporaryURL.nativeContainersPOSIXPath
+
+    let bridgeLauncher = RecordingLiveHostProcessLauncher()
+    let process = SocktainerProcessService(
+      socketURL: socketURL,
+      launcher: bridgeLauncher,
+      environment: isolatedEnvironment,
+      startupTimeout: .seconds(15)
+    )
+    let commandExecutor = FoundationHostCommandExecutor()
+    let context = DockerContextService(
+      socketURL: socketURL,
+      commandExecutor: commandExecutor,
+      environment: isolatedEnvironment
+    )
+    let composeClient = DockerComposeClientInstallService()
+    _ = try await composeClient.verifiedExecutableURL()
+    let configService = DockerComposeConfigService(
+      composeClient: composeClient,
+      commandExecutor: commandExecutor,
+      processEnvironment: isolatedEnvironment
+    )
+    let inventory = AppleRuntimeInventoryService()
+    let journal = ComposeOperationJournal(
+      directoryURL: rootURL.appending(path: "Journal", directoryHint: .isDirectory)
+    )
+    let executionWorkspace = FileComposeExecutionWorkspace(
+      rootURL: rootURL.appending(path: "Execution", directoryHint: .isDirectory)
+    )
+    let mutationExecutor = AppleComposeProjectMutationExecutor(
+      runtimeMutationCoordinator: RuntimeMutationCoordinator(),
+      inventory: inventory,
+      commandExecutor: commandExecutor,
+      executionWorkspace: executionWorkspace,
+      journal: journal
+    )
+    let lifecycle = ComposeProjectLifecycleService(
+      configRenderer: configService,
+      desiredStateDecoder: ComposeDesiredStateDecoder(
+        allowsBlockedLocalInputExecutionForTesting: true
+      ),
+      executionWorkspace: executionWorkspace,
+      inventory: inventory,
+      executionTool: configService,
+      mutationExecutor: mutationExecutor,
+      journal: journal
+    )
+    let composeFileURL = rootURL.appending(path: "compose.yaml")
+    let fileConfigURL = rootURL.appending(path: "file-config.txt")
+    let fileSecretURL = rootURL.appending(path: "file-secret.txt")
+    try Data("file-config-v1\n".utf8).write(to: fileConfigURL, options: .atomic)
+    try Data("file-secret-v1\n".utf8).write(to: fileSecretURL, options: .atomic)
+    for url in [fileConfigURL, fileSecretURL] {
+      guard chmod(url.nativeContainersPOSIXPath, 0o600) == 0 else {
+        throw LiveComposeLifecycleSmokeError("An input fixture file could not be secured.")
+      }
+    }
+    try liveBlockedFileInputComposeYAML(projectName: projectName).write(
+      to: composeFileURL,
+      atomically: true,
+      encoding: .utf8
+    )
+    guard chmod(composeFileURL.nativeContainersPOSIXPath, 0o600) == 0 else {
+      throw LiveComposeLifecycleSmokeError("The input Compose file could not be secured.")
+    }
+
+    var operationFailure: String?
+    do {
+      try await process.start(executableURL: binaryURL)
+      try await context.createOrRepairContext()
+      guard (await context.status()).state == .ready else {
+        throw LiveComposeLifecycleSmokeError("The isolated Docker context is not ready.")
+      }
+
+      let freshPlan = try await lifecycle.review(
+        directoryURL: rootURL,
+        options: ComposeProjectReviewOptions(
+          action: .up,
+          projectName: projectName,
+          pullPolicy: .never
+        )
+      )
+      try requireExecutable(freshPlan)
+      do {
+        _ = try await lifecycle.execute(freshPlan)
+        throw LiveComposeLifecycleSmokeError(
+          "The signed bridge unexpectedly accepted a host-file config or secret mount."
+        )
+      } catch let error as ComposeProjectLifecycleError {
+        guard case .commandFailed(let action, let exitCode, let output) = error,
+          action == .up,
+          exitCode == 1,
+          output.contains("diagnostics were suppressed")
+        else {
+          throw error
+        }
+      }
+      let bridgeOutput = bridgeLauncher.capturedOutput().combinedForError
+      guard bridgeOutput.contains("is not a directory"),
+        bridgeOutput.contains("/input-"),
+        !bridgeOutput.contains("file-config-v1"),
+        !bridgeOutput.contains("file-secret-v1")
+      else {
+        throw LiveComposeLifecycleSmokeError(
+          "The signed bridge did not expose the expected redacted host-file bind blocker."
+        )
+      }
+    } catch {
+      operationFailure = error.localizedDescription
+    }
+
+    let cleanupFailure = await cleanLiveInputProject(
+      projectName: projectName,
+      inventory: inventory,
+      journal: journal,
+      process: process,
+      socketURL: socketURL,
+      rootURL: rootURL
+    )
+    if let operationFailure, let cleanupFailure {
+      throw LiveComposeLifecycleSmokeError(
+        "Input lifecycle failed: \(operationFailure) Cleanup failed: \(cleanupFailure)"
+      )
+    }
+    if let operationFailure { throw LiveComposeLifecycleSmokeError(operationFailure) }
+    if let cleanupFailure { throw LiveComposeLifecycleSmokeError(cleanupFailure) }
+  }
 }
 
 private struct LiveComposeLifecycleSmokeError: LocalizedError, Sendable {
@@ -292,6 +478,27 @@ private struct LiveComposeLifecycleSmokeError: LocalizedError, Sendable {
   }
 
   var errorDescription: String? { message }
+}
+
+private final class RecordingLiveHostProcessLauncher: HostProcessLaunching,
+  @unchecked Sendable
+{
+  private let underlying = FoundationHostProcessLauncher()
+  private let lock = NSLock()
+  private var session: (any HostProcessSession)?
+
+  func launch(_ configuration: HostProcessConfiguration) throws -> any HostProcessSession {
+    let launched = try underlying.launch(configuration)
+    lock.withLock { session = launched }
+    return launched
+  }
+
+  func capturedOutput() -> HostProcessOutput {
+    lock.withLock {
+      session?.capturedOutput()
+        ?? HostProcessOutput(standardOutput: "", standardError: "", wasTruncated: false)
+    }
+  }
 }
 
 private func liveLifecycleComposeYAML(
@@ -314,6 +521,83 @@ private func liveLifecycleComposeYAML(
     default:
       name: \(fixture.networkName)
   """
+}
+
+private func liveBlockedFileInputComposeYAML(projectName: String) -> String {
+  """
+  services:
+    probe:
+      image: docker.io/library/alpine:3.20
+      command: ["sh", "-c", "trap 'exit 0' TERM INT; while true; do sleep 1; done"]
+      configs:
+        - source: file_config
+          target: /file-config
+      secrets:
+        - source: file_secret
+          target: /file-secret
+  configs:
+    file_config:
+      file: ./file-config.txt
+  secrets:
+    file_secret:
+      file: ./file-secret.txt
+  networks:
+    default:
+      name: \(projectName)_default
+  """
+}
+
+private func cleanLiveInputProject(
+  projectName: String,
+  inventory: AppleRuntimeInventoryService,
+  journal: ComposeOperationJournal,
+  process: SocktainerProcessService,
+  socketURL: URL,
+  rootURL: URL
+) async -> String? {
+  var failures: [String] = []
+  do {
+    let cleanup = AppleSocktainerComposeFixtureNativeCleanup()
+    var snapshot = try await inventory.loadInventory()
+    for container in snapshot.containers.filter({
+      $0.labels[ComposeLabelKey.project] == projectName
+    }) {
+      try await cleanup.removeContainer(container)
+    }
+    snapshot = try await inventory.loadInventory()
+    for network in snapshot.networks.filter({
+      $0.labels[ComposeLabelKey.project] == projectName
+    }) {
+      try await cleanup.removeNetwork(network)
+    }
+    snapshot = try await inventory.loadInventory()
+    for volume in snapshot.volumes.filter({
+      $0.labels[ComposeLabelKey.project] == projectName
+    }) {
+      try await cleanup.removeVolume(volume)
+    }
+    for recovery in try await journal.pendingRecoverySnapshots() {
+      try await journal.discardPendingAfterReview(operationID: recovery.operationID)
+    }
+  } catch {
+    failures.append(error.localizedDescription)
+  }
+  do {
+    try await process.forceStop()
+  } catch {
+    failures.append("Socktainer stop: \(error.localizedDescription)")
+  }
+  if FileManager.default.fileExists(atPath: socketURL.nativeContainersPOSIXPath) {
+    failures.append("Socktainer socket remained after input cleanup.")
+  }
+  if failures.isEmpty {
+    do {
+      try FileManager.default.removeItem(at: rootURL)
+    } catch {
+      failures.append("Input workspace removal: \(error.localizedDescription)")
+    }
+  }
+  return failures.isEmpty ? nil : failures.joined(separator: " ")
 }
 
 private func requireExecutable(_ plan: ComposeProjectPlan) throws {

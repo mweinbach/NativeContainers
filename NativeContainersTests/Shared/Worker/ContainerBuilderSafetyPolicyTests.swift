@@ -286,6 +286,11 @@ struct ContainerBuilderSafetyPolicyTests {
           .dns
         ),
         ("DNS options", makeConfiguration(dns: makeDNS(options: ["ndots:2"])), .dns),
+        (
+          "SSH agent forwarding",
+          makeConfiguration(sshAgentForwarding: true),
+          .sshAgentForwarding
+        ),
       ]
 
     for (name, configuration, mismatch) in cases {
@@ -597,7 +602,8 @@ struct ContainerBuilderSafetyPolicyTests {
       domain: nil,
       searchDomains: [],
       options: []
-    )
+    ),
+    sshAgentForwarding: Bool = false
   ) -> ContainerBuilderDesiredConfiguration {
     ContainerBuilderDesiredConfiguration(
       image: image,
@@ -606,7 +612,8 @@ struct ContainerBuilderSafetyPolicyTests {
       memoryBytes: memoryBytes ?? (4 * gibibyte),
       rosettaEnabled: rosettaEnabled,
       managedColorEnvironment: managedColorEnvironment,
-      dns: dns
+      dns: dns,
+      sshAgentForwarding: sshAgentForwarding
     )
   }
 

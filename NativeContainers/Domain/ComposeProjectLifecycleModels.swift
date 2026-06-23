@@ -44,6 +44,54 @@ struct ComposeProjectReviewOptions: Equatable, Sendable {
   }
 }
 
+enum ComposeProjectInputKind: String, Equatable, Sendable {
+  case config
+  case secret
+}
+
+enum ComposeProjectInputSourceKind: String, Equatable, Sendable {
+  case file
+  case environment
+  case literal
+}
+
+struct ComposeProjectInputRequirement: Equatable, Identifiable, Sendable {
+  let kind: ComposeProjectInputKind
+  let name: String
+  let sourceKind: ComposeProjectInputSourceKind
+  let environmentVariable: String?
+  let displayPath: String?
+  let byteCount: Int64
+  let serviceNames: [String]
+
+  var id: String { "\(kind.rawValue):\(name)" }
+}
+
+struct ComposeProjectInputRequirements: Equatable, Identifiable, Sendable {
+  let id: UUID
+  let source: ComposeProjectSourceSummary
+  let options: ComposeProjectReviewOptions
+  let inputs: [ComposeProjectInputRequirement]
+  let issues: [ComposeProjectReviewIssue]
+
+  var requiredEnvironmentVariables: [String] {
+    Array(Set(inputs.compactMap(\.environmentVariable))).sorted(by: composeStringOrder)
+  }
+}
+
+struct ComposeProjectReviewInputs: Equatable, Sendable {
+  let requirementsID: UUID
+  let environmentValues: [String: String]
+
+  init(
+    requirementsID: UUID,
+    environmentValues: [String: String] = [:]
+  ) {
+    self.requirementsID = requirementsID
+    self.environmentValues = environmentValues
+  }
+}
+
 struct ComposeProjectSourceFileIdentity: Equatable, Sendable {
   let device: UInt64
   let inode: UInt64
@@ -94,9 +142,34 @@ struct ComposeDesiredService: Equatable, Identifiable, Sendable {
   let profiles: [String]
   let dependencyNames: [String]
   let configurationHash: String?
+  let inputSeal: String?
   let volumeNames: [String]
   let networkNames: [String]
   let publishedPortCount: Int
+
+  init(
+    name: String,
+    imageReference: String,
+    replicaCount: Int,
+    profiles: [String],
+    dependencyNames: [String],
+    configurationHash: String?,
+    inputSeal: String? = nil,
+    volumeNames: [String],
+    networkNames: [String],
+    publishedPortCount: Int
+  ) {
+    self.name = name
+    self.imageReference = imageReference
+    self.replicaCount = replicaCount
+    self.profiles = profiles
+    self.dependencyNames = dependencyNames
+    self.configurationHash = configurationHash
+    self.inputSeal = inputSeal
+    self.volumeNames = volumeNames
+    self.networkNames = networkNames
+    self.publishedPortCount = publishedPortCount
+  }
 
   var id: String { name }
 }
@@ -145,6 +218,7 @@ enum ComposeProjectReviewIssueCode: String, Equatable, Sendable {
   case crossProjectConsumer
   case observedProjectDrift
   case executionPolicy
+  case inputPolicy
 }
 
 struct ComposeProjectReviewIssue: Equatable, Identifiable, Sendable {
@@ -247,6 +321,7 @@ struct ComposeProjectPlan: Equatable, Identifiable, Sendable {
   let composeSourceRevision: String
   let environmentSHA256: String
   let serviceConfigurationHashes: [String: String]
+  let executionServiceConfigurationHashes: [String: String]
   let observedIdentity: ComposeProjectInventoryIdentity
   let issues: [ComposeProjectReviewIssue]
   let containerActions: [ComposeProjectContainerAction]
@@ -254,6 +329,51 @@ struct ComposeProjectPlan: Equatable, Identifiable, Sendable {
   let networkActions: [ComposeProjectNetworkAction]
   let orphanContainers: [ComposeProjectContainerIdentity]
   let preservedResources: [ComposeProjectPreservedResource]
+
+  init(
+    id: UUID,
+    generatedAt: Date,
+    options: ComposeProjectReviewOptions,
+    source: ComposeProjectSourceSummary,
+    desiredState: ComposeDesiredState,
+    fullConfigurationSHA256: String,
+    activeConfigurationSHA256: String,
+    composeReleaseVersion: String,
+    composeBinarySHA256: String,
+    composeSourceRevision: String,
+    environmentSHA256: String,
+    serviceConfigurationHashes: [String: String],
+    executionServiceConfigurationHashes: [String: String]? = nil,
+    observedIdentity: ComposeProjectInventoryIdentity,
+    issues: [ComposeProjectReviewIssue],
+    containerActions: [ComposeProjectContainerAction],
+    volumeActions: [ComposeProjectVolumeAction],
+    networkActions: [ComposeProjectNetworkAction],
+    orphanContainers: [ComposeProjectContainerIdentity],
+    preservedResources: [ComposeProjectPreservedResource]
+  ) {
+    self.id = id
+    self.generatedAt = generatedAt
+    self.options = options
+    self.source = source
+    self.desiredState = desiredState
+    self.fullConfigurationSHA256 = fullConfigurationSHA256
+    self.activeConfigurationSHA256 = activeConfigurationSHA256
+    self.composeReleaseVersion = composeReleaseVersion
+    self.composeBinarySHA256 = composeBinarySHA256
+    self.composeSourceRevision = composeSourceRevision
+    self.environmentSHA256 = environmentSHA256
+    self.serviceConfigurationHashes = serviceConfigurationHashes
+    self.executionServiceConfigurationHashes =
+      executionServiceConfigurationHashes ?? serviceConfigurationHashes
+    self.observedIdentity = observedIdentity
+    self.issues = issues
+    self.containerActions = containerActions
+    self.volumeActions = volumeActions
+    self.networkActions = networkActions
+    self.orphanContainers = orphanContainers
+    self.preservedResources = preservedResources
+  }
 
   var blockers: [ComposeProjectReviewIssue] {
     issues.filter { $0.severity == .blocker }
@@ -288,6 +408,12 @@ enum ComposeProjectLifecycleError: LocalizedError, Equatable, Sendable {
   case configOutputTruncated
   case configOutputInvalid(String)
   case configChangedDuringReview
+  case inputRequirementsUnavailable
+  case inputRequirementsMismatch
+  case missingInputValue(String)
+  case unexpectedInputValue(String)
+  case inputSourceUnsafe(String)
+  case inputSourceTooLarge(String)
   case reviewBlocked(Int)
   case stalePlan
   case observedStateChanged
@@ -325,6 +451,18 @@ enum ComposeProjectLifecycleError: LocalizedError, Equatable, Sendable {
       "Docker Compose returned an invalid canonical model: \(reason)"
     case .configChangedDuringReview:
       "Docker Compose produced different canonical models during one review."
+    case .inputRequirementsUnavailable:
+      "The Compose input requirements are no longer available. Discover them again."
+    case .inputRequirementsMismatch:
+      "The Compose input requirements no longer match this project. Discover them again."
+    case .missingInputValue(let name):
+      "A reviewed value is required for Compose environment input \(name)."
+    case .unexpectedInputValue(let name):
+      "Compose environment input \(name) was not requested by the reviewed project."
+    case .inputSourceUnsafe(let name):
+      "Compose input \(name) is not a safe, owner-controlled regular file inside the project."
+    case .inputSourceTooLarge(let name):
+      "Compose input \(name) exceeds its bounded review limit."
     case .reviewBlocked(let count):
       "The Compose review has \(count) blocking compatibility issue\(count == 1 ? "" : "s")."
     case .stalePlan:

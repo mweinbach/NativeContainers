@@ -33,6 +33,8 @@ final class ComposeProjectWorkspaceModel {
   }
 
   private(set) var selectedDirectoryURL: URL?
+  private(set) var inputRequirements: ComposeProjectInputRequirements?
+  private(set) var inputValues: [String: String] = [:]
   private(set) var plan: ComposeProjectPlan?
   private(set) var isReviewing = false
   private(set) var isExecuting = false
@@ -70,9 +72,14 @@ final class ComposeProjectWorkspaceModel {
   }
 
   var canReview: Bool {
-    selectedDirectoryURL != nil
+    let requiredInputsArePresent =
+      inputRequirements?.requiredEnvironmentVariables.allSatisfy {
+        inputValues[$0] != nil
+      } ?? true
+    return selectedDirectoryURL != nil
       && isValidComposeProjectName(projectName)
       && profiles.allSatisfy(isValidComposeProfileName)
+      && requiredInputsArePresent
       && !isReviewing
       && !isExecuting
   }
@@ -98,6 +105,8 @@ final class ComposeProjectWorkspaceModel {
     removeVolumes = false
     killStuckContainers = true
     selectedDirectoryURL = nil
+    inputRequirements = nil
+    inputValues = [:]
     plan = nil
     executionResult = nil
     errorMessage = nil
@@ -127,22 +136,60 @@ final class ComposeProjectWorkspaceModel {
       removeVolumes: removeVolumes,
       killStuckContainers: killStuckContainers
     )
+    let previousPlanID = plan?.id
     isReviewing = true
     plan = nil
     executionResult = nil
     errorMessage = nil
     defer { isReviewing = false }
+    if let previousPlanID {
+      await service.discardReview(planID: previousPlanID)
+    }
 
     do {
+      let requirements: ComposeProjectInputRequirements
+      if let inputRequirements {
+        requirements = inputRequirements
+      } else {
+        requirements = try await service.discoverInputRequirements(
+          directoryURL: selectedDirectoryURL,
+          options: options
+        )
+        inputRequirements = requirements
+        inputValues = [:]
+        guard requirements.requiredEnvironmentVariables.isEmpty else { return }
+      }
+      defer {
+        inputRequirements = nil
+        inputValues = [:]
+      }
       plan = try await service.review(
         directoryURL: selectedDirectoryURL,
-        options: options
+        options: options,
+        inputs: ComposeProjectReviewInputs(
+          requirementsID: requirements.id,
+          environmentValues: inputValues
+        )
       )
     } catch is CancellationError {
       errorMessage = "Compose review was cancelled."
     } catch {
       errorMessage = error.localizedDescription
     }
+  }
+
+  func inputValue(for variable: String) -> String {
+    inputValues[variable] ?? ""
+  }
+
+  func setInputValue(_ value: String, for variable: String) {
+    guard inputRequirements?.requiredEnvironmentVariables.contains(variable) == true else {
+      return
+    }
+    inputValues[variable] = value
+    plan = nil
+    executionResult = nil
+    errorMessage = nil
   }
 
   func execute() async {
@@ -164,11 +211,13 @@ final class ComposeProjectWorkspaceModel {
       await didMutate()
       await loadRecoveries()
     } catch is CancellationError {
+      await service.discardReview(planID: plan.id)
       self.plan = nil
       errorMessage =
         "Compose execution was cancelled. Reconcile the pending recovery record before another mutation."
       await loadRecoveries()
     } catch {
+      await service.discardReview(planID: plan.id)
       self.plan = nil
       errorMessage = error.localizedDescription
       await loadRecoveries()
@@ -203,10 +252,38 @@ final class ComposeProjectWorkspaceModel {
     errorMessage = nil
   }
 
+  func discardPendingInputReview() async {
+    let requirementsID = inputRequirements?.id
+    let planID = plan?.id
+    inputRequirements = nil
+    inputValues = [:]
+    plan = nil
+    if let requirementsID {
+      await service.discardInputRequirements(requirementsID)
+    }
+    if let planID {
+      await service.discardReview(planID: planID)
+    }
+  }
+
   private func invalidateReview() {
+    let requirementsID = inputRequirements?.id
+    let planID = plan?.id
+    inputRequirements = nil
+    inputValues = [:]
     plan = nil
     executionResult = nil
     errorMessage = nil
+    if let requirementsID {
+      Task {
+        await service.discardInputRequirements(requirementsID)
+      }
+    }
+    if let planID {
+      Task {
+        await service.discardReview(planID: planID)
+      }
+    }
   }
 
   private static func suggestedProjectName(from directoryName: String) -> String {

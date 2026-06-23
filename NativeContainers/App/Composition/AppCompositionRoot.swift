@@ -23,10 +23,45 @@ enum AppCompositionRoot {
     let machineInventoryService = AppleLinuxMachineInventoryService(
       machineTransport: machineTransport
     )
-    let inventoryService = AppleRuntimeInventoryService(
-      infrastructureClient: infrastructureClient,
-      containerReader: containerReader,
-      machineInventory: machineInventoryService
+    let runtimeReleaseContractLoader =
+      BundledNativeRuntimeReleaseContractLoader()
+    let runtimeDistributionVerifier = NativeRuntimeDistributionVerifier()
+    let runtimeGraphContracts =
+      NativeRuntimeProductionContractFactory.launchGraphContractsByOrigin()
+    let runtimeGraphSnapshotter = LaunchctlNativeRuntimeGraphSnapshotter(
+      servicesByOrigin: runtimeGraphContracts.mapValues(\.services)
+    )
+    let runtimeGraphController = CommandNativeRuntimeGraphController(
+      commands: NativeRuntimeProductionContractFactory.controlCommands()
+    )
+    let runtimeSetup = VerifiedDualRuntimeSetupService(
+      releaseContractLoader: runtimeReleaseContractLoader,
+      distributionVerifier: runtimeDistributionVerifier,
+      graphSnapshotter: runtimeGraphSnapshotter
+    )
+    let runtimeMigration = NativeRuntimeMigrationService(
+      contractsByOrigin: runtimeGraphContracts,
+      graphSnapshotter: runtimeGraphSnapshotter
+    )
+    let runtimeDistribution =
+      NativeRuntimeDistributionManagementService(
+        releaseContractLoader: runtimeReleaseContractLoader,
+        distributionVerifier: runtimeDistributionVerifier,
+        graphSnapshotter: runtimeGraphSnapshotter,
+        graphController: runtimeGraphController,
+        migrator: runtimeMigration,
+        migrationLayout:
+          NativeRuntimeProductionContractFactory.migrationLayout(),
+        contractsByOrigin: runtimeGraphContracts,
+        mutationCoordinator: mutationCoordinator
+      )
+    let inventoryService = VerifiedRuntimeInventoryService(
+      base: AppleRuntimeInventoryService(
+        infrastructureClient: infrastructureClient,
+        containerReader: containerReader,
+        machineInventory: machineInventoryService
+      ),
+      runtimeVerifier: runtimeSetup
     )
     let performanceBenchmarkService = PerformanceBenchmarkService(
       scenarios: [
@@ -86,6 +121,10 @@ enum AppCompositionRoot {
       runtimeMutationCoordinator: mutationCoordinator
     )
     let machineConfigurationService = AppleLinuxMachineConfigurationService(
+      machineTransport: machineTransport,
+      runtimeMutationCoordinator: mutationCoordinator
+    )
+    let machineSnapshotService = AppleLinuxMachineSnapshotService(
       machineTransport: machineTransport,
       runtimeMutationCoordinator: mutationCoordinator
     )
@@ -378,6 +417,7 @@ enum AppCompositionRoot {
     }
     let imageBuildService = RecordingImageBuildService(
       base: AppleContainerBuildService(
+        sshAgentService: sshAgentService,
         runtimeMutationCoordinator: mutationCoordinator,
         buildExecutionCoordinator: buildExecutionCoordinator
       ),
@@ -386,7 +426,8 @@ enum AppCompositionRoot {
     )
     return AppServices(
       inventory: inventoryService,
-      appleContainerRuntimeSetup: AppleContainerRuntimeSetupService(),
+      appleContainerRuntimeSetup: runtimeSetup,
+      runtimeDistribution: runtimeDistribution,
       launchAtLogin: SMAppServiceLaunchAtLoginService(),
       notifications: UserNotificationService(),
       performanceBenchmarks: performanceBenchmarkService,
@@ -413,6 +454,7 @@ enum AppCompositionRoot {
       machineCreator: machineService,
       machineLifecycle: machineService,
       machineConfiguration: machineConfigurationService,
+      machineSnapshots: machineSnapshotService,
       machineCommands: machineProcessService,
       machineTerminal: machineProcessService,
       images: imageService,

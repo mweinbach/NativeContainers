@@ -6,6 +6,23 @@ struct ComposeProjectMutationRequest: Sendable {
   let canonicalConfiguration: Data
   let composeExecutableURL: URL
   let commandEnvironment: ComposeCommandEnvironment
+  let reviewedInputs: ComposeReviewedInputPayload
+
+  init(
+    plan: ComposeProjectPlan,
+    operationID: UUID,
+    canonicalConfiguration: Data,
+    composeExecutableURL: URL,
+    commandEnvironment: ComposeCommandEnvironment,
+    reviewedInputs: ComposeReviewedInputPayload = .empty
+  ) {
+    self.plan = plan
+    self.operationID = operationID
+    self.canonicalConfiguration = canonicalConfiguration
+    self.composeExecutableURL = composeExecutableURL
+    self.commandEnvironment = commandEnvironment
+    self.reviewedInputs = reviewedInputs
+  }
 }
 
 protocol ComposeProjectMutationExecuting: Sendable {

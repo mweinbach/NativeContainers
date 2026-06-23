@@ -45,9 +45,13 @@ struct DockerComposeConfigServiceTests {
     #expect(arguments.allSatisfy { $0.containsSubsequence(["--project-name", "demo"]) })
     #expect(
       arguments.prefix(2).allSatisfy {
-        $0.suffix(4) == ["config", "--format", "json", "--no-env-resolution"]
+        $0.suffix(5) == [
+          "config", "--format", "json", "--no-interpolate", "--no-env-resolution",
+        ]
       })
-    #expect(arguments[2].suffix(3) == ["config", "--hash", "*"])
+    #expect(
+      arguments[2].suffix(4) == ["config", "--no-interpolate", "--hash", "*"]
+    )
 
     let environments = await executor.environments
     #expect(environments.allSatisfy { $0?["HOME"] == "/Users/test" })
@@ -55,6 +59,56 @@ struct DockerComposeConfigServiceTests {
     #expect(environments.allSatisfy { $0?["DOCKER_HOST"] == nil })
     #expect(environments.allSatisfy { $0?["COMPOSE_PROJECT_NAME"] == nil })
     #expect(environments.allSatisfy { $0?["SECRET_TOKEN"] == nil })
+  }
+
+  @Test
+  func nonInterpolatingCanonicalPassPreservesTokensAndDiscoversEnvironmentInputs() async throws {
+    let canonical = """
+      {
+        "name":"demo",
+        "services":{"web":{"image":"nginx:1.27","configs":[{"source":"settings"}],"secrets":[{"source":"token"}]}},
+        "configs":{"settings":{"content":"home=${HOME}"}},
+        "secrets":{"token":{"environment":"DEMO_TOKEN"}}
+      }
+      """
+    let executor = ComposeCommandExecutorDouble(results: [
+      commandResult(canonical),
+      commandResult(canonical),
+      commandResult("web \(String(repeating: "a", count: 64))\n"),
+    ])
+    let service = DockerComposeConfigService(
+      composeClient: ReadyComposeClientDouble(),
+      commandExecutor: executor,
+      processEnvironment: ["HOME": "/ambient/home", "PATH": "/usr/bin"]
+    )
+    let rendered = try await service.render(
+      source: sourceLease,
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo")
+    )
+    #expect(String(decoding: rendered.fullConfiguration, as: UTF8.self).contains("${HOME}"))
+    let arguments = await executor.arguments
+    #expect(arguments.prefix(2).allSatisfy { $0.contains("--no-interpolate") })
+
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: "compose-noninterpolating-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = ComposeProjectSourceLease(
+      id: UUID(),
+      directoryURL: root,
+      composeFileURL: root.appending(path: "compose.yaml"),
+      summary: sourceLease.summary
+    )
+    let requirements = try await ComposeProjectInputVault(
+      sealer: HMACComposeInputSealer(keyData: Data(repeating: 14, count: 32))
+    ).discover(
+      source: source,
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      rendered: rendered
+    )
+    #expect(requirements.requiredEnvironmentVariables == ["DEMO_TOKEN"])
   }
 
   @Test
@@ -147,6 +201,41 @@ struct DockerComposeConfigServiceTests {
         options: ComposeProjectReviewOptions(action: .up, projectName: "demo")
       )
     }
+  }
+
+  @Test
+  func hashesTheFinalExecutionOverlayWithReviewedInputEnvironment() async throws {
+    let expected = String(repeating: "f", count: 64)
+    let executor = ComposeCommandExecutorDouble(results: [commandResult("web \(expected)\n")])
+    let service = DockerComposeConfigService(
+      composeClient: ReadyComposeClientDouble(),
+      commandExecutor: executor,
+      processEnvironment: ["HOME": "/Users/test", "PATH": "/usr/bin"]
+    )
+
+    let hashes = try await service.renderExecutionServiceHashes(
+      configurationURL: URL(filePath: "/private/tmp/review/compose.json"),
+      projectDirectoryURL: URL(filePath: "/private/tmp/review", directoryHint: .isDirectory),
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      inputEnvironment: ["DEMO_TOKEN": "reviewed-value"]
+    )
+
+    #expect(hashes == ["web": expected])
+    #expect(
+      await executor.environments == [
+        [
+          "COMPOSE_ANSI": "never",
+          "COMPOSE_DISABLE_ENV_FILE": "true",
+          "COMPOSE_MENU": "false",
+          "DEMO_TOKEN": "reviewed-value",
+          "HOME": "/Users/test",
+          "NO_COLOR": "1",
+          "PATH": "/usr/bin",
+        ]
+      ])
+    #expect(
+      await executor.arguments.first?.suffix(3) == ["config", "--hash", "*"]
+    )
   }
 
   private var sourceLease: ComposeProjectSourceLease {
@@ -271,6 +360,43 @@ struct ComposeDesiredStateDecoderTests {
   }
 
   @Test
+  func parsesReviewedLocalInputsOnlyBehindTheExplicitSignedBridgeTestGate() throws {
+    let seal = String(repeating: "e", count: 64)
+    let canonical = """
+      {
+        "name":"demo",
+        "services":{"web":{"image":"nginx:1.27","configs":[{"source":"settings"}],"secrets":[{"source":"token"}]}},
+        "configs":{"settings":{"content":"enabled=true"}},
+        "secrets":{"token":{"environment":"DEMO_TOKEN"}}
+      }
+      """
+    let rendered = renderedConfiguration(full: canonical, active: canonical)
+
+    let blockedReview = try decoder.decode(
+      rendered: rendered,
+      expectedProjectName: "demo",
+      serviceInputSeals: ["web": seal]
+    )
+    #expect(blockedReview.issues.count == 2)
+    #expect(
+      blockedReview.issues.allSatisfy {
+        $0.severity == .blocker && $0.message.contains("signed Socktainer 1.0.0")
+      }
+    )
+
+    let review = try ComposeDesiredStateDecoder(
+      allowsBlockedLocalInputExecutionForTesting: true
+    ).decode(
+      rendered: rendered,
+      expectedProjectName: "demo",
+      serviceInputSeals: ["web": seal]
+    )
+
+    #expect(review.issues.isEmpty)
+    #expect(review.desiredState.activeServices.first?.inputSeal == seal)
+  }
+
+  @Test
   func blocksUnsupportedFeaturesWithoutRetainingEnvironmentValues() throws {
     let secret = "super-secret-value"
     let rendered = renderedConfiguration(
@@ -281,6 +407,7 @@ struct ComposeDesiredStateDecoderTests {
             "web": {
               "build": {"context": "."},
               "healthcheck": {"test": ["CMD", "true"]},
+              "restart": "always",
               "environment": {"TOKEN": "\(secret)"},
               "volumes": [{"type": "bind", "source": "/tmp", "target": "/data"}],
               "networks": {"default": {"aliases": ["private-alias"]}}
@@ -296,6 +423,7 @@ struct ComposeDesiredStateDecoderTests {
             "web": {
               "build": {"context": "."},
               "healthcheck": {"test": ["CMD", "true"]},
+              "restart": "always",
               "environment": {"TOKEN": "\(secret)"},
               "volumes": [{"type": "bind", "source": "/tmp", "target": "/data"}],
               "networks": {"default": {"aliases": ["private-alias"]}}
@@ -312,7 +440,27 @@ struct ComposeDesiredStateDecoderTests {
     #expect(review.issues.count >= 4)
     #expect(review.issues.allSatisfy { $0.severity == .blocker })
     #expect(!messages.contains(secret))
+    #expect(messages.contains("Restart policies are not supported"))
     #expect(review.desiredState.activeServices.first?.imageReference == "")
+  }
+
+  @Test
+  func blocksEveryExplicitRestartPolicyIncludingNo() throws {
+    let canonical = """
+      {
+        "name":"demo",
+        "services":{"web":{"image":"nginx:1.27","restart":"no"}}
+      }
+      """
+
+    let review = try decoder.decode(
+      rendered: renderedConfiguration(full: canonical, active: canonical),
+      expectedProjectName: "demo"
+    )
+
+    #expect(review.issues.count == 1)
+    #expect(review.issues.first?.severity == .blocker)
+    #expect(review.issues.first?.message == "Restart policies are not supported.")
   }
 
   @Test

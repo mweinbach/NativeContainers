@@ -43,7 +43,7 @@ struct ComposeCanonicalModelValidator: ComposeCanonicalModelValidating {
   ) {
     reportUnknownKeys(
       in: project,
-      allowed: ["name", "networks", "services", "volumes"],
+      allowed: ["configs", "name", "networks", "secrets", "services", "volumes"],
       subject: projectName,
       context: "project",
       violations: &violations
@@ -59,6 +59,8 @@ struct ComposeCanonicalModelValidator: ComposeCanonicalModelValidating {
       allowedKeys: ["driver", "driver_opts", "external", "labels", "name"],
       violations: &violations
     )
+    inspectInputResources(project["configs"], kind: "config", violations: &violations)
+    inspectInputResources(project["secrets"], kind: "secret", violations: &violations)
     inspectResources(
       project["networks"],
       kind: "network",
@@ -76,6 +78,7 @@ struct ComposeCanonicalModelValidator: ComposeCanonicalModelValidating {
     guard let services = value as? JSONObject else { return }
     let allowedServiceKeys: Set<String> = [
       "command",
+      "configs",
       "container_name",
       "depends_on",
       "deploy",
@@ -94,6 +97,7 @@ struct ComposeCanonicalModelValidator: ComposeCanonicalModelValidating {
       "profiles",
       "restart",
       "scale",
+      "secrets",
       "stdin_open",
       "tty",
       "user",
@@ -129,6 +133,65 @@ struct ComposeCanonicalModelValidator: ComposeCanonicalModelValidating {
         service["ports"],
         serviceName: serviceName,
         violations: &violations
+      )
+      inspectInputGrants(
+        service["configs"],
+        kind: "config",
+        serviceName: serviceName,
+        violations: &violations
+      )
+      inspectInputGrants(
+        service["secrets"],
+        kind: "secret",
+        serviceName: serviceName,
+        violations: &violations
+      )
+      inspectReservedLabels(
+        service["labels"],
+        serviceName: serviceName,
+        violations: &violations
+      )
+    }
+  }
+
+  private func inspectInputGrants(
+    _ value: Any?,
+    kind: String,
+    serviceName: String,
+    violations: inout Set<Violation>
+  ) {
+    guard let grants = value as? [Any] else { return }
+    for grant in grants {
+      guard let grant = grant as? JSONObject else { continue }
+      reportUnknownKeys(
+        in: grant,
+        allowed: ["gid", "mode", "source", "target", "uid"],
+        subject: serviceName,
+        context: "\(kind) grant",
+        violations: &violations
+      )
+    }
+  }
+
+  private func inspectReservedLabels(
+    _ value: Any?,
+    serviceName: String,
+    violations: inout Set<Violation>
+  ) {
+    let names: [String]
+    if let labels = value as? JSONObject {
+      names = Array(labels.keys)
+    } else if let labels = value as? [String] {
+      names = labels.map { String($0.split(separator: "=", maxSplits: 1)[0]) }
+    } else {
+      return
+    }
+    if names.contains(where: { $0.hasPrefix(ComposeLabelKey.nativePrefix) }) {
+      violations.insert(
+        Violation(
+          subject: serviceName,
+          message: "The service uses a label reserved for NativeContainers Compose review."
+        )
       )
     }
   }
@@ -256,6 +319,46 @@ struct ComposeCanonicalModelValidator: ComposeCanonicalModelValidating {
             subject: logicalName,
             message:
               "Custom \(kind) labels are not supported by native resource creation."
+          )
+        )
+      }
+    }
+  }
+
+  private func inspectInputResources(
+    _ value: Any?,
+    kind: String,
+    violations: inout Set<Violation>
+  ) {
+    guard let resources = value as? JSONObject else { return }
+    for name in resources.keys.sorted(by: composeStringOrder) {
+      guard let resource = resources[name] as? JSONObject else { continue }
+      reportUnknownKeys(
+        in: resource,
+        allowed: [
+          "content", "driver", "environment", "external", "file", "name",
+          "template_driver",
+        ],
+        subject: name,
+        context: kind,
+        violations: &violations
+      )
+      if resource["external"] as? Bool == true
+        || hasMeaningfulValue(resource["driver"])
+        || hasMeaningfulValue(resource["template_driver"])
+      {
+        violations.insert(
+          Violation(
+            subject: name,
+            message: "External, driver-backed, and templated Compose \(kind)s are not supported."
+          )
+        )
+      }
+      if kind == "secret", hasMeaningfulValue(resource["content"]) {
+        violations.insert(
+          Violation(
+            subject: name,
+            message: "Literal content is supported for Compose configs, not secrets."
           )
         )
       }

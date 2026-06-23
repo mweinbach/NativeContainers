@@ -28,8 +28,10 @@ struct SettingsView: View {
         }
       }
 
+      NativeRuntimeDistributionSettingsSection(appModel: model)
+
       Section("Runtime policy") {
-        LabeledContent("Container backend", value: "Apple container 1.0.0")
+        LabeledContent("Container backend", value: "Verified Apple or NativeContainers runtime")
         LabeledContent("VM backend", value: "Virtualization.framework")
         LabeledContent("Networking", value: "Apple runtime / NAT")
       }

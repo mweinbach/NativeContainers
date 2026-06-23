@@ -167,6 +167,103 @@ struct LiveAppleContainerBuildSmokeTests {
 
   @Test(
     .enabled(
+      if: ProcessInfo.processInfo.environment[
+        "NATIVECONTAINERS_LIVE_BUILD_SSH_TESTS"
+      ] == "1",
+      "Set NATIVECONTAINERS_LIVE_BUILD_SSH_TESTS=1 with the verified NativeContainers runtime active."
+    )
+  )
+  func sshMountSignsAChallengeWithoutLeakingTheSocketOrPrivateKey() async throws {
+    let agent = try LiveBuildSSHAgentFixture()
+    defer { agent.stop() }
+    let fixture = try LiveBuildFixture(
+      prefix: "native-build-ssh",
+      runInstruction: """
+        RUN apk add --no-cache openssh-client
+        RUN --mount=type=ssh,required=true sh -ec 'ssh-add -L > /tmp/agent.pub && printf "nativecontainers-build-challenge\\n" > /tmp/challenge && { printf "agent "; cat /tmp/agent.pub; } > /tmp/allowed_signers && ssh-keygen -Y sign -f /tmp/agent.pub -n nativecontainers /tmp/challenge && ssh-keygen -Y verify -f /tmp/allowed_signers -I agent -n nativecontainers -s /tmp/challenge.sig < /tmp/challenge && rm -f /tmp/agent.pub /tmp/allowed_signers /tmp/challenge /tmp/challenge.sig && printf "ssh-ok\\n" > /nativecontainers-ssh-marker'
+        """
+    )
+    defer { fixture.removeContext() }
+
+    let sshAgentService = AppleContainerSSHAgentService(
+      environmentProvider: { [socketPath = agent.socketPath] in
+        ["SSH_AUTH_SOCK": socketPath]
+      }
+    )
+    let reviewedAgent = try #require(sshAgentService.availability().configuration)
+    let buildService = AppleContainerBuildService(
+      sshAgentService: sshAgentService,
+      worker: ContainerBuildWorkerProcess(
+        environmentSource: ["SSH_AUTH_SOCK": agent.socketPath]
+      )
+    )
+    let containerService = AppleContainerService()
+    let textProbe = LiveBuildTextProbe()
+    let plan = try await buildService.prepareBuild(
+      fixture.request(secrets: [], sshAgent: reviewedAgent)
+    ) { progress in
+      await textProbe.record(progress)
+    }
+
+    do {
+      let result = try await buildService.build(
+        plan,
+        authorization: ImageBuildAuthorization(
+          allowsTagReplacement: false,
+          allowsRecreateStoppedBuilder: true,
+          allowsStopRunningBuilder: true
+        )
+      ) { progress in
+        await textProbe.record(progress)
+      }
+      #expect(result.logTail == ContainerBuildWorkerDiagnostics.suppressedMessage)
+      let retained = await textProbe.text + "\n" + result.logTail
+      #expect(!retained.contains(agent.socketPath))
+      #expect(!retained.contains(agent.privateKeySentinel))
+
+      try await containerService.createContainer(
+        request: try ContainerCreationRequest(
+          name: fixture.containerID,
+          imageReference: plan.tags[0].reference,
+          cpuCount: 1,
+          memoryBytes: 256 * ContainerCreationRequest.bytesPerMiB,
+          arguments: ["/bin/sh", "-c", "while :; do sleep 3600; done"],
+          startAfterCreation: true
+        )
+      ) { _ in }
+      let marker = try await containerService.executeCommand(
+        in: fixture.containerID,
+        request: try ContainerCommandRequest(
+          executable: "/bin/cat",
+          arguments: ["/nativecontainers-ssh-marker"]
+        )
+      )
+      #expect(marker.standardOutput == "ssh-ok\n")
+      let leakage = try await containerService.executeCommand(
+        in: fixture.containerID,
+        request: try ContainerCommandRequest(
+          executable: "/bin/sh",
+          arguments: [
+            "-c",
+            "test ! -e /root/.ssh/id_ed25519 && ! grep -R -l 'BEGIN OPENSSH PRIVATE KEY' /root /etc /usr/local /var 2>/dev/null",
+          ]
+        )
+      )
+      #expect(leakage.exitCode == 0)
+
+      await cleanUpContainer(fixture.containerID, service: containerService)
+      await cleanUpImage(plan.tags[0].reference, service: containerService)
+      try await expectArtifactsRemoved(buildID: plan.id)
+    } catch {
+      await buildService.discardBuild(plan)
+      await cleanUpContainer(fixture.containerID, service: containerService)
+      await cleanUpImage(plan.tags[0].reference, service: containerService)
+      throw error
+    }
+  }
+
+  @Test(
+    .enabled(
       if: ProcessInfo.processInfo.environment["NATIVECONTAINERS_LIVE_BUILD_TESTS"] == "1",
       "Set NATIVECONTAINERS_LIVE_BUILD_TESTS=1 with Apple container services running."
     )
@@ -648,6 +745,7 @@ private struct LiveBuildFixture {
 
   func request(
     secrets: [ImageBuildSecretSelection],
+    sshAgent: ContainerSSHAgentConfiguration? = nil,
     output: ImageBuildOutputSelection = .imageStore,
     cachePolicy: ImageBuildCachePolicy = .disabled
   ) -> ImageBuildRequest {
@@ -664,6 +762,7 @@ private struct LiveBuildFixture {
       pullLatest: true,
       builderCPUCount: nil,
       builderMemoryMiB: nil,
+      sshAgent: sshAgent,
       output: output
     )
   }
@@ -711,10 +810,131 @@ private actor LiveBuildProgressProbe {
   }
 }
 
+private final class LiveBuildSSHAgentFixture: @unchecked Sendable {
+  let socketPath: String
+  let privateKeySentinel: String
+
+  private let rootURL: URL
+  private let process: Process
+  private let lock = NSLock()
+  private var stopped = false
+
+  init() throws {
+    let rootURL = FileManager.default.temporaryDirectory.appending(
+      path: "nativecontainers-build-ssh-agent-\(UUID().uuidString.lowercased())",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: rootURL,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: 0o700]
+    )
+    let socketPath = rootURL.appending(path: "agent.sock", directoryHint: .notDirectory)
+      .path(percentEncoded: false)
+    self.rootURL = rootURL
+    self.socketPath = socketPath
+
+    let process = Process()
+    process.executableURL = URL(filePath: "/usr/bin/ssh-agent")
+    process.arguments = ["-D", "-a", socketPath]
+    process.standardOutput = Pipe()
+    process.standardError = Pipe()
+    self.process = process
+
+    do {
+      try process.run()
+      try Self.waitForSocket(at: socketPath, process: process)
+      let keyURL = rootURL.appending(path: "id_ed25519", directoryHint: .notDirectory)
+      try Self.run(
+        executable: "/usr/bin/ssh-keygen",
+        arguments: [
+          "-q", "-t", "ed25519", "-N", "", "-C", "nativecontainers-live-build",
+          "-f", keyURL.path(percentEncoded: false),
+        ]
+      )
+      try Self.run(
+        executable: "/usr/bin/ssh-add",
+        arguments: [keyURL.path(percentEncoded: false)],
+        environment: ["SSH_AUTH_SOCK": socketPath]
+      )
+      let privateKey = try String(contentsOf: keyURL, encoding: .utf8)
+      let privateKeySentinel = String(
+        privateKey.split(whereSeparator: \.isNewline).dropFirst().first?.prefix(32) ?? ""
+      )
+      guard privateKeySentinel.count == 32 else {
+        throw LiveBuildSmokeError.sshAgentFailed("Generated private key was malformed.")
+      }
+      self.privateKeySentinel = privateKeySentinel
+    } catch {
+      if process.isRunning {
+        process.terminate()
+        process.waitUntilExit()
+      }
+      try? FileManager.default.removeItem(at: rootURL)
+      throw error
+    }
+  }
+
+  func stop() {
+    let shouldStop = lock.withLock {
+      guard !stopped else { return false }
+      stopped = true
+      return true
+    }
+    guard shouldStop else { return }
+    if process.isRunning {
+      process.terminate()
+      process.waitUntilExit()
+    }
+    try? FileManager.default.removeItem(at: rootURL)
+  }
+
+  private static func waitForSocket(at path: String, process: Process) throws {
+    for _ in 0..<100 {
+      var metadata = stat()
+      if lstat(path, &metadata) == 0,
+        metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFSOCK)
+      {
+        return
+      }
+      if !process.isRunning {
+        throw LiveBuildSmokeError.sshAgentFailed(
+          "ssh-agent exited with status \(process.terminationStatus)."
+        )
+      }
+      Thread.sleep(forTimeInterval: 0.05)
+    }
+    throw LiveBuildSmokeError.sshAgentFailed("Timed out waiting for the SSH agent socket.")
+  }
+
+  private static func run(
+    executable: String,
+    arguments: [String],
+    environment: [String: String] = [:]
+  ) throws {
+    let process = Process()
+    process.executableURL = URL(filePath: executable)
+    process.arguments = arguments
+    process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = output
+    try process.run()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+      let data = try output.fileHandleForReading.readToEnd() ?? Data()
+      throw LiveBuildSmokeError.sshAgentFailed(
+        String(decoding: data.suffix(2_000), as: UTF8.self)
+      )
+    }
+  }
+}
+
 private enum LiveBuildSmokeError: LocalizedError {
   case timedOutWaitingForBuild
   case outputRootUnavailable(String)
   case tarFailed(exitCode: Int32, output: String)
+  case sshAgentFailed(String)
 
   var errorDescription: String? {
     switch self {
@@ -724,6 +944,8 @@ private enum LiveBuildSmokeError: LocalizedError {
       "Could not create a private live-build output root at \(path)."
     case .tarFailed(let exitCode, let output):
       "tar exited with status \(exitCode). \(output)"
+    case .sshAgentFailed(let detail):
+      "The live-build SSH-agent fixture failed. \(detail)"
     }
   }
 }

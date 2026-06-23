@@ -20,6 +20,9 @@ struct ComposeProjectManagementView: View {
           }
           sourceSection
           intentSection
+          if let requirements = model.inputRequirements {
+            inputSection(requirements)
+          }
           if let errorMessage = model.errorMessage {
             errorBanner(errorMessage)
           }
@@ -80,6 +83,7 @@ struct ComposeProjectManagementView: View {
     .onDisappear {
       reviewTask?.cancel()
       executionTask?.cancel()
+      Task { await model.discardPendingInputReview() }
     }
   }
 
@@ -241,13 +245,90 @@ struct ComposeProjectManagementView: View {
     }
   }
 
+  private func inputSection(_ requirements: ComposeProjectInputRequirements) -> some View {
+    GroupBox("Reviewed configs and secrets") {
+      VStack(alignment: .leading, spacing: 12) {
+        Text(
+          "Environment-backed values stay only in the in-memory review vault and are consumed once at execution. File values are copied into the private execution store under an opaque seal."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+        ForEach(requirements.requiredEnvironmentVariables, id: \.self) { variable in
+          HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Image(systemName: "key.fill")
+              .foregroundStyle(.orange)
+              .frame(width: 20)
+            VStack(alignment: .leading, spacing: 3) {
+              Text(variable)
+                .font(.callout.weight(.semibold))
+              Text(environmentInputSummary(variable, requirements: requirements))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            SecureField(
+              variable,
+              text: Binding(
+                get: { model.inputValue(for: variable) },
+                set: { model.setInputValue($0, for: variable) }
+              )
+            )
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: 280)
+            .privacySensitive()
+          }
+        }
+
+        ForEach(requirements.inputs.filter { $0.environmentVariable == nil }) { input in
+          HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Image(systemName: input.kind == .secret ? "key.fill" : "doc.text.fill")
+              .foregroundStyle(input.kind == .secret ? .orange : .indigo)
+              .frame(width: 20)
+            VStack(alignment: .leading, spacing: 3) {
+              Text(input.name)
+                .font(.callout.weight(.semibold))
+              Text(
+                "\(input.kind.rawValue.capitalized) · \(input.sourceKind.rawValue.capitalized) · \(input.serviceNames.joined(separator: ", "))"
+              )
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if let path = input.displayPath {
+              Text(path)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            } else {
+              Text("Inline content")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+          }
+        }
+      }
+      .padding(10)
+    }
+  }
+
+  private func environmentInputSummary(
+    _ variable: String,
+    requirements: ComposeProjectInputRequirements
+  ) -> String {
+    requirements.inputs
+      .filter { $0.environmentVariable == variable }
+      .map { "\($0.kind.rawValue.capitalized) \($0.name)" }
+      .joined(separator: " · ")
+  }
+
   private var reviewPlaceholder: some View {
     Label {
       VStack(alignment: .leading, spacing: 3) {
         Text("Ready for review")
           .font(.headline)
         Text(
-          "The pinned Compose client will render the full and active models twice. Environment values are never retained in the review."
+          "The pinned Compose client will render the full and active models twice, then request any environment-backed config or secret values without persisting them in the plan."
         )
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -431,7 +512,9 @@ struct ComposeProjectManagementView: View {
           .tint(.red)
           .disabled(!model.canExecute)
         }
-        Button("Review Desired State") {
+        Button(
+          model.inputRequirements == nil ? "Review Desired State" : "Review With Inputs"
+        ) {
           reviewTask = Task {
             await model.review()
             reviewTask = nil

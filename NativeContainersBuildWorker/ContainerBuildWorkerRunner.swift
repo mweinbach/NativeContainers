@@ -55,6 +55,15 @@ struct ContainerBuildWorkerRunner {
           buildID: build.buildID
         )
       }
+      let expectedSSHAgentIDs = request.builder.forwardsSSHAgent ? ["default"] : []
+      guard build.sshAgentIDs == expectedSSHAgentIDs else {
+        throw ContainerBuildWorkerError.make(
+          code: "ssh-agent-request",
+          message:
+            "Build SSH forwarding must use exactly the reviewed agent ID “default” and matching builder configuration.",
+          buildID: build.buildID
+        )
+      }
       let reviewedBuilder = try await controller.requireRunningBuilder(
         requested: request.builder
       )
@@ -182,6 +191,7 @@ struct ContainerBuildWorkerRunner {
       contentStore: RemoteContentStoreClient(),
       buildArgs: request.buildArguments,
       secrets: secrets,
+      sshAgentIDs: request.sshAgentIDs,
       contextDir: inputs.context.path(percentEncoded: false),
       dockerfile: inputs.dockerfile,
       dockerignore: inputs.dockerignore,
