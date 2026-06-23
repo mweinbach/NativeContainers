@@ -262,12 +262,24 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       for: [.control, .option]
     )
     #expect(
-      transitions.presses.map(\.modifierFlags) == [
+      transitions.presses.map {
+        $0.modifierFlags.intersection(.deviceIndependentFlagsMask)
+      } == [
         [.control], [.control, .option],
       ])
     #expect(
-      transitions.releases.map(\.modifierFlags) == [
+      transitions.releases.map {
+        $0.modifierFlags.intersection(.deviceIndependentFlagsMask)
+      } == [
         [.control], [],
+      ])
+    #expect(
+      transitions.presses.map(\.modifierFlags.rawValue) == [
+        0x0004_0001, 0x000C_0021,
+      ])
+    #expect(
+      transitions.releases.map(\.modifierFlags.rawValue) == [
+        0x0004_0001, 0,
       ])
   }
 
@@ -1027,6 +1039,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     in window: NSWindow
   ) throws {
     let modifierTransitions = guestModifierTransitions(for: modifierFlags)
+    let guestModifierFlags =
+      modifierTransitions.presses.last?.modifierFlags ?? []
     let modifierPressEvents = modifierTransitions.presses.compactMap {
       guestFlagsChangedEvent(
         transition: $0,
@@ -1045,7 +1059,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       let down = NSEvent.keyEvent(
         with: .keyDown,
         location: .zero,
-        modifierFlags: modifierFlags,
+        modifierFlags: guestModifierFlags,
         timestamp: ProcessInfo.processInfo.systemUptime,
         windowNumber: window.windowNumber,
         context: nil,
@@ -1057,7 +1071,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       let up = NSEvent.keyEvent(
         with: .keyUp,
         location: .zero,
-        modifierFlags: modifierFlags,
+        modifierFlags: guestModifierFlags,
         timestamp: ProcessInfo.processInfo.systemUptime,
         windowNumber: window.windowNumber,
         context: nil,
@@ -1087,15 +1101,23 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     presses: [LiveLinuxVirtualMachineModifierTransition],
     releases: [LiveLinuxVirtualMachineModifierTransition]
   ) {
-    let modifierKeys: [(flag: NSEvent.ModifierFlags, keyCode: UInt16)] = [
-      (.shift, 0x38),
-      (.control, 0x3B),
-      (.option, 0x3A),
-    ]
+    // VZVirtualMachineView needs AppKit's left-device bits as well as the
+    // device-independent flags to turn synthetic changes into guest keypresses.
+    let modifierKeys:
+      [(
+        flag: NSEvent.ModifierFlags,
+        deviceFlag: NSEvent.ModifierFlags,
+        keyCode: UInt16
+      )] = [
+        (.shift, NSEvent.ModifierFlags(rawValue: 0x0000_0002), 0x38),
+        (.control, NSEvent.ModifierFlags(rawValue: 0x0000_0001), 0x3B),
+        (.option, NSEvent.ModifierFlags(rawValue: 0x0000_0020), 0x3A),
+      ]
     var activeFlags: NSEvent.ModifierFlags = []
     var presses: [LiveLinuxVirtualMachineModifierTransition] = []
     for modifier in modifierKeys where modifierFlags.contains(modifier.flag) {
       activeFlags.insert(modifier.flag)
+      activeFlags.insert(modifier.deviceFlag)
       presses.append(
         LiveLinuxVirtualMachineModifierTransition(
           keyCode: modifier.keyCode,
@@ -1108,6 +1130,7 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     for modifier in modifierKeys.reversed()
     where modifierFlags.contains(modifier.flag) {
       activeFlags.remove(modifier.flag)
+      activeFlags.remove(modifier.deviceFlag)
       releases.append(
         LiveLinuxVirtualMachineModifierTransition(
           keyCode: modifier.keyCode,
