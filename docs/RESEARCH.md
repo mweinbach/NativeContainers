@@ -25,12 +25,14 @@ Last updated: 2026-06-22.
   clone was removed after the run; the verified source remains under the host's
   `Downloads/NativeContainers-Fixtures` directory. The product copies a
   user-picked security-scoped URL through its descriptor-safe media service.
-- The live smoke deliberately stops before committing an installation to disk.
-  Direct captures from the production console show GRUB, the GNOME live
-  desktop, and Ubuntu's Welcome/language screen. Scripted Down/Up/Return events
-  preserved the intended GRUB boot, and pointer commands advanced the installer
-  from its language page. These runs prove rendered frames and input delivery,
-  but not a completed installation, audio, or a boot without the ISO.
+- The extended live smoke completed Ubuntu's graphical installation to the
+  production 64-GiB sparse disk, requested the guest's own reboot, captured the
+  installed login screen, authenticated into the installed GNOME first-run
+  desktop, and then detached the now-unused ISO through the production runtime.
+  The manifest persisted `installState: stopped` with no installation-media
+  path before the same run passed pause/resume, memory-balloon, force-stop, and
+  exact isolated-bundle cleanup. Audio and the broader installed-guest feature
+  matrix remain separate live checks.
 
 ## Apple container stack
 
@@ -634,12 +636,15 @@ The installed Apple documentation confirms:
   `VirtualMachineConsoleView` in a bounded native test window and emit its
   window number only after the view is visible. A hash-pinned official Ubuntu
   26.04 ARM64 ISO rendered GRUB, the branded boot sequence, the GNOME live
-  desktop, and the installer's Welcome/language page in that window. An
+  desktop, and the complete graphical installer in that window. The guest then
+  rebooted from its virtual disk to the installed login screen and authenticated
+  GNOME first-run desktop. An
   owner-only mode-0700 command channel accepts bounded, allowlisted key, click,
   and text events, acknowledges each command in a mode-0600 marker, and supports
   an explicit `finish` command so lifecycle cleanup still runs. Direct keyboard
-  events selected the intended GRUB entry; two pointer events moved the
-  installer beyond its language page.
+  and pointer events selected the intended GRUB entry and drove the reviewed
+  installer. Production media ejection after disk boot persisted completion
+  without disrupting the installed root filesystem.
 - The current Xcode MCP `RunSomeTests` request stops waiting at about 300
   seconds. Automated visual runs therefore use `finish` before that boundary.
   An owner-only, consumed-once request file lets a started Xcode test retain a

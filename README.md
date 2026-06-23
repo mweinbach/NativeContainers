@@ -166,7 +166,8 @@ exact cleanup. Optionally set
 `NATIVECONTAINERS_LIVE_LINUX_VM_VISUAL_SECONDS` to an integer from 1 through
 7,200 to present the exact production `VirtualMachineConsoleView` in a native
 window before the lifecycle checks. The reviewed Ubuntu 26.04 run rendered
-GRUB, the live GNOME desktop, and the installer's Welcome/language screen there.
+GRUB, completed the graphical installer, rebooted from the virtual disk, and
+authenticated into the installed GNOME first-run desktop there.
 Set `NATIVECONTAINERS_LIVE_LINUX_VM_INPUT_PROBE=1` with a visual hold of at
 least 34 seconds to focus that production `VZVirtualMachineView`, exercise the
 GRUB selection with Down, Up, and Return, and publish an owner-only input
@@ -190,12 +191,15 @@ hold early and continues the lifecycle and cleanup assertions.
 
 For an Xcode MCP run that cannot inherit test-scheme environment variables,
 write the equivalent configuration as owner-only mode-0600 JSON to
-`/private/tmp/nativecontainers-live-linux-vm-run-request.json`. The smoke
+`FileManager.default.temporaryDirectory` (normally
+`$TMPDIR/nativecontainers-live-linux-vm-run-request.json`). The smoke
 accepts only a current-user, single-link regular file, consumes it once, and
 supports `isoPath`, `isoSHA256`, `visualHoldSeconds`, `probesGuestInput`, and
 `requiresInstallationMediaEjection`. The reviewed run used the command channel
-to advance the Ubuntu installer. It does not claim that the graphical
-installation completed, audio works, or the guest boots from disk.
+to complete the Ubuntu installer, request its reboot, authenticate after disk
+boot, persist production ISO ejection, and then complete exact lifecycle and
+bundle cleanup. Audio and the other expanded installed-guest integrations are
+not inferred from that pass.
 
 Remote push is never exercised against a public registry. An additional
 round-trip smoke is available only when

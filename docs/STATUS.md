@@ -1882,6 +1882,34 @@ Updated: 2026-06-22.
   for the installer's transition window. `done` ended the hold, after which the
   same run confirmed pause/resume, 8-to-4-to-8-GiB balloon requests, force stop,
   manifest deletion, and complete isolated-library cleanup.
+- The extended one-shot run for VM ID
+  `56b04fcf-e464-4cf0-9b28-564d4aead54b` completed the graphical Ubuntu
+  installer and passed 1/1 after 1,413.327 seconds. It persisted production
+  media ejection, pause/resume, 8-to-4-to-8-GiB balloon requests, force stop,
+  manifest deletion, and isolated-library cleanup. Ejecting at the installer's
+  completion screen also exposed the expected SQUASHFS read failure while the
+  live root still depended on that device, so that run is installation and
+  ejection evidence but is intentionally not used as disk-boot evidence.
+- A corrected run retained the ISO through Ubuntu's own Restart action. VM ID
+  `64926411-0e77-4ff6-aaca-0f6e8d903b28` rebooted to the installed-disk login
+  screen, authenticated into the installed GNOME first-run desktop, and only
+  then ejected the now-unused ISO through
+  `LinuxVirtualMachineRuntimeService`. The manifest immediately persisted
+  `installState: stopped` with no installation-media path while the guest kept
+  running. The Xcode result passed 1/1 after 1,263.100 seconds and then proved
+  pause/resume, balloon requests, exact force stop, manifest deletion, empty
+  library cleanup, and removal of the test host, marker, and input channel.
+- One intermediate corrected-sequence attempt failed safely after 219.366
+  seconds because the allowlisted text channel rejected `!` before any disk
+  write. Xcode reported `.unsupportedInputCharacter("!")`, force-stopped the
+  exact guest, and removed its isolated bundle. The successful retry used an
+  alphanumeric disposable credential within the existing input policy.
+- After the installed-disk pass, the complete Xcode plan reports 1,147
+  outcomes: 1,116 passed, 31 explicit live/destructive gates skipped, zero
+  failed, and zero unrun. Build-for-testing completed in 2.667 seconds and the
+  normal `NativeContainers` / `My Mac` build completed in 3.818 seconds. The
+  warning-level build log and Issue Navigator are empty; both repository
+  contract validators and diff whitespace checks pass.
 - Xcode MCP's current test request stops waiting at about 300 seconds, so its
   automated runs use the explicit `finish` command while direct Xcode
   observation may use the harness's 7,200-second maximum. A current-user,
@@ -1910,33 +1938,34 @@ Updated: 2026-06-22.
   and the 3.444-second app build had an empty warning log. No VM bundle,
   temporary library, app process, or build worker remains.
 - This checkpoint proves real firmware/installer-backed VZ start, rendered
-  GRUB, boot, live-desktop, and installer frames in the production native
-  console, keyboard and pointer delivery through that console, and native
-  runtime control. It does not infer a completed graphical installation, audio
-  behavior, or boot from the virtual disk. Those remain explicit live work.
+  GRUB, live-desktop and installer frames, completed graphical installation,
+  reboot from the virtual disk, installed login and authenticated GNOME
+  first-run desktop, keyboard and pointer delivery, persisted production ISO
+  ejection, and native runtime control in the production console. It does not
+  infer audio behavior or any broader installed-guest integration not exercised
+  by those exact runs.
 
 ## Remaining live verification gap
 
-The entitlement, signing configuration, build, capability availability, and a
-hash-pinned Ubuntu ARM64 installer boot/control/input pass are verified through
-the Welcome screen. Completing the graphical installation and rebooting it
-through the new GUI workflow, then
-creating/restoring disk snapshots, suspending/restoring it, cloning it,
-exporting/restoring a portable copy, growing its disk and expanding the Linux
-partition/filesystem, and verifying shared/host-only packet flow plus a shared
-folder still need a disposable ISO smoke pass. Installing, booting,
-saving/restoring, growing the disk, expanding the macOS container, and
-clone-booting macOS are not claimed as live-verified until a local IPSW and
-disposable installed guest are available for that destructive integration pass.
+The entitlement, signing configuration, build, capability availability,
+hash-pinned Ubuntu ARM64 graphical installation, virtual-disk boot,
+authenticated installed desktop, input, media ejection, and core runtime
+controls are verified. Audio, read-only/read-write guest mounts, CPU/memory
+cold reconfiguration, disk growth plus guest partition/filesystem expansion,
+snapshot rollback, suspend/restore, clone and portable-copy boot, shared and
+host-only packet flow, and graceful/watchdog stop still need installed-guest
+live passes. Installing, booting, saving/restoring, growing the disk, expanding
+the macOS container, and clone-booting macOS are not claimed as live-verified
+until a local IPSW and disposable installed guest are available for that
+destructive integration pass.
 
 ## Next implementation slice
 
-1. Continue the hash-pinned Ubuntu 26.04 ARM64 fixture from the verified Welcome
-   screen through graphical installation and disk boot; verify audio,
-   mount a read-only and read-write host folder, eject its ISO, reboot from disk,
-   change CPU/memory, grow the virtual disk, expand the guest partition and file
-   system, and verify the next boot; create a named disk checkpoint, mutate
-   guest storage, restore it, and verify both data rollback and retained virtual
+1. Reuse the verified hash-pinned Ubuntu 26.04 ARM64 install/disk-boot workflow
+   to verify audio and mount a read-only and read-write host folder; change
+   CPU/memory, grow the virtual disk, expand the guest partition and file system,
+   and verify the next boot; create a named disk checkpoint, mutate guest
+   storage, restore it, and verify both data rollback and retained virtual
    capacity; suspend and restore the installed session,
    request a lower memory target under guest load, restore the full target,
    record host observations without treating the request as guaranteed
