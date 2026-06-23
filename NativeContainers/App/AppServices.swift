@@ -37,6 +37,7 @@ struct VirtualMachineDiskImageMaintenanceServices: Sendable {
 
 struct AppServices: Sendable {
   let inventory: any ContainerInventoryLoading
+  let appleContainerRuntimeSetup: any AppleContainerRuntimeSettingUp
   let launchAtLogin: any LaunchAtLoginManaging
   let notifications: any AppNotificationManaging
   let workloadCreationDefaults: any WorkloadCreationDefaultsProviding
@@ -101,6 +102,8 @@ struct AppServices: Sendable {
 
   init(
     inventory: any ContainerInventoryLoading,
+    appleContainerRuntimeSetup: any AppleContainerRuntimeSettingUp =
+      UnavailableAppleContainerRuntimeSetupService(),
     launchAtLogin: any LaunchAtLoginManaging = UnavailableLaunchAtLoginService(),
     notifications: any AppNotificationManaging = UnavailableAppNotificationService(),
     workloadCreationDefaults: any WorkloadCreationDefaultsProviding =
@@ -198,6 +201,7 @@ struct AppServices: Sendable {
       NoopRestoreImageStoreRecoveryService()
   ) {
     self.inventory = inventory
+    self.appleContainerRuntimeSetup = appleContainerRuntimeSetup
     self.launchAtLogin = launchAtLogin
     self.notifications = notifications
     self.workloadCreationDefaults = workloadCreationDefaults
@@ -263,6 +267,8 @@ struct AppServices: Sendable {
 
   init(
     containerService: any ContainerManaging,
+    appleContainerRuntimeSetup: any AppleContainerRuntimeSettingUp =
+      UnavailableAppleContainerRuntimeSetupService(),
     containerShell: any ContainerShellDiscovering = UnavailableContainerShellService(),
     terminalPresets: any TerminalPresetManaging = EphemeralTerminalPresetStore(),
     terminalTargets: any TerminalTargetOpening = UnavailableTerminalTargetService(),
@@ -349,6 +355,7 @@ struct AppServices: Sendable {
       NoopRestoreImageStoreRecoveryService()
   ) {
     inventory = containerService
+    self.appleContainerRuntimeSetup = appleContainerRuntimeSetup
     self.launchAtLogin = launchAtLogin
     self.notifications = notifications
     self.workloadCreationDefaults = workloadCreationDefaults

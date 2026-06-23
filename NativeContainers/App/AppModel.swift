@@ -24,6 +24,7 @@ final class AppModel {
   private(set) var runningContainerCount = 0
   private(set) var runningLinuxMachineCount = 0
   private(set) var isRefreshing = false
+  private(set) var isSettingUpAppleContainerRuntime = false
   private(set) var lastRefresh: Date?
   private(set) var errorMessage: String?
   private(set) var containerInventoryRevision: UInt64 = 0
@@ -207,6 +208,8 @@ final class AppModel {
 
   convenience init(
     containerService: any ContainerManaging = AppleContainerService(),
+    appleContainerRuntimeSetupService: any AppleContainerRuntimeSettingUp =
+      UnavailableAppleContainerRuntimeSetupService(),
     containerShellService: any ContainerShellDiscovering = UnavailableContainerShellService(),
     terminalPresetService: any TerminalPresetManaging = EphemeralTerminalPresetStore(),
     terminalTargetService: any TerminalTargetOpening = UnavailableTerminalTargetService(),
@@ -279,6 +282,7 @@ final class AppModel {
     self.init(
       services: AppServices(
         containerService: containerService,
+        appleContainerRuntimeSetup: appleContainerRuntimeSetupService,
         containerShell: containerShellService,
         terminalPresets: terminalPresetService,
         terminalTargets: terminalTargetService,
@@ -390,6 +394,21 @@ final class AppModel {
     refreshWaiters.removeAll(keepingCapacity: true)
     for waiter in waiters {
       waiter.resume()
+    }
+  }
+
+  func setUpAppleContainerRuntime() async {
+    guard systemInfo == nil, !isSettingUpAppleContainerRuntime else { return }
+    isSettingUpAppleContainerRuntime = true
+    defer { isSettingUpAppleContainerRuntime = false }
+
+    do {
+      try await services.appleContainerRuntimeSetup.start()
+      await refresh()
+    } catch is CancellationError {
+      errorMessage = "Apple runtime start was cancelled."
+    } catch {
+      errorMessage = "Apple runtime start: \(error.localizedDescription)"
     }
   }
 

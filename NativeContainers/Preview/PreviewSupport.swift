@@ -292,6 +292,33 @@ extension AppModel {
       initialInventory: inventory
     )
   }
+
+  static var previewRuntimeUnavailable: AppModel {
+    AppModel(
+      containerService: PreviewContainerService(
+        inventory: ContainerInventory(
+          system: ContainerSystemInfo(
+            version: "container-apiserver version 1.0.0",
+            build: "release",
+            commit: "ee848e3",
+            applicationRoot: URL(filePath: "/tmp/container"),
+            installRoot: URL(filePath: "/usr/local")
+          ),
+          containers: [],
+          images: [],
+          volumes: [],
+          networks: [],
+          machines: []
+        )
+      ),
+      appleContainerRuntimeSetupService: PreviewAppleContainerRuntimeSetupService(),
+      virtualMachineLibrary: PreviewVirtualMachineLibrary(hasMachine: false)
+    )
+  }
+}
+
+private actor PreviewAppleContainerRuntimeSetupService: AppleContainerRuntimeSettingUp {
+  func start() async throws {}
 }
 
 private actor PreviewRegistryService: RegistryManaging {

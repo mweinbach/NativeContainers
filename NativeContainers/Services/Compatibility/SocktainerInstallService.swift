@@ -1,7 +1,6 @@
 import CryptoKit
 import Darwin
 import Foundation
-import Security
 
 protocol SocktainerInstalling: Sendable {
   var release: SocktainerRelease { get }
@@ -247,41 +246,18 @@ struct SocktainerArtifactValidator: SocktainerArtifactValidating {
     at url: URL,
     teamIdentifier: String
   ) throws {
-    var staticCode: SecStaticCode?
-    guard
-      SecStaticCodeCreateWithPath(
-        url as CFURL,
-        SecCSFlags(rawValue: 0),
-        &staticCode
-      ) == errSecSuccess,
-      let staticCode
-    else {
-      throw DockerCompatibilityError.artifactSignatureInvalid
-    }
-
     let requirementText =
       "anchor apple generic and certificate leaf[subject.OU] = \"\(teamIdentifier)\""
-    var requirement: SecRequirement?
-    guard
-      SecRequirementCreateWithString(
-        requirementText as CFString,
-        SecCSFlags(rawValue: 0),
-        &requirement
-      ) == errSecSuccess,
-      let requirement
-    else {
+    do {
+      try StaticCodeRequirementValidator().validate(
+        codeAt: url,
+        requirement: requirementText
+      )
+    } catch StaticCodeRequirementValidationError.requirementFailed {
       throw DockerCompatibilityError.artifactSignerMismatch
-    }
-
-    let status = SecStaticCodeCheckValidity(
-      staticCode,
-      SecCSFlags(rawValue: 0),
-      requirement
-    )
-    guard status == errSecSuccess else {
-      if status == errSecCSReqFailed {
-        throw DockerCompatibilityError.artifactSignerMismatch
-      }
+    } catch StaticCodeRequirementValidationError.requirementCreationFailed {
+      throw DockerCompatibilityError.artifactSignerMismatch
+    } catch {
       throw DockerCompatibilityError.artifactSignatureInvalid
     }
   }

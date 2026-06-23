@@ -23,7 +23,11 @@ struct OverviewView: View {
         OverviewHeader(
           systemInfo: model.systemInfo,
           lastRefresh: model.lastRefresh,
-          isRefreshing: model.isRefreshing
+          isRefreshing: model.isRefreshing,
+          isSettingUpRuntime: model.isSettingUpAppleContainerRuntime,
+          onSetUpRuntime: {
+            Task { await model.setUpAppleContainerRuntime() }
+          }
         )
         ResourceSummaryGrid(
           runningContainers: model.containers.count(where: { $0.state.isRunning }),
@@ -67,6 +71,8 @@ struct OverviewHeader: View {
   let systemInfo: ContainerSystemInfo?
   let lastRefresh: Date?
   let isRefreshing: Bool
+  let isSettingUpRuntime: Bool
+  let onSetUpRuntime: () -> Void
 
   var body: some View {
     HStack(alignment: .top) {
@@ -85,19 +91,67 @@ struct OverviewHeader: View {
             "Apple container services are unavailable", systemImage: "exclamationmark.triangle.fill"
           )
           .foregroundStyle(.orange)
+          Text(
+            "NativeContainers uses Apple’s separately installed container \(AppleContainerRuntimeDistributionContract.requiredVersion) runtime. Install Apple’s signed package, then start its services here. First start may download Apple’s kernel and base image."
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
         }
       }
 
       Spacer()
 
-      if isRefreshing {
-        ProgressView()
-          .controlSize(.small)
-      } else if let lastRefresh {
-        Text("Updated \(lastRefresh, format: .relative(presentation: .named))")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+      VStack(alignment: .trailing, spacing: 10) {
+        if systemInfo == nil {
+          AppleContainerRuntimeRecoveryControl(
+            isWorking: isSettingUpRuntime,
+            action: onSetUpRuntime
+          )
+        }
+        if isRefreshing {
+          ProgressView()
+            .controlSize(.small)
+            .accessibilityLabel("Refreshing resources")
+        } else if let lastRefresh {
+          Text("Updated \(lastRefresh, format: .relative(presentation: .named))")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
       }
+    }
+  }
+}
+
+struct AppleContainerRuntimeRecoveryControl: View {
+  let isWorking: Bool
+  let action: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Link(destination: AppleContainerRuntimeDistributionContract.releaseURL) {
+        Label(
+          "Get Apple Container \(AppleContainerRuntimeDistributionContract.requiredVersion)",
+          systemImage: "arrow.down.circle"
+        )
+      }
+      .buttonStyle(.bordered)
+
+      Button(action: action) {
+        if isWorking {
+          HStack(spacing: 7) {
+            ProgressView()
+              .controlSize(.small)
+            Text("Starting…")
+          }
+        } else {
+          Label("Start Apple Runtime", systemImage: "play.circle")
+        }
+      }
+      .buttonStyle(.borderedProminent)
+      .disabled(isWorking)
+      .accessibilityHint(
+        "Validates Apple’s signed system installation and starts its container services. Initial startup may download Apple runtime components."
+      )
     }
   }
 }
@@ -308,6 +362,13 @@ struct ActiveResourceRow: View {
 #Preview("Overview") {
   NavigationStack {
     OverviewView(model: .preview)
+  }
+  .frame(width: 1_080, height: 760)
+}
+
+#Preview("Runtime unavailable") {
+  NavigationStack {
+    OverviewView(model: .previewRuntimeUnavailable)
   }
   .frame(width: 1_080, height: 760)
 }

@@ -1276,6 +1276,63 @@ struct AppModelTests {
       )
     }
   }
+
+  @Test
+  func runtimeSetupRefreshesInventoryAfterTheSignedServiceBecomesReady() async {
+    let runtimeSetup = RecordingAppleContainerRuntimeSetupService()
+    let containerService = MockContainerService(inventory: emptyInventory())
+    let model = AppModel(
+      containerService: containerService,
+      appleContainerRuntimeSetupService: runtimeSetup,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [])
+    )
+
+    await model.setUpAppleContainerRuntime()
+
+    #expect(await runtimeSetup.startCount == 1)
+    #expect(await containerService.loadCount == 1)
+    #expect(model.systemInfo?.version == "1.0.0")
+    #expect(model.errorMessage == nil)
+    #expect(!model.isSettingUpAppleContainerRuntime)
+  }
+
+  @Test
+  func runtimeSetupDoesNothingWhenInventoryAlreadyProvesReadiness() async {
+    let runtimeSetup = RecordingAppleContainerRuntimeSetupService()
+    let model = AppModel(
+      containerService: MockContainerService(inventory: emptyInventory()),
+      appleContainerRuntimeSetupService: runtimeSetup,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: []),
+      initialInventory: emptyInventory()
+    )
+
+    await model.setUpAppleContainerRuntime()
+
+    #expect(await runtimeSetup.startCount == 0)
+    #expect(model.systemInfo?.version == "1.0.0")
+  }
+
+  @Test
+  func runtimeSetupFailureRemainsActionableWithoutInventingInventory() async {
+    let runtimeSetup = RecordingAppleContainerRuntimeSetupService(
+      error: AppModelTestError.runtimeUnavailable
+    )
+    let containerService = MockContainerService(inventory: emptyInventory())
+    let model = AppModel(
+      containerService: containerService,
+      appleContainerRuntimeSetupService: runtimeSetup,
+      virtualMachineLibrary: MockVirtualMachineLibrary(manifests: [])
+    )
+
+    await model.setUpAppleContainerRuntime()
+
+    #expect(await runtimeSetup.startCount == 1)
+    #expect(await containerService.loadCount == 0)
+    #expect(model.systemInfo == nil)
+    #expect(model.errorMessage?.contains("Apple runtime start") == true)
+    #expect(model.errorMessage?.contains("offline") == true)
+    #expect(!model.isSettingUpAppleContainerRuntime)
+  }
 }
 
 private func emptyInventory() -> ContainerInventory {
@@ -1538,7 +1595,7 @@ private actor CountingAppStorageUsageService: StorageUsageLoading {
   }
 }
 
-private enum AppModelTestError: LocalizedError {
+private enum AppModelTestError: LocalizedError, Sendable {
   case runtimeUnavailable
   case transferFailed
 
@@ -1547,6 +1604,22 @@ private enum AppModelTestError: LocalizedError {
     case .runtimeUnavailable: "Apple container services are offline."
     case .transferFailed: "The image transfer failed after downloading content."
     }
+  }
+}
+
+private actor RecordingAppleContainerRuntimeSetupService:
+  AppleContainerRuntimeSettingUp
+{
+  private let error: AppModelTestError?
+  private(set) var startCount = 0
+
+  init(error: AppModelTestError? = nil) {
+    self.error = error
+  }
+
+  func start() async throws {
+    startCount += 1
+    if let error { throw error }
   }
 }
 

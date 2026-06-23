@@ -386,6 +386,7 @@ enum AppCompositionRoot {
     )
     return AppServices(
       inventory: inventoryService,
+      appleContainerRuntimeSetup: AppleContainerRuntimeSetupService(),
       launchAtLogin: SMAppServiceLaunchAtLoginService(),
       notifications: UserNotificationService(),
       performanceBenchmarks: performanceBenchmarkService,

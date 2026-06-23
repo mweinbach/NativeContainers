@@ -10,6 +10,7 @@ struct AppCompositionRootTests {
     let services = AppCompositionRoot.live()
 
     #expect(services.inventory is AppleRuntimeInventoryService)
+    #expect(services.appleContainerRuntimeSetup is AppleContainerRuntimeSetupService)
     #expect(services.workloadCreationDefaults is HostResourceDefaultService)
     #expect(services.performanceBenchmarks is PerformanceBenchmarkService)
     #expect(services.kubernetes is AppleKubernetesClusterService)
