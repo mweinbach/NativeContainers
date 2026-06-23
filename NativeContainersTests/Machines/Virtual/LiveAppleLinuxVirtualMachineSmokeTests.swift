@@ -258,6 +258,17 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     #expect(shortcut.summary == "key:open-terminal")
     #expect(text.summary == "text:\(mountCommand.count)-characters")
     #expect(LiveLinuxVirtualMachineTypingKey("/") != nil)
+    let transitions = Self.guestModifierTransitions(
+      for: [.control, .option]
+    )
+    #expect(
+      transitions.presses.map(\.modifierFlags) == [
+        [.control], [.control, .option],
+      ])
+    #expect(
+      transitions.releases.map(\.modifierFlags) == [
+        [.control], [],
+      ])
   }
 
   @Test("Live input command rejects symbolic and hard links")
@@ -1015,7 +1026,22 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     to view: VZVirtualMachineView,
     in window: NSWindow
   ) throws {
+    let modifierTransitions = guestModifierTransitions(for: modifierFlags)
+    let modifierPressEvents = modifierTransitions.presses.compactMap {
+      guestFlagsChangedEvent(
+        transition: $0,
+        windowNumber: window.windowNumber
+      )
+    }
+    let modifierReleaseEvents = modifierTransitions.releases.compactMap {
+      guestFlagsChangedEvent(
+        transition: $0,
+        windowNumber: window.windowNumber
+      )
+    }
     guard
+      modifierPressEvents.count == modifierTransitions.presses.count,
+      modifierReleaseEvents.count == modifierTransitions.releases.count,
       let down = NSEvent.keyEvent(
         with: .keyDown,
         location: .zero,
@@ -1045,8 +1071,69 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         description
       )
     }
+    for event in modifierPressEvents {
+      view.flagsChanged(with: event)
+    }
     view.keyDown(with: down)
     view.keyUp(with: up)
+    for event in modifierReleaseEvents {
+      view.flagsChanged(with: event)
+    }
+  }
+
+  private static func guestModifierTransitions(
+    for modifierFlags: NSEvent.ModifierFlags
+  ) -> (
+    presses: [LiveLinuxVirtualMachineModifierTransition],
+    releases: [LiveLinuxVirtualMachineModifierTransition]
+  ) {
+    let modifierKeys: [(flag: NSEvent.ModifierFlags, keyCode: UInt16)] = [
+      (.shift, 0x38),
+      (.control, 0x3B),
+      (.option, 0x3A),
+    ]
+    var activeFlags: NSEvent.ModifierFlags = []
+    var presses: [LiveLinuxVirtualMachineModifierTransition] = []
+    for modifier in modifierKeys where modifierFlags.contains(modifier.flag) {
+      activeFlags.insert(modifier.flag)
+      presses.append(
+        LiveLinuxVirtualMachineModifierTransition(
+          keyCode: modifier.keyCode,
+          modifierFlags: activeFlags
+        )
+      )
+    }
+
+    var releases: [LiveLinuxVirtualMachineModifierTransition] = []
+    for modifier in modifierKeys.reversed()
+    where modifierFlags.contains(modifier.flag) {
+      activeFlags.remove(modifier.flag)
+      releases.append(
+        LiveLinuxVirtualMachineModifierTransition(
+          keyCode: modifier.keyCode,
+          modifierFlags: activeFlags
+        )
+      )
+    }
+    return (presses, releases)
+  }
+
+  private static func guestFlagsChangedEvent(
+    transition: LiveLinuxVirtualMachineModifierTransition,
+    windowNumber: Int
+  ) -> NSEvent? {
+    NSEvent.keyEvent(
+      with: .flagsChanged,
+      location: .zero,
+      modifierFlags: transition.modifierFlags,
+      timestamp: ProcessInfo.processInfo.systemUptime,
+      windowNumber: windowNumber,
+      context: nil,
+      characters: "",
+      charactersIgnoringModifiers: "",
+      isARepeat: false,
+      keyCode: transition.keyCode
+    )
   }
 
   private static func sendGuestClick(
@@ -1183,6 +1270,11 @@ private struct LiveLinuxVirtualMachineInputCommand {
     case .finish: "finish"
     }
   }
+}
+
+private struct LiveLinuxVirtualMachineModifierTransition {
+  let keyCode: UInt16
+  let modifierFlags: NSEvent.ModifierFlags
 }
 
 private enum LiveLinuxVirtualMachineInputKey: CustomStringConvertible {
