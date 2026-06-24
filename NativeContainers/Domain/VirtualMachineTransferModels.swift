@@ -14,7 +14,8 @@ extension VirtualMachineManifest {
 
   func imported(
     using mode: VirtualMachineImportMode,
-    linuxMACAddress: String? = nil
+    linuxMACAddress: String? = nil,
+    windowsMACAddress: String? = nil
   ) throws -> VirtualMachineManifest {
     let portable = portableRepresentation()
     switch mode {
@@ -24,7 +25,8 @@ extension VirtualMachineManifest {
       return try VirtualMachineManifest(
         cloning: portable,
         name: name,
-        linuxMACAddress: linuxMACAddress
+        linuxMACAddress: linuxMACAddress,
+        windowsMACAddress: windowsMACAddress
       )
       .portableRepresentation()
     }

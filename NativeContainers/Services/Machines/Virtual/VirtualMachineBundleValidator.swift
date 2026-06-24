@@ -57,7 +57,7 @@ struct VirtualMachineBundleValidator {
         guard
           cloneMACAddress.caseInsensitiveCompare(sourceIdentity.macAddress ?? "")
             != .orderedSame,
-          try !linuxMACAddressExists(cloneMACAddress)
+          try !efiMACAddressExists(cloneMACAddress)
         else {
           throw VirtualMachineBundleError.duplicateMACAddress
         }
@@ -80,7 +80,7 @@ struct VirtualMachineBundleValidator {
       )
       let hasMACAddressCollision =
         if let macAddress = identity.macAddress {
-          try linuxMACAddressExists(macAddress)
+          try efiMACAddressExists(macAddress)
         } else {
           false
         }
@@ -171,7 +171,10 @@ struct VirtualMachineBundleValidator {
 
     switch manifest.guest {
     case .macOS:
-      guard manifest.linuxDiskSnapshotConfiguration == nil else {
+      guard manifest.linuxDiskSnapshotConfiguration == nil,
+        manifest.windowsDiskSnapshotConfiguration == nil,
+        manifest.windowsConfiguration == nil
+      else {
         throw VirtualMachineBundleError.invalidBundle(
           "the staged macOS manifest contains Linux disk snapshot state"
         )
@@ -201,6 +204,8 @@ struct VirtualMachineBundleValidator {
     case .linux:
       guard let configuration = manifest.linuxConfiguration,
         configuration.installationMediaPath == nil,
+        manifest.windowsConfiguration == nil,
+        manifest.windowsDiskSnapshotConfiguration == nil,
         manifest.auxiliaryStoragePath == nil,
         manifest.hardwareModelPath == nil,
         manifest.machineIdentifierPath == nil,
@@ -226,6 +231,50 @@ struct VirtualMachineBundleValidator {
       try validateDiskSnapshotArtifacts(
         manifest.effectiveLinuxDiskSnapshotConfiguration,
         configurationName: "linuxDiskSnapshotConfiguration",
+        in: bundleURL
+      )
+    case .windows:
+      guard let configuration = manifest.windowsConfiguration,
+        configuration.installationMediaPath == nil,
+        configuration.setupConfigurationMediaPath == nil,
+        manifest.linuxConfiguration == nil,
+        manifest.linuxDiskSnapshotConfiguration == nil,
+        manifest.auxiliaryStoragePath == nil,
+        manifest.hardwareModelPath == nil,
+        manifest.machineIdentifierPath == nil,
+        manifest.restoreImageURL == nil,
+        manifest.audioConfiguration == nil,
+        !isPortable || manifest.networkConfiguration == nil,
+        manifest.macOSGuestOperatingSystem == nil,
+        manifest.macOSMinimumCPUCount == nil,
+        manifest.macOSMinimumMemoryBytes == nil,
+        manifest.macOSFirstBootState == nil,
+        manifest.macOSDiskSnapshotConfiguration == nil
+      else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "the staged Windows manifest contains incomplete or guest-incompatible state"
+        )
+      }
+      _ = try artifactResolver.resolve(
+        configuration.efiVariableStorePath,
+        named: "efiVariableStorePath",
+        in: bundleURL,
+        writable: true
+      )
+      let secretURL = try artifactResolver.resolve(
+        configuration.guestAgentSecretPath,
+        named: "guestAgentSecretPath",
+        in: bundleURL,
+        writable: false
+      )
+      guard try Data(contentsOf: secretURL).count == 32 else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "the Windows guest-agent secret is invalid"
+        )
+      }
+      try validateDiskSnapshotArtifacts(
+        manifest.effectiveWindowsDiskSnapshotConfiguration,
+        configurationName: "windowsDiskSnapshotConfiguration",
         in: bundleURL
       )
     }
@@ -255,6 +304,14 @@ struct VirtualMachineBundleValidator {
       }
       path = configuration.machineIdentifierPath
       macAddress = configuration.macAddress
+    case .windows:
+      guard let configuration = manifest.windowsConfiguration else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "the manifest has no Windows platform configuration"
+        )
+      }
+      path = configuration.machineIdentifierPath
+      macAddress = configuration.macAddress
     }
 
     let identifierURL = try artifactResolver.resolve(
@@ -271,6 +328,15 @@ struct VirtualMachineBundleValidator {
           throw VirtualMachineBundleError.invalidMachineIdentifier
         }
       case .linux:
+        guard linuxIdentityValidator.isValidIdentifierData(identifierData) else {
+          throw VirtualMachineBundleError.invalidMachineIdentifier
+        }
+        guard let macAddress,
+          linuxIdentityValidator.isValidMACAddress(macAddress)
+        else {
+          throw VirtualMachineBundleError.invalidMACAddress
+        }
+      case .windows:
         guard linuxIdentityValidator.isValidIdentifierData(identifierData) else {
           throw VirtualMachineBundleError.invalidMachineIdentifier
         }
@@ -350,15 +416,20 @@ struct VirtualMachineBundleValidator {
     return false
   }
 
-  private func linuxMACAddressExists(_ candidate: String) throws -> Bool {
-    try bundleStore.list().contains {
-      guard $0.guest == .linux,
-        let existing = $0.linuxConfiguration?.macAddress
-      else {
-        return false
-      }
+  private func efiMACAddressExists(_ candidate: String) throws -> Bool {
+    try bundleStore.list().contains(where: { manifest in
+      let existing =
+        switch manifest.guest {
+        case .macOS:
+          Optional<String>.none
+        case .linux:
+          manifest.linuxConfiguration?.macAddress
+        case .windows:
+          manifest.windowsConfiguration?.macAddress
+        }
+      guard let existing else { return false }
       return existing.caseInsensitiveCompare(candidate) == .orderedSame
-    }
+    })
   }
 
   private func hasPersistedPlatformIdentity(_ manifest: VirtualMachineManifest) -> Bool {
@@ -367,6 +438,8 @@ struct VirtualMachineBundleValidator {
       manifest.machineIdentifierPath != nil
     case .linux:
       manifest.linuxConfiguration != nil
+    case .windows:
+      manifest.windowsConfiguration != nil
     }
   }
 

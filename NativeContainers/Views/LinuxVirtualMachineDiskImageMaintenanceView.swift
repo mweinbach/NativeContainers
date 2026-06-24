@@ -50,7 +50,7 @@ struct LinuxVirtualMachineDiskImageMaintenanceView: View {
           HStack(spacing: 12) {
             Label {
               Text(
-                "Grew the virtual disk by \(Int64(clamping: result.addedLogicalBytes), format: .byteCount(style: .file)). Expand the Linux partition and file system after the next start."
+                growthCompletionMessage(result)
               )
             } icon: {
               Image(systemName: "checkmark.circle.fill")
@@ -112,5 +112,16 @@ struct LinuxVirtualMachineDiskImageMaintenanceView: View {
     case .available, .incompatible:
       return "Discard the saved state before growing the virtual disk."
     }
+  }
+
+  private func growthCompletionMessage(
+    _ result: VirtualMachineDiskImageResizeResult
+  ) -> LocalizedStringResource {
+    if machine.guest == .windows {
+      return
+        "Grew the virtual disk by \(Int64(clamping: result.addedLogicalBytes), format: .byteCount(style: .file)). Extend the Windows volume after the next start."
+    }
+    return
+      "Grew the virtual disk by \(Int64(clamping: result.addedLogicalBytes), format: .byteCount(style: .file)). Expand the Linux partition and file system after the next start."
   }
 }

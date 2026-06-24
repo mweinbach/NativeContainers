@@ -175,6 +175,16 @@
 		1F606CDA2FEAF43700FBE6ED /* NativeRuntimeDistributionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CD92FEAF43700FBE6ED /* NativeRuntimeDistributionModel.swift */; };
 		1F606CDC2FEAF44700FBE6ED /* NativeRuntimeDistributionSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CDB2FEAF44700FBE6ED /* NativeRuntimeDistributionSettingsSection.swift */; };
 		1F606CDE2FEAF4C800FBE6ED /* NativeRuntimeDistributionManagementServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CDD2FEAF4C800FBE6ED /* NativeRuntimeDistributionManagementServiceTests.swift */; };
+		1F606CE02FEB516C00FBE6ED /* WindowsVirtualMachineModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CDF2FEB516B00FBE6ED /* WindowsVirtualMachineModels.swift */; };
+		1F606CE22FEB516C00FBE6ED /* WindowsInstallationMediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CE12FEB516C00FBE6ED /* WindowsInstallationMediaService.swift */; };
+		1F606CE42FEB516C00FBE6ED /* WindowsPlatformArtifactPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CE32FEB516C00FBE6ED /* WindowsPlatformArtifactPreparer.swift */; };
+		1F606CE62FEB516C00FBE6ED /* WindowsVirtualMachineCreationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CE52FEB516C00FBE6ED /* WindowsVirtualMachineCreationService.swift */; };
+		1F606CE82FEB516C00FBE6ED /* WindowsVirtualMachineModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CE72FEB516C00FBE6ED /* WindowsVirtualMachineModelsTests.swift */; };
+		1F606CEA2FEB516C00FBE6ED /* WindowsInstallationMediaServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CE92FEB516C00FBE6ED /* WindowsInstallationMediaServiceTests.swift */; };
+		1F606CEC2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CEB2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseService.swift */; };
+		1F606CEE2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseContract.json in Resources */ = {isa = PBXBuildFile; fileRef = 1F606CED2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseContract.json */; };
+		1F606CF02FEB52CD00FBE6ED /* WindowsGuestToolsReleaseServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CEF2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseServiceTests.swift */; };
+		1F606CF22FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CF12FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift */; };
 		1F64B9572FE8D4ED00598A65 /* KubernetesClusterModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B9562FE8D4ED00598A65 /* KubernetesClusterModels.swift */; };
 		1F64B9592FE8D4FE00598A65 /* KubernetesClusterDescriptorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B9582FE8D4FE00598A65 /* KubernetesClusterDescriptorStore.swift */; };
 		1F64B95B2FE8D53000598A65 /* AppleKubernetesClusterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B95A2FE8D53000598A65 /* AppleKubernetesClusterService.swift */; };
@@ -854,6 +864,16 @@
 		1F606CD92FEAF43700FBE6ED /* NativeRuntimeDistributionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRuntimeDistributionModel.swift; sourceTree = "<group>"; };
 		1F606CDB2FEAF44700FBE6ED /* NativeRuntimeDistributionSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRuntimeDistributionSettingsSection.swift; sourceTree = "<group>"; };
 		1F606CDD2FEAF4C800FBE6ED /* NativeRuntimeDistributionManagementServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRuntimeDistributionManagementServiceTests.swift; sourceTree = "<group>"; };
+		1F606CDF2FEB516B00FBE6ED /* WindowsVirtualMachineModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsVirtualMachineModels.swift; sourceTree = "<group>"; };
+		1F606CE12FEB516C00FBE6ED /* WindowsInstallationMediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsInstallationMediaService.swift; sourceTree = "<group>"; };
+		1F606CE32FEB516C00FBE6ED /* WindowsPlatformArtifactPreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsPlatformArtifactPreparer.swift; sourceTree = "<group>"; };
+		1F606CE52FEB516C00FBE6ED /* WindowsVirtualMachineCreationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsVirtualMachineCreationService.swift; sourceTree = "<group>"; };
+		1F606CE72FEB516C00FBE6ED /* WindowsVirtualMachineModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsVirtualMachineModelsTests.swift; sourceTree = "<group>"; };
+		1F606CE92FEB516C00FBE6ED /* WindowsInstallationMediaServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsInstallationMediaServiceTests.swift; sourceTree = "<group>"; };
+		1F606CEB2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsGuestToolsReleaseService.swift; sourceTree = "<group>"; };
+		1F606CED2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseContract.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = WindowsGuestToolsReleaseContract.json; sourceTree = "<group>"; };
+		1F606CEF2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsGuestToolsReleaseServiceTests.swift; sourceTree = "<group>"; };
+		1F606CF12FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveWindowsInstallationMediaSmokeTests.swift; sourceTree = "<group>"; };
 		1F64B9562FE8D4ED00598A65 /* KubernetesClusterModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesClusterModels.swift; sourceTree = "<group>"; };
 		1F64B9582FE8D4FE00598A65 /* KubernetesClusterDescriptorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesClusterDescriptorStore.swift; sourceTree = "<group>"; };
 		1F64B95A2FE8D53000598A65 /* AppleKubernetesClusterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleKubernetesClusterService.swift; sourceTree = "<group>"; };
@@ -1514,6 +1534,7 @@
 				1FBCEA432FE9B3AE00EAC55C /* VirtualMachineMemoryBalloonModels.swift */,
 				1FBCEA532FE9BBB100EAC55C /* VirtualMachineConsoleWindowModels.swift */,
 				1FBCEA552FE9BFFA00EAC55C /* ContainerFilesystemExportModels.swift */,
+				1F606CDF2FEB516B00FBE6ED /* WindowsVirtualMachineModels.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -1882,6 +1903,10 @@
 				1FBCEA352FE9AD0400EAC55C /* AppleVirtualMachineDiskImageExtender.swift */,
 				1FBCEA372FE9AD3600EAC55C /* VirtualMachineDiskImageResizeService.swift */,
 				1FBCEA452FE9B3B700EAC55C /* AppleVirtualMachineMemoryBalloonController.swift */,
+				1F606CE12FEB516C00FBE6ED /* WindowsInstallationMediaService.swift */,
+				1F606CE32FEB516C00FBE6ED /* WindowsPlatformArtifactPreparer.swift */,
+				1F606CE52FEB516C00FBE6ED /* WindowsVirtualMachineCreationService.swift */,
+				1F606CEB2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseService.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -2213,6 +2238,10 @@
 				1FBCEA4D2FE9B7F600EAC55C /* LinuxVirtualMachineDiskSnapshotServiceTests.swift */,
 				1FBCEA512FE9BBB100EAC55C /* VirtualMachineConsoleWindowModelsTests.swift */,
 				1FBCEA612FE9C58900EAC55C /* LiveAppleLinuxVirtualMachineSmokeTests.swift */,
+				1F606CE72FEB516C00FBE6ED /* WindowsVirtualMachineModelsTests.swift */,
+				1F606CE92FEB516C00FBE6ED /* WindowsInstallationMediaServiceTests.swift */,
+				1F606CEF2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseServiceTests.swift */,
+				1F606CF12FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -2345,6 +2374,7 @@
 			children = (
 				50A6FE055FE52A768F0F9C9A /* Localizable.xcstrings */,
 				1F606CC42FEAEEF300FBE6ED /* NativeRuntimeReleaseContract.json */,
+				1F606CED2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseContract.json */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -2597,6 +2627,7 @@
 			files = (
 				267B8B7DEB728875D45C11CC /* Localizable.xcstrings in Resources */,
 				1F606CC52FEAEEF300FBE6ED /* NativeRuntimeReleaseContract.json in Resources */,
+				1F606CEE2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseContract.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2617,9 +2648,11 @@
 				1F9D2C432FE7E7E20076F5B9 /* ComposeProjectLifecycleServiceTests.swift in Sources */,
 				1F5E64112FE8877100A430FF /* AppleLinuxVirtualMachineConfigurationFactoryTests.swift in Sources */,
 				1F9D2B722FE79B860076F5B9 /* AppleRuntimeCommandExecutorTests.swift in Sources */,
+				1F606CEA2FEB516C00FBE6ED /* WindowsInstallationMediaServiceTests.swift in Sources */,
 				1FBCEA422FE9AE9A00EAC55C /* VirtualMachineDiskImageResizeServiceTests.swift in Sources */,
 				1F9D2B332FE7755D0076F5B9 /* ImageBuildSecretServiceTests.swift in Sources */,
 				1F99F1BB2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift in Sources */,
+				1F606CF22FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift in Sources */,
 				1F9D2CA22FE803130076F5B9 /* StorageReclamationClientTests.swift in Sources */,
 				1F99F1CB2FE8CE4200DF0752 /* FieldDiagnosticServiceTests.swift in Sources */,
 				18E0B550FB9D7772C2D45292 /* ContainerBuildWorkerProcessTests.swift in Sources */,
@@ -2649,6 +2682,7 @@
 				1F5E63D12FE8787100A430FF /* LiveAppleContainerAttachmentSmokeTests.swift in Sources */,
 				1F9D2BA62FE7AA560076F5B9 /* MacVirtualMachineRuntimeOwnershipStoreTests.swift in Sources */,
 				1FBCEA4C2FE9B40A00EAC55C /* VirtualMachineMemoryBalloonTestSupport.swift in Sources */,
+				1F606CE82FEB516C00FBE6ED /* WindowsVirtualMachineModelsTests.swift in Sources */,
 				1FEC47542FE8435D00DC60B2 /* ComposeExecutionOverlayServiceTests.swift in Sources */,
 				1F9D2B5C2FE792CF0076F5B9 /* LinuxMachineManagementTests.swift in Sources */,
 				1F9D2B622FE796030076F5B9 /* AppleLinuxMachineInventoryServiceTests.swift in Sources */,
@@ -2659,6 +2693,7 @@
 				1F9D2B0F2FE769CE0076F5B9 /* ApplePublishedSocketWorkspaceTests.swift in Sources */,
 				1FEC47422FE8393A00DC60B2 /* VirtualMachineDiskImageRewriteServiceTests.swift in Sources */,
 				1F606CCB2FEAF0AE00FBE6ED /* LiveNativeRuntimeDistributionTests.swift in Sources */,
+				1F606CF02FEB52CD00FBE6ED /* WindowsGuestToolsReleaseServiceTests.swift in Sources */,
 				1F5E645B2FE89BD800A430FF /* AppleMacVirtualMachineDiskSnapshotLayerStoreTests.swift in Sources */,
 				1F9D2B052FE768E10076F5B9 /* ContainerAttachmentModelsTests.swift in Sources */,
 				1F9D2AFF2FE766480076F5B9 /* AppleImageServiceTests.swift in Sources */,
@@ -2880,6 +2915,7 @@
 				1F5E647D2FE8A5FB00A430FF /* HostResourceStateProviding.swift in Sources */,
 				1F5E63BD2FE870AC00A430FF /* TerminalPresetManagerView.swift in Sources */,
 				4F656DDFC3706DF8D8B4E3C0 /* ContainerCreationView.swift in Sources */,
+				1F606CE22FEB516C00FBE6ED /* WindowsInstallationMediaService.swift in Sources */,
 				1FBCEA102FE99D8100EAC55C /* VirtualMachineComputeService.swift in Sources */,
 				CF01A590ABF08323E6B93DC7 /* ContainerInspectorModel.swift in Sources */,
 				1F9D2ADB2FE75FF80076F5B9 /* AppleContainerSnapshotReader.swift in Sources */,
@@ -2903,6 +2939,7 @@
 				1F606CB32FEAE96400FBE6ED /* NativeRuntimeDistributionModels.swift in Sources */,
 				1F9D2B882FE7A1440076F5B9 /* MacVirtualMachineInstallationModel.swift in Sources */,
 				1FEC474C2FE841A400DC60B2 /* ComposeCanonicalModelValidator.swift in Sources */,
+				1F606CEC2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseService.swift in Sources */,
 				EDB26DFD01272D05145851C1 /* ContainerProvisioningModel.swift in Sources */,
 				1F9D2BD62FE7BE380076F5B9 /* MacVirtualMachineSharedDirectoriesView.swift in Sources */,
 				1FBCEA342FE9ACF800EAC55C /* VirtualMachineDiskImageResizeJournal.swift in Sources */,
@@ -2933,6 +2970,7 @@
 				1FEC47622FE84A8A00DC60B2 /* MenuBarQuickControlsView.swift in Sources */,
 				1F5E63972FE85C7700A430FF /* AppNotificationModels.swift in Sources */,
 				1F606CD32FEAF35A00FBE6ED /* ContainerBuilderImageIntegrityPolicy.swift in Sources */,
+				1F606CE62FEB516C00FBE6ED /* WindowsVirtualMachineCreationService.swift in Sources */,
 				1FB6BA822FE96CE600099F15 /* KubernetesResourceBrowserView.swift in Sources */,
 				1F5E63F12FE881E400A430FF /* AppleMacVirtualMachineNetworkDeviceFactory.swift in Sources */,
 				1F5E63D72FE87A2C00A430FF /* MacVirtualMachineAudioSection.swift in Sources */,
@@ -2955,6 +2993,7 @@
 				1F9D2BDC2FE7C30F0076F5B9 /* DockerCompatibilityModels.swift in Sources */,
 				1F606CBF2FEAECFF00FBE6ED /* NativeRuntimeMigrationCopier.swift in Sources */,
 				1F9D2AD52FE75CAB0076F5B9 /* AppleContainerCleanupClient.swift in Sources */,
+				1F606CE02FEB516C00FBE6ED /* WindowsVirtualMachineModels.swift in Sources */,
 				73762F62AD06A7F38EA6E1E3 /* ContainerToolsModel.swift in Sources */,
 				1F5E639B2FE85CB100A430FF /* AppNotificationSettingsModel.swift in Sources */,
 				1FBCEA482FE9B3EC00EAC55C /* VirtualMachineMemoryBalloonControl.swift in Sources */,
@@ -3015,6 +3054,7 @@
 				1F5E64292FE88AE600A430FF /* LinuxVirtualMachineRuntimeModel.swift in Sources */,
 				1F9D2C732FE7F9710076F5B9 /* VirtualMachineTransferModels.swift in Sources */,
 				1F5E63BB2FE870A800A430FF /* TerminalWorkspaceSessionView.swift in Sources */,
+				1F606CE42FEB516C00FBE6ED /* WindowsPlatformArtifactPreparer.swift in Sources */,
 				1F9D2C392FE7E7670076F5B9 /* ComposeLifecyclePlanner.swift in Sources */,
 				1F9D2BA22FE7AA0C0076F5B9 /* VirtualMachineRuntimeOwnershipStore.swift in Sources */,
 				89BC7AFF7D77A8BEBC3C1009 /* ImageOperationViews.swift in Sources */,

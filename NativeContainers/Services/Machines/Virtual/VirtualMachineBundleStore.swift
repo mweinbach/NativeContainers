@@ -103,6 +103,14 @@ struct VirtualMachineBundleStore {
     }
   }
 
+  func validatePreparedArtifacts(_ artifacts: WindowsPlatformArtifactURLs) throws {
+    if let missingArtifact = firstMissingArtifact(in: artifacts.all) {
+      throw WindowsPlatformArtifactError.missingArtifact(
+        missingArtifact.lastPathComponent
+      )
+    }
+  }
+
   func bundleURL(for id: UUID) -> URL {
     rootURL
       .appending(path: id.uuidString.lowercased(), directoryHint: .isDirectory)

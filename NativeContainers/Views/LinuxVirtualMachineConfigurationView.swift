@@ -48,21 +48,36 @@ struct LinuxVirtualMachineConfigurationView: View {
             ? { isConfirmingDiscardSavedState = true } : nil
         )
         LinuxVirtualMachineBootSection(
+          guest: machine.guest,
           installState: machine.installState,
-          configuration: machine.linuxConfiguration,
+          hasConfiguration: hasEFIConfiguration,
+          installationMediaPath: installationMediaPath,
+          securityMode: machine.windowsConfiguration?.securityMode,
           hasLiveInstallationMedia: runtime.snapshot.hasInstallationMedia
         )
         LinuxVirtualMachineNetworkSection(
+          guest: machine.guest,
           editMessage: topologyEditMessage,
           network: network,
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
         LinuxVirtualMachineConnectivitySection(
-          macAddress: machine.linuxConfiguration?.macAddress,
-          sharesClipboard: machine.linuxConfiguration?.sharesClipboard == true
+          guest: machine.guest,
+          macAddress: efiMACAddress,
+          sharesClipboard: sharesClipboard,
+          hasGuestTools: machine.windowsConfiguration?.guestTools != nil
         )
+        if let windows = machine.windowsConfiguration {
+          WindowsVirtualMachineIntegrationSection(
+            securityMode: windows.securityMode,
+            media: windows.installationMedia,
+            guestTools: windows.guestTools,
+            guestToolsMediaAttached: windows.effectiveGuestToolsMediaAttached
+          )
+        }
         LinuxVirtualMachineSharedDirectoriesView(
+          guest: machine.guest,
           runtimeState: runtime.snapshot.state,
           hasActiveRuntime: runtime.snapshot.target != nil,
           editMessage: topologyEditMessage,
@@ -114,7 +129,7 @@ struct LinuxVirtualMachineConfigurationView: View {
     guard !diskMaintenance.isBusy, !diskSnapshots.isBusy else {
       return "Wait for virtual disk maintenance to finish."
     }
-    guard machine.linuxConfiguration != nil,
+    guard hasEFIConfiguration,
       machine.installState == .readyToInstall || machine.installState == .stopped
     else {
       return "Finish preparing this VM before changing its configuration."
@@ -182,16 +197,37 @@ struct LinuxVirtualMachineConfigurationView: View {
     !diskMaintenance.isBusy && !diskSnapshots.isBusy
       && runtime.snapshot.canDiscardSavedState
   }
+
+  private var hasEFIConfiguration: Bool {
+    machine.linuxConfiguration != nil || machine.windowsConfiguration != nil
+  }
+
+  private var installationMediaPath: String? {
+    machine.linuxConfiguration?.installationMediaPath
+      ?? machine.windowsConfiguration?.installationMediaPath
+  }
+
+  private var efiMACAddress: String? {
+    machine.linuxConfiguration?.macAddress
+      ?? machine.windowsConfiguration?.macAddress
+  }
+
+  private var sharesClipboard: Bool {
+    machine.linuxConfiguration?.sharesClipboard
+      ?? machine.windowsConfiguration?.sharesClipboard
+      ?? false
+  }
 }
 
 private struct LinuxVirtualMachineNetworkSection: View {
+  let guest: VirtualMachineGuest
   let editMessage: LocalizedStringResource?
   let network: LinuxVirtualMachineNetworkModel
   let discardSavedState: (() -> Void)?
 
   var body: some View {
     VirtualMachineNetworkContent(
-      guest: .linux,
+      guest: guest,
       attachment: network.attachment,
       isLoading: network.isLoading,
       isWorking: network.isWorking,
@@ -217,11 +253,14 @@ private struct LinuxVirtualMachineConfigurationHeader: View {
 
   var body: some View {
     HStack(alignment: .top, spacing: 16) {
-      Image(systemName: "display")
+      Image(systemName: machine.guest == .windows ? "rectangle" : "display")
         .font(.system(size: 34))
-        .foregroundStyle(.mint)
+        .foregroundStyle(machine.guest == .windows ? Color.blue : Color.mint)
         .frame(width: 46, height: 46)
-        .background(.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        .background(
+          (machine.guest == .windows ? Color.blue : Color.mint).opacity(0.12),
+          in: RoundedRectangle(cornerRadius: 10)
+        )
       VStack(alignment: .leading, spacing: 7) {
         Text(machine.name)
           .font(.title2.weight(.semibold))
@@ -263,21 +302,26 @@ private struct LinuxVirtualMachineConfigurationHeader: View {
 }
 
 private struct LinuxVirtualMachineBootSection: View {
+  let guest: VirtualMachineGuest
   let installState: VirtualMachineInstallState
-  let configuration: LinuxVirtualMachineConfiguration?
+  let hasConfiguration: Bool
+  let installationMediaPath: String?
+  let securityMode: WindowsVirtualMachineSecurityMode?
   let hasLiveInstallationMedia: Bool
 
   var body: some View {
     GroupBox("Boot & Installation") {
       VStack(alignment: .leading, spacing: 10) {
-        LabeledContent("Firmware", value: "UEFI")
+        LabeledContent("Firmware") {
+          Text(firmwareLabel)
+        }
         LabeledContent("Installation") {
           Text(installationLabel)
         }
         LabeledContent("Installer ISO") {
           Text(installerLabel)
         }
-        if configuration != nil {
+        if hasConfiguration {
           LabeledContent("Machine identity", value: "Persistent generic platform")
         }
       }
@@ -303,15 +347,24 @@ private struct LinuxVirtualMachineBootSection: View {
 
   private var installerLabel: LocalizedStringResource {
     if hasLiveInstallationMedia { return "Attached to running guest" }
-    return configuration?.installationMediaPath == nil
+    return installationMediaPath == nil
       ? "Ejected from future boots"
       : "Attached on next boot"
+  }
+
+  private var firmwareLabel: LocalizedStringResource {
+    guard guest == .windows else { return "UEFI" }
+    return securityMode == .productionSecureBoot
+      ? "UEFI with Secure Boot"
+      : "UEFI with Secure Boot disabled"
   }
 }
 
 private struct LinuxVirtualMachineConnectivitySection: View {
+  let guest: VirtualMachineGuest
   let macAddress: String?
   let sharesClipboard: Bool
+  let hasGuestTools: Bool
 
   var body: some View {
     GroupBox("Connectivity") {
@@ -327,7 +380,9 @@ private struct LinuxVirtualMachineConnectivitySection: View {
           Text(sharedClipboardLabel)
         }
         LabeledContent("Display", value: "Virtio GPU")
-        LabeledContent("Audio", value: "Host output")
+        LabeledContent("Audio") {
+          Text(audioLabel)
+        }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.vertical, 6)
@@ -335,7 +390,83 @@ private struct LinuxVirtualMachineConnectivitySection: View {
   }
 
   private var sharedClipboardLabel: LocalizedStringResource {
-    sharesClipboard ? "Enabled" : "Disabled"
+    if guest == .windows, !hasGuestTools {
+      return "Requires signed guest tools"
+    }
+    return sharesClipboard ? "Enabled" : "Disabled"
+  }
+
+  private var audioLabel: LocalizedStringResource {
+    guest == .windows
+      ? "Virtio sound • requires NativeContainers driver"
+      : "Host output"
+  }
+}
+
+private struct WindowsVirtualMachineIntegrationSection: View {
+  let securityMode: WindowsVirtualMachineSecurityMode
+  let media: WindowsInstallationMediaMetadata
+  let guestTools: WindowsGuestToolsReleaseReference?
+  let guestToolsMediaAttached: Bool
+
+  var body: some View {
+    GroupBox("Windows Compatibility") {
+      VStack(alignment: .leading, spacing: 10) {
+        LabeledContent("Installer architecture", value: "ARM64")
+        LabeledContent("Installer volume") {
+          Text(media.volumeLabel)
+        }
+        LabeledContent("Installer size") {
+          Text(Int64(clamping: media.byteCount), format: .byteCount(style: .file))
+        }
+        LabeledContent("Installer SHA-256") {
+          Text(verbatim: media.sha256)
+            .font(.caption.monospaced())
+            .textSelection(.enabled)
+            .lineLimit(2)
+        }
+        LabeledContent("TPM 2.0", value: "Unavailable in Virtualization.framework")
+        LabeledContent("Setup compatibility", value: "TPM check only")
+        LabeledContent("Security mode") {
+          Text(securityLabel)
+        }
+        LabeledContent("Guest tools") {
+          Text(guestToolsLabel)
+        }
+        if securityMode == .developmentTestSigning {
+          Label(
+            "Secure Boot is disabled. This is the current bootable Windows mode.",
+            systemImage: "checkmark.shield.fill"
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        } else {
+          Label(
+            "Booting is disabled until the signed guest drivers pass release validation.",
+            systemImage: "lock.shield.fill"
+          )
+          .font(.caption)
+          .foregroundStyle(.orange)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.vertical, 6)
+    }
+  }
+
+  private var securityLabel: LocalizedStringResource {
+    securityMode == .productionSecureBoot
+      ? "Secure Boot • boot unavailable"
+      : "Secure Boot off • bootable"
+  }
+
+  private var guestToolsLabel: LocalizedStringResource {
+    guard let guestTools else {
+      return "Not attached • production drivers are not yet Microsoft-signed"
+    }
+    return guestToolsMediaAttached
+      ? "Version \(guestTools.version) attached"
+      : "Version \(guestTools.version) installed"
   }
 }
 

@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Security
 
 protocol VirtualMachineBundlePreparing: Sendable {
   func prepare(_ request: VirtualMachineBundlePreparationRequest) async throws
@@ -87,6 +88,7 @@ struct VirtualMachineBundlePreparationService:
       portability: request.portability
     )
     try applyIdentityPolicy(request)
+    try applyWindowsGuestAgentIdentityPolicy(request)
     try write(request.destinationManifest, to: request.destinationBundleURL)
     _ = try inspector.snapshot(of: request.destinationBundleURL)
     try Task.checkCancellation()
@@ -186,34 +188,45 @@ struct VirtualMachineBundlePreparationService:
       )
     }
 
-    if request.sourceManifest.guest == .macOS {
+    switch request.sourceManifest.guest {
+    case .macOS:
       guard request.sourceManifest.linuxDiskSnapshotConfiguration == nil,
-        request.destinationManifest.linuxDiskSnapshotConfiguration == nil
+        request.destinationManifest.linuxDiskSnapshotConfiguration == nil,
+        request.sourceManifest.windowsDiskSnapshotConfiguration == nil,
+        request.destinationManifest.windowsDiskSnapshotConfiguration == nil,
+        request.sourceManifest.windowsConfiguration == nil,
+        request.destinationManifest.windowsConfiguration == nil
       else {
         throw VirtualMachineBundleError.invalidBundle(
-          "the macOS manifest contains Linux disk snapshot state"
+          "the macOS manifest contains state for another guest type"
         )
       }
-      return
-    }
-
-    for manifest in [request.sourceManifest, request.destinationManifest] {
-      guard let configuration = manifest.linuxConfiguration,
-        configuration.installationMediaPath == nil,
-        manifest.auxiliaryStoragePath == nil,
-        manifest.hardwareModelPath == nil,
-        manifest.machineIdentifierPath == nil,
-        manifest.restoreImageURL == nil,
-        manifest.audioConfiguration == nil,
-        manifest.macOSGuestOperatingSystem == nil,
-        manifest.macOSMinimumCPUCount == nil,
-        manifest.macOSMinimumMemoryBytes == nil,
-        manifest.macOSFirstBootState == nil,
-        manifest.macOSDiskSnapshotConfiguration == nil
-      else {
-        throw VirtualMachineBundleError.invalidBundle(
-          "the Linux manifest contains incomplete or guest-incompatible state"
-        )
+    case .linux:
+      for manifest in [request.sourceManifest, request.destinationManifest] {
+        guard let configuration = manifest.linuxConfiguration,
+          configuration.installationMediaPath == nil,
+          manifest.windowsConfiguration == nil,
+          manifest.windowsDiskSnapshotConfiguration == nil,
+          hasNoMacOSOnlyState(manifest)
+        else {
+          throw VirtualMachineBundleError.invalidBundle(
+            "the Linux manifest contains incomplete or guest-incompatible state"
+          )
+        }
+      }
+    case .windows:
+      for manifest in [request.sourceManifest, request.destinationManifest] {
+        guard let configuration = manifest.windowsConfiguration,
+          configuration.installationMediaPath == nil,
+          configuration.setupConfigurationMediaPath == nil,
+          manifest.linuxConfiguration == nil,
+          manifest.linuxDiskSnapshotConfiguration == nil,
+          hasNoMacOSOnlyState(manifest)
+        else {
+          throw VirtualMachineBundleError.invalidBundle(
+            "the Windows manifest contains incomplete or guest-incompatible state"
+          )
+        }
       }
     }
 
@@ -224,16 +237,29 @@ struct VirtualMachineBundlePreparationService:
           == request.sourceManifest.networkConfiguration
       else {
         throw VirtualMachineBundleError.invalidBundle(
-          "the same-host Linux copy changed its network configuration"
+          "the same-host VM copy changed its network configuration"
         )
       }
     case .portable:
       guard request.destinationManifest.networkConfiguration == nil else {
         throw VirtualMachineBundleError.invalidBundle(
-          "host-local Linux network configuration remains in the portable manifest"
+          "host-local VM network configuration remains in the portable manifest"
         )
       }
     }
+  }
+
+  private func hasNoMacOSOnlyState(_ manifest: VirtualMachineManifest) -> Bool {
+    manifest.auxiliaryStoragePath == nil
+      && manifest.hardwareModelPath == nil
+      && manifest.machineIdentifierPath == nil
+      && manifest.restoreImageURL == nil
+      && manifest.audioConfiguration == nil
+      && manifest.macOSGuestOperatingSystem == nil
+      && manifest.macOSMinimumCPUCount == nil
+      && manifest.macOSMinimumMemoryBytes == nil
+      && manifest.macOSFirstBootState == nil
+      && manifest.macOSDiskSnapshotConfiguration == nil
   }
 
   private func validateDiskSnapshotArtifacts(
@@ -280,23 +306,33 @@ struct VirtualMachineBundlePreparationService:
   private func validateNetworkIdentityPolicy(
     _ request: VirtualMachineBundlePreparationRequest
   ) throws {
-    guard request.sourceManifest.guest == .linux else { return }
-    guard let source = request.sourceManifest.linuxConfiguration,
-      let destination = request.destinationManifest.linuxConfiguration,
-      linuxIdentityGenerator.isValidMACAddress(source.macAddress),
-      linuxIdentityGenerator.isValidMACAddress(destination.macAddress)
+    let sourceAddress: String?
+    let destinationAddress: String?
+    switch request.sourceManifest.guest {
+    case .macOS:
+      return
+    case .linux:
+      sourceAddress = request.sourceManifest.linuxConfiguration?.macAddress
+      destinationAddress = request.destinationManifest.linuxConfiguration?.macAddress
+    case .windows:
+      sourceAddress = request.sourceManifest.windowsConfiguration?.macAddress
+      destinationAddress = request.destinationManifest.windowsConfiguration?.macAddress
+    }
+    guard let sourceAddress, let destinationAddress,
+      linuxIdentityGenerator.isValidMACAddress(sourceAddress),
+      linuxIdentityGenerator.isValidMACAddress(destinationAddress)
     else {
       throw VirtualMachineBundleError.invalidMACAddress
     }
 
     switch request.identityPolicy {
     case .preserve:
-      guard destination.macAddress.caseInsensitiveCompare(source.macAddress) == .orderedSame
+      guard destinationAddress.caseInsensitiveCompare(sourceAddress) == .orderedSame
       else {
         throw VirtualMachineBundleError.invalidMACAddress
       }
     case .regenerate:
-      guard destination.macAddress.caseInsensitiveCompare(source.macAddress) != .orderedSame
+      guard destinationAddress.caseInsensitiveCompare(sourceAddress) != .orderedSame
       else {
         throw VirtualMachineBundleError.duplicateMACAddress
       }
@@ -309,6 +345,8 @@ struct VirtualMachineBundlePreparationService:
       try machineIdentifierGenerator.makeIdentifierData()
     case .linux:
       linuxIdentityGenerator.makeIdentifierData()
+    case .windows:
+      linuxIdentityGenerator.makeIdentifierData()
     }
   }
 
@@ -320,6 +358,8 @@ struct VirtualMachineBundlePreparationService:
     case .macOS:
       machineIdentifierGenerator.isValidIdentifierData(data)
     case .linux:
+      linuxIdentityGenerator.isValidIdentifierData(data)
+    case .windows:
       linuxIdentityGenerator.isValidIdentifierData(data)
     }
   }
@@ -335,6 +375,8 @@ struct VirtualMachineBundlePreparationService:
         manifest.machineIdentifierPath
       case .linux:
         manifest.linuxConfiguration?.machineIdentifierPath
+      case .windows:
+        manifest.windowsConfiguration?.machineIdentifierPath
       }
     guard let path else {
       throw VirtualMachineBundleError.invalidBundle(
@@ -350,6 +392,60 @@ struct VirtualMachineBundlePreparationService:
       )
     } catch {
       throw VirtualMachineBundleError.invalidBundle(error.localizedDescription)
+    }
+  }
+
+  private func applyWindowsGuestAgentIdentityPolicy(
+    _ request: VirtualMachineBundlePreparationRequest
+  ) throws {
+    guard request.sourceManifest.guest == .windows,
+      let sourcePath = request.sourceManifest.windowsConfiguration?.guestAgentSecretPath,
+      let destinationPath =
+        request.destinationManifest.windowsConfiguration?.guestAgentSecretPath
+    else {
+      return
+    }
+    let sourceURL = try artifactResolver.resolve(
+      sourcePath,
+      named: "guestAgentSecretPath",
+      in: request.sourceBundleURL,
+      writable: false
+    )
+    let destinationURL = try artifactResolver.resolve(
+      destinationPath,
+      named: "guestAgentSecretPath",
+      in: request.destinationBundleURL,
+      writable: request.identityPolicy == .regenerate
+    )
+    let sourceSecret = try Data(contentsOf: sourceURL)
+    guard sourceSecret.count == 32 else {
+      throw VirtualMachineBundleError.invalidBundle(
+        "the Windows guest-agent secret is invalid"
+      )
+    }
+
+    switch request.identityPolicy {
+    case .preserve:
+      guard try Data(contentsOf: destinationURL) == sourceSecret else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "the Windows guest-agent secret changed unexpectedly"
+        )
+      }
+    case .regenerate:
+      var secret = Data(count: 32)
+      let status = secret.withUnsafeMutableBytes { bytes in
+        SecRandomCopyBytes(kSecRandomDefault, bytes.count, bytes.baseAddress!)
+      }
+      guard status == errSecSuccess, secret != sourceSecret else {
+        throw VirtualMachineBundleError.invalidBundle(
+          "a fresh Windows guest-agent secret could not be generated"
+        )
+      }
+      try secret.write(to: destinationURL, options: .atomic)
+      try fileManager.setAttributes(
+        [.posixPermissions: 0o600],
+        ofItemAtPath: destinationURL.path
+      )
     }
   }
 

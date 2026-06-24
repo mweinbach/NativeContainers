@@ -118,6 +118,12 @@ actor VirtualMachineDiskImageResizeService:
         to: targetLogicalBytes,
         recoveredExistingJournal: false
       )
+    case .windows:
+      try await growLinux(
+        machineID: machineID,
+        to: targetLogicalBytes,
+        recoveredExistingJournal: false
+      )
     }
   }
 
@@ -169,7 +175,7 @@ actor VirtualMachineDiskImageResizeService:
               for: lease
             )
           }
-        case .linux:
+        case .linux, .windows:
           let lease = try await store.acquireLinuxDiskImageResizeRuntime(
             id: target.manifest.id
           )
@@ -599,7 +605,7 @@ actor VirtualMachineDiskImageResizeService:
     for lease: LinuxVirtualMachineRuntimeLease
   ) -> Context {
     let configuration = lease.machine.manifest
-      .effectiveLinuxDiskSnapshotConfiguration
+      .effectiveDiskSnapshotConfiguration
     return Context(
       target: lease.target,
       manifest: lease.machine.manifest,

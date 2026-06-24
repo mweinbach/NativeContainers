@@ -20,9 +20,9 @@ struct LinuxVirtualMachineRow: View {
     HStack(spacing: 14) {
       Button(action: onSelect) {
         HStack(spacing: 14) {
-          Image(systemName: "display")
+          Image(systemName: guestIcon)
             .font(.title2)
-            .foregroundStyle(.mint)
+            .foregroundStyle(guestTint)
             .frame(width: 30)
 
           VStack(alignment: .leading, spacing: 4) {
@@ -73,8 +73,8 @@ struct LinuxVirtualMachineRow: View {
         }
         .menuStyle(.borderlessButton)
         .disabled(diskMaintenance.isBusy)
-        .help("More Linux virtual machine actions")
-        .accessibilityLabel("More Linux virtual machine actions")
+        .help(moreActionsLabel)
+        .accessibilityLabel(moreActionsLabel)
       }
     }
     .padding(.vertical, 7)
@@ -92,7 +92,7 @@ struct LinuxVirtualMachineRow: View {
         Task { await runtime.startFresh() }
       }
     } message: {
-      Text("The suspended session is permanently discarded before Linux starts.")
+      Text(startFreshMessage)
     }
     .confirmationDialog(
       "Discard the saved state for \(machine.name)?",
@@ -236,7 +236,7 @@ struct LinuxVirtualMachineRow: View {
     case .readyToInstall:
       readyToInstallStateLabel
     case .installing:
-      "Installing Linux"
+      installingLabel
     case .stopped:
       stoppedStateLabel
     case .failed:
@@ -293,5 +293,29 @@ struct LinuxVirtualMachineRow: View {
     }
     if runtime.snapshot.isForceStopQueued { return "Force Stop Queued" }
     return "Force Stop…"
+  }
+
+  private var guestIcon: String {
+    machine.guest == .windows ? "rectangle" : "display"
+  }
+
+  private var guestTint: Color {
+    machine.guest == .windows ? .blue : .mint
+  }
+
+  private var moreActionsLabel: LocalizedStringResource {
+    machine.guest == .windows
+      ? "More Windows virtual machine actions"
+      : "More Linux virtual machine actions"
+  }
+
+  private var startFreshMessage: LocalizedStringResource {
+    machine.guest == .windows
+      ? "The suspended session is permanently discarded before Windows starts."
+      : "The suspended session is permanently discarded before Linux starts."
+  }
+
+  private var installingLabel: LocalizedStringResource {
+    machine.guest == .windows ? "Installing Windows" : "Installing Linux"
   }
 }

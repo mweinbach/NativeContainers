@@ -150,11 +150,17 @@ struct VirtualMachineComputeState: Equatable, Sendable {
     memoryBytes: UInt64?
   ) {
     switch guest {
-    case .linux:
+    case .linux, .windows:
       guard guestMinimumCPUCount == nil,
         guestMinimumMemoryBytes == nil
       else {
         throw VirtualMachineComputeError.invalidPersistedGuestRequirements
+      }
+      if guest == .windows {
+        return (
+          2,
+          4 * VirtualMachineResources.bytesPerGiB
+        )
       }
       return (nil, nil)
     case .macOS:

@@ -2771,3 +2771,42 @@ separately signed fork binary is version/digest/team pinned. Source staging,
 ad-hoc signing, or a version string alone cannot enable it. Producing that
 artifact belongs to the Developer ID release work intentionally excluded from
 this implementation slice.
+
+## ADR-093: Gate native Windows ARM64 support on signed guest tools
+
+**Status:** Accepted experimental implementation — 2026-06-23
+
+Windows 11 ARM64 uses the existing generic-EFI Virtualization.framework runtime
+instead of introducing another hypervisor or a converted appliance format. The
+app accepts normal local Microsoft ISO media, streams a private copy while
+hashing it, mounts only that copy read-only for inspection, and requires an
+ARM64 EFI boot manager plus the boot and install WIM payloads. The manifest
+retains the media provenance and checksum without increasing the bundle schema.
+
+The persistent system disk is NVMe and setup media is read-only USB mass
+storage. VirtIO graphics, network, sound, entropy, balloon and vsock devices
+keep the runtime aligned with the companion open-source Windows driver stack.
+All guest-neutral GUI VM lifecycle, storage, snapshot, network, clone, transfer,
+saved-state, folder and metadata services remain shared; Windows-specific
+branches are limited to platform artifacts, device configuration, security and
+guest integration.
+
+Virtualization.framework exposes no public virtual TPM. The setup answer disk
+therefore bypasses only the TPM check, never CPU, memory, storage or Secure
+Boot. The current bootable mode defaults Secure Boot off. A visible toggle
+exposes the prepared production mode, which uses persistent Secure Boot NVRAM
+on macOS 27 and later, but enabling it blocks both creation and runtime start.
+
+The app does not embed mutable driver binaries. A bundled release contract
+names one immutable HTTPS `NCTools.iso`, exact SHA-256 and byte count. Download
+uses private partial staging and a versioned managed cache. Production VM
+creation and boot remain hard-gated until the contract independently asserts
+both Microsoft driver signing and a completed stock-ISO Secure Boot validation.
+The current contract asserts neither, so experimental source and test coverage
+do not become a product support claim by accident.
+
+The companion repository owns the ARM64 drivers, VirtIO sound WaveRT adapter,
+guest service/user agent, packaging and signing evidence. It pins upstream
+virtio-win and Microsoft SysVAD revisions and preserves their notices rather
+than copying untracked snapshots. See `docs/WINDOWS_SUPPORT.md` for the exact
+release and verification boundary.

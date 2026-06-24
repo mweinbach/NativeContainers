@@ -51,8 +51,26 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     else {
       throw LinuxVirtualMachineError.unsupportedMemorySize(resources.memoryBytes)
     }
-    guard let linuxConfiguration = machine.manifest.linuxConfiguration else {
-      throw LinuxVirtualMachineError.missingManifestValue("linuxConfiguration")
+    let macAddressString: String
+    let sharesClipboard: Bool
+    switch machine.manifest.guest {
+    case .linux:
+      guard let configuration = machine.manifest.linuxConfiguration else {
+        throw LinuxVirtualMachineError.missingManifestValue("linuxConfiguration")
+      }
+      macAddressString = configuration.macAddress
+      sharesClipboard = configuration.sharesClipboard
+    case .windows:
+      guard let configuration = machine.manifest.windowsConfiguration else {
+        throw WindowsVirtualMachineError.missingManifestValue("windowsConfiguration")
+      }
+      guard configuration.securityMode.isCurrentlyBootable else {
+        throw WindowsVirtualMachineError.secureBootBootUnavailable
+      }
+      macAddressString = configuration.macAddress
+      sharesClipboard = configuration.sharesClipboard
+    case .macOS:
+      throw VirtualMachineModelError.requiresLinuxGuest(machine.manifest.id)
     }
 
     let machineIdentifierData = try Data(contentsOf: machine.machineIdentifierURL)
@@ -63,8 +81,8 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     else {
       throw LinuxVirtualMachineError.invalidMachineIdentifier
     }
-    guard let macAddress = VZMACAddress(string: linuxConfiguration.macAddress) else {
-      throw LinuxVirtualMachineError.invalidMACAddress(linuxConfiguration.macAddress)
+    guard let macAddress = VZMACAddress(string: macAddressString) else {
+      throw LinuxVirtualMachineError.invalidMACAddress(macAddressString)
     }
 
     let platform = VZGenericPlatformConfiguration()
@@ -76,17 +94,27 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     let diskAttachment = try diskImageService.makeWritableAttachment(
       for: machine
     )
-    let disk = VZVirtioBlockDeviceConfiguration(attachment: diskAttachment)
+    let disk: VZStorageDeviceConfiguration =
+      if machine.manifest.guest == .windows {
+        VZNVMExpressControllerDeviceConfiguration(attachment: diskAttachment)
+      } else {
+        VZVirtioBlockDeviceConfiguration(attachment: diskAttachment)
+      }
     var usbControllers: [VZUSBControllerConfiguration] = []
-    if let installationMediaURL = machine.installationMediaURL {
-      let installationAttachment = try VZDiskImageStorageDeviceAttachment(
-        url: installationMediaURL,
-        readOnly: true
-      )
+    let removableMediaURLs = [
+      machine.installationMediaURL,
+      machine.setupConfigurationMediaURL,
+      machine.guestToolsMediaURL,
+    ].compactMap { $0 }
+    if !removableMediaURLs.isEmpty {
       let controller = VZXHCIControllerConfiguration()
-      controller.usbDevices = [
-        VZUSBMassStorageDeviceConfiguration(attachment: installationAttachment)
-      ]
+      controller.usbDevices = try removableMediaURLs.map { url in
+        let attachment = try VZDiskImageStorageDeviceAttachment(
+          url: url,
+          readOnly: true
+        )
+        return VZUSBMassStorageDeviceConfiguration(attachment: attachment)
+      }
       usbControllers = [controller]
     }
 
@@ -126,8 +154,11 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     configuration.memoryBalloonDevices = [
       VZVirtioTraditionalMemoryBalloonDeviceConfiguration()
     ]
-    if linuxConfiguration.sharesClipboard {
+    if machine.manifest.guest == .linux, sharesClipboard {
       configuration.consoleDevices = [makeSpiceConsole()]
+    }
+    if machine.manifest.guest == .windows {
+      configuration.socketDevices = [VZVirtioSocketDeviceConfiguration()]
     }
 
     do {

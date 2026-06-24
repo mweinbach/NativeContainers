@@ -15,6 +15,7 @@ struct LinuxVirtualMachineRuntimeView: View {
       LinuxVirtualMachineRuntimeHeader(
         machineName: machine.name,
         snapshot: model.snapshot,
+        allowsStart: allowsStart,
         capturesSystemKeys: $capturesSystemKeys,
         start: { Task { await model.start() } },
         pause: { Task { await model.pause() } },
@@ -33,6 +34,9 @@ struct LinuxVirtualMachineRuntimeView: View {
           isConfirmingDiscardSavedState = true
         }
       )
+      if !allowsStart {
+        WindowsVirtualMachineSecureBootBanner()
+      }
       LinuxVirtualMachineSavedStateBanner(snapshot: model.snapshot)
       VirtualMachineMemoryBalloonNotice(
         snapshot: model.snapshot.memoryBalloon
@@ -78,7 +82,7 @@ struct LinuxVirtualMachineRuntimeView: View {
         Task { await model.startFresh() }
       }
     } message: {
-      Text("The suspended session is permanently discarded before Linux starts.")
+      Text(startFreshMessage)
     }
     .confirmationDialog(
       "Discard the saved state for \(machine.name)?",
@@ -99,15 +103,32 @@ struct LinuxVirtualMachineRuntimeView: View {
       }
     } message: {
       Text(
-        "This safely ejects the installer from the running guest and prevents the ISO from attaching on future boots."
+        installationCompletionMessage
       )
     }
+  }
+
+  private var startFreshMessage: LocalizedStringResource {
+    machine.guest == .windows
+      ? "The suspended session is permanently discarded before Windows starts."
+      : "The suspended session is permanently discarded before Linux starts."
+  }
+
+  private var installationCompletionMessage: LocalizedStringResource {
+    machine.guest == .windows
+      ? "This ejects the Windows installer, setup compatibility disk, and guest-tools media from the running guest and future boots."
+      : "This safely ejects the installer from the running guest and prevents the ISO from attaching on future boots."
+  }
+
+  private var allowsStart: Bool {
+    machine.windowsConfiguration?.securityMode.isCurrentlyBootable ?? true
   }
 }
 
 private struct LinuxVirtualMachineRuntimeHeader: View {
   let machineName: String
   let snapshot: LinuxVirtualMachineRuntimeSnapshot
+  let allowsStart: Bool
   @Binding var capturesSystemKeys: Bool
   let start: () -> Void
   let pause: () -> Void
@@ -148,6 +169,7 @@ private struct LinuxVirtualMachineRuntimeHeader: View {
         HStack(spacing: 12) {
           LinuxVirtualMachineRuntimeControls(
             snapshot: snapshot,
+            allowsStart: allowsStart,
             start: start,
             pause: pause,
             resume: resume,
@@ -167,6 +189,7 @@ private struct LinuxVirtualMachineRuntimeHeader: View {
         VStack(alignment: .trailing, spacing: 8) {
           LinuxVirtualMachineRuntimeControls(
             snapshot: snapshot,
+            allowsStart: allowsStart,
             start: start,
             pause: pause,
             resume: resume,
@@ -210,6 +233,7 @@ private struct LinuxVirtualMachineRuntimeAccessoryControls: View {
 
 private struct LinuxVirtualMachineRuntimeControls: View {
   let snapshot: LinuxVirtualMachineRuntimeSnapshot
+  let allowsStart: Bool
   let start: () -> Void
   let pause: () -> Void
   let resume: () -> Void
@@ -225,11 +249,15 @@ private struct LinuxVirtualMachineRuntimeControls: View {
       if snapshot.canStart {
         Button(startTitle, systemImage: "play.fill", action: start)
           .buttonStyle(.borderedProminent)
+          .disabled(!allowsStart)
+          .help(startHelp)
       } else if snapshot.canStartFresh,
         case .incompatible = snapshot.savedStateStatus
       {
         Button("Start Fresh…", systemImage: "play.fill", action: confirmStartFresh)
           .buttonStyle(.borderedProminent)
+          .disabled(!allowsStart)
+          .help(startHelp)
       }
       if snapshot.canPause {
         Button("Pause", systemImage: "pause.fill", action: pause)
@@ -262,6 +290,7 @@ private struct LinuxVirtualMachineRuntimeControls: View {
       if snapshot.canDiscardSavedState {
         Menu {
           Button("Start Fresh…", systemImage: "play.fill", action: confirmStartFresh)
+            .disabled(!allowsStart)
           Button(
             "Discard Saved State…",
             systemImage: "trash",
@@ -283,12 +312,32 @@ private struct LinuxVirtualMachineRuntimeControls: View {
     return "Start"
   }
 
+  private var startHelp: String {
+    allowsStart
+      ? String(localized: "Start the virtual machine")
+      : String(localized: "Turn off Secure Boot to start this Windows virtual machine")
+  }
+
   private var forceStopTitle: LocalizedStringResource {
     if snapshot.isForceStopCompleteAwaitingCleanup {
       return "Force Stopped"
     }
     if snapshot.isForceStopQueued { return "Force Stop Queued" }
     return "Force Stop…"
+  }
+}
+
+private struct WindowsVirtualMachineSecureBootBanner: View {
+  var body: some View {
+    Label(
+      "Secure Boot is enabled. Booting is disabled until the signed guest drivers pass release validation.",
+      systemImage: "lock.shield.fill"
+    )
+    .font(.caption)
+    .foregroundStyle(.orange)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, 14)
+    .padding(.bottom, 10)
   }
 }
 

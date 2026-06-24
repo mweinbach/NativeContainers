@@ -167,6 +167,12 @@ private struct VirtualMachineNetworkGuidance: View {
       "NativeContainers recreates this shared network when the app launches. Changes apply on the next cold start."
     case (.linux, .hostOnly):
       "NativeContainers recreates this isolated network when the app launches. External access is unavailable."
+    case (.windows, .nat):
+      "NAT is portable. Network changes apply on the next cold start."
+    case (.windows, .shared):
+      "NativeContainers recreates this shared network when the app launches. Changes apply on the next cold start."
+    case (.windows, .hostOnly):
+      "NativeContainers recreates this isolated network when the app launches. External access is unavailable."
     }
   }
 }
