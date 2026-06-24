@@ -46,6 +46,34 @@ struct VirtualMachineConsoleWindowModelsTests {
     #expect(mismatched.resolve(in: [machine]) == nil)
   }
 
+  @Test
+  func automaticDisplayReconfigurationRequiresPositiveDimensions() {
+    #expect(
+      !VirtualMachineConsoleContainerView.shouldAutomaticallyReconfigureDisplay(
+        requested: true,
+        size: .zero
+      )
+    )
+    #expect(
+      !VirtualMachineConsoleContainerView.shouldAutomaticallyReconfigureDisplay(
+        requested: true,
+        size: CGSize(width: 1_280, height: 0)
+      )
+    )
+    #expect(
+      VirtualMachineConsoleContainerView.shouldAutomaticallyReconfigureDisplay(
+        requested: true,
+        size: CGSize(width: 1_280, height: 800)
+      )
+    )
+    #expect(
+      !VirtualMachineConsoleContainerView.shouldAutomaticallyReconfigureDisplay(
+        requested: false,
+        size: CGSize(width: 1_280, height: 800)
+      )
+    )
+  }
+
   private func makeManifest(
     name: String,
     guest: VirtualMachineGuest

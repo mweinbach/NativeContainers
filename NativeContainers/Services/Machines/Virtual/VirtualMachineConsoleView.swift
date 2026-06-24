@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 @preconcurrency import Virtualization
 
@@ -10,22 +11,26 @@ struct VirtualMachineConsoleView: NSViewRepresentable {
     Coordinator()
   }
 
-  func makeNSView(context: Context) -> VZVirtualMachineView {
-    let view = VZVirtualMachineView()
+  func makeNSView(context: Context) -> VirtualMachineConsoleContainerView {
+    let view = VirtualMachineConsoleContainerView()
     configure(view, coordinator: context.coordinator)
     return view
   }
 
-  func updateNSView(_ view: VZVirtualMachineView, context: Context) {
+  func updateNSView(
+    _ view: VirtualMachineConsoleContainerView,
+    context: Context
+  ) {
     configure(view, coordinator: context.coordinator)
   }
 
   private func configure(
-    _ view: VZVirtualMachineView,
+    _ container: VirtualMachineConsoleContainerView,
     coordinator: Coordinator
   ) {
+    let view = container.virtualMachineView
     guard let virtualMachine = console.virtualMachine else {
-      detach(view, coordinator: coordinator)
+      detach(container, coordinator: coordinator)
       return
     }
     if #available(macOS 27.0, *) {
@@ -45,13 +50,16 @@ struct VirtualMachineConsoleView: NSViewRepresentable {
       view.virtualMachine = virtualMachine
     }
     view.capturesSystemKeys = capturesSystemKeys
-    view.automaticallyReconfiguresDisplay = automaticallyReconfiguresDisplay
+    container.requestsAutomaticDisplayReconfiguration =
+      automaticallyReconfiguresDisplay
   }
 
   private func detach(
-    _ view: VZVirtualMachineView,
+    _ container: VirtualMachineConsoleContainerView,
     coordinator: Coordinator
   ) {
+    let view = container.virtualMachineView
+    container.requestsAutomaticDisplayReconfiguration = false
     if #available(macOS 27.0, *) {
       view.adaptor = nil
     } else {
@@ -62,9 +70,11 @@ struct VirtualMachineConsoleView: NSViewRepresentable {
   }
 
   static func dismantleNSView(
-    _ view: VZVirtualMachineView,
+    _ container: VirtualMachineConsoleContainerView,
     coordinator: Coordinator
   ) {
+    let view = container.virtualMachineView
+    container.requestsAutomaticDisplayReconfiguration = false
     if #available(macOS 27.0, *) {
       view.adaptor = nil
     } else {
@@ -78,5 +88,50 @@ struct VirtualMachineConsoleView: NSViewRepresentable {
   final class Coordinator {
     var adaptorStorage: Any?
     var virtualMachineIdentifier: ObjectIdentifier?
+  }
+}
+
+@MainActor
+final class VirtualMachineConsoleContainerView: NSView {
+  let virtualMachineView = VZVirtualMachineView()
+
+  var requestsAutomaticDisplayReconfiguration = false {
+    didSet { updateAutomaticDisplayReconfiguration() }
+  }
+
+  override init(frame frameRect: NSRect) {
+    super.init(frame: frameRect)
+    addSubview(virtualMachineView)
+  }
+
+  convenience init() {
+    self.init(frame: .zero)
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
+
+  override func layout() {
+    super.layout()
+    virtualMachineView.frame = bounds
+    updateAutomaticDisplayReconfiguration()
+  }
+
+  nonisolated static func shouldAutomaticallyReconfigureDisplay(
+    requested: Bool,
+    size: CGSize
+  ) -> Bool {
+    requested && size.width > 0 && size.height > 0
+  }
+
+  private func updateAutomaticDisplayReconfiguration() {
+    virtualMachineView.automaticallyReconfiguresDisplay =
+      Self
+      .shouldAutomaticallyReconfigureDisplay(
+        requested: requestsAutomaticDisplayReconfiguration,
+        size: bounds.size
+      )
   }
 }
