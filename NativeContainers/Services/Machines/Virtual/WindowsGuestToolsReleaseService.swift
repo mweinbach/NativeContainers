@@ -11,6 +11,7 @@ struct WindowsGuestToolsReleaseContract: Codable, Equatable, Sendable {
   let sha256: String?
   let byteCount: UInt64?
   let isMicrosoftSigned: Bool
+  let isWindowsSecureBootValidated: Bool
   let sourceRepositoryURL: URL
 }
 
@@ -300,6 +301,9 @@ actor WindowsGuestToolsReleaseManager: WindowsGuestToolsReleaseManaging {
     }
     guard contract.isMicrosoftSigned else {
       throw WindowsVirtualMachineError.productionGuestToolsUnavailable
+    }
+    guard contract.isWindowsSecureBootValidated else {
+      throw WindowsVirtualMachineError.productionSecureBootUnvalidated
     }
     guard let artifactURL = contract.artifactURL,
       artifactURL.scheme?.lowercased() == "https",

@@ -190,7 +190,7 @@ struct DiskutilDiskImageMounter: DiskImageMounting {
   func detach(_ image: MountedDiskImage) async throws {
     let result = try await executor.execute(
       executableURL: Self.executableURL,
-      arguments: ["image", "detach", image.devicePath],
+      arguments: ["eject", image.devicePath],
       environment: nil,
       timeout: .seconds(120)
     )

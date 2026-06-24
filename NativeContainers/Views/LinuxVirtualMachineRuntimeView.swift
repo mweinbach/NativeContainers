@@ -78,7 +78,7 @@ struct LinuxVirtualMachineRuntimeView: View {
         Task { await model.startFresh() }
       }
     } message: {
-      Text("The suspended session is permanently discarded before Linux starts.")
+      Text(startFreshMessage)
     }
     .confirmationDialog(
       "Discard the saved state for \(machine.name)?",
@@ -99,9 +99,21 @@ struct LinuxVirtualMachineRuntimeView: View {
       }
     } message: {
       Text(
-        "This safely ejects the installer from the running guest and prevents the ISO from attaching on future boots."
+        installationCompletionMessage
       )
     }
+  }
+
+  private var startFreshMessage: LocalizedStringResource {
+    machine.guest == .windows
+      ? "The suspended session is permanently discarded before Windows starts."
+      : "The suspended session is permanently discarded before Linux starts."
+  }
+
+  private var installationCompletionMessage: LocalizedStringResource {
+    machine.guest == .windows
+      ? "This ejects the Windows installer, setup compatibility disk, and guest-tools media from the running guest and future boots."
+      : "This safely ejects the installer from the running guest and prevents the ISO from attaching on future boots."
   }
 }
 

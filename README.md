@@ -13,6 +13,10 @@ This repository is intentionally split into two runtime lanes:
 - General Linux and macOS virtual machines use
   [`Virtualization.framework`](https://developer.apple.com/documentation/virtualization)
   directly, including `VZVirtualMachineView` for native guest display.
+- Experimental Windows 11 ARM64 virtual machines use the same native framework
+  with verified Microsoft ISO media. Production creation stays hard-gated until
+  the companion ARM64 guest drivers are Microsoft-signed and the complete stock
+  ISO Secure Boot path is release-validated.
 
 The app targets Apple silicon and macOS 26 or newer. The ordinary container lane
 uses Apple `container` 1.0.0 from Apple’s
@@ -39,6 +43,7 @@ the remaining destructive VM verification passes are still open. See:
 - [Research notes](docs/RESEARCH.md)
 - [Architecture decisions](docs/DECISIONS.md)
 - [Current status](docs/STATUS.md)
+- [Windows 11 ARM64 support](docs/WINDOWS_SUPPORT.md)
 
 The feature matrix is also the availability contract. In particular, physical
 USB is implemented but blocked in the current signed build by the unavailable

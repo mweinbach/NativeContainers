@@ -118,7 +118,7 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
     }
     let guestToolsMediaURL: URL?
     if let configuration = manifest.windowsConfiguration,
-      configuration.guestToolsMediaAttached,
+      configuration.effectiveGuestToolsMediaAttached,
       let release = configuration.guestTools
     {
       guestToolsMediaURL = try windowsGuestToolsCache.resolve(release)

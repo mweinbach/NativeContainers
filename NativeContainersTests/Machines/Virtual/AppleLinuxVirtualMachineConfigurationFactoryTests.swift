@@ -248,6 +248,53 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
       try LinuxVirtualMachineBundleResolver(rootURL: fixture.root).resolve(prepared)
     }
   }
+
+  @Test
+  func buildsWindowsConfigurationWithNVMeSetupMediaAndGuestAgentSocket() async throws {
+    let fixture = try WindowsConfigurationFixture()
+    defer { fixture.remove() }
+    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
+      to: fixture.installationMedia
+    )
+    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
+      to: fixture.setupConfigurationMedia
+    )
+    let machine = try LinuxVirtualMachineBundleResolver(
+      rootURL: fixture.root
+    ).resolve(fixture.manifest)
+
+    let configuration = try AppleLinuxVirtualMachineConfigurationFactory()
+      .makeConfiguration(for: machine)
+
+    #expect(
+      configuration.storageDevices.first
+        is VZNVMExpressControllerDeviceConfiguration
+    )
+    let controller = try #require(
+      configuration.usbControllers.first as? VZXHCIControllerConfiguration
+    )
+    #expect(controller.usbDevices.count == 2)
+    let mountedURLs = try Set(
+      controller.usbDevices.map { device in
+        let storage = try #require(
+          device as? VZUSBMassStorageDeviceConfiguration
+        )
+        let attachment = try #require(
+          storage.attachment as? VZDiskImageStorageDeviceAttachment
+        )
+        #expect(attachment.isReadOnly)
+        return attachment.url
+      }
+    )
+    #expect(
+      mountedURLs
+        == [fixture.installationMedia, fixture.setupConfigurationMedia]
+    )
+    #expect(configuration.socketDevices.first is VZVirtioSocketDeviceConfiguration)
+    #expect(configuration.consoleDevices.isEmpty)
+    #expect(configuration.audioDevices.first is VZVirtioSoundDeviceConfiguration)
+    #expect(configuration.networkDevices.first is VZVirtioNetworkDeviceConfiguration)
+  }
 }
 
 @MainActor
@@ -377,6 +424,100 @@ private struct LinuxConfigurationFixture {
       id: draft.id,
       installationMediaURL: installationMedia
     )
+  }
+
+  func remove() {
+    try? FileManager.default.removeItem(at: root)
+  }
+}
+
+private struct WindowsConfigurationFixture {
+  let root: URL
+  let bundle: URL
+  let installationMedia: URL
+  let setupConfigurationMedia: URL
+  let manifest: VirtualMachineManifest
+
+  init() throws {
+    root = FileManager.default.temporaryDirectory.appending(
+      path: "NativeContainers-WindowsConfigurationTests-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    var manifest = try VirtualMachineManifest(
+      name: "Windows Configuration",
+      guest: .windows,
+      installState: .readyToInstall,
+      resources: resources
+    )
+    bundle =
+      root
+      .appending(
+        path: manifest.id.uuidString.lowercased(),
+        directoryHint: .isDirectory
+      )
+      .appendingPathExtension(VirtualMachineLibrary.bundleExtension)
+    let platform = bundle.appending(
+      path: WindowsPlatformArtifactURLs.directoryName,
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: platform,
+      withIntermediateDirectories: true
+    )
+    let disk = bundle.appending(path: "Disk.img")
+    guard FileManager.default.createFile(atPath: disk.path, contents: nil) else {
+      throw CocoaError(.fileWriteUnknown)
+    }
+    let diskHandle = try FileHandle(forWritingTo: disk)
+    try diskHandle.truncate(atOffset: resources.diskBytes)
+    try diskHandle.close()
+
+    let efi = platform.appending(
+      path: WindowsPlatformArtifactURLs.efiVariableStoreFilename
+    )
+    _ = try VZEFIVariableStore(creatingVariableStoreAt: efi)
+    try VZGenericMachineIdentifier().dataRepresentation.write(
+      to: platform.appending(
+        path: WindowsPlatformArtifactURLs.machineIdentifierFilename
+      )
+    )
+    installationMedia = platform.appending(
+      path: WindowsPlatformArtifactURLs.installationMediaFilename
+    )
+    setupConfigurationMedia = platform.appending(
+      path: WindowsPlatformArtifactURLs.setupConfigurationMediaFilename
+    )
+    try Data(repeating: 7, count: 32).write(
+      to: platform.appending(
+        path: WindowsPlatformArtifactURLs.guestAgentSecretFilename
+      )
+    )
+    manifest.windowsConfiguration = WindowsVirtualMachineConfiguration(
+      efiVariableStorePath: WindowsPlatformArtifactURLs.efiVariableStoreManifestPath,
+      machineIdentifierPath: WindowsPlatformArtifactURLs.machineIdentifierManifestPath,
+      installationMediaPath: WindowsPlatformArtifactURLs.installationMediaManifestPath,
+      setupConfigurationMediaPath:
+        WindowsPlatformArtifactURLs.setupConfigurationMediaManifestPath,
+      guestAgentSecretPath: WindowsPlatformArtifactURLs.guestAgentSecretManifestPath,
+      installationMedia: WindowsInstallationMediaMetadata(
+        sha256: String(repeating: "0", count: 64),
+        byteCount: 9,
+        volumeLabel: "WINDOWS_ARM64",
+        architecture: .arm64,
+        sourceFilename: "Windows.iso",
+        efiBootManagerPath: "efi/boot/bootaa64.efi",
+        bootImagePath: "sources/boot.wim",
+        installImagePath: "sources/install.wim"
+      ),
+      macAddress: "02:00:00:00:00:77",
+      securityMode: .developmentTestSigning
+    )
+    self.manifest = manifest
   }
 
   func remove() {

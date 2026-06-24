@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LinuxVirtualMachineSharedDirectoriesView: View {
+  let guest: VirtualMachineGuest
   let runtimeState: LinuxVirtualMachineRuntimeState
   let hasActiveRuntime: Bool
   let editMessage: LocalizedStringResource?
@@ -16,6 +17,7 @@ struct LinuxVirtualMachineSharedDirectoriesView: View {
 
   var body: some View {
     LinuxVirtualMachineSharedDirectoriesSection(
+      guest: guest,
       directories: sharedDirectories.directories,
       isLoading: sharedDirectories.isLoading,
       isWorking: sharedDirectories.isWorking,
@@ -48,6 +50,7 @@ struct LinuxVirtualMachineSharedDirectoriesView: View {
     .sheet(isPresented: $isPresentingAddSheet, onDismiss: clearPendingDirectory) {
       if let sourceURL = pendingDirectoryURL {
         LinuxVirtualMachineAddSharedDirectoryView(
+          guest: guest,
           sourceURL: sourceURL,
           isWorking: sharedDirectories.isWorking,
           cancel: { isPresentingAddSheet = false },
@@ -98,6 +101,7 @@ struct LinuxVirtualMachineSharedDirectoriesView: View {
 }
 
 private struct LinuxVirtualMachineSharedDirectoriesSection: View {
+  let guest: VirtualMachineGuest
   let directories: [LinuxVirtualMachineSharedDirectorySummary]
   let isLoading: Bool
   let isWorking: Bool
@@ -145,6 +149,7 @@ private struct LinuxVirtualMachineSharedDirectoriesSection: View {
           VStack(spacing: 0) {
             ForEach(directories.enumerated(), id: \.element.id) { index, directory in
               LinuxVirtualMachineSharedDirectoryRow(
+                guest: guest,
                 guestName: directory.guestName,
                 hostPath: directory.lastKnownPath,
                 readOnly: directory.readOnly,
@@ -158,7 +163,7 @@ private struct LinuxVirtualMachineSharedDirectoriesSection: View {
           }
         }
 
-        LinuxVirtioFSMountInstructions()
+        LinuxVirtioFSMountInstructions(guest: guest)
 
         HStack {
           Text("Folder changes apply on the next cold start.")
@@ -182,6 +187,7 @@ private struct LinuxVirtualMachineSharedDirectoriesSection: View {
 }
 
 private struct LinuxVirtualMachineSharedDirectoryRow: View {
+  let guest: VirtualMachineGuest
   let guestName: String
   let hostPath: String
   let readOnly: Bool
@@ -213,7 +219,7 @@ private struct LinuxVirtualMachineSharedDirectoryRow: View {
           .foregroundStyle(.secondary)
           .lineLimit(1)
           .truncationMode(.middle)
-        Text(verbatim: "/mnt/nativecontainers/\(guestName)")
+        Text(verbatim: guestPath)
           .font(.caption.monospaced())
           .foregroundStyle(.tertiary)
           .textSelection(.enabled)
@@ -227,32 +233,50 @@ private struct LinuxVirtualMachineSharedDirectoryRow: View {
     }
     .padding(.vertical, 10)
   }
+
+  private var guestPath: String {
+    guest == .windows
+      ? "\\\\nativecontainers\\\(guestName)"
+      : "/mnt/nativecontainers/\(guestName)"
+  }
 }
 
 private struct LinuxVirtioFSMountInstructions: View {
+  let guest: VirtualMachineGuest
   private let mountCommand =
     "sudo mkdir -p /mnt/nativecontainers && sudo mount -t virtiofs nativecontainers /mnt/nativecontainers"
 
   var body: some View {
     VStack(alignment: .leading, spacing: 7) {
-      Label("Mount in Linux", systemImage: "terminal")
-        .font(.subheadline.weight(.semibold))
-      Text(
-        "Run this command in the guest after boot. The Linux kernel must include VirtioFS support."
-      )
-      .font(.caption)
-      .foregroundStyle(.secondary)
-      Text(verbatim: mountCommand)
-        .font(.caption.monospaced())
-        .textSelection(.enabled)
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
+      if guest == .windows {
+        Label("Mount in Windows", systemImage: "network")
+          .font(.subheadline.weight(.semibold))
+        Text(
+          "The NativeContainers guest service maps these VirtioFS shares through WinFsp after signed guest tools are installed."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      } else {
+        Label("Mount in Linux", systemImage: "terminal")
+          .font(.subheadline.weight(.semibold))
+        Text(
+          "Run this command in the guest after boot. The Linux kernel must include VirtioFS support."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        Text(verbatim: mountCommand)
+          .font(.caption.monospaced())
+          .textSelection(.enabled)
+          .padding(8)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
+      }
     }
   }
 }
 
 private struct LinuxVirtualMachineAddSharedDirectoryView: View {
+  let guest: VirtualMachineGuest
   let sourceURL: URL
   let isWorking: Bool
   let cancel: () -> Void
@@ -262,11 +286,13 @@ private struct LinuxVirtualMachineAddSharedDirectoryView: View {
   @State private var readOnly = true
 
   init(
+    guest: VirtualMachineGuest,
     sourceURL: URL,
     isWorking: Bool,
     cancel: @escaping () -> Void,
     save: @escaping (String, Bool) -> Void
   ) {
+    self.guest = guest
     self.sourceURL = sourceURL
     self.isWorking = isWorking
     self.cancel = cancel
@@ -277,6 +303,7 @@ private struct LinuxVirtualMachineAddSharedDirectoryView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
       LinuxVirtualMachineAddSharedDirectoryHeader(
+        guest: guest,
         sourcePath: sourceURL.path(percentEncoded: false)
       )
       Form {
@@ -288,11 +315,9 @@ private struct LinuxVirtualMachineAddSharedDirectoryView: View {
         .pickerStyle(.segmented)
       }
       .formStyle(.grouped)
-      Text(
-        "After mounting VirtioFS, this folder appears under /mnt/nativecontainers/<guest name>."
-      )
-      .font(.caption)
-      .foregroundStyle(.secondary)
+      Text(guestPathDescription)
+        .font(.caption)
+        .foregroundStyle(.secondary)
       HStack {
         Spacer()
         Button("Cancel", action: cancel)
@@ -309,14 +334,21 @@ private struct LinuxVirtualMachineAddSharedDirectoryView: View {
     .padding(24)
     .frame(width: 500)
   }
+
+  private var guestPathDescription: LocalizedStringResource {
+    guest == .windows
+      ? "After signed guest tools mount VirtioFS, this folder appears under \\\\nativecontainers\\<guest name>."
+      : "After mounting VirtioFS, this folder appears under /mnt/nativecontainers/<guest name>."
+  }
 }
 
 private struct LinuxVirtualMachineAddSharedDirectoryHeader: View {
+  let guest: VirtualMachineGuest
   let sourcePath: String
 
   var body: some View {
     VStack(alignment: .leading, spacing: 5) {
-      Text("Add Linux Shared Folder")
+      Text(title)
         .font(.title2.weight(.semibold))
       Text(sourcePath)
         .font(.callout)
@@ -324,6 +356,12 @@ private struct LinuxVirtualMachineAddSharedDirectoryHeader: View {
         .lineLimit(2)
         .truncationMode(.middle)
     }
+  }
+
+  private var title: LocalizedStringResource {
+    guest == .windows
+      ? "Add Windows Shared Folder"
+      : "Add Linux Shared Folder"
   }
 }
 

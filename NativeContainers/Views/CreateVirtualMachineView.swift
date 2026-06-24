@@ -27,9 +27,21 @@ struct CreateVirtualMachineView: View {
     resourceConstraint = defaults.constraint
     _guest = State(initialValue: initialGuest)
     _name = State(initialValue: initialGuest.defaultDisplayName)
-    _cpuCount = State(initialValue: defaults.virtualMachine.cpuCount)
-    _memoryGiB = State(initialValue: defaults.virtualMachine.memoryGiB)
-    _diskGiB = State(initialValue: defaults.virtualMachine.diskGiB)
+    _cpuCount = State(
+      initialValue: initialGuest == .windows
+        ? max(defaults.virtualMachine.cpuCount, 2)
+        : defaults.virtualMachine.cpuCount
+    )
+    _memoryGiB = State(
+      initialValue: initialGuest == .windows
+        ? max(defaults.virtualMachine.memoryGiB, 4)
+        : defaults.virtualMachine.memoryGiB
+    )
+    _diskGiB = State(
+      initialValue: initialGuest == .windows
+        ? max(defaults.virtualMachine.diskGiB, 64)
+        : defaults.virtualMachine.diskGiB
+    )
   }
 
   var body: some View {
@@ -47,10 +59,19 @@ struct CreateVirtualMachineView: View {
         Stepper(
           "CPUs: \(cpuCount)",
           value: $cpuCount,
-          in: 1...ProcessInfo.processInfo.processorCount
+          in: minimumCPUCount...ProcessInfo.processInfo.processorCount
         )
-        Stepper("Memory: \(memoryGiB) GiB", value: $memoryGiB, in: 1...128)
-        Stepper("Disk: \(diskGiB) GiB", value: $diskGiB, in: 8...1024, step: 8)
+        Stepper(
+          "Memory: \(memoryGiB) GiB",
+          value: $memoryGiB,
+          in: minimumMemoryGiB...128
+        )
+        Stepper(
+          "Disk: \(diskGiB) GiB",
+          value: $diskGiB,
+          in: minimumDiskGiB...1024,
+          step: 8
+        )
         WorkloadResourceConstraintNotice(constraint: resourceConstraint)
 
         if guest != .macOS {
@@ -142,6 +163,21 @@ struct CreateVirtualMachineView: View {
     !isCreating
       && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       && (guest == .macOS || installationMediaURL != nil)
+      && cpuCount >= minimumCPUCount
+      && memoryGiB >= minimumMemoryGiB
+      && diskGiB >= minimumDiskGiB
+  }
+
+  private var minimumCPUCount: Int {
+    guest == .windows ? 2 : 1
+  }
+
+  private var minimumMemoryGiB: Int {
+    guest == .windows ? 4 : 1
+  }
+
+  private var minimumDiskGiB: Int {
+    guest == .windows ? 64 : 8
   }
 
   private var creationDescription: LocalizedStringResource {

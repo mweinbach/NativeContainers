@@ -25,6 +25,28 @@ struct WindowsGuestToolsReleaseServiceTests {
   }
 
   @Test
+  func unvalidatedSecureBootHardGatesSignedReleaseWithoutDownloading() async throws {
+    let fixture = try WindowsGuestToolsFixture()
+    defer { fixture.remove() }
+    let downloader = RecordingWindowsGuestToolsDownloader(data: Data([1]))
+    let manager = WindowsGuestToolsReleaseManager(
+      contractLoader: StaticWindowsGuestToolsContractLoader(
+        contract: fixture.contract(
+          isMicrosoftSigned: true,
+          isWindowsSecureBootValidated: false
+        )
+      ),
+      downloader: downloader,
+      cache: WindowsGuestToolsCache(rootURL: fixture.cache)
+    )
+
+    await #expect(throws: WindowsVirtualMachineError.productionSecureBootUnvalidated) {
+      try await manager.prepareProductionRelease()
+    }
+    #expect(await downloader.downloadCount() == 0)
+  }
+
+  @Test
   func signedReleaseDownloadsVerifiesAndReusesManagedCache() async throws {
     let fixture = try WindowsGuestToolsFixture()
     defer { fixture.remove() }
@@ -125,6 +147,7 @@ private struct WindowsGuestToolsFixture {
 
   func contract(
     isMicrosoftSigned: Bool,
+    isWindowsSecureBootValidated: Bool = true,
     data: Data = Data([1])
   ) -> WindowsGuestToolsReleaseContract {
     WindowsGuestToolsReleaseContract(
@@ -134,6 +157,7 @@ private struct WindowsGuestToolsFixture {
       sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
       byteCount: UInt64(data.count),
       isMicrosoftSigned: isMicrosoftSigned,
+      isWindowsSecureBootValidated: isWindowsSecureBootValidated,
       sourceRepositoryURL: URL(
         string: "https://github.com/example/NativeContainersWindowsGuestTools"
       )!

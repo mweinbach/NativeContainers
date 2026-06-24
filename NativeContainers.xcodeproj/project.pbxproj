@@ -184,6 +184,7 @@
 		1F606CEC2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CEB2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseService.swift */; };
 		1F606CEE2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseContract.json in Resources */ = {isa = PBXBuildFile; fileRef = 1F606CED2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseContract.json */; };
 		1F606CF02FEB52CD00FBE6ED /* WindowsGuestToolsReleaseServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CEF2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseServiceTests.swift */; };
+		1F606CF22FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F606CF12FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift */; };
 		1F64B9572FE8D4ED00598A65 /* KubernetesClusterModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B9562FE8D4ED00598A65 /* KubernetesClusterModels.swift */; };
 		1F64B9592FE8D4FE00598A65 /* KubernetesClusterDescriptorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B9582FE8D4FE00598A65 /* KubernetesClusterDescriptorStore.swift */; };
 		1F64B95B2FE8D53000598A65 /* AppleKubernetesClusterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64B95A2FE8D53000598A65 /* AppleKubernetesClusterService.swift */; };
@@ -872,6 +873,7 @@
 		1F606CEB2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsGuestToolsReleaseService.swift; sourceTree = "<group>"; };
 		1F606CED2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseContract.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = WindowsGuestToolsReleaseContract.json; sourceTree = "<group>"; };
 		1F606CEF2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsGuestToolsReleaseServiceTests.swift; sourceTree = "<group>"; };
+		1F606CF12FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveWindowsInstallationMediaSmokeTests.swift; sourceTree = "<group>"; };
 		1F64B9562FE8D4ED00598A65 /* KubernetesClusterModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesClusterModels.swift; sourceTree = "<group>"; };
 		1F64B9582FE8D4FE00598A65 /* KubernetesClusterDescriptorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesClusterDescriptorStore.swift; sourceTree = "<group>"; };
 		1F64B95A2FE8D53000598A65 /* AppleKubernetesClusterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleKubernetesClusterService.swift; sourceTree = "<group>"; };
@@ -2239,6 +2241,7 @@
 				1F606CE72FEB516C00FBE6ED /* WindowsVirtualMachineModelsTests.swift */,
 				1F606CE92FEB516C00FBE6ED /* WindowsInstallationMediaServiceTests.swift */,
 				1F606CEF2FEB52CD00FBE6ED /* WindowsGuestToolsReleaseServiceTests.swift */,
+				1F606CF12FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift */,
 			);
 			path = Virtual;
 			sourceTree = "<group>";
@@ -2649,6 +2652,7 @@
 				1FBCEA422FE9AE9A00EAC55C /* VirtualMachineDiskImageResizeServiceTests.swift in Sources */,
 				1F9D2B332FE7755D0076F5B9 /* ImageBuildSecretServiceTests.swift in Sources */,
 				1F99F1BB2FE8C53400DF0752 /* PerformanceBenchmarkServiceTests.swift in Sources */,
+				1F606CF22FEB539100FBE6ED /* LiveWindowsInstallationMediaSmokeTests.swift in Sources */,
 				1F9D2CA22FE803130076F5B9 /* StorageReclamationClientTests.swift in Sources */,
 				1F99F1CB2FE8CE4200DF0752 /* FieldDiagnosticServiceTests.swift in Sources */,
 				18E0B550FB9D7772C2D45292 /* ContainerBuildWorkerProcessTests.swift in Sources */,

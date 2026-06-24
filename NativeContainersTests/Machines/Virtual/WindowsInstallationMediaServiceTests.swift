@@ -96,6 +96,116 @@ struct WindowsInstallationMediaServiceTests {
     #expect(try Data(contentsOf: artifacts.guestAgentSecret).count == 32)
     #expect(!address.isEmpty)
   }
+
+  @Test
+  func setupWriterCreatesMountableFATImageWithOnlyTPMBypass() async throws {
+    let fixture = try WindowsMediaFixture()
+    defer { fixture.remove() }
+    let imageURL = fixture.root.appending(path: "SetupConfig.img")
+    let mounter = DiskutilDiskImageMounter()
+    let secret = Data((0..<32).map { UInt8($0) })
+
+    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
+      to: imageURL,
+      guestAgentSecret: secret
+    )
+    let image = try await mounter.attach(imageURL, readOnly: true)
+    let answer: String
+    let embeddedSecret: Data
+    do {
+      answer = try String(
+        contentsOf: image.mountURL.appending(path: "Autounattend.xml"),
+        encoding: .utf8
+      )
+      embeddedSecret = try Data(
+        contentsOf:
+          image.mountURL
+          .appending(
+            path: DiskutilWindowsSetupConfigurationMediaWriter.integrationDirectoryName,
+            directoryHint: .isDirectory
+          )
+          .appending(
+            path: DiskutilWindowsSetupConfigurationMediaWriter.guestAgentSecretFilename
+          )
+      )
+      try await mounter.detach(image)
+    } catch {
+      try? await mounter.detach(image)
+      throw error
+    }
+
+    #expect(answer.contains("BypassTPMCheck"))
+    #expect(!answer.contains("BypassSecureBootCheck"))
+    #expect(!answer.contains("BypassCPUCheck"))
+    #expect(!answer.contains("BypassRAMCheck"))
+    #expect(embeddedSecret == secret)
+  }
+
+  @Test
+  func setupWriterRejectsInvalidGuestAgentSecretBeforeCreatingImage() async throws {
+    let fixture = try WindowsMediaFixture()
+    defer { fixture.remove() }
+    let imageURL = fixture.root.appending(path: "SetupConfig.img")
+
+    await #expect(throws: WindowsPlatformArtifactError.invalidGuestAgentSecret) {
+      try await DiskutilWindowsSetupConfigurationMediaWriter().write(
+        to: imageURL,
+        guestAgentSecret: Data(repeating: 0, count: 31)
+      )
+    }
+
+    #expect(!FileManager.default.fileExists(atPath: imageURL.path))
+  }
+
+  @Test
+  func diskutilMounterEjectsWholeAttachedImageDevice() async throws {
+    let executor = RecordingWindowsHostCommandExecutor(
+      result: HostCommandResult(
+        exitCode: 0,
+        standardOutput: "Disk /dev/disk99 ejected",
+        standardError: "",
+        outputWasTruncated: false
+      )
+    )
+    let image = MountedDiskImage(
+      devicePath: "/dev/disk99",
+      mountURL: URL(filePath: "/Volumes/NCTSETUP", directoryHint: .isDirectory),
+      volumeLabel: "NCTSETUP"
+    )
+
+    try await DiskutilDiskImageMounter(executor: executor).detach(image)
+
+    let invocation = try #require(await executor.invocation)
+    #expect(invocation.executableURL == DiskutilDiskImageMounter.executableURL)
+    #expect(invocation.arguments == ["eject", "/dev/disk99"])
+  }
+}
+
+private actor RecordingWindowsHostCommandExecutor: HostCommandExecuting {
+  struct Invocation: Sendable {
+    let executableURL: URL
+    let arguments: [String]
+  }
+
+  private let result: HostCommandResult
+  private(set) var invocation: Invocation?
+
+  init(result: HostCommandResult) {
+    self.result = result
+  }
+
+  func execute(
+    executableURL: URL,
+    arguments: [String],
+    environment: [String: String]?,
+    timeout: Duration
+  ) async throws -> HostCommandResult {
+    invocation = Invocation(
+      executableURL: executableURL,
+      arguments: arguments
+    )
+    return result
+  }
 }
 
 private actor RecordingWindowsMediaMounter: DiskImageMounting {

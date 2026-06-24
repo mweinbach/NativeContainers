@@ -5,5 +5,6 @@
   "sha256": null,
   "byteCount": null,
   "isMicrosoftSigned": false,
+  "isWindowsSecureBootValidated": false,
   "sourceRepositoryURL": "https://github.com/mweinbach/NativeContainersWindowsGuestTools"
 }

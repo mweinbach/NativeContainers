@@ -79,7 +79,10 @@ protocol WindowsPlatformIdentityCreating: Sendable {
 }
 
 protocol WindowsSetupConfigurationMediaWriting: Sendable {
-  func write(to destinationURL: URL) async throws
+  func write(
+    to destinationURL: URL,
+    guestAgentSecret: Data
+  ) async throws
 }
 
 struct WindowsPlatformArtifactPreparer: WindowsPlatformArtifactPreparing {
@@ -120,12 +123,17 @@ struct WindowsPlatformArtifactPreparer: WindowsPlatformArtifactPreparing {
       copy: copy
     )
     try Task.checkCancellation()
-    try await setupMediaWriter.write(to: destination.setupConfigurationMedia)
-    try Task.checkCancellation()
     let macAddress = try identityService.create(
       at: destination,
       securityMode: securityMode
     )
+    try Task.checkCancellation()
+    let guestAgentSecret = try Data(contentsOf: destination.guestAgentSecret)
+    try await setupMediaWriter.write(
+      to: destination.setupConfigurationMedia,
+      guestAgentSecret: guestAgentSecret
+    )
+    try Task.checkCancellation()
     return WindowsPlatformPreparationResult(
       macAddress: macAddress,
       installationMedia: media
@@ -182,6 +190,8 @@ struct DiskutilWindowsSetupConfigurationMediaWriter:
   static let imageSize = "16MiB"
   static let volumeName = "NCTSETUP"
   static let answerFilename = "Autounattend.xml"
+  static let integrationDirectoryName = "NativeContainers"
+  static let guestAgentSecretFilename = "GuestAgentSecret.bin"
 
   private let executor: any HostCommandExecuting
   private let mounter: any DiskImageMounting
@@ -194,7 +204,13 @@ struct DiskutilWindowsSetupConfigurationMediaWriter:
     self.mounter = mounter ?? DiskutilDiskImageMounter(executor: executor)
   }
 
-  func write(to destinationURL: URL) async throws {
+  func write(
+    to destinationURL: URL,
+    guestAgentSecret: Data
+  ) async throws {
+    guard guestAgentSecret.count == 32 else {
+      throw WindowsPlatformArtifactError.invalidGuestAgentSecret
+    }
     let result = try await executor.execute(
       executableURL: DiskutilDiskImageMounter.executableURL,
       arguments: [
@@ -221,6 +237,18 @@ struct DiskutilWindowsSetupConfigurationMediaWriter:
     do {
       let answerURL = image.mountURL.appending(path: Self.answerFilename)
       try Data(Self.answerFile.utf8).write(to: answerURL, options: [.atomic])
+      let integrationDirectory = image.mountURL.appending(
+        path: Self.integrationDirectoryName,
+        directoryHint: .isDirectory
+      )
+      try FileManager.default.createDirectory(
+        at: integrationDirectory,
+        withIntermediateDirectories: false
+      )
+      try guestAgentSecret.write(
+        to: integrationDirectory.appending(path: Self.guestAgentSecretFilename),
+        options: [.atomic]
+      )
       try await mounter.detach(image)
     } catch {
       try? await mounter.detach(image)
@@ -231,6 +259,13 @@ struct DiskutilWindowsSetupConfigurationMediaWriter:
       ofItemAtPath: destinationURL.path
     )
     completed = true
+  }
+
+  func write(to destinationURL: URL) async throws {
+    try await write(
+      to: destinationURL,
+      guestAgentSecret: Data(repeating: 0, count: 32)
+    )
   }
 
   private func diagnostic(from result: HostCommandResult) -> String {
@@ -264,6 +299,7 @@ struct DiskutilWindowsSetupConfigurationMediaWriter:
 enum WindowsPlatformArtifactError: LocalizedError, Equatable {
   case setupMediaCreationFailed(String)
   case unableToCreateGuestAgentSecret(OSStatus)
+  case invalidGuestAgentSecret
   case missingArtifact(String)
 
   var errorDescription: String? {
@@ -272,6 +308,8 @@ enum WindowsPlatformArtifactError: LocalizedError, Equatable {
       "The Windows setup configuration image could not be created: \(diagnostic)"
     case .unableToCreateGuestAgentSecret(let status):
       "The Windows guest-agent secret could not be generated (Security status \(status))."
+    case .invalidGuestAgentSecret:
+      "The Windows guest-agent secret must contain exactly 32 bytes."
     case .missingArtifact(let filename):
       "Windows platform preparation did not create \(filename)."
     }

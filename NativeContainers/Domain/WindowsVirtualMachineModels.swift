@@ -42,7 +42,7 @@ struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
   var macAddress: String
   let securityMode: WindowsVirtualMachineSecurityMode
   var guestTools: WindowsGuestToolsReleaseReference?
-  var guestToolsMediaAttached: Bool
+  var guestToolsMediaAttached: Bool? = nil
   var sharesClipboard: Bool
 
   init(
@@ -70,6 +70,10 @@ struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
     self.guestToolsMediaAttached = guestToolsMediaAttached ?? (guestTools != nil)
     self.sharesClipboard = sharesClipboard
   }
+
+  var effectiveGuestToolsMediaAttached: Bool {
+    guestToolsMediaAttached ?? (guestTools != nil)
+  }
 }
 
 struct WindowsPlatformPreparationResult: Equatable, Sendable {
@@ -90,6 +94,7 @@ enum WindowsVirtualMachineError: LocalizedError, Equatable {
   case insufficientDisk(UInt64)
   case secureBootRequiresMacOS27
   case productionGuestToolsUnavailable
+  case productionSecureBootUnvalidated
   case invalidConfiguration(String)
 
   var errorDescription: String? {
@@ -118,6 +123,8 @@ enum WindowsVirtualMachineError: LocalizedError, Equatable {
       "Secure Boot for Windows requires macOS 27 or newer."
     case .productionGuestToolsUnavailable:
       "Production Windows support remains unavailable until the required guest drivers are Microsoft-signed."
+    case .productionSecureBootUnvalidated:
+      "Production Windows support remains unavailable until the stock ARM64 installer and signed drivers pass the Secure Boot release validation."
     case .invalidConfiguration(let reason):
       "The Windows virtual machine configuration is invalid: \(reason)"
     }

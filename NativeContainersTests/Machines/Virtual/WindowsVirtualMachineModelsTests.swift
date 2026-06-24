@@ -60,6 +60,25 @@ struct WindowsVirtualMachineModelsTests {
   }
 
   @Test
+  func windowsConfigurationWithoutGuestToolsMediaFlagStillDecodes() throws {
+    let configuration = makeConfiguration()
+    var object = try #require(
+      JSONSerialization.jsonObject(
+        with: JSONEncoder().encode(configuration)
+      ) as? [String: Any]
+    )
+    object.removeValue(forKey: "guestToolsMediaAttached")
+
+    let decoded = try JSONDecoder().decode(
+      WindowsVirtualMachineConfiguration.self,
+      from: JSONSerialization.data(withJSONObject: object)
+    )
+
+    #expect(decoded.guestToolsMediaAttached == nil)
+    #expect(!decoded.effectiveGuestToolsMediaAttached)
+  }
+
+  @Test
   func finishingInstallationEjectsBothSetupVolumesFromFutureBoots() throws {
     let resources = try VirtualMachineResources(
       cpuCount: 4,
