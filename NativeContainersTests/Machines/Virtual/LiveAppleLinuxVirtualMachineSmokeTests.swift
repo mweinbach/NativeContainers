@@ -642,24 +642,8 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       ])
   }
 
-  @Test("Host-only peer discovery normalizes BSD ARP output")
-  func hostOnlyPeerDiscoveryNormalizesBSDARPOutput() throws {
-    let output =
-      "? (192.168.64.7) at 2:0:0:0:0:a on vmnet2 ifscope [ethernet]\n"
-
-    let address = try Self.arpPeerAddress(
-      in: output,
-      matching: "02:00:00:00:00:0a"
-    )
-
-    #expect(address == "192.168.64.7")
-    #expect(
-      try Self.arpPeerAddress(
-        in: output,
-        matching: "02:00:00:00:00:0b"
-      ) == nil
-    )
-
+  @Test("Host-only peer discovery validates vmnet DHCP leases")
+  func hostOnlyPeerDiscoveryValidatesVmnetDHCPLeases() throws {
     var subnetAddress = in_addr()
     var subnetMask = in_addr()
     #expect(
@@ -672,32 +656,35 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
         inet_pton(AF_INET, $0, &subnetMask)
       } == 1
     )
-    let probeAddresses = try Self.hostOnlyProbeAddresses(
+    let leases = """
+      {
+      name=nativecontainers
+      ip_address=192.168.128.5
+      hw_address=1,2:0:0:0:0:a
+      identifier=1,2:0:0:0:0:a
+      lease=0x1234
+      }
+      {
+      name=unrelated
+      ip_address=192.168.64.2
+      hw_address=1,2:0:0:0:0:b
+      }
+      """
+    let address = try Self.dhcpLeaseAddress(
+      in: leases,
+      matching: "02:00:00:00:00:0a",
       subnetAddress: subnetAddress,
       subnetMask: subnetMask
     )
-    #expect(probeAddresses.count == 253)
-    #expect(probeAddresses.first == "192.168.128.2")
-    #expect(probeAddresses.last == "192.168.128.254")
+
+    #expect(address == "192.168.128.5")
     #expect(
-      Self.tcpProbeConfirmsReachability(
-        HostCommandResult(
-          exitCode: 1,
-          standardOutput: "",
-          standardError: "nc: connectx failed: Connection refused",
-          outputWasTruncated: false
-        )
-      )
-    )
-    #expect(
-      !Self.tcpProbeConfirmsReachability(
-        HostCommandResult(
-          exitCode: 1,
-          standardOutput: "",
-          standardError: "nc: connectx failed: Operation timed out",
-          outputWasTruncated: false
-        )
-      )
+      try Self.dhcpLeaseAddress(
+        in: leases,
+        matching: "02:00:00:00:00:0b",
+        subnetAddress: subnetAddress,
+        subnetMask: subnetMask
+      ) == nil
     )
   }
 
@@ -1328,44 +1315,16 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
       &subnetMask
     )
     let subnet = "\(ipv4String(subnetAddress))/\(ipv4String(subnetMask))"
-    let probeAddresses = try hostOnlyProbeAddresses(
-      subnetAddress: subnetAddress,
-      subnetMask: subnetMask
-    )
-    let commands = FoundationHostCommandExecutor()
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: .seconds(timeoutSeconds))
-    var nextProbeDeadline = clock.now
 
     while clock.now < deadline {
-      if clock.now >= nextProbeDeadline {
-        await probeHostOnlyAddresses(probeAddresses)
-        nextProbeDeadline = clock.now.advanced(by: .seconds(10))
-      }
-      let arp = try await commands.execute(
-        executableURL: URL(filePath: "/usr/sbin/arp"),
-        arguments: ["-an"],
-        environment: nil,
-        timeout: .seconds(5)
-      )
-      guard arp.exitCode == 0, !arp.outputWasTruncated else {
-        throw LiveLinuxVirtualMachineSmokeError.customNetworkUnavailable(
-          "arp inspection failed while checking \(subnet)"
-        )
-      }
-      if let peerAddress = try arpPeerAddress(
-        in: arp.standardOutput,
-        matching: normalizedMACAddress
-      ) {
-        let tcpProbe = try await commands.execute(
-          executableURL: URL(filePath: "/usr/bin/nc"),
-          arguments: ["-4", "-n", "-z", "-G", "2", peerAddress, "1"],
-          environment: nil,
-          timeout: .seconds(5)
-        )
-        if tcpProbeConfirmsReachability(tcpProbe) {
-          return peerAddress
-        }
+      if let peerAddress = try hostOnlyDHCPLeaseAddress(
+        matching: normalizedMACAddress,
+        subnetAddress: subnetAddress,
+        subnetMask: subnetMask
+      ), await tcpEndpointConfirmsReachability(peerAddress) {
+        return peerAddress
       }
       try await Task.sleep(for: .milliseconds(500))
     }
@@ -1375,77 +1334,164 @@ struct LiveAppleLinuxVirtualMachineSmokeTests {
     )
   }
 
-  private static func hostOnlyProbeAddresses(
+  private static func hostOnlyDHCPLeaseAddress(
+    matching macAddress: String,
     subnetAddress: in_addr,
     subnetMask: in_addr
-  ) throws -> [String] {
-    let hostAddress = UInt32(bigEndian: subnetAddress.s_addr)
-    let hostMask = UInt32(bigEndian: subnetMask.s_addr)
-    let networkAddress = hostAddress & hostMask
-    let broadcastAddress = networkAddress | ~hostMask
-    guard broadcastAddress > networkAddress + 1,
-      broadcastAddress - networkAddress <= 1_024
-    else {
+  ) throws -> String? {
+    let path = "/var/db/dhcpd_leases"
+    let descriptor = path.withCString {
+      Darwin.open($0, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+    }
+    if descriptor < 0 {
+      if errno == ENOENT { return nil }
       throw LiveLinuxVirtualMachineSmokeError.customNetworkUnavailable(
-        "the reserved subnet is empty or exceeds the 1,024-address probe limit"
+        "the vmnet DHCP lease database could not be opened"
       )
     }
+    defer { Darwin.close(descriptor) }
 
-    return (networkAddress + 1..<broadcastAddress).compactMap { address in
-      guard address != hostAddress else { return nil }
-      return ipv4String(in_addr(s_addr: address.bigEndian))
+    var metadata = stat()
+    guard Darwin.fstat(descriptor, &metadata) == 0,
+      metadata.st_mode & S_IFMT == S_IFREG,
+      metadata.st_uid == 0,
+      metadata.st_nlink == 1,
+      metadata.st_mode & 0o022 == 0,
+      metadata.st_size >= 0,
+      metadata.st_size <= 1_024 * 1_024
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.customNetworkUnavailable(
+        "the vmnet DHCP lease database failed safety validation"
+      )
     }
+    let handle = FileHandle(
+      fileDescriptor: descriptor,
+      closeOnDealloc: false
+    )
+    guard let data = try handle.readToEnd(),
+      data.count == Int(metadata.st_size),
+      let contents = String(data: data, encoding: .utf8)
+    else {
+      throw LiveLinuxVirtualMachineSmokeError.customNetworkUnavailable(
+        "the vmnet DHCP lease database could not be read completely"
+      )
+    }
+    return try dhcpLeaseAddress(
+      in: contents,
+      matching: macAddress,
+      subnetAddress: subnetAddress,
+      subnetMask: subnetMask
+    )
   }
 
-  private static func probeHostOnlyAddresses(_ addresses: [String]) async {
-    let batchSize = 32
-    for startIndex in stride(from: 0, to: addresses.count, by: batchSize) {
-      let endIndex = min(startIndex + batchSize, addresses.count)
-      let batch = addresses[startIndex..<endIndex]
-      await withTaskGroup(of: Void.self) { group in
-        for address in batch {
-          group.addTask {
-            _ = try? await FoundationHostCommandExecutor().execute(
-              executableURL: URL(filePath: "/usr/bin/nc"),
-              arguments: ["-4", "-n", "-z", "-G", "1", address, "1"],
-              environment: nil,
-              timeout: .seconds(2)
-            )
-          }
+  private static func dhcpLeaseAddress(
+    in contents: String,
+    matching macAddress: String,
+    subnetAddress: in_addr,
+    subnetMask: in_addr
+  ) throws -> String? {
+    let normalizedMACAddress = try normalizeMACAddress(macAddress)
+    for block in contents.split(separator: "}") {
+      var candidateAddress: String?
+      var candidateMACAddress: String?
+      for rawLine in block.split(whereSeparator: \.isNewline) {
+        let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        if line.hasPrefix("ip_address=") {
+          candidateAddress = String(line.dropFirst("ip_address=".count))
+        } else if line.hasPrefix("hw_address=1,") {
+          candidateMACAddress = String(line.dropFirst("hw_address=1,".count))
         }
       }
-    }
-  }
-
-  private static func tcpProbeConfirmsReachability(
-    _ result: HostCommandResult
-  ) -> Bool {
-    guard !result.outputWasTruncated else { return false }
-    if result.exitCode == 0 { return true }
-    let detail = [result.standardError, result.standardOutput]
-      .joined(separator: "\n")
-      .lowercased()
-    return detail.contains("connection refused")
-  }
-
-  private static func arpPeerAddress(
-    in output: String,
-    matching expectedMACAddress: String
-  ) throws -> String? {
-    for line in output.split(whereSeparator: \.isNewline) {
-      let fields = line.split(whereSeparator: \.isWhitespace).map(String.init)
-      guard
-        let atIndex = fields.firstIndex(of: "at"),
-        fields.indices.contains(atIndex + 1),
-        let candidateMACAddress = try? normalizeMACAddress(fields[atIndex + 1]),
-        candidateMACAddress == expectedMACAddress,
-        let wrappedAddress = fields.first(where: {
-          $0.first == "(" && $0.last == ")" && $0.count > 2
-        })
+      guard let candidateAddress,
+        let candidateMACAddress,
+        let normalizedCandidateMACAddress = try? normalizeMACAddress(
+          candidateMACAddress
+        ),
+        normalizedCandidateMACAddress == normalizedMACAddress,
+        ipv4Address(
+          candidateAddress,
+          belongsTo: subnetAddress,
+          mask: subnetMask
+        )
       else { continue }
-      return String(wrappedAddress.dropFirst().dropLast())
+      return candidateAddress
     }
     return nil
+  }
+
+  private static func ipv4Address(
+    _ value: String,
+    belongsTo subnetAddress: in_addr,
+    mask subnetMask: in_addr
+  ) -> Bool {
+    var candidateAddress = in_addr()
+    guard value.withCString({ inet_pton(AF_INET, $0, &candidateAddress) }) == 1 else {
+      return false
+    }
+    let candidate = UInt32(bigEndian: candidateAddress.s_addr)
+    let subnet = UInt32(bigEndian: subnetAddress.s_addr)
+    let mask = UInt32(bigEndian: subnetMask.s_addr)
+    let network = subnet & mask
+    let broadcast = network | ~mask
+    return candidate != network
+      && candidate != broadcast
+      && candidate != subnet
+      && candidate & mask == network
+  }
+
+  private static func tcpEndpointConfirmsReachability(
+    _ address: String
+  ) async -> Bool {
+    await Task.detached(priority: .utility) {
+      let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+      guard descriptor >= 0 else { return false }
+      defer { Darwin.close(descriptor) }
+
+      let flags = Darwin.fcntl(descriptor, F_GETFL, 0)
+      guard flags >= 0,
+        Darwin.fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0
+      else { return false }
+
+      var endpoint = sockaddr_in()
+      endpoint.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+      endpoint.sin_family = sa_family_t(AF_INET)
+      endpoint.sin_port = UInt16(1).bigEndian
+      guard address.withCString({ inet_pton(AF_INET, $0, &endpoint.sin_addr) }) == 1
+      else { return false }
+
+      let result = withUnsafePointer(to: &endpoint) { pointer in
+        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+          Darwin.connect(
+            descriptor,
+            $0,
+            socklen_t(MemoryLayout<sockaddr_in>.size)
+          )
+        }
+      }
+      if result == 0 { return true }
+      let initialError = errno
+      if initialError == ECONNREFUSED { return true }
+      guard initialError == EINPROGRESS else { return false }
+
+      var event = pollfd(
+        fd: descriptor,
+        events: Int16(POLLOUT),
+        revents: 0
+      )
+      guard Darwin.poll(&event, 1, 2_000) > 0 else { return false }
+      var socketError: Int32 = 0
+      var socketErrorSize = socklen_t(MemoryLayout<Int32>.size)
+      guard
+        Darwin.getsockopt(
+          descriptor,
+          SOL_SOCKET,
+          SO_ERROR,
+          &socketError,
+          &socketErrorSize
+        ) == 0
+      else { return false }
+      return socketError == 0 || socketError == ECONNREFUSED
+    }.value
   }
 
   private static func normalizeMACAddress(_ value: String) throws -> String {
