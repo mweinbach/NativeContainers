@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
+@preconcurrency import Virtualization
 
 @testable import NativeContainers
 
@@ -95,6 +96,22 @@ struct WindowsInstallationMediaServiceTests {
     #expect(try Data(contentsOf: artifacts.efiVariableStore).count > 0)
     #expect(try Data(contentsOf: artifacts.guestAgentSecret).count == 32)
     #expect(!address.isEmpty)
+  }
+
+  @Test
+  func productionIdentityPersistsEnabledSecureBootState() throws {
+    guard #available(macOS 27.0, *) else { return }
+    let fixture = try WindowsMediaFixture()
+    defer { fixture.remove() }
+    let artifacts = WindowsPlatformArtifactURLs(directory: fixture.artifacts)
+
+    _ = try AppleWindowsPlatformIdentityService().create(
+      at: artifacts,
+      securityMode: .productionSecureBoot
+    )
+
+    let variableStore = VZEFIVariableStore(url: artifacts.efiVariableStore)
+    #expect(try variableStore.isSecureBootEnabled)
   }
 
   @Test

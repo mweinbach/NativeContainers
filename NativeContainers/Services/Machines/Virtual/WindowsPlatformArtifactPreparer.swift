@@ -159,6 +159,11 @@ struct AppleWindowsPlatformIdentityService: WindowsPlatformIdentityCreating {
       }
       try variableStore.enrollDefaultSecureBootSignatures()
       try variableStore.enableSecureBootUsingDefaultPlatformKey()
+      guard try variableStore.isSecureBootEnabled else {
+        throw WindowsVirtualMachineError.invalidConfiguration(
+          "Secure Boot did not remain enabled in the EFI variable store"
+        )
+      }
     }
 
     var secret = Data(count: 32)
