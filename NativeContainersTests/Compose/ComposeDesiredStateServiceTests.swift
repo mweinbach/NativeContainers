@@ -451,6 +451,38 @@ struct ComposeDesiredStateDecoderTests {
   }
 
   @Test
+  func upstreamBridgeProfileBlocksForkOnlyComposeFeatures() throws {
+    let canonical = """
+      {
+        "name":"demo",
+        "services":{
+          "web":{
+            "image":"nginx:1.27",
+            "healthcheck":{"test":["CMD","true"]},
+            "restart":"always",
+            "configs":[{"source":"settings"}],
+            "networks":{"default":{"aliases":["web.internal"]}}
+          }
+        },
+        "configs":{"settings":{"content":"enabled=true"}},
+        "networks":{"default":{"name":"demo_default","external":false}}
+      }
+      """
+    let decoder = ComposeDesiredStateDecoder(
+      allowsNativeContainersForkFeatures: false
+    )
+
+    let review = try decoder.decode(
+      rendered: renderedConfiguration(full: canonical, active: canonical),
+      expectedProjectName: "demo"
+    )
+
+    #expect(!review.issues.isEmpty)
+    #expect(review.issues.allSatisfy { $0.severity == .blocker })
+    #expect(review.issues.allSatisfy { $0.message.contains("NativeContainers Socktainer fork") })
+  }
+
+  @Test
   func blocksCanonicalKeysOutsideTheExplicitExecutionAllowlist() throws {
     let rendered = renderedConfiguration(
       full: """

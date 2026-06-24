@@ -25,14 +25,15 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
   private typealias JSONObject = [String: Any]
 
   private let canonicalModelValidator: any ComposeCanonicalModelValidating
+  private let allowsNativeContainersForkFeatures: Bool
 
   init(
     canonicalModelValidator: any ComposeCanonicalModelValidating =
       ComposeCanonicalModelValidator(),
-    allowsBlockedLocalInputExecutionForTesting: Bool = true
+    allowsNativeContainersForkFeatures: Bool = true
   ) {
     self.canonicalModelValidator = canonicalModelValidator
-    _ = allowsBlockedLocalInputExecutionForTesting
+    self.allowsNativeContainersForkFeatures = allowsNativeContainersForkFeatures
   }
 
   func decode(
@@ -235,6 +236,20 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
         return nil
       }
       networkNames = networks.keys.sorted(by: composeStringOrder)
+      if !allowsNativeContainersForkFeatures {
+        for networkName in networkNames {
+          if let attachment = networks[networkName] as? JSONObject,
+            !stringArray(attachment["aliases"]).isEmpty
+          {
+            issues.append(
+              forkFeatureBlocker(
+                subject: name,
+                feature: "custom network aliases"
+              )
+            )
+          }
+        }
+      }
     }
 
     let publishedPortCount: Int
@@ -292,6 +307,26 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
           message: "The service uses unsupported \(key) configuration."
         )
       )
+    }
+
+    if !allowsNativeContainersForkFeatures {
+      for key in ["configs", "secrets", "healthcheck"]
+      where hasMeaningfulValue(service[key]) {
+        issues.append(
+          forkFeatureBlocker(
+            subject: serviceName,
+            feature: key
+          )
+        )
+      }
+      if let restart = service["restart"] as? String, !restart.isEmpty {
+        issues.append(
+          forkFeatureBlocker(
+            subject: serviceName,
+            feature: "restart policies"
+          )
+        )
+      }
     }
 
     for key in [
@@ -360,6 +395,19 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
         continue
       }
       let condition = dependency["condition"] as? String ?? "service_started"
+      let restart = dependency["restart"] as? Bool ?? false
+      let required = dependency["required"] as? Bool ?? true
+      if !allowsNativeContainersForkFeatures,
+        condition != "service_started" || restart || !required
+      {
+        issues.append(
+          forkFeatureBlocker(
+            subject: serviceName,
+            feature: "dependency condition or restart propagation"
+          )
+        )
+        continue
+      }
       if !["service_started", "service_healthy", "service_completed_successfully"].contains(
         condition
       ) {
@@ -374,6 +422,18 @@ struct ComposeDesiredStateDecoder: ComposeDesiredStateDecoding {
       }
     }
     return names
+  }
+
+  private func forkFeatureBlocker(
+    subject: String,
+    feature: String
+  ) -> ComposeProjectReviewIssue {
+    blocker(
+      .unsupportedFeature,
+      subject: subject,
+      message:
+        "The service uses \(feature), which requires the exact verified NativeContainers Socktainer fork; signed upstream Socktainer 1.0.0 remains blocked."
+    )
   }
 
   private func detectDependencyCycles(

@@ -11,9 +11,15 @@ protocol ComposeLifecyclePlanning: Sendable {
 }
 
 struct ComposeLifecyclePlanner: ComposeLifecyclePlanning {
-  private let containerPlanner = ComposeContainerLifecyclePlanner()
+  private let containerPlanner: ComposeContainerLifecyclePlanner
   private let resourcePlanner = ComposeResourceLifecyclePlanner()
   private let policyValidator = ComposeLifecyclePolicyValidator()
+
+  init(allowsNativeContainersForkRecreation: Bool = true) {
+    containerPlanner = ComposeContainerLifecyclePlanner(
+      allowsNativeContainersForkRecreation: allowsNativeContainersForkRecreation
+    )
+  }
 
   func plan(
     source: ComposeProjectSourceSummary,

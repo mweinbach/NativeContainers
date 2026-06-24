@@ -206,7 +206,7 @@ struct ComposeProjectLifecycleServiceTests {
       sourceAccess: ComposeSourceAccessDouble(),
       configRenderer: renderer,
       desiredStateDecoder: ComposeDesiredStateDecoder(
-        allowsBlockedLocalInputExecutionForTesting: true
+        allowsNativeContainersForkFeatures: true
       ),
       inputVault: ComposeProjectInputVault(
         sealer: HMACComposeInputSealer(keyData: Data(repeating: 15, count: 32))

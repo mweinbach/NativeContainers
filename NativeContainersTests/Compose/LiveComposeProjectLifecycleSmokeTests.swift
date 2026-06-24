@@ -380,7 +380,7 @@ struct LiveComposeProjectLifecycleSmokeTests {
     let lifecycle = ComposeProjectLifecycleService(
       configRenderer: configService,
       desiredStateDecoder: ComposeDesiredStateDecoder(
-        allowsBlockedLocalInputExecutionForTesting: true
+        allowsNativeContainersForkFeatures: true
       ),
       executionWorkspace: executionWorkspace,
       inventory: inventory,

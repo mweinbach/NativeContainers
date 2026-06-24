@@ -265,6 +265,38 @@ struct ComposeLifecyclePlannerTests {
   }
 
   @Test
+  func upstreamBridgeProfileBlocksReplacementWithoutPlanningDestructiveMutation() {
+    let desired = desiredWebState(
+      replicaCount: 1,
+      inputSeal: String(repeating: "e", count: 64)
+    )
+    let existing = container(
+      id: "web-1",
+      service: "web",
+      state: .stopped,
+      imageDigest: "sha256:web",
+      inputSeal: String(repeating: "f", count: 64)
+    )
+
+    let plan = ComposeLifecyclePlanner(
+      allowsNativeContainersForkRecreation: false
+    ).plan(
+      source: sourceSummary,
+      rendered: rendered,
+      review: ComposeDesiredStateReview(desiredState: desired, issues: []),
+      options: ComposeProjectReviewOptions(action: .up, projectName: "demo"),
+      inventory: makeInventory(
+        containers: [existing],
+        images: [image(reference: "example/web:latest", digest: "sha256:web")]
+      )
+    )
+
+    #expect(!plan.canExecute)
+    #expect(plan.containerActions.map(\.operation) == [.converge])
+    #expect(plan.blockers.contains { $0.message.contains("input seal") })
+  }
+
+  @Test
   func createMissingUpIsExecutableForAContiguousReviewedPrefix() {
     let desired = desiredWebState(replicaCount: 2)
     let existing = container(

@@ -43,7 +43,13 @@ struct OptionalIntegrationServiceModule: Sendable {
     )
     let composeProjectLifecycle = ComposeProjectLifecycleService(
       configRenderer: composeConfigService,
+      desiredStateDecoder: ComposeDesiredStateDecoder(
+        allowsNativeContainersForkFeatures: false
+      ),
       executionWorkspace: composeExecutionWorkspace,
+      planner: ComposeLifecyclePlanner(
+        allowsNativeContainersForkRecreation: false
+      ),
       inventory: inventory,
       executionTool: composeConfigService,
       mutationExecutor: composeMutationExecutor,

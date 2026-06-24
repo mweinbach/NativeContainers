@@ -2,12 +2,15 @@ import Foundation
 
 struct ComposeContainerLifecyclePlanner: Sendable {
   private let attachmentVerifier: ComposeContainerAttachmentVerifier
+  private let allowsNativeContainersForkRecreation: Bool
 
   init(
     attachmentVerifier: ComposeContainerAttachmentVerifier =
-      ComposeContainerAttachmentVerifier()
+      ComposeContainerAttachmentVerifier(),
+    allowsNativeContainersForkRecreation: Bool = true
   ) {
     self.attachmentVerifier = attachmentVerifier
+    self.allowsNativeContainersForkRecreation = allowsNativeContainersForkRecreation
   }
 
   func planActions(
@@ -119,6 +122,60 @@ struct ComposeContainerLifecyclePlanner: Sendable {
       switch options.action {
       case .up:
         guard let service = activeServices[serviceName] else { continue }
+        if !allowsNativeContainersForkRecreation {
+          validateConvergenceReplicaSet(
+            instances: orderedInstances,
+            replicas: replicas,
+            service: service,
+            issues: &issues
+          )
+          for instance in orderedInstances {
+            if !attachmentVerifier.hasExactAttachments(
+              containerID: instance.record.id,
+              service: service,
+              desiredState: desired,
+              inventory: inventory
+            ) {
+              issues.append(
+                ComposeLifecycleIssue.blocker(
+                  .executionPolicy,
+                  subject: instance.record.id,
+                  message:
+                    "Replacing mismatched Compose attachments requires the exact verified NativeContainers Socktainer fork."
+                )
+              )
+            }
+            validateExistingContainer(
+              instance.record,
+              service: service,
+              localDigest: localDigests[service.imageReference],
+              context: "Up",
+              requiresNativeStartSafety: false,
+              issues: &issues
+            )
+            guard let replica = replicas[instance.identity.id] else { continue }
+            drafts.append(
+              ContainerActionDraft(
+                operation: .converge,
+                serviceName: serviceName,
+                replicaNumber: replica,
+                expectedIdentity: instance.identity
+              )
+            )
+          }
+          let existingReplicas = Set(replicas.values)
+          for replica in 1...service.replicaCount where !existingReplicas.contains(replica) {
+            drafts.append(
+              ContainerActionDraft(
+                operation: .create,
+                serviceName: serviceName,
+                replicaNumber: replica,
+                expectedIdentity: nil
+              )
+            )
+          }
+          continue
+        }
         for instance in orderedInstances {
           guard let replica = replicas[instance.identity.id] else { continue }
           if replica > service.replicaCount {
@@ -244,6 +301,41 @@ struct ComposeContainerLifecyclePlanner: Sendable {
       }
     }
     return drafts
+  }
+
+  private func validateConvergenceReplicaSet(
+    instances: [ObservedComposeContainer],
+    replicas: [String: Int],
+    service: ComposeDesiredService,
+    issues: inout [ComposeProjectReviewIssue]
+  ) {
+    if instances.count > service.replicaCount {
+      issues.append(
+        ComposeLifecycleIssue.blocker(
+          .executionPolicy,
+          subject: service.name,
+          message:
+            "Scale-down requires the exact verified NativeContainers Socktainer fork."
+        )
+      )
+    }
+    validateReplicaRange(
+      replicas,
+      service: service,
+      actionName: "Up",
+      issues: &issues
+    )
+    let expectedPrefix = instances.isEmpty ? Set<Int>() : Set(1...instances.count)
+    if Set(replicas.values) != expectedPrefix {
+      issues.append(
+        ComposeLifecycleIssue.blocker(
+          .executionPolicy,
+          subject: service.name,
+          message:
+            "Repairing a noncontiguous replica set requires the exact verified NativeContainers Socktainer fork."
+        )
+      )
+    }
   }
 
   private func validatedReplicas(

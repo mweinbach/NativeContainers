@@ -460,7 +460,7 @@ struct SocktainerComposeConformanceManifest: Equatable, Sendable {
     return SocktainerComposeConformanceManifest(
       bridgeVersion: "1.0.0-nc.1",
       engineAPIVersion: "1.51",
-      sourceRevision: "e129281",
+      sourceRevision: "c3a368f",
       implementedOperations: Set(DockerEngineComposeOperation.allCases),
       passedScenarioIDs: Set(SocktainerComposeSemanticScenarioCatalog.all.map(\.id)),
       fixtures: fixtures
