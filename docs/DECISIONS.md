@@ -2757,17 +2757,17 @@ guest integration.
 
 Virtualization.framework exposes no public virtual TPM. The setup answer disk
 therefore bypasses only the TPM check, never CPU, memory, storage or Secure
-Boot. Production uses persistent Secure Boot NVRAM on macOS 27 and later.
-Development driver bring-up is a separately labeled test-signing mode with
-Secure Boot disabled; it is not silently selected as a fallback.
+Boot. The current bootable mode defaults Secure Boot off. A visible toggle
+exposes the prepared production mode, which uses persistent Secure Boot NVRAM
+on macOS 27 and later, but enabling it blocks both creation and runtime start.
 
 The app does not embed mutable driver binaries. A bundled release contract
 names one immutable HTTPS `NCTools.iso`, exact SHA-256 and byte count. Download
 uses private partial staging and a versioned managed cache. Production VM
-creation remains hard-gated until the contract independently asserts both
-Microsoft driver signing and a completed stock-ISO Secure Boot validation. The
-current contract asserts neither, so experimental source and test coverage do
-not become a product support claim by accident.
+creation and boot remain hard-gated until the contract independently asserts
+both Microsoft driver signing and a completed stock-ISO Secure Boot validation.
+The current contract asserts neither, so experimental source and test coverage
+do not become a product support claim by accident.
 
 The companion repository owns the ARM64 drivers, VirtIO sound WaveRT adapter,
 guest service/user agent, packaging and signing evidence. It pins upstream

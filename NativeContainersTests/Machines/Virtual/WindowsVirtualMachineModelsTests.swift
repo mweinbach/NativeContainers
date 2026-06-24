@@ -5,6 +5,23 @@ import Testing
 
 struct WindowsVirtualMachineModelsTests {
   @Test
+  func windowsConfigurationDefaultsToTheCurrentBootableSecurityMode() {
+    let configuration = WindowsVirtualMachineConfiguration(
+      efiVariableStorePath: "WindowsPlatform/NVRAM",
+      machineIdentifierPath: "WindowsPlatform/MachineIdentifier",
+      installationMediaPath: "WindowsPlatform/Installation.iso",
+      setupConfigurationMediaPath: "WindowsPlatform/SetupConfig.img",
+      guestAgentSecretPath: "WindowsPlatform/GuestAgentSecret",
+      installationMedia: makeWindowsInstallationMediaMetadata(),
+      macAddress: "02:00:00:00:00:01"
+    )
+
+    #expect(configuration.securityMode == .developmentTestSigning)
+    #expect(configuration.securityMode.isCurrentlyBootable)
+    #expect(!WindowsVirtualMachineSecurityMode.productionSecureBoot.isCurrentlyBootable)
+  }
+
+  @Test
   func olderManifestWithoutWindowsConfigurationStillDecodes() throws {
     let data = Data(
       """
@@ -138,18 +155,155 @@ struct WindowsVirtualMachineModelsTests {
       installationMediaPath: "WindowsPlatform/Installation.iso",
       setupConfigurationMediaPath: "WindowsPlatform/SetupConfig.img",
       guestAgentSecretPath: "WindowsPlatform/GuestAgentSecret",
-      installationMedia: WindowsInstallationMediaMetadata(
-        sha256: "abc123",
-        byteCount: 7_994_415_104,
-        volumeLabel: "CCCOMA_A64FRE_EN-US_DV9",
-        architecture: .arm64,
-        sourceFilename: "Win11_25H2_English_Arm64_v2.iso",
-        efiBootManagerPath: "efi/boot/bootaa64.efi",
-        bootImagePath: "sources/boot.wim",
-        installImagePath: "sources/install.wim"
-      ),
+      installationMedia: makeWindowsInstallationMediaMetadata(),
       macAddress: "02:00:00:00:00:01",
       securityMode: .developmentTestSigning
     )
   }
+}
+
+struct WindowsVirtualMachineCreationServiceTests {
+  @Test
+  func createsWindowsMachineWithSecureBootOff() async throws {
+    let library = WindowsCreationTestLibrary()
+    let guestTools = RecordingWindowsCreationGuestTools()
+    let service = WindowsVirtualMachineCreationService(
+      library: library,
+      guestTools: guestTools
+    )
+    let mediaURL = URL(filePath: "/tmp/Windows.iso")
+
+    let machine = try await service.createWindowsVirtualMachine(
+      name: "Windows 11",
+      resources: try makeWindowsCreationResources(),
+      installationMediaURL: mediaURL,
+      securityMode: .currentDefault
+    )
+
+    #expect(machine.guest == .windows)
+    #expect(machine.installState == .readyToInstall)
+    #expect(machine.windowsConfiguration?.securityMode == .developmentTestSigning)
+    #expect(await library.preparedMediaURL == mediaURL)
+    #expect(await library.preparedGuestTools == nil)
+    #expect(await guestTools.prepareCount == 0)
+  }
+
+  @Test
+  func secureBootIsBlockedBeforeDraftOrGuestToolsPreparation() async throws {
+    let library = WindowsCreationTestLibrary()
+    let guestTools = RecordingWindowsCreationGuestTools()
+    let service = WindowsVirtualMachineCreationService(
+      library: library,
+      guestTools: guestTools
+    )
+
+    await #expect(throws: WindowsVirtualMachineError.secureBootBootUnavailable) {
+      _ = try await service.createWindowsVirtualMachine(
+        name: "Blocked Secure Boot",
+        resources: try makeWindowsCreationResources(),
+        installationMediaURL: URL(filePath: "/tmp/Windows.iso"),
+        securityMode: .productionSecureBoot
+      )
+    }
+
+    #expect(await library.draftCount == 0)
+    #expect(await library.prepareCount == 0)
+    #expect(await guestTools.prepareCount == 0)
+  }
+}
+
+private actor WindowsCreationTestLibrary: VirtualMachineLibraryProtocol {
+  private(set) var manifests: [VirtualMachineManifest] = []
+  private(set) var draftCount = 0
+  private(set) var prepareCount = 0
+  private(set) var preparedMediaURL: URL?
+  private(set) var preparedGuestTools: WindowsGuestToolsReleaseReference?
+
+  func list() -> [VirtualMachineManifest] {
+    manifests
+  }
+
+  func createDraft(
+    name: String,
+    guest: VirtualMachineGuest,
+    resources: VirtualMachineResources
+  ) throws -> VirtualMachineManifest {
+    draftCount += 1
+    let manifest = try VirtualMachineManifest(
+      name: name,
+      guest: guest,
+      installState: .draft,
+      resources: resources
+    )
+    manifests.append(manifest)
+    return manifest
+  }
+
+  func prepareWindowsVM(
+    id: UUID,
+    installationMediaURL: URL,
+    securityMode: WindowsVirtualMachineSecurityMode,
+    guestTools: WindowsGuestToolsReleaseReference?
+  ) throws -> VirtualMachineManifest {
+    prepareCount += 1
+    preparedMediaURL = installationMediaURL
+    preparedGuestTools = guestTools
+    guard let index = manifests.firstIndex(where: { $0.id == id }) else {
+      throw VirtualMachineModelError.virtualMachineNotFound(id)
+    }
+    var manifest = manifests[index]
+    manifest.markReadyToInstallWindows(
+      configuration: WindowsVirtualMachineConfiguration(
+        efiVariableStorePath: "WindowsPlatform/NVRAM",
+        machineIdentifierPath: "WindowsPlatform/MachineIdentifier",
+        installationMediaPath: "WindowsPlatform/Installation.iso",
+        setupConfigurationMediaPath: "WindowsPlatform/SetupConfig.img",
+        guestAgentSecretPath: "WindowsPlatform/GuestAgentSecret",
+        installationMedia: makeWindowsInstallationMediaMetadata(),
+        macAddress: "02:00:00:00:00:01",
+        securityMode: securityMode,
+        guestTools: guestTools
+      )
+    )
+    manifests[index] = manifest
+    return manifest
+  }
+}
+
+private actor RecordingWindowsCreationGuestTools: WindowsGuestToolsReleaseManaging {
+  private(set) var prepareCount = 0
+
+  func prepareProductionRelease() -> WindowsGuestToolsReleaseReference {
+    prepareCount += 1
+    return WindowsGuestToolsReleaseReference(
+      version: "1.0.0",
+      artifactURL: URL(string: "https://example.invalid/NCTools.iso")!,
+      sha256: String(repeating: "0", count: 64),
+      byteCount: 1,
+      isMicrosoftSigned: true
+    )
+  }
+}
+
+private func makeWindowsCreationResources() throws -> VirtualMachineResources {
+  try VirtualMachineResources(
+    cpuCount: 4,
+    memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+    diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+  )
+}
+
+private func makeWindowsInstallationMediaMetadata()
+  -> WindowsInstallationMediaMetadata
+{
+  WindowsInstallationMediaMetadata(
+    sha256: "abc123",
+    byteCount: 7_994_415_104,
+    volumeLabel: "CCCOMA_A64FRE_EN-US_DV9",
+    architecture: .arm64,
+    sourceFilename: "Win11_25H2_English_Arm64_v2.iso",
+    efiBootManagerPath: "efi/boot/bootaa64.efi",
+    bootImagePath: "sources/boot.wim",
+    installImagePath: "sources/install.wim"
+  )
 }

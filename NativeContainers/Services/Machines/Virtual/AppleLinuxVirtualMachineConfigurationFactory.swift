@@ -64,6 +64,9 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
       guard let configuration = machine.manifest.windowsConfiguration else {
         throw WindowsVirtualMachineError.missingManifestValue("windowsConfiguration")
       }
+      guard configuration.securityMode.isCurrentlyBootable else {
+        throw WindowsVirtualMachineError.secureBootBootUnavailable
+      }
       macAddressString = configuration.macAddress
       sharesClipboard = configuration.sharesClipboard
     case .macOS:

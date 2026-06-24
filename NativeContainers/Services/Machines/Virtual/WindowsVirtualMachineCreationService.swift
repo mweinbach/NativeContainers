@@ -28,6 +28,9 @@ struct WindowsVirtualMachineCreationService: WindowsVirtualMachineCreating {
     installationMediaURL: URL,
     securityMode: WindowsVirtualMachineSecurityMode
   ) async throws -> VirtualMachineManifest {
+    guard securityMode.isCurrentlyBootable else {
+      throw WindowsVirtualMachineError.secureBootBootUnavailable
+    }
     try Self.validate(resources)
     let guestToolsRelease =
       if securityMode == .productionSecureBoot {

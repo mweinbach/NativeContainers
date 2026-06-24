@@ -14,9 +14,10 @@ This repository is intentionally split into two runtime lanes:
   [`Virtualization.framework`](https://developer.apple.com/documentation/virtualization)
   directly, including `VZVirtualMachineView` for native guest display.
 - Experimental Windows 11 ARM64 virtual machines use the same native framework
-  with verified Microsoft ISO media. Production creation stays hard-gated until
-  the companion ARM64 guest drivers are Microsoft-signed and the complete stock
-  ISO Secure Boot path is release-validated.
+  with verified Microsoft ISO media. Secure Boot is off by default in the
+  current bootable mode. The UI exposes the future Secure Boot mode, but creation
+  and runtime start remain hard-gated until the companion ARM64 guest drivers are
+  Microsoft-signed and the complete stock ISO Secure Boot path is release-validated.
 
 The app targets Apple silicon and macOS 26 or newer. The ordinary container lane
 uses Apple `container` 1.0.0 from Apple’s

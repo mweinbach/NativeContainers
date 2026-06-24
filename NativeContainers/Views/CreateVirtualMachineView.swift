@@ -12,8 +12,7 @@ struct CreateVirtualMachineView: View {
   @State private var memoryGiB: Int
   @State private var diskGiB: Int
   @State private var installationMediaURL: URL?
-  @State private var windowsSecurityMode =
-    WindowsVirtualMachineSecurityMode.productionSecureBoot
+  @State private var isWindowsSecureBootEnabled = false
   @State private var isChoosingInstallationMedia = false
   @State private var isCreating = false
   @State private var errorMessage: String?
@@ -92,19 +91,11 @@ struct CreateVirtualMachineView: View {
         }
 
         if guest == .windows {
-          Picker("Security", selection: $windowsSecurityMode) {
-            Text("Secure Boot").tag(
-              WindowsVirtualMachineSecurityMode.productionSecureBoot
-            )
-            Text("Experimental").tag(
-              WindowsVirtualMachineSecurityMode.developmentTestSigning
-            )
-          }
+          Toggle("Secure Boot", isOn: $isWindowsSecureBootEnabled)
           Text(windowsSecurityDescription)
             .font(.caption)
             .foregroundStyle(
-              windowsSecurityMode == .productionSecureBoot
-                ? Color.secondary : Color.orange
+              isWindowsSecureBootEnabled ? Color.orange : Color.secondary
             )
         }
       }
@@ -166,6 +157,7 @@ struct CreateVirtualMachineView: View {
       && cpuCount >= minimumCPUCount
       && memoryGiB >= minimumMemoryGiB
       && diskGiB >= minimumDiskGiB
+      && (guest != .windows || windowsSecurityMode.isCurrentlyBootable)
   }
 
   private var minimumCPUCount: Int {
@@ -194,10 +186,14 @@ struct CreateVirtualMachineView: View {
   private var windowsSecurityDescription: LocalizedStringResource {
     switch windowsSecurityMode {
     case .productionSecureBoot:
-      "Secure Boot is enrolled in persistent NVRAM. Full guest integration remains gated until the Windows drivers are Microsoft-signed."
+      "Secure Boot support is prepared, but creating and booting this VM is disabled until the signed guest drivers pass release validation."
     case .developmentTestSigning:
-      "Secure Boot is disabled for experimental, test-signed driver development. Do not use this mode for production workloads."
+      "Secure Boot is off. This is the current bootable Windows mode."
     }
+  }
+
+  private var windowsSecurityMode: WindowsVirtualMachineSecurityMode {
+    isWindowsSecureBootEnabled ? .productionSecureBoot : .currentDefault
   }
 
   private func create() {

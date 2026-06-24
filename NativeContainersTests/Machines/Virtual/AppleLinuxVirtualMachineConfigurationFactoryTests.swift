@@ -295,6 +295,28 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
     #expect(configuration.audioDevices.first is VZVirtioSoundDeviceConfiguration)
     #expect(configuration.networkDevices.first is VZVirtioNetworkDeviceConfiguration)
   }
+
+  @Test
+  func rejectsSecureBootWindowsConfigurationBeforeRuntimeCreation() async throws {
+    let fixture = try WindowsConfigurationFixture(
+      securityMode: .productionSecureBoot
+    )
+    defer { fixture.remove() }
+    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
+      to: fixture.installationMedia
+    )
+    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
+      to: fixture.setupConfigurationMedia
+    )
+    let machine = try LinuxVirtualMachineBundleResolver(
+      rootURL: fixture.root
+    ).resolve(fixture.manifest)
+
+    #expect(throws: WindowsVirtualMachineError.secureBootBootUnavailable) {
+      try AppleLinuxVirtualMachineConfigurationFactory()
+        .makeConfiguration(for: machine)
+    }
+  }
 }
 
 @MainActor
@@ -438,7 +460,9 @@ private struct WindowsConfigurationFixture {
   let setupConfigurationMedia: URL
   let manifest: VirtualMachineManifest
 
-  init() throws {
+  init(
+    securityMode: WindowsVirtualMachineSecurityMode = .currentDefault
+  ) throws {
     root = FileManager.default.temporaryDirectory.appending(
       path: "NativeContainers-WindowsConfigurationTests-\(UUID().uuidString)",
       directoryHint: .isDirectory
@@ -515,7 +539,7 @@ private struct WindowsConfigurationFixture {
         installImagePath: "sources/install.wim"
       ),
       macAddress: "02:00:00:00:00:77",
-      securityMode: .developmentTestSigning
+      securityMode: securityMode
     )
     self.manifest = manifest
   }

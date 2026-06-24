@@ -4,8 +4,14 @@ enum WindowsVirtualMachineSecurityMode: String, Codable, CaseIterable, Sendable 
   case productionSecureBoot
   case developmentTestSigning
 
+  static let currentDefault = Self.developmentTestSigning
+
   var usesSecureBoot: Bool {
     self == .productionSecureBoot
+  }
+
+  var isCurrentlyBootable: Bool {
+    self == .developmentTestSigning
   }
 }
 
@@ -53,7 +59,7 @@ struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
     guestAgentSecretPath: String,
     installationMedia: WindowsInstallationMediaMetadata,
     macAddress: String,
-    securityMode: WindowsVirtualMachineSecurityMode = .productionSecureBoot,
+    securityMode: WindowsVirtualMachineSecurityMode = .currentDefault,
     guestTools: WindowsGuestToolsReleaseReference? = nil,
     guestToolsMediaAttached: Bool? = nil,
     sharesClipboard: Bool = true
@@ -93,6 +99,7 @@ enum WindowsVirtualMachineError: LocalizedError, Equatable {
   case insufficientMemory(UInt64)
   case insufficientDisk(UInt64)
   case secureBootRequiresMacOS27
+  case secureBootBootUnavailable
   case productionGuestToolsUnavailable
   case productionSecureBootUnvalidated
   case invalidConfiguration(String)
@@ -121,6 +128,8 @@ enum WindowsVirtualMachineError: LocalizedError, Equatable {
       "Windows 11 requires at least 64 GiB of disk capacity; \(bytes) bytes were requested."
     case .secureBootRequiresMacOS27:
       "Secure Boot for Windows requires macOS 27 or newer."
+    case .secureBootBootUnavailable:
+      "Windows Secure Boot is prepared but cannot boot until the signed guest drivers pass release validation. Turn off Secure Boot to run Windows now."
     case .productionGuestToolsUnavailable:
       "Production Windows support remains unavailable until the required guest drivers are Microsoft-signed."
     case .productionSecureBootUnvalidated:

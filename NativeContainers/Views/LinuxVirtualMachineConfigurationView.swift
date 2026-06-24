@@ -435,8 +435,15 @@ private struct WindowsVirtualMachineIntegrationSection: View {
         }
         if securityMode == .developmentTestSigning {
           Label(
-            "Experimental mode disables Secure Boot for test-signed driver development.",
-            systemImage: "exclamationmark.triangle.fill"
+            "Secure Boot is disabled. This is the current bootable Windows mode.",
+            systemImage: "checkmark.shield.fill"
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        } else {
+          Label(
+            "Booting is disabled until the signed guest drivers pass release validation.",
+            systemImage: "lock.shield.fill"
           )
           .font(.caption)
           .foregroundStyle(.orange)
@@ -449,8 +456,8 @@ private struct WindowsVirtualMachineIntegrationSection: View {
 
   private var securityLabel: LocalizedStringResource {
     securityMode == .productionSecureBoot
-      ? "Secure Boot • production gate enforced"
-      : "Development test signing"
+      ? "Secure Boot • boot unavailable"
+      : "Secure Boot off • bootable"
   }
 
   private var guestToolsLabel: LocalizedStringResource {

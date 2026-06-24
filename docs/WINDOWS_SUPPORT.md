@@ -5,11 +5,14 @@ built directly on Apple's `Virtualization.framework`. It accepts normal
 Microsoft ARM64 ISO media; it does not convert the ISO, extract an installation
 image, or depend on a prebuilt Windows disk.
 
-Production creation is deliberately unavailable today. NativeContainers will
-not weaken that boundary: the bundled guest-tools contract must name a
-Microsoft-signed driver ISO, pass exact size and SHA-256 verification, and mark
-the stock Windows Secure Boot installation as release-validated before the
-production path can create a VM.
+Secure Boot is off by default in the current bootable mode. The creation UI
+exposes a Secure Boot toggle so the product boundary is explicit, but enabling
+it disables creation. A second runtime guard prevents an imported or older
+Secure Boot manifest from starting. NativeContainers will not weaken that
+boundary: the bundled guest-tools contract must name a Microsoft-signed driver
+ISO, pass exact size and SHA-256 verification, and mark the stock Windows Secure
+Boot installation as release-validated before the Secure Boot path can create
+or start a VM.
 
 ## Implemented host path
 
@@ -25,10 +28,13 @@ production path can create a VM.
 - The same per-VM secret is delivered as a raw 32-byte file on that temporary
   setup disk. Guest-tools installation moves it into an ACL-restricted SYSTEM
   location before setup media is ejected; the manifest never contains it.
-- Production mode enrolls Apple's default Secure Boot signatures and enables
-  Secure Boot with the default platform key. It requires macOS 27 or newer.
-  Development mode leaves Secure Boot disabled so locally test-signed drivers
-  can be brought up without pretending they are production-safe.
+- The current default leaves Secure Boot disabled and is the only mode allowed
+  to create and start a Windows VM.
+- The prepared production mode enrolls Apple's default Secure Boot signatures
+  and enables Secure Boot with the default platform key on macOS 27 or newer.
+  Its creation and runtime gates stay closed until release validation succeeds;
+  the enrollment, signed-tools and persisted-NVRAM framework remains in place
+  behind that gate.
 - The setup disk contains one compatibility exception:
   `BypassTPMCheck`. It does not bypass CPU, RAM, storage, or Secure Boot checks.
   Windows minimums remain 2 CPUs, 4 GiB RAM, and 64 GiB disk.
@@ -84,8 +90,9 @@ production input. A release is usable only when all of these are true:
 
 Downloads first land in a private partial file. Only a verified artifact is
 renamed into the versioned Application Support cache. A corrupt cached artifact
-is removed and reacquired. Production VM creation happens only after this gate,
-so a failed tools release leaves no draft VM behind.
+is removed and reacquired. When the Secure Boot path is enabled in a future
+release, VM creation happens only after this gate, so a failed tools release
+leaves no draft VM behind.
 
 ## Verification status
 
