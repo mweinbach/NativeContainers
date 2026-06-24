@@ -349,6 +349,7 @@ enum AppCompositionRoot {
     let linuxVirtualMachineRuntime = LinuxVirtualMachineRuntimeService(
       leasingStore: virtualMachineLibrary,
       installationStore: virtualMachineLibrary,
+      windowsBootMediaRepairer: virtualMachineLibrary,
       engine: AppleLinuxVirtualMachineRuntimeEngine(
         configurationFactory: linuxVirtualMachineConfigurationFactory
       ),

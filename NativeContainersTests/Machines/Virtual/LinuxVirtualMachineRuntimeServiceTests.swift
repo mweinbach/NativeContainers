@@ -6,6 +6,24 @@ import Testing
 @MainActor
 struct LinuxVirtualMachineRuntimeServiceTests {
   @Test
+  func bootMediaRepairFailureStopsBeforeRuntimeLeaseAndSession() async throws {
+    let repairer = LinuxRuntimeServiceBootMediaRepairer(
+      error: LinuxRuntimeServiceTestError.expected
+    )
+    let fixture = try LinuxRuntimeServiceFixture(
+      windowsBootMediaRepairer: repairer
+    )
+
+    await #expect(throws: LinuxRuntimeServiceTestError.expected) {
+      try await fixture.service.start(id: fixture.machineID)
+    }
+
+    #expect(await repairer.callCount == 1)
+    #expect(fixture.engine.sessions.isEmpty)
+    #expect(fixture.releaseRecorder.count == 0)
+  }
+
+  @Test
   func lifecyclePublishesRunningPausedResumedAndStoppedStates() async throws {
     let fixture = try LinuxRuntimeServiceFixture()
 
@@ -300,7 +318,9 @@ private struct LinuxRuntimeServiceFixture {
 
   init(
     startWaits: Bool = false,
-    forceStopCapabilityTimeout: Duration = .seconds(1)
+    forceStopCapabilityTimeout: Duration = .seconds(1),
+    windowsBootMediaRepairer: any WindowsVirtualMachineBootMediaRepairing =
+      NoOpWindowsVirtualMachineBootMediaRepairer()
   ) throws {
     machine = try makeLinuxRuntimeServiceMachine()
     store = LinuxRuntimeServiceStore(
@@ -313,6 +333,7 @@ private struct LinuxRuntimeServiceFixture {
     service = LinuxVirtualMachineRuntimeService(
       leasingStore: store,
       installationStore: store,
+      windowsBootMediaRepairer: windowsBootMediaRepairer,
       engine: engine,
       savedStateService: savedState,
       shutdownPolicy: VirtualMachineShutdownPolicy(
@@ -322,6 +343,22 @@ private struct LinuxRuntimeServiceFixture {
       ),
       shutdownScheduler: shutdownScheduler
     )
+  }
+}
+
+private actor LinuxRuntimeServiceBootMediaRepairer:
+  WindowsVirtualMachineBootMediaRepairing
+{
+  private let error: (any Error)?
+  private(set) var callCount = 0
+
+  init(error: (any Error)? = nil) {
+    self.error = error
+  }
+
+  func repairWindowsBootMediaIfNeeded(id: UUID) async throws {
+    callCount += 1
+    if let error { throw error }
   }
 }
 

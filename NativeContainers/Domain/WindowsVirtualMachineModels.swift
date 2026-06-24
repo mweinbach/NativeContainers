@@ -39,6 +39,8 @@ struct WindowsGuestToolsReleaseReference: Codable, Equatable, Sendable {
 }
 
 struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
+  static let currentBootMediaFormatVersion = 1
+
   let efiVariableStorePath: String
   let machineIdentifierPath: String
   var installationMediaPath: String?
@@ -49,6 +51,7 @@ struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
   let securityMode: WindowsVirtualMachineSecurityMode
   var guestTools: WindowsGuestToolsReleaseReference?
   var guestToolsMediaAttached: Bool? = nil
+  var bootMediaFormatVersion: Int? = nil
   var sharesClipboard: Bool
 
   init(
@@ -62,6 +65,7 @@ struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
     securityMode: WindowsVirtualMachineSecurityMode = .currentDefault,
     guestTools: WindowsGuestToolsReleaseReference? = nil,
     guestToolsMediaAttached: Bool? = nil,
+    bootMediaFormatVersion: Int = Self.currentBootMediaFormatVersion,
     sharesClipboard: Bool = true
   ) {
     self.efiVariableStorePath = efiVariableStorePath
@@ -74,11 +78,16 @@ struct WindowsVirtualMachineConfiguration: Codable, Equatable, Sendable {
     self.securityMode = securityMode
     self.guestTools = guestTools
     self.guestToolsMediaAttached = guestToolsMediaAttached ?? (guestTools != nil)
+    self.bootMediaFormatVersion = bootMediaFormatVersion
     self.sharesClipboard = sharesClipboard
   }
 
   var effectiveGuestToolsMediaAttached: Bool {
     guestToolsMediaAttached ?? (guestTools != nil)
+  }
+
+  var effectiveBootMediaFormatVersion: Int {
+    bootMediaFormatVersion ?? 0
   }
 }
 

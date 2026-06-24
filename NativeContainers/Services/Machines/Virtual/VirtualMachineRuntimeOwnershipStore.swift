@@ -8,6 +8,16 @@ protocol LinuxVirtualMachineRuntimeLeasing: Sendable {
   func acquireLinuxRuntime(id: UUID) async throws -> LinuxVirtualMachineRuntimeLease
 }
 
+protocol WindowsVirtualMachineBootMediaRepairing: Sendable {
+  func repairWindowsBootMediaIfNeeded(id: UUID) async throws
+}
+
+struct NoOpWindowsVirtualMachineBootMediaRepairer:
+  WindowsVirtualMachineBootMediaRepairing
+{
+  func repairWindowsBootMediaIfNeeded(id: UUID) async throws {}
+}
+
 protocol LinuxVirtualMachineInstallationCompleting: Sendable {
   func completeLinuxInstallation(
     lease: LinuxVirtualMachineRuntimeLease

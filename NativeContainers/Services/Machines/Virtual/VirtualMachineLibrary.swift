@@ -1,7 +1,34 @@
+import Darwin
 import Foundation
 
 protocol VirtualMachineInventoryLoading: Sendable {
   func list() async throws -> [VirtualMachineManifest]
+}
+
+enum WindowsBootMediaRepairError: LocalizedError, Equatable {
+  case missingConfiguration
+  case installationMediaChanged
+  case invalidPreparedMedia
+  case publishFailed(Int32)
+  case rollbackFailed(manifest: String, code: Int32)
+  case synchronizationFailed(Int32)
+
+  var errorDescription: String? {
+    switch self {
+    case .missingConfiguration:
+      "The Windows VM is missing the installation media needed to repair its boot disk."
+    case .installationMediaChanged:
+      "The retained Windows installation ISO no longer matches its recorded size."
+    case .invalidPreparedMedia:
+      "The rebuilt Windows boot disk is incomplete."
+    case .publishFailed(let code):
+      "The rebuilt Windows boot disk could not replace the legacy disk (errno \(code))."
+    case .rollbackFailed(let manifest, let code):
+      "The Windows boot disk was replaced, but its manifest update failed (\(manifest)) and rollback also failed (errno \(code))."
+    case .synchronizationFailed(let code):
+      "The repaired Windows boot disk directory could not be synchronized (errno \(code))."
+    }
+  }
 }
 
 protocol VirtualMachineDraftCreating: Sendable {
@@ -110,6 +137,7 @@ actor VirtualMachineLibrary:
   MacVirtualMachineRuntimeLeasing,
   MacVirtualMachineFirstBootPersisting,
   LinuxVirtualMachineRuntimeLeasing,
+  WindowsVirtualMachineBootMediaRepairing,
   LinuxVirtualMachineInstallationCompleting,
   MacVirtualMachineSharedDirectoryPersisting,
   LinuxVirtualMachineSharedDirectoryPersisting,
@@ -141,6 +169,8 @@ actor VirtualMachineLibrary:
   static let cloneStagingSuffix = ".partial"
   static let importStagingPrefix = ".Import-"
   static let importStagingSuffix = ".partial"
+  static let windowsBootMediaRepairPrefix = ".SetupConfig.repair-"
+  static let windowsBootMediaRepairSuffix = ".partial"
 
   private struct ActiveClone {
     let transaction: VirtualMachineCloneTransaction
@@ -159,6 +189,7 @@ actor VirtualMachineLibrary:
   private let macPlatformArtifactPreparer: any MacPlatformArtifactPreparing
   private let linuxPlatformArtifactPreparer: any LinuxPlatformArtifactPreparing
   private let windowsPlatformArtifactPreparer: any WindowsPlatformArtifactPreparing
+  private let windowsSetupMediaWriter: any WindowsSetupConfigurationMediaWriting
   private let macVirtualMachineBundleResolver: any MacVirtualMachineBundleResolving
   private let linuxVirtualMachineBundleResolver: any LinuxVirtualMachineBundleResolving
   private let linuxVirtualMachineIdentityGenerator: any LinuxVirtualMachineIdentityGenerating
@@ -179,6 +210,8 @@ actor VirtualMachineLibrary:
       LinuxPlatformArtifactPreparer(),
     windowsPlatformArtifactPreparer: any WindowsPlatformArtifactPreparing =
       WindowsPlatformArtifactPreparer(),
+    windowsSetupMediaWriter: any WindowsSetupConfigurationMediaWriting =
+      DiskutilWindowsSetupConfigurationMediaWriter(),
     macMachineIdentifierValidator: any MacVirtualMachineIdentifierValidating =
       AppleMacVirtualMachineIdentifierGenerator(),
     linuxIdentityGenerator: any LinuxVirtualMachineIdentityGenerating =
@@ -212,6 +245,7 @@ actor VirtualMachineLibrary:
     self.macPlatformArtifactPreparer = macPlatformArtifactPreparer
     self.linuxPlatformArtifactPreparer = linuxPlatformArtifactPreparer
     self.windowsPlatformArtifactPreparer = windowsPlatformArtifactPreparer
+    self.windowsSetupMediaWriter = windowsSetupMediaWriter
     self.macVirtualMachineBundleResolver = bundleResolver
     self.linuxVirtualMachineBundleResolver = linuxBundleResolver
     self.linuxVirtualMachineIdentityGenerator = linuxIdentityGenerator
@@ -1595,11 +1629,179 @@ actor VirtualMachineLibrary:
     }
   }
 
+  func repairWindowsBootMediaIfNeeded(id: UUID) async throws {
+    try bundleStore.ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+
+    var manifest = try linuxRuntimeManifest(id: id)
+    guard manifest.guest == .windows else { return }
+    guard manifest.installState == .readyToInstall else { return }
+    guard let configuration = manifest.windowsConfiguration,
+      let installationMediaPath = configuration.installationMediaPath,
+      let setupMediaPath = configuration.setupConfigurationMediaPath
+    else {
+      throw WindowsBootMediaRepairError.missingConfiguration
+    }
+
+    let bundleURL = bundleStore.bundleURL(for: id)
+    try bundleStore.requireDirectory(bundleURL)
+    let runtimeLockURL = bundleURL.appending(path: Self.runtimeLockFilename)
+    guard let runtimeLock = try AdvisoryFileLock.acquire(at: runtimeLockURL) else {
+      throw LinuxVirtualMachineRuntimeError.ownedElsewhere(id)
+    }
+    defer { runtimeLock.release() }
+
+    let installationMediaURL = try linuxVirtualMachineBundleResolver.resolveArtifact(
+      installationMediaPath,
+      named: "installationMediaPath",
+      in: bundleURL,
+      writable: false
+    )
+    let setupMediaURL = try linuxVirtualMachineBundleResolver.resolveArtifact(
+      setupMediaPath,
+      named: "setupConfigurationMediaPath",
+      in: bundleURL,
+      writable: true
+    )
+    let secretURL = try linuxVirtualMachineBundleResolver.resolveArtifact(
+      configuration.guestAgentSecretPath,
+      named: "guestAgentSecretPath",
+      in: bundleURL,
+      writable: false
+    )
+    try removeStaleWindowsBootMediaRepairs(in: setupMediaURL.deletingLastPathComponent())
+
+    let installationValues = try installationMediaURL.resourceValues(forKeys: [
+      .isRegularFileKey,
+      .fileSizeKey,
+    ])
+    guard installationValues.isRegularFile == true,
+      let installationSize = installationValues.fileSize,
+      installationSize >= 0,
+      UInt64(installationSize) == configuration.installationMedia.byteCount
+    else {
+      throw WindowsBootMediaRepairError.installationMediaChanged
+    }
+    let setupValues = try setupMediaURL.resourceValues(forKeys: [
+      .isRegularFileKey,
+      .fileSizeKey,
+    ])
+    let setupSize = setupValues.fileSize ?? -1
+    let setupIsCurrent =
+      configuration.effectiveBootMediaFormatVersion
+      >= WindowsVirtualMachineConfiguration.currentBootMediaFormatVersion
+      && setupValues.isRegularFile == true
+      && setupSize >= 0
+      && UInt64(setupSize) >= configuration.installationMedia.byteCount
+    guard !setupIsCurrent else { return }
+
+    let stagingURL = setupMediaURL.deletingLastPathComponent().appending(
+      path:
+        "\(Self.windowsBootMediaRepairPrefix)\(UUID().uuidString.lowercased())\(Self.windowsBootMediaRepairSuffix)"
+    )
+    var stagingExists = false
+    defer {
+      if stagingExists {
+        try? fileManager.removeItem(at: stagingURL)
+      }
+    }
+
+    let guestAgentSecret = try Data(contentsOf: secretURL)
+    stagingExists = true
+    try await windowsSetupMediaWriter.write(
+      installationMediaURL: installationMediaURL,
+      installationMediaByteCount: configuration.installationMedia.byteCount,
+      to: stagingURL,
+      guestAgentSecret: guestAgentSecret
+    )
+    let stagedValues = try stagingURL.resourceValues(forKeys: [
+      .isRegularFileKey,
+      .fileSizeKey,
+    ])
+    let stagedSize = stagedValues.fileSize ?? -1
+    guard stagedValues.isRegularFile == true,
+      stagedSize >= 0,
+      UInt64(stagedSize) >= configuration.installationMedia.byteCount
+    else {
+      throw WindowsBootMediaRepairError.invalidPreparedMedia
+    }
+
+    guard
+      Darwin.renameatx_np(
+        AT_FDCWD,
+        stagingURL.nativeContainersPOSIXPath,
+        AT_FDCWD,
+        setupMediaURL.nativeContainersPOSIXPath,
+        UInt32(RENAME_SWAP)
+      ) == 0
+    else {
+      throw WindowsBootMediaRepairError.publishFailed(errno)
+    }
+
+    do {
+      manifest.markWindowsBootMediaPrepared()
+      try bundleStore.write(manifest, to: bundleStore.manifestURL(for: id))
+    } catch {
+      guard
+        Darwin.renameatx_np(
+          AT_FDCWD,
+          stagingURL.nativeContainersPOSIXPath,
+          AT_FDCWD,
+          setupMediaURL.nativeContainersPOSIXPath,
+          UInt32(RENAME_SWAP)
+        ) == 0
+      else {
+        throw WindowsBootMediaRepairError.rollbackFailed(
+          manifest: error.localizedDescription,
+          code: errno
+        )
+      }
+      throw error
+    }
+
+    try fileManager.removeItem(at: stagingURL)
+    stagingExists = false
+    try synchronizeDirectory(setupMediaURL.deletingLastPathComponent())
+  }
+
   func acquireLinuxRuntime(id: UUID) throws -> LinuxVirtualMachineRuntimeLease {
     try acquireLinuxRuntime(
       id: id,
       allowsDiskImageResizeJournal: false
     )
+  }
+
+  private func removeStaleWindowsBootMediaRepairs(in directoryURL: URL) throws {
+    let children = try fileManager.contentsOfDirectory(
+      at: directoryURL,
+      includingPropertiesForKeys: nil,
+      options: []
+    )
+    for child in children {
+      let name = child.lastPathComponent
+      guard name.hasPrefix(Self.windowsBootMediaRepairPrefix),
+        name.hasSuffix(Self.windowsBootMediaRepairSuffix)
+      else {
+        continue
+      }
+      try fileManager.removeItem(at: child)
+    }
+  }
+
+  private func synchronizeDirectory(_ directoryURL: URL) throws {
+    let descriptor = Darwin.open(
+      directoryURL.nativeContainersPOSIXPath,
+      O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+    )
+    guard descriptor >= 0 else {
+      throw WindowsBootMediaRepairError.synchronizationFailed(errno)
+    }
+    defer { Darwin.close(descriptor) }
+    guard Darwin.fsync(descriptor) == 0 else {
+      throw WindowsBootMediaRepairError.synchronizationFailed(errno)
+    }
   }
 
   func acquireLinuxDiskImageResizeRuntime(

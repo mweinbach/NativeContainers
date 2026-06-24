@@ -31,6 +31,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
 
   private let leasingStore: any LinuxVirtualMachineRuntimeLeasing
   private let installationStore: any LinuxVirtualMachineInstallationCompleting
+  private let windowsBootMediaRepairer: any WindowsVirtualMachineBootMediaRepairing
   private let engine: any LinuxVirtualMachineRuntimeEngine
   private let savedStateService: any LinuxVirtualMachineSavedStateManaging
   private let shutdownPolicy: VirtualMachineShutdownPolicy
@@ -42,6 +43,8 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
   init(
     leasingStore: any LinuxVirtualMachineRuntimeLeasing,
     installationStore: any LinuxVirtualMachineInstallationCompleting,
+    windowsBootMediaRepairer: any WindowsVirtualMachineBootMediaRepairing =
+      NoOpWindowsVirtualMachineBootMediaRepairer(),
     engine: any LinuxVirtualMachineRuntimeEngine,
     savedStateService: any LinuxVirtualMachineSavedStateManaging,
     shutdownPolicy: VirtualMachineShutdownPolicy = .standard,
@@ -50,6 +53,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
   ) {
     self.leasingStore = leasingStore
     self.installationStore = installationStore
+    self.windowsBootMediaRepairer = windowsBootMediaRepairer
     self.engine = engine
     self.savedStateService = savedStateService
     self.shutdownPolicy = shutdownPolicy
@@ -601,6 +605,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     var pendingLease: LinuxVirtualMachineRuntimeLease?
 
     do {
+      try await windowsBootMediaRepairer.repairWindowsBootMediaIfNeeded(id: id)
       let lease = try await leasingStore.acquireLinuxRuntime(id: id)
       pendingLease = lease
       guard isCurrentOperation(token, for: id), sessions[id] == nil else {

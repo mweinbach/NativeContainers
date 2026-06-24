@@ -250,7 +250,7 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
   }
 
   @Test
-  func buildsWindowsConfigurationWithNVMeSetupMediaAndGuestAgentSocket() async throws {
+  func buildsWindowsConfigurationWithBootableSetupMediaAheadOfNVMe() async throws {
     let fixture = try WindowsConfigurationFixture()
     defer { fixture.remove() }
     let machine = try LinuxVirtualMachineBundleResolver(
@@ -260,30 +260,30 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
     let configuration = try AppleLinuxVirtualMachineConfigurationFactory()
       .makeConfiguration(for: machine)
 
-    #expect(
+    #expect(configuration.storageDevices.count == 3)
+    let installer = try #require(
       configuration.storageDevices.first
+        as? VZUSBMassStorageDeviceConfiguration
+    )
+    let installerAttachment = try #require(
+      installer.attachment as? VZDiskImageStorageDeviceAttachment
+    )
+    #expect(installerAttachment.url == fixture.installationMedia)
+    #expect(installerAttachment.isReadOnly)
+    let setupMedia = try #require(
+      configuration.storageDevices[1]
+        as? VZUSBMassStorageDeviceConfiguration
+    )
+    let setupAttachment = try #require(
+      setupMedia.attachment as? VZDiskImageStorageDeviceAttachment
+    )
+    #expect(setupAttachment.url == fixture.setupConfigurationMedia)
+    #expect(setupAttachment.isReadOnly)
+    #expect(
+      configuration.storageDevices.last
         is VZNVMExpressControllerDeviceConfiguration
     )
-    let controller = try #require(
-      configuration.usbControllers.first as? VZXHCIControllerConfiguration
-    )
-    #expect(controller.usbDevices.count == 1)
-    let mountedURLs = try Set(
-      controller.usbDevices.map { device in
-        let storage = try #require(
-          device as? VZUSBMassStorageDeviceConfiguration
-        )
-        let attachment = try #require(
-          storage.attachment as? VZDiskImageStorageDeviceAttachment
-        )
-        #expect(attachment.isReadOnly)
-        return attachment.url
-      }
-    )
-    #expect(
-      mountedURLs
-        == [fixture.setupConfigurationMedia]
-    )
+    #expect(configuration.usbControllers.isEmpty)
     #expect(configuration.socketDevices.first is VZVirtioSocketDeviceConfiguration)
     #expect(configuration.consoleDevices.isEmpty)
     #expect(configuration.audioDevices.first is VZVirtioSoundDeviceConfiguration)

@@ -96,6 +96,29 @@ struct WindowsVirtualMachineModelsTests {
   }
 
   @Test
+  func legacyConfigurationWithoutBootMediaVersionRequiresRepair() throws {
+    let configuration = makeConfiguration()
+    var object = try #require(
+      JSONSerialization.jsonObject(
+        with: JSONEncoder().encode(configuration)
+      ) as? [String: Any]
+    )
+    object.removeValue(forKey: "bootMediaFormatVersion")
+
+    let decoded = try JSONDecoder().decode(
+      WindowsVirtualMachineConfiguration.self,
+      from: JSONSerialization.data(withJSONObject: object)
+    )
+
+    #expect(decoded.bootMediaFormatVersion == nil)
+    #expect(decoded.effectiveBootMediaFormatVersion == 0)
+    #expect(
+      configuration.effectiveBootMediaFormatVersion
+        == WindowsVirtualMachineConfiguration.currentBootMediaFormatVersion
+    )
+  }
+
+  @Test
   func finishingInstallationEjectsBothSetupVolumesFromFutureBoots() throws {
     let resources = try VirtualMachineResources(
       cpuCount: 4,

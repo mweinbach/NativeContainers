@@ -100,29 +100,38 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
       } else {
         VZVirtioBlockDeviceConfiguration(attachment: diskAttachment)
       }
+    var storageDevices: [VZStorageDeviceConfiguration] = []
     var usbControllers: [VZUSBControllerConfiguration] = []
-    let removableMediaURLs: [URL]
     if machine.manifest.guest == .windows {
-      // Virtualization exposes USB mass storage rather than an optical drive.
-      // The setup image is the UEFI-bootable FAT32 mirror of the source ISO.
-      removableMediaURLs = [
+      // EFI discovers bootable installer media from the storage-device list.
+      // Keep it ahead of the empty NVMe disk so first launch boots Setup.
+      let removableMediaURLs = [
+        machine.installationMediaURL,
         machine.setupConfigurationMediaURL,
         machine.guestToolsMediaURL,
       ].compactMap { $0 }
-    } else {
-      removableMediaURLs = [machine.installationMediaURL].compactMap { $0 }
-    }
-    if !removableMediaURLs.isEmpty {
-      let controller = VZXHCIControllerConfiguration()
-      controller.usbDevices = try removableMediaURLs.map { url in
+      storageDevices = try removableMediaURLs.map { url in
         let attachment = try VZDiskImageStorageDeviceAttachment(
           url: url,
           readOnly: true
         )
         return VZUSBMassStorageDeviceConfiguration(attachment: attachment)
       }
-      usbControllers = [controller]
+    } else {
+      let removableMediaURLs = [machine.installationMediaURL].compactMap { $0 }
+      if !removableMediaURLs.isEmpty {
+        let controller = VZXHCIControllerConfiguration()
+        controller.usbDevices = try removableMediaURLs.map { url in
+          let attachment = try VZDiskImageStorageDeviceAttachment(
+            url: url,
+            readOnly: true
+          )
+          return VZUSBMassStorageDeviceConfiguration(attachment: attachment)
+        }
+        usbControllers = [controller]
+      }
     }
+    storageDevices.append(disk)
 
     let graphics = VZVirtioGraphicsDeviceConfiguration()
     graphics.scanouts = [
@@ -147,7 +156,7 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     configuration.bootLoader = bootLoader
     configuration.cpuCount = resources.cpuCount
     configuration.memorySize = resources.memoryBytes
-    configuration.storageDevices = [disk]
+    configuration.storageDevices = storageDevices
     configuration.usbControllers = usbControllers
     configuration.graphicsDevices = [graphics]
     configuration.networkDevices = [network]

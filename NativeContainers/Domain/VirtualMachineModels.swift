@@ -368,6 +368,14 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     installationFailure = nil
     self.updatedAt = updatedAt
   }
+
+  mutating func markWindowsBootMediaPrepared(
+    version: Int = WindowsVirtualMachineConfiguration.currentBootMediaFormatVersion,
+    updatedAt: Date = Date()
+  ) {
+    windowsConfiguration?.bootMediaFormatVersion = version
+    self.updatedAt = updatedAt
+  }
 }
 
 struct MacRestoreImageInfo: Codable, Equatable, Sendable {

@@ -265,6 +265,220 @@ struct WindowsInstallationMediaServiceTests {
   }
 }
 
+struct WindowsBootMediaRepairTests {
+  @Test
+  func legacyBootMediaIsAtomicallyRebuiltOnceBeforeRuntimeUse() async throws {
+    let fixture = try WindowsBootMediaRepairFixture()
+    defer { fixture.remove() }
+    let writer = RecordingWindowsSetupMediaWriter(behavior: .succeed)
+    let library = fixture.makeLibrary(writer: writer)
+    let machine = try await fixture.prepare(using: library)
+    try fixture.markBootMediaLegacy(for: machine.id)
+    let legacyBytes = try Data(contentsOf: fixture.setupMediaURL(for: machine.id))
+
+    try await library.repairWindowsBootMediaIfNeeded(id: machine.id)
+
+    let repaired = try #require(try await library.list().first)
+    #expect(
+      repaired.windowsConfiguration?.effectiveBootMediaFormatVersion
+        == WindowsVirtualMachineConfiguration.currentBootMediaFormatVersion
+    )
+    #expect(try Data(contentsOf: fixture.setupMediaURL(for: machine.id)) != legacyBytes)
+    #expect(await writer.writeCount == 1)
+    try fixture.expectNoRepairPartials(for: machine.id)
+
+    try await library.repairWindowsBootMediaIfNeeded(id: machine.id)
+    #expect(await writer.writeCount == 1)
+  }
+
+  @Test
+  func failedRepairPreservesLegacyMediaAndManifest() async throws {
+    let fixture = try WindowsBootMediaRepairFixture()
+    defer { fixture.remove() }
+    let writer = RecordingWindowsSetupMediaWriter(behavior: .failAfterWrite)
+    let library = fixture.makeLibrary(writer: writer)
+    let machine = try await fixture.prepare(using: library)
+    try fixture.markBootMediaLegacy(for: machine.id)
+    let legacyBytes = try Data(contentsOf: fixture.setupMediaURL(for: machine.id))
+
+    await #expect(throws: WindowsBootMediaRepairTestError.expected) {
+      try await library.repairWindowsBootMediaIfNeeded(id: machine.id)
+    }
+
+    let preserved = try #require(try await library.list().first)
+    #expect(preserved.windowsConfiguration?.bootMediaFormatVersion == nil)
+    #expect(try Data(contentsOf: fixture.setupMediaURL(for: machine.id)) == legacyBytes)
+    try fixture.expectNoRepairPartials(for: machine.id)
+  }
+}
+
+private enum WindowsBootMediaRepairTestError: Error {
+  case expected
+}
+
+private actor RecordingWindowsSetupMediaWriter:
+  WindowsSetupConfigurationMediaWriting
+{
+  enum Behavior: Sendable {
+    case succeed
+    case failAfterWrite
+  }
+
+  private let behavior: Behavior
+  private(set) var writeCount = 0
+
+  init(behavior: Behavior) {
+    self.behavior = behavior
+  }
+
+  func write(
+    installationMediaURL: URL,
+    installationMediaByteCount: UInt64,
+    to destinationURL: URL,
+    guestAgentSecret: Data
+  ) async throws {
+    writeCount += 1
+    try Data(
+      repeating: 0x5a,
+      count: Int(installationMediaByteCount) + 64
+    ).write(to: destinationURL)
+    if behavior == .failAfterWrite {
+      throw WindowsBootMediaRepairTestError.expected
+    }
+  }
+}
+
+private struct WindowsBootMediaRepairFixture {
+  static let installationBytes = Data(repeating: 0x42, count: 256)
+
+  let root: URL
+  let libraryRoot: URL
+  let sourceISO: URL
+
+  init() throws {
+    root = FileManager.default.temporaryDirectory.appending(
+      path: "NativeContainers-WindowsBootMediaRepairTests-\(UUID().uuidString)",
+      directoryHint: .isDirectory
+    )
+    libraryRoot = root.appending(path: "Library", directoryHint: .isDirectory)
+    sourceISO = root.appending(path: "Windows.iso")
+    try FileManager.default.createDirectory(
+      at: root,
+      withIntermediateDirectories: false
+    )
+    try Self.installationBytes.write(to: sourceISO)
+  }
+
+  func makeLibrary(
+    writer: any WindowsSetupConfigurationMediaWriting
+  ) -> VirtualMachineLibrary {
+    VirtualMachineLibrary(
+      rootURL: libraryRoot,
+      windowsPlatformArtifactPreparer: WindowsBootMediaRepairArtifactPreparer(),
+      windowsSetupMediaWriter: writer
+    )
+  }
+
+  func prepare(using library: VirtualMachineLibrary) async throws
+    -> VirtualMachineManifest
+  {
+    let resources = try VirtualMachineResources(
+      cpuCount: 4,
+      memoryBytes: 8 * VirtualMachineResources.bytesPerGiB,
+      diskBytes: 64 * VirtualMachineResources.bytesPerGiB
+    )
+    let draft = try await library.createDraft(
+      name: "Legacy Windows",
+      guest: .windows,
+      resources: resources
+    )
+    return try await library.prepareWindowsVM(
+      id: draft.id,
+      installationMediaURL: sourceISO,
+      securityMode: .developmentTestSigning,
+      guestTools: nil
+    )
+  }
+
+  func markBootMediaLegacy(for id: UUID) throws {
+    let manifestURL = bundleURL(for: id).appending(
+      path: VirtualMachineLibrary.manifestFilename
+    )
+    var manifest = try #require(
+      JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL))
+        as? [String: Any]
+    )
+    var configuration = try #require(
+      manifest["windowsConfiguration"] as? [String: Any]
+    )
+    configuration.removeValue(forKey: "bootMediaFormatVersion")
+    manifest["windowsConfiguration"] = configuration
+    try JSONSerialization.data(
+      withJSONObject: manifest,
+      options: [.prettyPrinted, .sortedKeys]
+    ).write(to: manifestURL, options: [.atomic])
+  }
+
+  func setupMediaURL(for id: UUID) -> URL {
+    bundleURL(for: id)
+      .appending(
+        path: WindowsPlatformArtifactURLs.directoryName,
+        directoryHint: .isDirectory
+      )
+      .appending(path: WindowsPlatformArtifactURLs.setupConfigurationMediaFilename)
+  }
+
+  func expectNoRepairPartials(for id: UUID) throws {
+    let platform = setupMediaURL(for: id).deletingLastPathComponent()
+    let names = try FileManager.default.contentsOfDirectory(atPath: platform.path)
+    #expect(!names.contains(where: { $0.hasPrefix(".SetupConfig.repair-") }))
+  }
+
+  func bundleURL(for id: UUID) -> URL {
+    libraryRoot
+      .appending(path: id.uuidString.lowercased(), directoryHint: .isDirectory)
+      .appendingPathExtension(VirtualMachineLibrary.bundleExtension)
+  }
+
+  func remove() {
+    try? FileManager.default.removeItem(at: root)
+  }
+}
+
+private struct WindowsBootMediaRepairArtifactPreparer:
+  WindowsPlatformArtifactPreparing
+{
+  func prepare(
+    installationMediaURL: URL,
+    destination: WindowsPlatformArtifactURLs,
+    securityMode: WindowsVirtualMachineSecurityMode
+  ) async throws -> WindowsPlatformPreparationResult {
+    try Data("nvram".utf8).write(to: destination.efiVariableStore)
+    try Data("machine".utf8).write(to: destination.machineIdentifier)
+    try FileManager.default.copyItem(
+      at: installationMediaURL,
+      to: destination.installationMedia
+    )
+    try Data(repeating: 0x11, count: 16).write(
+      to: destination.setupConfigurationMedia
+    )
+    try Data(repeating: 0x22, count: 32).write(to: destination.guestAgentSecret)
+    return WindowsPlatformPreparationResult(
+      macAddress: "02:00:00:00:00:44",
+      installationMedia: WindowsInstallationMediaMetadata(
+        sha256: String(repeating: "0", count: 64),
+        byteCount: UInt64(WindowsBootMediaRepairFixture.installationBytes.count),
+        volumeLabel: "WINDOWS_ARM64",
+        architecture: .arm64,
+        sourceFilename: installationMediaURL.lastPathComponent,
+        efiBootManagerPath: "efi/boot/bootaa64.efi",
+        bootImagePath: "sources/boot.wim",
+        installImagePath: "sources/install.wim"
+      )
+    )
+  }
+}
+
 private actor RecordingWindowsWIMImageSplitter: WindowsWIMImageSplitting {
   struct Invocation: Sendable {
     let sourceURL: URL
