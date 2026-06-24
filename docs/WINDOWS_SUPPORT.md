@@ -2,8 +2,13 @@
 
 NativeContainers has an experimental Windows 11 ARM64 virtual-machine lane
 built directly on Apple's `Virtualization.framework`. It accepts normal
-Microsoft ARM64 ISO media; it does not convert the ISO, extract an installation
-image, or depend on a prebuilt Windows disk.
+Microsoft ARM64 ISO media and retains an exact hashed copy. Because
+Virtualization exposes USB mass storage rather than an optical drive, preparation
+also builds a UEFI-bootable FAT32 mirror of the ISO. The oversized
+`sources/install.wim` is losslessly split into `install.swm`, `install2.swm`,
+and any later parts in the same `sources` directory, which Windows Setup supports
+for [FAT32 installation media](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/split-a-windows-image--wim--file-to-span-across-multiple-dvds?view=windows-11).
+It does not depend on a prebuilt Windows disk.
 
 Secure Boot is off by default in the current bootable mode. The creation UI
 exposes a Secure Boot toggle so the product boundary is explicit, but enabling
@@ -22,11 +27,17 @@ or start a VM.
 - The copied image is mounted read-only with `diskutil`. Inspection requires a
   nonempty ARM64 PE boot manager at `efi/boot/bootaa64.efi`, plus `boot.wim` and
   `install.wim`.
+- Preparation creates a private GPT/FAT32 USB image, copies every ordinary ISO
+  file except `install.wim`, and rejects links, special files, duplicate install
+  images, or any other file that exceeds FAT32's limit. `wimlib-imagex` splits
+  `install.wim` into parts capped at 3,800 MiB; every output part is revalidated
+  before the image is committed.
 - Preparation creates persistent generic machine identity, a random locally
   administered MAC address, a 32-byte guest-agent secret, EFI NVRAM, a sparse
-  VM disk, and a small FAT setup disk in one recoverable bundle transaction.
+  VM disk, and the bootable FAT32 setup image in one recoverable bundle
+  transaction.
 - The same per-VM secret is delivered as a raw 32-byte file on that temporary
-  setup disk. Guest-tools installation moves it into an ACL-restricted SYSTEM
+  bootable setup image. Guest-tools installation moves it into an ACL-restricted SYSTEM
   location before setup media is ejected; the manifest never contains it.
 - The current default leaves Secure Boot disabled and is the only mode allowed
   to create and start a Windows VM.
@@ -38,9 +49,11 @@ or start a VM.
 - The setup disk contains one compatibility exception:
   `BypassTPMCheck`. It does not bypass CPU, RAM, storage, or Secure Boot checks.
   Windows minimums remain 2 CPUs, 4 GiB RAM, and 64 GiB disk.
-- The runtime uses EFI, a generic platform, an NVMe system disk, read-only USB
-  installer/setup/tools media, VirtIO graphics, networking, sound, entropy,
-  ballooning and vsock, plus USB keyboard and absolute pointer devices.
+- The runtime uses EFI, a generic platform, an NVMe system disk, the read-only
+  bootable FAT32 installer and verified tools media over USB, VirtIO graphics,
+  networking, sound, entropy, ballooning and vsock, plus USB keyboard and
+  absolute pointer devices. The exact source ISO remains available for
+  provenance but is not attached as a raw disk.
 - Windows reuses the generation-pinned VM lifecycle, console, networking,
   compute, disk growth, snapshots, same-host clone, portable transfer, saved
   state, metadata and shared-folder services already used by GUI Linux VMs.
@@ -48,6 +61,12 @@ or start a VM.
 - Finishing installation ejects all removable setup media from the running
   guest and future boots. Guest-tools media then resolves only through the
   verified managed cache.
+
+The development path resolves `wimlib-imagex` first from a future app-bundled
+`WindowsTools` resource and then from the standard Apple silicon or Intel
+Homebrew locations. A production distribution must pin, license, package, and
+verify that helper in the app bundle rather than depending on a mutable host
+installation.
 
 ## Guest tools and drivers
 
@@ -100,9 +119,13 @@ The supplied `Win11_25H2_English_Arm64_v2.iso` has a live, read-only media test
 that pins its 7,994,415,104-byte size, SHA-256
 `638aa2c88e94385b00f4f178d071e3df0b7d9e335577a83bd533b7f2eb65adf0`,
 volume label, ARM64 boot manager and WIM layout, then proves the source size and
-modification date are unchanged. Deterministic tests cover media rejection,
-copy integrity, setup-answer policy, bundle round trips, runtime device
-configuration, production gating and managed-cache recovery.
+modification date are unchanged. A separate opt-in lane copies that exact ISO,
+creates and validates the 8,137-MiB FAT32 installer with real split WIM parts,
+starts it through Virtualization, presents the native console for 45 seconds,
+passes pause/resume, force-stops, and proves exact temporary-bundle cleanup.
+Deterministic tests cover media rejection, copy integrity, boot-media
+replication and splitting, setup-answer policy, bundle round trips, runtime
+device configuration, production gating and managed-cache recovery.
 
 An installed Windows desktop, Microsoft-signed custom drivers, HLK results,
 host/guest agent interoperability, shared-folder mapping, clipboard, sound,

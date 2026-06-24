@@ -2782,9 +2782,16 @@ app accepts normal local Microsoft ISO media, streams a private copy while
 hashing it, mounts only that copy read-only for inspection, and requires an
 ARM64 EFI boot manager plus the boot and install WIM payloads. The manifest
 retains the media provenance and checksum without increasing the bundle schema.
+Virtualization exposes the installer only as USB mass storage, while Microsoft's
+stock image is optical/El Torito media rather than a hybrid disk. Preparation
+therefore mirrors the inspected files into a private GPT/FAT32 image, replaces
+only `sources/install.wim` with validated split `.swm` parts capped at 3,800
+MiB, and commits that bootable image in the existing setup-media slot. The exact
+source ISO remains in the bundle for provenance but is not attached as a raw
+disk.
 
-The persistent system disk is NVMe and setup media is read-only USB mass
-storage. VirtIO graphics, network, sound, entropy, balloon and vsock devices
+The persistent system disk is NVMe and the bootable setup image is read-only USB
+mass storage. VirtIO graphics, network, sound, entropy, balloon and vsock devices
 keep the runtime aligned with the companion open-source Windows driver stack.
 All guest-neutral GUI VM lifecycle, storage, snapshot, network, clone, transfer,
 saved-state, folder and metadata services remain shared; Windows-specific
@@ -2810,3 +2817,11 @@ guest service/user agent, packaging and signing evidence. It pins upstream
 virtio-win and Microsoft SysVAD revisions and preserves their notices rather
 than copying untracked snapshots. See `docs/WINDOWS_SUPPORT.md` for the exact
 release and verification boundary.
+
+The current development build resolves `wimlib-imagex` from a future bundled
+resource or fixed Homebrew locations. Production packaging must pin, license,
+bundle, and verify the helper; a mutable host package is not a release
+dependency. The real pinned ISO lane now covers FAT32 construction, WIM
+splitting, VZ start, console presentation, pause/resume, force-stop, and cleanup.
+It does not promote Windows to supported: installed-desktop, signed-driver, and
+host/guest integration validation remain release gates.

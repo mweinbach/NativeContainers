@@ -253,12 +253,6 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
   func buildsWindowsConfigurationWithNVMeSetupMediaAndGuestAgentSocket() async throws {
     let fixture = try WindowsConfigurationFixture()
     defer { fixture.remove() }
-    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
-      to: fixture.installationMedia
-    )
-    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
-      to: fixture.setupConfigurationMedia
-    )
     let machine = try LinuxVirtualMachineBundleResolver(
       rootURL: fixture.root
     ).resolve(fixture.manifest)
@@ -273,7 +267,7 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
     let controller = try #require(
       configuration.usbControllers.first as? VZXHCIControllerConfiguration
     )
-    #expect(controller.usbDevices.count == 2)
+    #expect(controller.usbDevices.count == 1)
     let mountedURLs = try Set(
       controller.usbDevices.map { device in
         let storage = try #require(
@@ -288,7 +282,7 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
     )
     #expect(
       mountedURLs
-        == [fixture.installationMedia, fixture.setupConfigurationMedia]
+        == [fixture.setupConfigurationMedia]
     )
     #expect(configuration.socketDevices.first is VZVirtioSocketDeviceConfiguration)
     #expect(configuration.consoleDevices.isEmpty)
@@ -302,12 +296,6 @@ struct AppleLinuxVirtualMachineConfigurationFactoryTests {
       securityMode: .productionSecureBoot
     )
     defer { fixture.remove() }
-    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
-      to: fixture.installationMedia
-    )
-    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
-      to: fixture.setupConfigurationMedia
-    )
     let machine = try LinuxVirtualMachineBundleResolver(
       rootURL: fixture.root
     ).resolve(fixture.manifest)
@@ -516,6 +504,9 @@ private struct WindowsConfigurationFixture {
     setupConfigurationMedia = platform.appending(
       path: WindowsPlatformArtifactURLs.setupConfigurationMediaFilename
     )
+    let removableDiskBytes = Data(repeating: 0, count: 1_024 * 1_024)
+    try removableDiskBytes.write(to: installationMedia)
+    try removableDiskBytes.write(to: setupConfigurationMedia)
     try Data(repeating: 7, count: 32).write(
       to: platform.appending(
         path: WindowsPlatformArtifactURLs.guestAgentSecretFilename

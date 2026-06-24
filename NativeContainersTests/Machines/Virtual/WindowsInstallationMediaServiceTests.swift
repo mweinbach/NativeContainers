@@ -115,47 +115,112 @@ struct WindowsInstallationMediaServiceTests {
   }
 
   @Test
-  func setupWriterCreatesMountableFATImageWithOnlyTPMBypass() async throws {
+  func bootableMediaPopulatorCopiesInstallerSplitsWIMAndWritesOnlyTPMBypass()
+    async throws
+  {
     let fixture = try WindowsMediaFixture()
     defer { fixture.remove() }
-    let imageURL = fixture.root.appending(path: "SetupConfig.img")
-    let mounter = DiskutilDiskImageMounter()
+    try fixture.makeMountedWindowsVolume(machine: 0xaa64, mixedCase: true)
+    let destination = fixture.root.appending(
+      path: "BootableVolume",
+      directoryHint: .isDirectory
+    )
+    try FileManager.default.createDirectory(
+      at: destination,
+      withIntermediateDirectories: false
+    )
+    let readme = Data("installer payload".utf8)
+    try readme.write(to: fixture.volume.appending(path: "README.txt"))
     let secret = Data((0..<32).map { UInt8($0) })
+    let splitter = RecordingWindowsWIMImageSplitter()
 
-    try await DiskutilWindowsSetupConfigurationMediaWriter().write(
-      to: imageURL,
+    try await WindowsBootableInstallationMediaPopulator(
+      splitter: splitter
+    ).populate(
+      from: fixture.volume,
+      to: destination,
       guestAgentSecret: secret
     )
-    let image = try await mounter.attach(imageURL, readOnly: true)
-    let answer: String
-    let embeddedSecret: Data
-    do {
-      answer = try String(
-        contentsOf: image.mountURL.appending(path: "Autounattend.xml"),
-        encoding: .utf8
-      )
-      embeddedSecret = try Data(
-        contentsOf:
-          image.mountURL
-          .appending(
-            path: DiskutilWindowsSetupConfigurationMediaWriter.integrationDirectoryName,
-            directoryHint: .isDirectory
-          )
-          .appending(
-            path: DiskutilWindowsSetupConfigurationMediaWriter.guestAgentSecretFilename
-          )
-      )
-      try await mounter.detach(image)
-    } catch {
-      try? await mounter.detach(image)
-      throw error
-    }
+    let answer = try String(
+      contentsOf: destination.appending(path: "Autounattend.xml"),
+      encoding: .utf8
+    )
+    let embeddedSecret = try Data(
+      contentsOf:
+        destination
+        .appending(
+          path: DiskutilWindowsSetupConfigurationMediaWriter.integrationDirectoryName,
+          directoryHint: .isDirectory
+        )
+        .appending(
+          path: DiskutilWindowsSetupConfigurationMediaWriter.guestAgentSecretFilename
+        )
+    )
+    let sources = destination.appending(path: "Sources", directoryHint: .isDirectory)
+    let splitInvocation = try #require(await splitter.invocation)
 
     #expect(answer.contains("BypassTPMCheck"))
     #expect(!answer.contains("BypassSecureBootCheck"))
     #expect(!answer.contains("BypassCPUCheck"))
     #expect(!answer.contains("BypassRAMCheck"))
     #expect(embeddedSecret == secret)
+    #expect(try Data(contentsOf: destination.appending(path: "README.txt")) == readme)
+    #expect(
+      FileManager.default.fileExists(
+        atPath: destination.appending(path: "EFI/Boot/BOOTAA64.EFI").path
+      )
+    )
+    #expect(!FileManager.default.fileExists(atPath: sources.appending(path: "INSTALL.WIM").path))
+    #expect(try Data(contentsOf: sources.appending(path: "install.swm")) == Data([2]))
+    #expect(splitInvocation.sourceURL.lastPathComponent == "INSTALL.WIM")
+    #expect(splitInvocation.destinationURL == sources.appending(path: "install.swm"))
+  }
+
+  @Test
+  func wimlibSplitterUsesBoundedFAT32Parts() async throws {
+    let fixture = try WindowsMediaFixture()
+    defer { fixture.remove() }
+    let executable = fixture.root.appending(path: "wimlib-imagex")
+    try Data([0]).write(to: executable)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o700],
+      ofItemAtPath: executable.path
+    )
+    let executor = RecordingWindowsHostCommandExecutor(
+      result: HostCommandResult(
+        exitCode: 0,
+        standardOutput: "split complete",
+        standardError: "",
+        outputWasTruncated: false
+      )
+    )
+    let destination = fixture.root.appending(path: "install.swm")
+
+    try await WIMLibWindowsWIMImageSplitter(
+      executor: executor,
+      executableURL: executable
+    ).split(sourceURL: fixture.sourceISO, destinationURL: destination)
+
+    let invocation = try #require(await executor.invocation)
+    #expect(invocation.executableURL == executable)
+    #expect(
+      invocation.arguments
+        == [
+          "split",
+          fixture.sourceISO.path,
+          destination.path,
+          String(WIMLibWindowsWIMImageSplitter.maximumPartSizeMiB),
+        ]
+    )
+  }
+
+  @Test
+  func setupWriterSizesBootableImageWithHeadroom() throws {
+    #expect(
+      try DiskutilWindowsSetupConfigurationMediaWriter.imageSize(
+        installationMediaByteCount: 7_994_415_104
+      ) == "8137MiB"
+    )
   }
 
   @Test
@@ -166,6 +231,8 @@ struct WindowsInstallationMediaServiceTests {
 
     await #expect(throws: WindowsPlatformArtifactError.invalidGuestAgentSecret) {
       try await DiskutilWindowsSetupConfigurationMediaWriter().write(
+        installationMediaURL: fixture.sourceISO,
+        installationMediaByteCount: 1,
         to: imageURL,
         guestAgentSecret: Data(repeating: 0, count: 31)
       )
@@ -195,6 +262,23 @@ struct WindowsInstallationMediaServiceTests {
     let invocation = try #require(await executor.invocation)
     #expect(invocation.executableURL == DiskutilDiskImageMounter.executableURL)
     #expect(invocation.arguments == ["eject", "/dev/disk99"])
+  }
+}
+
+private actor RecordingWindowsWIMImageSplitter: WindowsWIMImageSplitting {
+  struct Invocation: Sendable {
+    let sourceURL: URL
+    let destinationURL: URL
+  }
+
+  private(set) var invocation: Invocation?
+
+  func split(sourceURL: URL, destinationURL: URL) async throws {
+    invocation = Invocation(
+      sourceURL: sourceURL,
+      destinationURL: destinationURL
+    )
+    try Data(contentsOf: sourceURL).write(to: destinationURL)
   }
 }
 

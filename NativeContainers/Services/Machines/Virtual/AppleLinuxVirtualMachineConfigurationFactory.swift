@@ -101,11 +101,17 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
         VZVirtioBlockDeviceConfiguration(attachment: diskAttachment)
       }
     var usbControllers: [VZUSBControllerConfiguration] = []
-    let removableMediaURLs = [
-      machine.installationMediaURL,
-      machine.setupConfigurationMediaURL,
-      machine.guestToolsMediaURL,
-    ].compactMap { $0 }
+    let removableMediaURLs: [URL]
+    if machine.manifest.guest == .windows {
+      // Virtualization exposes USB mass storage rather than an optical drive.
+      // The setup image is the UEFI-bootable FAT32 mirror of the source ISO.
+      removableMediaURLs = [
+        machine.setupConfigurationMediaURL,
+        machine.guestToolsMediaURL,
+      ].compactMap { $0 }
+    } else {
+      removableMediaURLs = [machine.installationMediaURL].compactMap { $0 }
+    }
     if !removableMediaURLs.isEmpty {
       let controller = VZXHCIControllerConfiguration()
       controller.usbDevices = try removableMediaURLs.map { url in
