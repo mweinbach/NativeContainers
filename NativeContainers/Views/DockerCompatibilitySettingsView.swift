@@ -76,7 +76,7 @@ struct DockerCompatibilitySettingsSection: View {
           .textSelection(.enabled)
 
         Text(
-          "Compatibility is optional and partial: Socktainer exposes part of Docker Engine API v1.51. Reviewed fresh/create-missing Up and exact-ID Start, Stop, and declared-service Down use crash-safe journaling; unsupported Compose features and recreation remain blocked."
+          "Compatibility is optional. Signed upstream Socktainer 1.0.0 exposes only the baseline subset. The exact NativeContainers fork completes the local Engine subset and Compose contract, but fork-only execution stays fail-closed until its separately signed release is installed."
         )
         .font(.caption)
         .foregroundStyle(.secondary)

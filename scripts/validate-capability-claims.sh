@@ -87,12 +87,30 @@ require_literal NativeContainers/Services/Compose/ComposeProjectInputVault.swift
 require_literal NativeContainers/Services/Compose/ComposeContainerLifecyclePlanner.swift \
   'container.labels[ComposeLabelKey.inputSeal] != inputSeal' \
   "stale Compose input recreation blocker"
-require_literal NativeContainers/Services/Compose/ComposeDesiredStateDecoder.swift \
-  'remain blocked by signed Socktainer 1.0.0' \
-  "production signed-bridge input blocker"
+require_literal NativeContainers/Services/Compose/SocktainerComposeConformanceService.swift \
+  'sourceRevision: "5bdafa7"' \
+  "completed NativeContainers bridge conformance pin"
+require_literal NativeContainers/Services/Compose/SocktainerComposeConformanceService.swift \
+  'passedScenarioIDs: Set(SocktainerComposeSemanticScenarioCatalog.all.map(\.id))' \
+  "complete NativeContainers bridge semantic evidence"
+require_literal NativeContainers/App/Composition/OptionalIntegrationServiceModule.swift \
+  'allowsNativeContainersForkFeatures: false' \
+  "production upstream Compose feature gate"
+require_literal NativeContainers/App/Composition/OptionalIntegrationServiceModule.swift \
+  'allowsNativeContainersForkRecreation: false' \
+  "production upstream Compose recreation gate"
+require_literal NativeContainers/Domain/ComposeProjectActions.swift \
+  'case replace' \
+  "typed Compose replacement action"
+require_literal NativeContainers/Domain/ComposeProjectActions.swift \
+  'case scaleDown' \
+  "typed Compose scale-down action"
 require_literal docs/FEATURE_MATRIX.md \
-  'The local config/secret review vault, HMAC seals, bounded mode-0400 staging, redaction, and final-overlay hashing are implemented but dormant behind an execution blocker.' \
-  "qualified Compose input implementation claim"
+  '| Docker Compose | Review/input-vault/planning/revalidation/journal/mutation services + private official client + exact NativeContainers bridge fork | Conditional M2 |' \
+  "conditional complete Compose claim"
+require_literal docs/FEATURE_MATRIX.md \
+  '| Docker CLI and Engine API | Pinned Socktainer install/process/context services + exact NativeContainers bridge fork | Conditional M2 |' \
+  "conditional local Engine subset claim"
 
 for requirement in \
   containerStartup \

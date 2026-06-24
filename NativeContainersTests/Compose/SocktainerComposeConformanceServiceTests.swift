@@ -76,7 +76,7 @@ struct SocktainerComposeConformanceServiceTests {
     ).report()
 
     #expect(report.bridgeVersion == "1.0.0-nc.1")
-    #expect(report.sourceRevision == "c3a368f")
+    #expect(report.sourceRevision == "5bdafa7")
     #expect(report.supportedCount == 12)
     #expect(report.gapCount == 0)
     #expect(report.projectLifecycleIsEligible)

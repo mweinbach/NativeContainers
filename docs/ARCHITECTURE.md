@@ -633,14 +633,23 @@ commands, strips shell context/host overrides for the operation, and confirms
 that the user’s active context did not change.
 
 Compose bridge conformance is another independent pure service facet.
-`SocktainerComposeConformanceService` evaluates an immutable manifest pinned to
-Socktainer 1.0.0, Docker Engine API 1.51, and release revision `876c2fc`.
-Each fixture names the exact Engine operations it requires and separately
-records semantic limitations or application-policy blocks. Missing operations
-fail closed, and new operation cases are not accepted implicitly. The resulting
-report is visible in Settings but is explicitly source-pinned evidence rather
-than a live Compose execution result. It does not start the bridge, inspect
-Apple inventory, or authorize project mutation.
+`SocktainerComposeConformanceService` retains the immutable upstream 1.0.0
+manifest at revision `876c2fc` and a second exact NativeContainers fork manifest
+at revision `5bdafa7`, both against Docker Engine API 1.51. Each fixture names
+the exact Engine operations it requires and separately records semantic
+postconditions. The fork manifest is supported only because all 12 fixtures and
+all 41 recreation/alias/health/restart scenarios passed; HTTP success without
+the expected state mutation fails. Missing operations fail closed, and new
+operation cases are not accepted implicitly. The report remains source-pinned
+evidence rather than execution authority.
+
+The fork also completes the local-runtime Engine utility surface: stopped-rootfs
+export, bounded process-table inspection, restart-policy updates, Docker Hub
+search, and OCI distribution inspection. APIs whose underlying architecture is
+absent—pause/unpause state, filesystem changes/commit, plugins, Swarm, and
+session attachment—return explicit unsupported responses. NativeContainers does
+not describe that bounded local-runtime contract as universal Docker daemon
+parity.
 
 `SocktainerComposeLiveConformanceService` is a separate opt-in execution
 boundary. A private workspace facet writes one fixed Alpine fixture with unique,
@@ -724,12 +733,17 @@ mode-0400 inputs, environment values enter only the bounded Compose child, and
 the final overlay adds the input seal before calculating exact reviewed service
 hashes. Plans, labels, and journals never retain environment values or direct
 secret hashes. Existing containers with a different seal require recreation and
-therefore remain blocked instead of being reused.
+are never silently reused. The exact fork profile turns that requirement into a
+typed, journaled replacement; the signed-upstream profile emits a blocker.
 
-Compose 5.1.4 still has a replacement flow that deletes the old container before
-a rename that Socktainer 1.0.0 does not implement. Configuration/image drift and
-other recreation remain blocked; create-missing never authorizes replacement or
-scale-down.
+The NativeContainers fork supplies real rename, network connect/disconnect,
+scoped aliases, health state, restart persistence, and private EXT4 input
+injection. The planner can therefore replace one targeted service, repair a
+noncontiguous replica set, and scale down exact highest replicas while final
+postconditions prove the reviewed identity-sealed set. Production currently
+instantiates the signed-upstream decoder/planner profile, which preserves safe
+fresh/create-missing behavior but rejects every fork-only semantic until a
+separately signed fork release is pinned.
 
 Crash recovery journals contain only opaque ordered step tokens. Schema v3
 requires every completed token to be the next reviewed step and requires all

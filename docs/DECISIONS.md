@@ -2683,7 +2683,7 @@ never accepted.
 
 ## ADR-091: Seal local Compose configs and secrets into reviewed execution
 
-**Status:** Accepted implementation; execution blocked — 2026-06-23
+**Status:** Superseded by ADR-092 — 2026-06-23
 
 Local Docker Compose does not require Engine config or secret objects for the
 target source forms. NativeContainers therefore prepares project-local file
@@ -2735,3 +2735,39 @@ Configs, secrets, recreation, aliases, health checks, and restart policies remai
 blocked until one exact signed Socktainer release passes their live semantic
 conformance contracts; partial current-main behavior does not change those
 claims.
+
+## ADR-092: Complete Compose and the local Engine subset in an exact bridge fork
+
+**Status:** Accepted; release activation conditional — 2026-06-23
+
+NativeContainers maintains an exact Socktainer `1.0.0-nc.1` source candidate at
+revision `5bdafa7`. The fork supplies real rename, network connect/disconnect,
+scoped aliases, health execution/state, restart-policy persistence and recovery,
+and private EXT4 overrides for reviewed config/secret injection. The app-side
+planner correspondingly owns typed targeted replacement, exact highest-replica
+scale-down, noncontiguous repair, crash-safe step journaling, and final
+identity-sealed postconditions.
+
+This capability is evidence-driven. The fork must pass all 12 immutable Compose
+fixtures and all 41 observed semantic scenarios covering replacement, aliases,
+health, and restart behavior. Config and secret probes read exact reviewed bytes
+inside fresh and replacement containers. A successful HTTP status without the
+required runtime mutation does not count. Revision `5bdafa7` passes that source
+and live conformance boundary.
+
+The same revision completes the Docker Engine v1.51 routes meaningful for the
+Apple local-container runtime, including stopped-container export, process-table
+inspection, restart-policy updates, Docker Hub search, and OCI distribution
+inspection. Pause/unpause state, filesystem changes/commit, plugins, Swarm, and
+session APIs have no matching local-runtime architecture and return explicit
+unsupported responses. This is a complete local-runtime subset, not a claim of
+universal Docker daemon parity.
+
+The app keeps upstream and fork capability profiles separate. The production
+installer still authenticates signed upstream Socktainer 1.0.0, so production
+composition selects the baseline decoder/planner and rejects every fork-only
+feature before mutation. The complete profile becomes selectable only after a
+separately signed fork binary is version/digest/team pinned. Source staging,
+ad-hoc signing, or a version string alone cannot enable it. Producing that
+artifact belongs to the Developer ID release work intentionally excluded from
+this implementation slice.

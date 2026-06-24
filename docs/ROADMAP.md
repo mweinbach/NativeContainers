@@ -95,6 +95,11 @@ must leave a usable, test-backed product slice.
       HTTP-level readiness, exact-PID TERM-to-KILL/Force Stop recovery, stale
       socket cleanup, and a product-specific Docker context that never becomes
       the active context implicitly.
+- [x] Complete the exact NativeContainers Socktainer fork's local-runtime Docker
+      Engine v1.51 subset, including export, top, restart-policy updates, image
+      search, and distribution inspection. Pause/unpause, changes/commit,
+      plugins, Swarm, and session APIs stay explicit unsupported architecture
+      families rather than success-shaped stubs.
 - [x] Source-pinned Socktainer 1.0.0 Compose conformance manifest with explicit
       route requirements, semantic gaps, and a visible policy block.
 - [x] Isolated live-wire Compose fixture with canonical Apple-inventory proof,
@@ -116,23 +121,26 @@ must leave a usable, test-backed product slice.
       recovery compatibility, and a doubly gated real Up/Stop/Start/Down lifecycle
       probe with detached exact-identity cleanup.
 - [x] Add a deterministic external-resource execution overlay, immutable stable
-      metadata paths, supported-key allowlist, attachment proofs, and contiguous
-      replica-prefix guard; enable create-missing Up while keeping recreation
-      blocked on Socktainer 1.0.0.
-- [ ] Compose container recreation after the pinned bridge implements container
-      rename plus network connect/disconnect. Fresh and create-missing Up do not
-      authorize replacement or scale-down.
-- [ ] Compose per-service network aliases after Socktainer maps alias intent into
-      container creation and inspection.
-- [ ] Compose health checks and restart policies after the pinned bridge exposes
-      both configuration and authoritative runtime state.
-- [ ] Local Compose configs and secrets without Engine objects. The two-stage
-      review vault, Keychain HMAC seals, stable mode-0400 file staging,
+      metadata paths, supported-key allowlist, attachment proofs, contiguous
+      replica-prefix safety for upstream 1.0.0, and exact noncontiguous repair
+      through the NativeContainers bridge fork.
+- [x] Implement typed, journaled Compose container replacement and exact
+      scale-down after the bridge fork added real rename/connect/disconnect
+      mutations and passed all eight recreation postconditions.
+- [x] Implement per-network default and custom Compose aliases with isolation and
+      inspect parity across multiple networks and projects.
+- [x] Implement CMD/CMD-SHELL/NONE health checks, cadence, bounded logs, events,
+      persistence, wait semantics, and `depends_on: service_healthy` ordering.
+- [x] Implement `no`, `always`, `on-failure[:limit]`, and `unless-stopped`
+      restart policies with backoff, manual-stop behavior, persistence, events,
+      and inspection parity.
+- [x] Implement local Compose configs and secrets without Engine objects. The
+      two-stage review vault, Keychain HMAC seals, stable mode-0400 file staging,
       bounded/redacted child execution, final-overlay hashes, and stale-input
-      recreation blockers are implemented but kept dormant. Signed Socktainer
-      1.0.0 rejects file-source host mounts and exposes no root filesystem for
-      pre-start literal/environment archive injection; enable only after an
-      exact signed-runtime conformance pass.
+      replacement semantics cover every reviewed file/environment/literal form.
+      The exact fork passes all 12 fixtures and 41 scenarios; production keeps
+      fork-only execution blocked until the excluded Developer ID work yields a
+      separately signed and pinned bridge release.
 - [x] Read-only automatic project detection and objective per-project status
       from canonical Compose labels in Apple inventory.
 - [x] SSH agent forwarding and safe host-directory sharing.
@@ -217,6 +225,10 @@ must leave a usable, test-backed product slice.
       through the app-owned vmnet pool, with stopped-only lease-backed edits,
       cold-start application, same-host clone retention, and portable reset to
       NAT.
+- [x] Live-verify installed-guest portable transfer boot and host-only
+      reachability: export/import rotates generic and MAC identity, the imported
+      disk boots, vmnet leases the reviewed address inside the exact subnet, and
+      the host receives a direct TCP response through the custom bridge.
 - [x] Stopped-only GUI Linux same-host clone and portable `.nativevm`
       export/import through the shared VM transaction stack, with fresh
       `VZGenericMachineIdentifier` plus MAC identity for copies, collision
@@ -378,8 +390,9 @@ must leave a usable, test-backed product slice.
           reconciliation that never acts on a same-name replacement.
   - [x] Live-provision the gated Alpine machine, verify API reachability and a
         real Deployment, Service, and disposable pod, verify the app-owned
-        inventory path, survive a stop/start, then delete the exact machine,
-        namespace, and temporary credentials.
+        inventory/log/command/terminal/mutation paths, survive a stop/start,
+        then delete the exact machine, namespace, and temporary credentials.
+        The exact-head one-shot gate passed in 145 seconds.
 - [x] Source-level accessibility contract with semantic management controls,
       independent row-selection and runtime actions, visible-name input labels,
       selection values, localization-safe alignment, and a static drift gate.
@@ -465,12 +478,15 @@ Potential parity gaps are tracked rather than hidden:
   `com.apple.container.*` Mach labels. NativeContainers requires Apple’s signed
   system installation rather than maintaining a namespaced client/service fork.
 - Apple container 1.0 exposes neither persistent machine snapshot mutations nor
-  a builder SSH/session-attachable contract, so Apple-machine backup and
-  Dockerfile SSH mounts remain upstream-blocked.
-- Socktainer 1.0.0 lacks container rename, network connect/disconnect, aliases,
-  health/restart semantics, and config/secret resources. Compose recreation and
-  those canonical features remain upstream-blocked rather than partially
-  emulated.
+  a builder SSH/session-attachable contract. The exact NativeContainers runtime
+  forks implement both behind verified-origin gates; the official runtime stays
+  unsupported and the excluded Developer ID package is still required for
+  activation.
+- Signed upstream Socktainer 1.0.0 lacks container rename, network
+  connect/disconnect, aliases, health/restart semantics, and config/secret
+  delivery. The exact NativeContainers bridge fork implements and semantically
+  conforms those features; production's upstream profile remains fail-closed
+  until a separately signed fork release is pinned.
 - AccessoryAccess USB requires
   `com.apple.developer.accessory-access.usb`; the signed target cannot activate
   physical USB until Xcode can provision that entitlement.

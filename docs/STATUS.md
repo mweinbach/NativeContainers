@@ -2010,39 +2010,41 @@ Updated: 2026-06-23.
   playback, microphone input, or any broader installed-guest integration not
   exercised by those exact runs.
 
-## Remaining live verification gap
+## Remaining environment-gated acceptance
 
 The entitlement, signing configuration, build, capability availability,
 hash-pinned Ubuntu ARM64 graphical installation, virtual-disk boot,
 authenticated installed desktop, input, media ejection, and core runtime
 controls plus read-only/read-write VirtioFS guest semantics and the guest-side
 Virtio audio playback path, CPU/memory cold reconfiguration, disk growth,
-guest partition/filesystem expansion, and graceful guest stop are verified.
-Audible host playback, snapshot rollback, suspend/restore, clone and
-portable-copy boot, shared and host-only packet flow, and watchdog stop still
-need installed-guest live passes. Installing, booting, saving/restoring, growing
-the disk, expanding the macOS container, and clone-booting macOS are not claimed
-as live-verified until a local IPSW and disposable installed guest are available
-for that destructive integration pass.
+guest partition/filesystem expansion, graceful guest stop, portable-copy boot,
+and host-only packet flow are verified. The transfer run imported a fresh
+generic/MAC identity, booted the installed disk, applied host-only mode, matched
+the reviewed MAC in vmnet's root-owned lease database, and observed a direct
+host TCP response through the exact custom subnet.
 
-## Next implementation slice
+Audible host playback, snapshot rollback, suspend/restore, same-host clone boot,
+shared-mode packet flow, and watchdog fallback still need installed-guest live
+passes. Installing, booting, saving/restoring, growing the disk, expanding the
+macOS container, and clone-booting macOS are not claimed as live-verified until
+a local IPSW and disposable installed guest are available for that destructive
+integration pass.
 
-1. Reuse the verified hash-pinned Ubuntu 26.04 ARM64 install/disk-boot workflow
-   to capture or human-confirm host-audible playback; create a named disk
-   checkpoint, mutate guest storage, restore it, and verify both data rollback
-   and retained virtual capacity; suspend and restore the installed session,
-   request a lower memory target under guest load, restore the full target,
-   record host observations without treating the request as guaranteed
-   reclamation, verify shared and host-only vmnet connectivity, clone and
-   portable-round-trip it, and exercise the watchdog force-stop fallback.
+## Next acceptance slice
+
+1. Reuse the verified hash-pinned Ubuntu 26.04 ARM64 installed-disk workflow to
+   capture or human-confirm host-audible playback; create and restore a named
+   disk checkpoint; suspend/restore; verify shared-mode vmnet traffic; boot a
+   same-host clone; and exercise the watchdog force-stop fallback. Transfer boot
+   and host-only host reachability no longer belong to this gap.
 2. Live-verify the implemented macOS installer, lifecycle service, force-stop
    recovery, console, CPU/memory reconfiguration, disk growth plus APFS
    container expansion, cooperative lower/full runtime memory targets,
    same-host save/restore, and fresh-identity clone boot against a local IPSW.
-3. Live-verify a second reviewed Up that grows a real pinned Socktainer project
-   from a contiguous replica prefix, including stable metadata and exact Apple
-   attachment observations. Keep recreation blocked until the pinned bridge
-   implements rename and network attachment routes.
+3. Publish the exact NativeContainers Socktainer fork only after its already
+   passing 12-fixture/41-scenario contract is bound to a signed version, digest,
+   and team identity. Until then the production upstream profile remains
+   deliberately fail-closed for fork-only semantics.
 4. Provision a Developer ID Application identity, run Xcode's Developer ID
    distribution and notarization flow, then pass the strict stapled-product
    validator before calling the app publicly distributable.
@@ -2228,3 +2230,51 @@ for that destructive integration pass.
   errors. Six focused recovery/coverage tests pass, including a real SIGKILL of
   the isolated worker. Full-suite and repository-validator results are recorded
   after the remaining completion slices.
+
+## Compose, Engine, Kubernetes, and VM completion checkpoint
+
+- The NativeContainers Socktainer fork at `5bdafa7` implements the complete
+  local-runtime Engine v1.51 subset. Real stopped-container export, bounded
+  process-table inspection, restart-policy updates, Docker Hub search, and OCI
+  distribution inspection replace the final utility stubs. The complete fork
+  suite passes 354 tests across 54 suites, and live Docker CLI probes pass for
+  export, top, update, search, and distribution inspection. Pause/unpause,
+  changes/commit, plugins, Swarm, and session APIs remain explicit unsupported
+  architecture families rather than success-shaped no-ops.
+- The same fork passes all 12 Compose fixtures and all 41 observed semantic
+  scenarios. File/environment/literal configs and file/environment secrets are
+  read inside containers with exact bytes; replacement, scale-down, aliases,
+  health state, `service_healthy`, restart limits/backoff/manual-stop behavior,
+  events, persistence, and inspection parity all have postcondition evidence.
+  App plans now include typed replacement/scale actions and final
+  identity-sealed postconditions. Production composition explicitly selects the
+  signed-upstream profile and cannot authorize fork-only behavior until a
+  separately signed fork release is pinned.
+- The Kubernetes one-shot exact-head destructive gate passed in 145 seconds. It
+  provisioned the pinned K3s machine, verified Deployment/Service/Pod inventory,
+  logs, direct-argv command execution, optimistic-locked scaling/restart/delete,
+  an identity-pinned PTY, stop/start recovery, and exact machine, namespace, and
+  credential cleanup.
+- Repeated hash-pinned Ubuntu 26.04 installations continued to prove graphical
+  install, installed-disk boot, login, production media ejection, and cold
+  reconfiguration. The transfer extension exported and imported the installed
+  bundle with fresh generic/MAC identity and booted the copy. The imported guest
+  then booted with host-only networking; vmnet assigned the reviewed MAC
+  `62:ad:e8:55:ed:35` to `192.168.128.5` on `bridge101`, and a host TCP connect
+  received `ECONNREFUSED`, proving a direct guest-stack response. The final
+  automated verifier now obtains that evidence through a no-follow,
+  root-owned/single-link/mode-bounded DHCP lease descriptor and an in-process
+  nonblocking socket, avoiding child-process ARP/netcat behavior.
+- The runtime fork's focused machine-snapshot suite passes 15 tests across two
+  suites, and its build-SSH metadata tests pass. The builder-shim Go suite and
+  pinned OCI verification pass. The runtime fork's full integration suite still
+  expects the packaged `container` executable and therefore reports
+  `.binaryNotFound` in CLI cases on this source-only host; no snapshot or SSH
+  semantic failure was observed in the focused suites.
+- Xcode MCP closed its transport after the long live-VM runs. No shell
+  `xcodebuild` substitute was used. The final in-process verifier is based on the
+  last successfully compiled parser/socket implementation, but the renamed
+  focused test, final project build, full app suite, and remaining destructive
+  snapshot/saved-state/clone acceptance lanes require a restored Xcode MCP
+  transport. Repository-format, contract, package, and fork suites remain
+  independently runnable while that transport is unavailable.
