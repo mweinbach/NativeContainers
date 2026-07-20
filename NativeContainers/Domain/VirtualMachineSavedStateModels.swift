@@ -57,6 +57,7 @@ enum VirtualMachineSavedStateError: LocalizedError, Equatable, Sendable {
   case invalidTransaction(UUID)
   case invalidBundle(String)
   case unsupportedSchema(Int)
+  case managedLinuxBoxUnsupported(UUID)
   case operationAndCleanupFailed(operation: String, cleanup: String)
 
   var errorDescription: String? {
@@ -75,6 +76,8 @@ enum VirtualMachineSavedStateError: LocalizedError, Equatable, Sendable {
       "The saved-state bundle is invalid: \(reason)"
     case .unsupportedSchema(let version):
       "The saved state uses unsupported metadata version \(version)."
+    case .managedLinuxBoxUnsupported(let identifier):
+      "Residential Linux box \(identifier.uuidString) does not support machine-state save or restore."
     case .operationAndCleanupFailed(let operation, let cleanup):
       "The saved-state operation failed (\(operation)), and cleanup also failed (\(cleanup))."
     }

@@ -53,19 +53,20 @@ struct LinuxVirtualMachineConfigurationView: View {
           hasLiveInstallationMedia: runtime.snapshot.hasInstallationMedia
         )
         LinuxVirtualMachineNetworkSection(
-          editMessage: topologyEditMessage,
+          editMessage: hardenedTopologyEditMessage,
           network: network,
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil
         )
         LinuxVirtualMachineConnectivitySection(
           macAddress: machine.linuxConfiguration?.macAddress,
-          sharesClipboard: machine.linuxConfiguration?.sharesClipboard == true
+          sharesClipboard: machine.linuxConfiguration?.sharesClipboard == true,
+          isHardened: machine.isHardenedLinuxBox
         )
         LinuxVirtualMachineSharedDirectoriesView(
           runtimeState: runtime.snapshot.state,
           hasActiveRuntime: runtime.snapshot.target != nil,
-          editMessage: topologyEditMessage,
+          editMessage: hardenedTopologyEditMessage,
           discardSavedState: canDiscardSavedState
             ? { isConfirmingDiscardSavedState = true } : nil,
           sharedDirectories: sharedDirectories
@@ -146,6 +147,13 @@ struct LinuxVirtualMachineConfigurationView: View {
     }
   }
 
+  private var hardenedTopologyEditMessage: LocalizedStringResource? {
+    if machine.isHardenedLinuxBox {
+      return "The Residential profile fixes networking to NAT, disables the shared clipboard, and prevents host folder sharing."
+    }
+    return topologyEditMessage
+  }
+
   private var snapshotEditMessage: LocalizedStringResource? {
     guard !diskMaintenance.isBusy else {
       return "Wait for virtual disk maintenance to finish."
@@ -223,8 +231,13 @@ private struct LinuxVirtualMachineConfigurationHeader: View {
         .frame(width: 46, height: 46)
         .background(.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
       VStack(alignment: .leading, spacing: 7) {
-        Text(machine.name)
-          .font(.title2.weight(.semibold))
+        HStack(spacing: 8) {
+          Text(machine.name)
+            .font(.title2.weight(.semibold))
+          if let profile = machine.linuxConfiguration?.linuxBoxDescriptor?.profile {
+            LinuxBoxProfileBadge(profile: profile)
+          }
+        }
         HStack(spacing: 7) {
           Group {
             if isRefreshingDiskState {
@@ -312,6 +325,7 @@ private struct LinuxVirtualMachineBootSection: View {
 private struct LinuxVirtualMachineConnectivitySection: View {
   let macAddress: String?
   let sharesClipboard: Bool
+  let isHardened: Bool
 
   var body: some View {
     GroupBox("Connectivity") {
@@ -335,7 +349,8 @@ private struct LinuxVirtualMachineConnectivitySection: View {
   }
 
   private var sharedClipboardLabel: LocalizedStringResource {
-    sharesClipboard ? "Enabled" : "Disabled"
+    if isHardened { return "Disabled by Residential profile" }
+    return sharesClipboard ? "Enabled" : "Disabled"
   }
 }
 

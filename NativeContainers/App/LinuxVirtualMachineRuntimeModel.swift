@@ -103,7 +103,7 @@ final class LinuxVirtualMachineRuntimeModel {
   func requestStop() async {
     guard let target = snapshot.target else { return }
     await perform {
-      try service.requestStop(target: target)
+      try await service.stop(target: target)
     }
   }
 

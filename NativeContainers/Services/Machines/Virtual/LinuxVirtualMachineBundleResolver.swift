@@ -1,6 +1,10 @@
 import Foundation
 
 protocol LinuxVirtualMachineBundleResolving: Sendable {
+  func resolve(
+    _ manifest: VirtualMachineManifest,
+    in bundleURL: URL
+  ) throws -> ResolvedLinuxVirtualMachine
   func resolve(_ manifest: VirtualMachineManifest) throws -> ResolvedLinuxVirtualMachine
   func resolveArtifact(
     _ path: String,
@@ -20,6 +24,18 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
   }
 
   func resolve(_ manifest: VirtualMachineManifest) throws -> ResolvedLinuxVirtualMachine {
+    let bundleURL =
+      rootURL
+      .appending(path: manifest.id.uuidString.lowercased(), directoryHint: .isDirectory)
+      .appendingPathExtension(VirtualMachineLibrary.bundleExtension)
+      .standardizedFileURL
+    return try resolve(manifest, in: bundleURL)
+  }
+
+  func resolve(
+    _ manifest: VirtualMachineManifest,
+    in bundleURL: URL
+  ) throws -> ResolvedLinuxVirtualMachine {
     guard manifest.guest == .linux else {
       throw VirtualMachineModelError.requiresLinuxGuest(manifest.id)
     }
@@ -31,14 +47,24 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
     guard let linuxConfiguration = manifest.linuxConfiguration else {
       throw LinuxVirtualMachineError.missingManifestValue("linuxConfiguration")
     }
-
-    let bundleURL =
-      rootURL
-      .appending(path: manifest.id.uuidString.lowercased(), directoryHint: .isDirectory)
-      .appendingPathExtension(VirtualMachineLibrary.bundleExtension)
-      .standardizedFileURL
+    if manifest.isHardenedLinuxBox {
+      guard manifest.effectiveNetworkConfiguration.attachment == .nat else {
+        throw LinuxVirtualMachineError.invalidBundle(
+          "Residential Linux boxes require NAT networking"
+        )
+      }
+      guard !linuxConfiguration.sharesClipboard else {
+        throw LinuxVirtualMachineError.invalidBundle(
+          "Residential Linux boxes cannot share the clipboard"
+        )
+      }
+      guard linuxConfiguration.installationMediaPath == nil else {
+        throw LinuxVirtualMachineError.invalidBundle(
+          "Residential Linux boxes cannot attach installation media"
+        )
+      }
+    }
     try requireBundleDirectory(bundleURL)
-
     let diskImageURL = try resolveArtifact(
       manifest.diskImagePath,
       named: "diskImagePath",
@@ -66,13 +92,8 @@ struct LinuxVirtualMachineBundleResolver: LinuxVirtualMachineBundleResolving, Se
       in: bundleURL
     )
     let installationMediaURL = try linuxConfiguration.installationMediaPath.map {
-      try resolveArtifact(
-        $0,
-        named: "installationMediaPath",
-        in: bundleURL
-      )
+      try resolveArtifact($0, named: "installationMediaPath", in: bundleURL)
     }
-
     return ResolvedLinuxVirtualMachine(
       manifest: manifest,
       bundleURL: bundleURL,

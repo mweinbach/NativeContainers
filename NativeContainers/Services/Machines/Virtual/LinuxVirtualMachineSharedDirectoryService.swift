@@ -79,12 +79,18 @@ actor LinuxVirtualMachineSharedDirectoryService:
     let current = try await persistence.linuxSharedDirectoryConfiguration(id: machineID)
     try requireUniqueName(canonicalName, in: current.directories)
 
+    let lease = try await leasingStore.acquireLinuxRuntime(id: machineID)
+    defer { lease.release() }
+    guard !lease.machine.manifest.isHardenedLinuxBox else {
+      throw LinuxVirtualMachineSharedDirectoryError.managedConfigurationLocked(
+        machineID
+      )
+    }
+
     let directory = try bookmarkService.makeRecord(
       request: request,
       canonicalGuestName: canonicalName
     )
-    let lease = try await leasingStore.acquireLinuxRuntime(id: machineID)
-    defer { lease.release() }
 
     try await requireNoSavedState(for: lease)
 
@@ -97,6 +103,11 @@ actor LinuxVirtualMachineSharedDirectoryService:
   ) async throws -> LinuxVirtualMachineSharedDirectoryConfiguration {
     let lease = try await leasingStore.acquireLinuxRuntime(id: machineID)
     defer { lease.release() }
+    guard !lease.machine.manifest.isHardenedLinuxBox else {
+      throw LinuxVirtualMachineSharedDirectoryError.managedConfigurationLocked(
+        machineID
+      )
+    }
 
     try await requireNoSavedState(for: lease)
 

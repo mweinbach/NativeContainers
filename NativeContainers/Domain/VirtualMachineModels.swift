@@ -1,5 +1,6 @@
 import Foundation
 
+
 enum VirtualMachineGuest: String, Codable, CaseIterable, Hashable, Sendable {
   case macOS
   case linux
@@ -38,7 +39,9 @@ struct VirtualMachineResources: Codable, Equatable, Sendable {
 }
 
 struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
-  static let currentSchemaVersion = 1
+  static let legacySchemaVersion = 1
+  static let currentSchemaVersion = 2
+  static let supportedSchemaVersions = legacySchemaVersion...currentSchemaVersion
 
   let schemaVersion: Int
   let id: UUID
@@ -68,6 +71,7 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
 
   init(
     id: UUID = UUID(),
+    schemaVersion: Int = Self.currentSchemaVersion,
     name: String,
     guest: VirtualMachineGuest,
     installState: VirtualMachineInstallState = .draft,
@@ -77,8 +81,11 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     diskImageFormat: VirtualMachineDiskImageFormat = .raw
   ) throws {
     let trimmedName = try Self.normalizedName(name)
+    guard Self.supportedSchemaVersions.contains(schemaVersion) else {
+      throw VirtualMachineModelError.unsupportedSchema(schemaVersion)
+    }
 
-    self.schemaVersion = Self.currentSchemaVersion
+    self.schemaVersion = schemaVersion
     self.id = id
     self.name = trimmedName
     self.guest = guest
@@ -139,6 +146,42 @@ struct VirtualMachineManifest: Codable, Equatable, Sendable, Identifiable {
     macOSFirstBootState = source.macOSFirstBootState
     macOSDiskSnapshotConfiguration = source.macOSDiskSnapshotConfiguration
     linuxDiskSnapshotConfiguration = source.linuxDiskSnapshotConfiguration
+  }
+
+
+  var isHardenedLinuxBox: Bool {
+    isManagedLinuxBox
+      && linuxConfiguration?.linuxBoxDescriptor?.profile == .residential
+  }
+
+  var isManagedLinuxBox: Bool {
+    schemaVersion == Self.currentSchemaVersion
+      && guest == .linux
+      && linuxConfiguration?.linuxBoxDescriptor != nil
+  }
+
+  func validateSchema() throws {
+    guard Self.supportedSchemaVersions.contains(schemaVersion) else {
+      throw VirtualMachineModelError.unsupportedSchema(schemaVersion)
+    }
+    let descriptor = linuxConfiguration?.linuxBoxDescriptor
+    if schemaVersion == Self.legacySchemaVersion, descriptor != nil {
+      throw VirtualMachineModelError.invalidManifest(
+        "schema-1 manifests cannot contain a managed Linux box descriptor"
+      )
+    }
+    if let descriptor {
+      guard schemaVersion == Self.currentSchemaVersion, guest == .linux else {
+        throw VirtualMachineModelError.invalidManifest(
+          "managed Linux box descriptors require a schema-2 Linux manifest"
+        )
+      }
+      do {
+        try descriptor.validate()
+      } catch {
+        throw VirtualMachineModelError.invalidManifest(error.localizedDescription)
+      }
+    }
   }
 
   var effectiveAudioConfiguration: MacVirtualMachineAudioConfiguration {
@@ -340,6 +383,7 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
   case insufficientDisk
   case unsupportedSchema(Int)
   case duplicateIdentifier(UUID)
+  case invalidManifest(String)
   case bundleIdentifierMismatch(expected: UUID, bundleName: String)
   case libraryInUse
   case virtualMachineNotFound(UUID)
@@ -366,6 +410,8 @@ enum VirtualMachineModelError: LocalizedError, Equatable {
       "A virtual machine disk needs at least 8 GiB."
     case .unsupportedSchema(let version):
       "This virtual machine uses unsupported manifest version \(version)."
+    case .invalidManifest(let reason):
+      "The virtual machine manifest is invalid: \(reason)."
     case .duplicateIdentifier(let identifier):
       "A virtual machine with identifier \(identifier.uuidString) already exists."
     case .bundleIdentifierMismatch(let expected, let bundleName):

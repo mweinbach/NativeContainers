@@ -19,6 +19,7 @@ protocol LinuxVirtualMachineRuntimeEngineSession: AnyObject {
   var memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)? { get }
   var hasInstallationMedia: Bool { get }
   var canForceStop: Bool { get }
+  var isManagedLinuxBox: Bool { get }
   var eventHandler: LinuxVirtualMachineRuntimeEventHandler? { get set }
 
   func start() async throws
@@ -27,12 +28,25 @@ protocol LinuxVirtualMachineRuntimeEngineSession: AnyObject {
   func pause() async throws
   func resume() async throws
   func requestStop() throws
+  func connectAgent(
+    port: UInt32
+  ) async throws -> any LinuxVirtualMachineAgentTransport
   func forceStop() async throws
   func ejectInstallationMedia() async throws
   func close()
 }
 
 extension LinuxVirtualMachineRuntimeEngineSession {
+  var isManagedLinuxBox: Bool { false }
+
+  func connectAgent(
+    port: UInt32
+  ) async throws -> any LinuxVirtualMachineAgentTransport {
+    throw LinuxVirtualMachineRuntimeError.operationUnavailable(
+      "connect a guest agent for"
+    )
+  }
+
   var memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)? { nil }
 
   func close() {}
@@ -55,6 +69,7 @@ protocol LinuxVirtualMachineRuntimeManaging: Sendable {
     for target: LinuxVirtualMachineRuntimeTarget
   ) throws
   func requestStop(target: LinuxVirtualMachineRuntimeTarget) throws
+  func stop(target: LinuxVirtualMachineRuntimeTarget) async throws
   func forceStop(target: LinuxVirtualMachineRuntimeTarget) async throws
   func discardSavedState(id: UUID) async throws
   func ejectInstallationMedia(
@@ -68,6 +83,10 @@ extension LinuxVirtualMachineRuntimeManaging {
     for target: LinuxVirtualMachineRuntimeTarget
   ) throws {
     throw VirtualMachineMemoryBalloonError.unavailable
+  }
+
+  func stop(target: LinuxVirtualMachineRuntimeTarget) async throws {
+    try requestStop(target: target)
   }
 }
 

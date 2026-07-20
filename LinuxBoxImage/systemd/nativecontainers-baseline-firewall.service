@@ -1,0 +1,16 @@
+[Unit]
+Description=NativeContainers fail-closed baseline firewall
+DefaultDependencies=no
+Before=network-pre.target systemd-networkd.service nativecontainers-agent.service nativecontainers-network-authorization.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nft -f /usr/lib/nativecontainers/nativecontainers-baseline-firewall.nft
+RemainAfterExit=yes
+StandardOutput=null
+StandardError=null
+LimitCORE=0
+
+[Install]
+WantedBy=sysinit.target

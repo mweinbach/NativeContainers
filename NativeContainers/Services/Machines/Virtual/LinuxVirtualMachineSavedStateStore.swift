@@ -142,14 +142,16 @@ struct LinuxVirtualMachineSavedStateStore:
   func beginSave(
     for lease: LinuxVirtualMachineRuntimeLease
   ) async throws -> LinuxVirtualMachineSavedStateTransaction {
-    try await store.beginSave(for: context(for: lease))
+    try requireSaveRestoreAllowed(for: lease)
+    return try await store.beginSave(for: context(for: lease))
   }
 
   func commitSave(
     _ transaction: LinuxVirtualMachineSavedStateTransaction,
     for lease: LinuxVirtualMachineRuntimeLease
   ) async throws -> LinuxVirtualMachineSavedStateSummary {
-    try await store.commitSave(transaction, for: context(for: lease))
+    try requireSaveRestoreAllowed(for: lease)
+    return try await store.commitSave(transaction, for: context(for: lease))
   }
 
   func abortSave(
@@ -162,13 +164,15 @@ struct LinuxVirtualMachineSavedStateStore:
   func beginRestore(
     for lease: LinuxVirtualMachineRuntimeLease
   ) async throws -> LinuxVirtualMachineSavedStateRestoreTransaction {
-    try await store.beginRestore(for: context(for: lease))
+    try requireSaveRestoreAllowed(for: lease)
+    return try await store.beginRestore(for: context(for: lease))
   }
 
   func finishRestore(
     _ transaction: LinuxVirtualMachineSavedStateRestoreTransaction,
     for lease: LinuxVirtualMachineRuntimeLease
   ) async throws {
+    try requireSaveRestoreAllowed(for: lease)
     try await store.finishRestore(transaction, for: context(for: lease))
   }
 
@@ -187,6 +191,16 @@ struct LinuxVirtualMachineSavedStateStore:
     for lease: LinuxVirtualMachineRuntimeLease
   ) async throws -> Bool {
     try await store.reclaimSavedState(candidate, for: context(for: lease))
+  }
+
+  private func requireSaveRestoreAllowed(
+    for lease: LinuxVirtualMachineRuntimeLease
+  ) throws {
+    guard !lease.machine.manifest.isHardenedLinuxBox else {
+      throw LinuxVirtualMachineSavedStateError.managedLinuxBoxUnsupported(
+        lease.target.machineID
+      )
+    }
   }
 
   private func context(

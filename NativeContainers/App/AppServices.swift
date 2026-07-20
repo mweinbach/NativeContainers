@@ -100,6 +100,9 @@ struct AppServices: Sendable {
   let restoreImageAcquisition: any RestoreImageAcquiring
   let restoreImageStoreRecovery: any RestoreImageStoreRecovering
 
+  let linuxBoxAutomation: LinuxBoxAutomationService?
+  let nativeContainersControlServer: NativeContainersControlServing?
+  let applicationLifecycleCoordinator: NativeContainersApplicationLifecycleCoordinating?
   init(
     inventory: any ContainerInventoryLoading,
     appleContainerRuntimeSetup: any AppleContainerRuntimeSettingUp =
@@ -198,7 +201,10 @@ struct AppServices: Sendable {
     restoreImageDiscovery: any MacRestoreImageDiscovering,
     restoreImageAcquisition: any RestoreImageAcquiring,
     restoreImageStoreRecovery: any RestoreImageStoreRecovering =
-      NoopRestoreImageStoreRecoveryService()
+      NoopRestoreImageStoreRecoveryService(),
+    linuxBoxAutomation: LinuxBoxAutomationService? = nil,
+    nativeContainersControlServer: NativeContainersControlServing? = nil,
+    applicationLifecycleCoordinator: NativeContainersApplicationLifecycleCoordinating? = nil
   ) {
     self.inventory = inventory
     self.appleContainerRuntimeSetup = appleContainerRuntimeSetup
@@ -263,6 +269,9 @@ struct AppServices: Sendable {
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageAcquisition = restoreImageAcquisition
     self.restoreImageStoreRecovery = restoreImageStoreRecovery
+    self.linuxBoxAutomation = linuxBoxAutomation
+    self.nativeContainersControlServer = nativeContainersControlServer
+    self.applicationLifecycleCoordinator = applicationLifecycleCoordinator
   }
 
   init(
@@ -417,5 +426,8 @@ struct AppServices: Sendable {
     self.restoreImageDiscovery = restoreImageDiscovery
     self.restoreImageAcquisition = restoreImageAcquisition
     self.restoreImageStoreRecovery = restoreImageStoreRecovery
+    self.linuxBoxAutomation = nil
+    self.nativeContainersControlServer = nil
+    self.applicationLifecycleCoordinator = nil
   }
 }

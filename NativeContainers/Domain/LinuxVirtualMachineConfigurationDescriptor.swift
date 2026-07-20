@@ -13,7 +13,8 @@ struct LinuxVirtualMachineSharedDirectoryDescriptor:
 struct LinuxVirtualMachineConfigurationDescriptor:
   Codable, Equatable, Sendable
 {
-  static let currentTopologyVersion = 2
+  static let currentTopologyVersion = 3
+  static let guestAgentSocketPort: UInt32 = 4050
 
   let topologyVersion: Int
   let cpuCount: Int
@@ -26,6 +27,7 @@ struct LinuxVirtualMachineConfigurationDescriptor:
   let efiVariableStorePath: String
   let machineIdentifierPath: String
   let installationMediaPath: String?
+  let linuxBoxDescriptor: LinuxBoxDescriptor?
   let platform: String
   let bootLoader: String
   let diskDevice: String
@@ -43,6 +45,7 @@ struct LinuxVirtualMachineConfigurationDescriptor:
   let entropyDevices: [String]
   let memoryBalloonDevices: [String]
   let consoleDevices: [String]
+  let socketDevices: [String]
   let sharesClipboard: Bool
   let directorySharingDevice: String?
   let directorySharingRevision: UInt64?
@@ -81,6 +84,22 @@ struct LinuxVirtualMachineConfigurationDescriptorService:
       machine.sharedDirectories.revision > 0
       || !machine.sharedDirectories.directories.isEmpty
 
+    if machine.manifest.isManagedLinuxBox {
+      guard let descriptor = linux.linuxBoxDescriptor else {
+        throw LinuxVirtualMachineError.invalidConfiguration(
+          "managed Linux boxes require an image descriptor"
+        )
+      }
+      try descriptor.validate()
+    }
+
+    if machine.manifest.isHardenedLinuxBox {
+      try validateManagedTopology(
+        machine: machine,
+        linux: linux,
+        network: network
+      )
+    }
     return LinuxVirtualMachineConfigurationDescriptor(
       topologyVersion: LinuxVirtualMachineConfigurationDescriptor
         .currentTopologyVersion,
@@ -102,6 +121,7 @@ struct LinuxVirtualMachineConfigurationDescriptorService:
       efiVariableStorePath: linux.efiVariableStorePath,
       machineIdentifierPath: linux.machineIdentifierPath,
       installationMediaPath: linux.installationMediaPath,
+      linuxBoxDescriptor: linux.linuxBoxDescriptor,
       platform: "Generic",
       bootLoader: "EFI",
       diskDevice: "VirtioBlock",
@@ -123,6 +143,8 @@ struct LinuxVirtualMachineConfigurationDescriptorService:
       memoryBalloonDevices: ["VirtioTraditional"],
       consoleDevices: linux.sharesClipboard
         ? ["VirtioConsole/SPICEAgent"] : [],
+      socketDevices: machine.manifest.isManagedLinuxBox
+        ? ["VirtioSocket/\(LinuxVirtualMachineConfigurationDescriptor.guestAgentSocketPort)"] : [],
       sharesClipboard: linux.sharesClipboard,
       directorySharingDevice: hasDirectorySharingHistory
         && !machine.sharedDirectories.directories.isEmpty
@@ -141,5 +163,31 @@ struct LinuxVirtualMachineConfigurationDescriptorService:
           )
         } : nil
     )
+  }
+  private func validateManagedTopology(
+    machine: ResolvedLinuxVirtualMachine,
+    linux: LinuxVirtualMachineConfiguration,
+    network: VirtualMachineNetworkConfiguration
+  ) throws {
+    guard network.attachment == .nat else {
+      throw LinuxVirtualMachineError.invalidConfiguration(
+        "Residential Linux boxes require NAT networking"
+      )
+    }
+    guard !linux.sharesClipboard else {
+      throw LinuxVirtualMachineError.invalidConfiguration(
+        "Residential Linux boxes cannot share the clipboard"
+      )
+    }
+    guard linux.installationMediaPath == nil, machine.installationMediaURL == nil else {
+      throw LinuxVirtualMachineError.invalidConfiguration(
+        "Residential Linux boxes cannot attach installation media"
+      )
+    }
+    guard machine.sharedDirectories.directories.isEmpty else {
+      throw LinuxVirtualMachineError.invalidConfiguration(
+        "Residential Linux boxes cannot share host directories"
+      )
+    }
   }
 }

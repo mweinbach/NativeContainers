@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 struct VirtualMachineBundleStore {
@@ -58,13 +59,12 @@ struct VirtualMachineBundleStore {
       contentsOf: bundleURL.appending(path: VirtualMachineLibrary.manifestFilename)
     )
     let manifest = try Self.decoder.decode(VirtualMachineManifest.self, from: data)
-    guard manifest.schemaVersion == VirtualMachineManifest.currentSchemaVersion else {
-      throw VirtualMachineModelError.unsupportedSchema(manifest.schemaVersion)
-    }
+    try manifest.validateSchema()
     return manifest
   }
 
   func write(_ manifest: VirtualMachineManifest, to url: URL) throws {
+    try manifest.validateSchema()
     let data = try Self.encoder.encode(manifest)
     try data.write(to: url, options: [.atomic])
   }
@@ -120,6 +120,12 @@ struct VirtualMachineBundleStore {
       directoryHint: .isDirectory
     )
   }
+  func managedCreationStagingDirectory(operationID: UUID) -> URL {
+    rootURL.appending(
+      path: "\(VirtualMachineLibrary.managedCreationStagingPrefix)\(operationID.uuidString.lowercased())\(VirtualMachineLibrary.managedCreationStagingSuffix)",
+      directoryHint: .isDirectory
+    )
+  }
 
   func installationInstalledDirectory(id: UUID) -> URL {
     bundleURL(for: id).appending(
@@ -151,6 +157,35 @@ struct VirtualMachineBundleStore {
       prefix: VirtualMachineLibrary.importStagingPrefix,
       suffix: VirtualMachineLibrary.importStagingSuffix
     )
+    try removeManagedCreationStagingDirectories()
+  }
+
+  private func removeManagedCreationStagingDirectories() throws {
+    let entries = try fileManager.contentsOfDirectory(
+      at: rootURL,
+      includingPropertiesForKeys: nil,
+      options: []
+    )
+    for entry in entries {
+      let name = entry.lastPathComponent
+      guard name.hasPrefix(VirtualMachineLibrary.managedCreationStagingPrefix),
+        name.hasSuffix(VirtualMachineLibrary.managedCreationStagingSuffix)
+      else { continue }
+      let operation = String(
+        name.dropFirst(VirtualMachineLibrary.managedCreationStagingPrefix.count)
+          .dropLast(VirtualMachineLibrary.managedCreationStagingSuffix.count)
+      )
+      guard let operationID = UUID(uuidString: operation),
+        operationID.uuidString.lowercased() == operation
+      else { continue }
+      var metadata = Darwin.stat()
+      guard Darwin.lstat(entry.path(percentEncoded: false), &metadata) == 0,
+        metadata.st_mode & S_IFMT == S_IFDIR,
+        metadata.st_uid == getuid(),
+        metadata.st_mode & 0o7777 == 0o700
+      else { continue }
+      try fileManager.removeItem(at: entry)
+    }
   }
 
   func removeOrphanedInstallationStagingDirectories(id: UUID) throws {

@@ -53,6 +53,7 @@ enum VirtualMachineNetworkError: LocalizedError, Equatable, Sendable {
   case unavailable
   case configurationRevisionOverflow
   case savedStateBlocksChanges(UUID)
+  case managedConfigurationLocked(UUID)
   case vmnetNetworkCreationFailed(VirtualMachineNetworkAttachment, Int)
   case invalidMACAddress(String)
 
@@ -64,6 +65,8 @@ enum VirtualMachineNetworkError: LocalizedError, Equatable, Sendable {
       "The network configuration changed too many times to update safely."
     case .savedStateBlocksChanges(let identifier):
       "Discard the saved state for virtual machine \(identifier.uuidString) before changing its network."
+    case .managedConfigurationLocked(let identifier):
+      "Residential Linux box \(identifier.uuidString) always uses automatic NAT networking."
     case .vmnetNetworkCreationFailed(let attachment, let status):
       "NativeContainers could not create the \(attachment.displayName) network (vmnet status \(status))."
     case .invalidMACAddress(let address):
