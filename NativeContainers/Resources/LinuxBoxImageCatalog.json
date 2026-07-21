@@ -1,0 +1,20 @@
+{
+  "images" : [
+    {
+      "compressedSHA256" : "0000000000000000000000000000000000000000000000000000000000000000",
+      "compressedSizeBytes" : 0,
+      "guestAgentProtocolVersion" : 2,
+      "imageBuildRevision" : "linux-box-image-v1",
+      "imageID" : "debian-13-arm64-v1",
+      "logicalSizeBytes" : 0,
+      "published" : false,
+      "rawSHA512" : "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "releaseAssetURL" : "https://github.com/mweinbach/NativeContainers/releases/download/linux-box-image-v1/nativecontainers-debian-13-arm64-v1.raw.lzfse",
+      "sourceDigestURL" : "https://cloud.debian.org/images/cloud/trixie/20260712-2537/SHA512SUMS",
+      "sourceMetadataURL" : "https://cloud.debian.org/images/cloud/trixie/20260712-2537/debian-13-generic-arm64-20260712-2537.json",
+      "sourceSHA512" : "21f7862aca5d05a0ac8c63e64d78520967d881d05152c125b719d008f42ed2ff61e6f02908fda53a5e31a8c6e29d3a1116426e1646b9090f698c59872722d8bb",
+      "sourceURL" : "https://cloud.debian.org/images/cloud/trixie/20260712-2537/debian-13-generic-arm64-20260712-2537.raw"
+    }
+  ],
+  "schemaVersion" : 1
+}

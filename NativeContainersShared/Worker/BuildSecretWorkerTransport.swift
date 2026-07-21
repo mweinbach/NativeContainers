@@ -224,37 +224,7 @@ struct ContainerBuildWorkerInvocation: Sendable {
 
 enum ContainerBuildWorkerInvocationInput {
   static func read(from descriptor: Int32) throws -> ContainerBuildWorkerInvocation {
-    let header = try readExactly(
-      from: descriptor,
-      count: 4,
-      truncated: { received in
-        ContainerBuildWorkerFrameError.truncatedHeader(receivedBytes: received)
-      }
-    )
-    let length =
-      (UInt32(header[header.startIndex]) << 24)
-      | (UInt32(header[header.startIndex + 1]) << 16)
-      | (UInt32(header[header.startIndex + 2]) << 8)
-      | UInt32(header[header.startIndex + 3])
-    guard length > 0 else {
-      throw ContainerBuildWorkerFrameError.emptyFrame
-    }
-    guard length <= UInt32(ContainerBuildWorkerFrameCodec.maximumPayloadBytes) else {
-      throw ContainerBuildWorkerFrameError.frameTooLarge(
-        actualBytes: Int(length),
-        maximumBytes: ContainerBuildWorkerFrameCodec.maximumPayloadBytes
-      )
-    }
-    let payload = try readExactly(
-      from: descriptor,
-      count: Int(length),
-      truncated: { received in
-        ContainerBuildWorkerFrameError.truncatedPayload(
-          expectedBytes: Int(length),
-          receivedBytes: received
-        )
-      }
-    )
+    let payload = try BoundedJSONFrameCodec.readPayload(from: descriptor)
 
     let request: ContainerBuildWorkerRequest
     do {
@@ -269,30 +239,6 @@ enum ContainerBuildWorkerInvocationInput {
     return ContainerBuildWorkerInvocation(request: request, secrets: secrets)
   }
 
-  private static func readExactly(
-    from descriptor: Int32,
-    count: Int,
-    truncated: (Int) -> any Error
-  ) throws -> Data {
-    var data = Data(count: count)
-    var offset = 0
-    try data.withUnsafeMutableBytes { bytes in
-      while offset < count {
-        let result = Darwin.read(
-          descriptor,
-          bytes.baseAddress!.advanced(by: offset),
-          count - offset
-        )
-        if result < 0 {
-          if errno == EINTR { continue }
-          throw ContainerBuildWorkerFrameError.inputReadFailed(code: errno)
-        }
-        guard result > 0 else { throw truncated(offset) }
-        offset += result
-      }
-    }
-    return data
-  }
 }
 
 enum ContainerBuildSecretWire {

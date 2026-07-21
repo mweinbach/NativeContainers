@@ -56,6 +56,7 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
   let saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport
   let memoryBalloon: VirtualMachineMemoryBalloonSnapshot?
   let hasInstallationMedia: Bool
+  let isReady: Bool
   let isForceStopQueued: Bool
   let isForceStopCompleteAwaitingCleanup: Bool
   let errorMessage: String?
@@ -69,6 +70,7 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
     saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport = .unknown,
     memoryBalloon: VirtualMachineMemoryBalloonSnapshot? = nil,
     hasInstallationMedia: Bool = false,
+    isReady: Bool = false,
     isForceStopQueued: Bool = false,
     isForceStopCompleteAwaitingCleanup: Bool = false,
     errorMessage: String? = nil
@@ -81,6 +83,7 @@ struct LinuxVirtualMachineRuntimeSnapshot: Equatable, Sendable {
     self.saveRestoreSupport = saveRestoreSupport
     self.memoryBalloon = memoryBalloon
     self.hasInstallationMedia = hasInstallationMedia
+    self.isReady = isReady
     self.isForceStopQueued = isForceStopQueued
     self.isForceStopCompleteAwaitingCleanup = isForceStopCompleteAwaitingCleanup
     self.errorMessage = errorMessage

@@ -1,0 +1,15 @@
+[Unit]
+Description=Grow NativeContainers root filesystem to available disk capacity
+After=local-fs.target
+Before=nativecontainers-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/libexec/nativecontainers_grow_root.py
+RemainAfterExit=no
+StandardOutput=null
+StandardError=null
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

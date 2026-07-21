@@ -26,8 +26,13 @@ struct LinuxVirtualMachineRow: View {
             .frame(width: 30)
 
           VStack(alignment: .leading, spacing: 4) {
-            Text(machine.name)
-              .font(.headline)
+            HStack(spacing: 8) {
+              Text(machine.name)
+                .font(.headline)
+              if let profile = machine.linuxConfiguration?.linuxBoxDescriptor?.profile {
+                LinuxBoxProfileBadge(profile: profile)
+              }
+            }
             Text(statusLabel)
               .font(.caption)
               .foregroundStyle(.secondary)
@@ -60,7 +65,9 @@ struct LinuxVirtualMachineRow: View {
           {
             Divider()
             Button("Clone VM…", systemImage: "square.on.square", action: clone)
-            Button("Export VM…", systemImage: "square.and.arrow.up", action: export)
+            if !machine.isHardenedLinuxBox {
+              Button("Export VM…", systemImage: "square.and.arrow.up", action: export)
+            }
           }
           if runtime.snapshot.target == nil,
             runtime.snapshot.state != .ownedElsewhere
@@ -293,5 +300,47 @@ struct LinuxVirtualMachineRow: View {
     }
     if runtime.snapshot.isForceStopQueued { return "Force Stop Queued" }
     return "Force Stop…"
+  }
+}
+
+struct LinuxBoxProfileBadge: View {
+  let profile: LinuxBoxProfile
+
+  var body: some View {
+    Label(title, systemImage: systemImage)
+      .font(.caption2.weight(.semibold))
+      .foregroundStyle(tint)
+      .padding(.horizontal, 7)
+      .padding(.vertical, 2)
+      .background(tint.opacity(0.12), in: Capsule())
+      .accessibilityLabel(Text(accessibilityTitle))
+  }
+
+  private var title: LocalizedStringResource {
+    switch profile {
+    case .standard: "Standard"
+    case .residential: "Residential"
+    }
+  }
+
+  private var accessibilityTitle: LocalizedStringResource {
+    switch profile {
+    case .standard: "Standard managed profile"
+    case .residential: "Residential managed profile"
+    }
+  }
+
+  private var systemImage: String {
+    switch profile {
+    case .standard: "shippingbox"
+    case .residential: "lock.fill"
+    }
+  }
+
+  private var tint: Color {
+    switch profile {
+    case .standard: .mint
+    case .residential: .orange
+    }
   }
 }

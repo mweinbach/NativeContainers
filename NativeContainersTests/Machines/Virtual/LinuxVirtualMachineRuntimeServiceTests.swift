@@ -37,6 +37,44 @@ struct LinuxVirtualMachineRuntimeServiceTests {
   }
 
   @Test
+  func standardManagedRequestStopReachesSession() async throws {
+    let fixture = try LinuxRuntimeServiceFixture(
+      managedManifest: true,
+      managedProfile: .standard
+    )
+    try await fixture.service.start(id: fixture.machineID)
+    let target = try #require(
+      fixture.service.snapshot(for: fixture.machineID).target
+    )
+
+    try fixture.service.requestStop(target: target)
+
+    #expect(fixture.engine.sessions[0].requestStopCount == 1)
+  }
+
+  @Test
+  func residentialRequestStopRequiresQuiesce() async throws {
+    let fixture = try LinuxRuntimeServiceFixture(
+      managedProfile: .residential
+    )
+    try await fixture.service.start(id: fixture.machineID)
+    let target = try #require(
+      fixture.service.snapshot(for: fixture.machineID).target
+    )
+
+    await #expect(
+      throws: LinuxVirtualMachineRuntimeError.operationUnavailable(
+        "request an unquiesced stop for"
+      )
+    ) {
+      try fixture.service.requestStop(target: target)
+    }
+
+    #expect(fixture.engine.sessions[0].requestStopCount == 0)
+  }
+
+
+  @Test
   func runningGuestAcceptsValidatedMemoryBalloonTargets() async throws {
     let fixture = try LinuxRuntimeServiceFixture()
     let gibibyte = VirtualMachineResources.bytesPerGiB
@@ -284,6 +322,30 @@ struct LinuxVirtualMachineRuntimeServiceTests {
     }
     #expect(fixture.engine.sessions[1].forceStopCount == 0)
   }
+  @Test
+  func managedResumeReadinessFailureForceStopsAndReleasesSession() async throws {
+    let fixture = try LinuxRuntimeServiceFixture(managedManifest: true)
+    try await fixture.service.start(id: fixture.machineID)
+    let target = try #require(
+      fixture.service.snapshot(for: fixture.machineID).target
+    )
+    try await fixture.service.pause(target: target)
+    let session = fixture.engine.sessions[0]
+    session.isManagedLinuxBox = true
+
+    await #expect(throws: LinuxVirtualMachineAgentClientError.identityMismatch) {
+      try await fixture.service.resume(target: target)
+    }
+
+    let snapshot = fixture.service.snapshot(for: fixture.machineID)
+    #expect(session.resumeCount == 1)
+    #expect(session.forceStopCount == 1)
+    #expect(snapshot.state == .stopped)
+    #expect(snapshot.target == nil)
+    #expect(!snapshot.isReady)
+    #expect(fixture.releaseRecorder.count == 1)
+  }
+
 }
 
 @MainActor
@@ -300,9 +362,15 @@ private struct LinuxRuntimeServiceFixture {
 
   init(
     startWaits: Bool = false,
-    forceStopCapabilityTimeout: Duration = .seconds(1)
+    forceStopCapabilityTimeout: Duration = .seconds(1),
+    managedManifest: Bool = false,
+    managedProfile: LinuxBoxProfile = .standard
   ) throws {
-    machine = try makeLinuxRuntimeServiceMachine()
+    let isManaged = managedManifest || managedProfile != .standard
+    machine = try makeLinuxRuntimeServiceMachine(
+      managed: isManaged,
+      managedProfile: managedProfile
+    )
     store = LinuxRuntimeServiceStore(
       machine: machine,
       releaseRecorder: releaseRecorder
@@ -478,6 +546,7 @@ private final class LinuxRuntimeServiceSession:
   private(set) var hasInstallationMedia: Bool
   var canForceStop = true
   var eventHandler: LinuxVirtualMachineRuntimeEventHandler?
+  var isManagedLinuxBox = false
   private(set) var didStart = false
   private(set) var pauseCount = 0
   private(set) var resumeCount = 0
@@ -528,6 +597,12 @@ private final class LinuxRuntimeServiceSession:
 
   func resume() async throws {
     resumeCount += 1
+  }
+
+  func connectAgent(
+    port: UInt32
+  ) async throws -> any LinuxVirtualMachineAgentTransport {
+    throw LinuxVirtualMachineAgentClientError.identityMismatch
   }
 
   func requestStop() throws {
@@ -624,7 +699,10 @@ private enum LinuxRuntimeServiceTestError: LocalizedError, Equatable {
   var errorDescription: String? { "Expected Linux runtime service failure." }
 }
 
-private func makeLinuxRuntimeServiceMachine() throws -> ResolvedLinuxVirtualMachine {
+private func makeLinuxRuntimeServiceMachine(
+  managed: Bool = false,
+  managedProfile: LinuxBoxProfile = .standard
+) throws -> ResolvedLinuxVirtualMachine {
   let identifier = UUID()
   let resources = try VirtualMachineResources(
     cpuCount: 4,
@@ -635,17 +713,32 @@ private func makeLinuxRuntimeServiceMachine() throws -> ResolvedLinuxVirtualMach
     id: identifier,
     name: "Linux Runtime Service",
     guest: .linux,
-    installState: .draft,
+    installState: managed ? .stopped : .draft,
     resources: resources
   )
-  manifest.markReadyToInstallLinux(
-    configuration: LinuxVirtualMachineConfiguration(
+  if managed {
+    manifest.linuxConfiguration = LinuxVirtualMachineConfiguration(
       efiVariableStorePath: LinuxPlatformArtifactURLs.efiVariableStoreManifestPath,
       machineIdentifierPath: LinuxPlatformArtifactURLs.machineIdentifierManifestPath,
-      installationMediaPath: LinuxPlatformArtifactURLs.installationMediaManifestPath,
-      macAddress: "02:00:00:00:00:03"
+      installationMediaPath: nil,
+      macAddress: "02:00:00:00:00:03",
+      linuxBoxDescriptor: try LinuxBoxDescriptor(
+        imageID: "debian-13-arm64-v1",
+        imageBuildRevision: "linux-box-image-v1",
+        rawImageSHA512: String(repeating: "a", count: 128),
+        profile: managedProfile
+      )
     )
-  )
+  } else {
+    manifest.markReadyToInstallLinux(
+      configuration: LinuxVirtualMachineConfiguration(
+        efiVariableStorePath: LinuxPlatformArtifactURLs.efiVariableStoreManifestPath,
+        machineIdentifierPath: LinuxPlatformArtifactURLs.machineIdentifierManifestPath,
+        installationMediaPath: LinuxPlatformArtifactURLs.installationMediaManifestPath,
+        macAddress: "02:00:00:00:00:03"
+      )
+    )
+  }
   let bundle = URL(
     filePath: "/tmp/\(identifier.uuidString).nativevm",
     directoryHint: .isDirectory
@@ -660,8 +753,10 @@ private func makeLinuxRuntimeServiceMachine() throws -> ResolvedLinuxVirtualMach
     machineIdentifierURL: bundle.appending(
       path: LinuxPlatformArtifactURLs.machineIdentifierManifestPath
     ),
-    installationMediaURL: bundle.appending(
-      path: LinuxPlatformArtifactURLs.installationMediaManifestPath
-    )
+    installationMediaURL: managed
+      ? nil
+      : bundle.appending(
+        path: LinuxPlatformArtifactURLs.installationMediaManifestPath
+      )
   )
 }

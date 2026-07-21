@@ -22,6 +22,13 @@ protocol LinuxVirtualMachinePreparing: Sendable {
     installationMediaURL: URL
   ) async throws -> VirtualMachineManifest
 }
+protocol LinuxManagedBoxCreating: Sendable {
+  func createManagedLinuxBox(
+    request: LinuxBoxManagedCreationRequest,
+    image: LinuxBoxImageRecord,
+    operationID: UUID
+  ) async throws -> LinuxBoxManagedCreationResult
+}
 
 protocol VirtualMachineDiscarding: Sendable {
   func discardVirtualMachine(id: UUID) async throws
@@ -36,7 +43,8 @@ protocol VirtualMachineLibraryProtocol:
   VirtualMachineDraftCreating,
   MacVirtualMachinePreparing,
   LinuxVirtualMachinePreparing,
-  VirtualMachineDiscarding
+  VirtualMachineDiscarding,
+  LinuxManagedBoxCreating
 {}
 
 extension MacVirtualMachinePreparing {
@@ -51,6 +59,16 @@ extension LinuxVirtualMachinePreparing {
     installationMediaURL: URL
   ) async throws -> VirtualMachineManifest {
     throw VirtualMachineModelError.linuxPlatformPreparationUnavailable
+  }
+}
+
+extension LinuxManagedBoxCreating {
+  func createManagedLinuxBox(
+    request: LinuxBoxManagedCreationRequest,
+    image: LinuxBoxImageRecord,
+    operationID: UUID
+  ) async throws -> LinuxBoxManagedCreationResult {
+    throw LinuxBoxManagedCreationError.unavailable
   }
 }
 
@@ -102,7 +120,8 @@ actor VirtualMachineLibrary:
   MacVirtualMachineDiskSnapshotPersisting,
   LinuxVirtualMachineDiskSnapshotPersisting,
   VirtualMachineDiskImageReplacementStoring,
-  VirtualMachineDiskImageResizeStoring
+  VirtualMachineDiskImageResizeStoring,
+  LinuxManagedBoxCreating
 {
   static let bundleExtension = "nativevm"
   static let manifestFilename = "manifest.json"
@@ -120,6 +139,8 @@ actor VirtualMachineLibrary:
   static let cloneStagingSuffix = ".partial"
   static let importStagingPrefix = ".Import-"
   static let importStagingSuffix = ".partial"
+  static let managedCreationStagingPrefix = ".ManagedCreation-"
+  static let managedCreationStagingSuffix = ".partial"
 
   private struct ActiveClone {
     let transaction: VirtualMachineCloneTransaction
@@ -142,6 +163,7 @@ actor VirtualMachineLibrary:
   private let linuxVirtualMachineIdentityGenerator: any LinuxVirtualMachineIdentityGenerating
   private let sharedDirectoryStore: any VirtualMachineSharedDirectoryConfigurationStoring
   private let sharedDirectoryNameValidator: any VirtualMachineSharedDirectoryNameValidating
+  private let managedCreationService: LinuxBoxManagedCreationService
   private var operationLockLease: AdvisoryFileLockLease?
   private var operationAccessTokens = Set<UUID>()
   private var installationOperationIDs = Set<UUID>()
@@ -162,7 +184,8 @@ actor VirtualMachineLibrary:
     sharedDirectoryStore: any VirtualMachineSharedDirectoryConfigurationStoring =
       FileVirtualMachineSharedDirectoryConfigurationStore(),
     sharedDirectoryNameValidator: any VirtualMachineSharedDirectoryNameValidating =
-      AppleVirtualMachineSharedDirectoryNameValidator()
+      AppleVirtualMachineSharedDirectoryNameValidator(),
+    linuxBoxImageCache: LinuxBoxImageCache = LinuxBoxImageCache()
   ) {
     let resolvedRootURL =
       rootURL
@@ -200,6 +223,12 @@ actor VirtualMachineLibrary:
       linuxIdentityValidator: linuxIdentityGenerator,
       sharedDirectoryStore: sharedDirectoryStore,
       sharedDirectoryNameValidator: sharedDirectoryNameValidator
+    )
+    self.managedCreationService = LinuxBoxManagedCreationService(
+      rootURL: resolvedRootURL,
+      fileManager: fileManager,
+      cache: linuxBoxImageCache,
+      identityGenerator: linuxIdentityGenerator
     )
   }
 
@@ -381,6 +410,11 @@ actor VirtualMachineLibrary:
 
     let updated = try current.settingAttachment(attachment)
     guard updated != current else { return current }
+    guard !manifest.isHardenedLinuxBox else {
+      throw LinuxVirtualMachineNetworkError.managedConfigurationLocked(
+        manifest.id
+      )
+    }
 
     manifest.networkConfiguration = updated
     manifest.updatedAt = Date()
@@ -631,6 +665,11 @@ actor VirtualMachineLibrary:
   ) throws -> LinuxVirtualMachineSharedDirectoryConfiguration {
     let borrow = try lease.borrow()
     defer { borrow.release() }
+    guard !lease.machine.manifest.isHardenedLinuxBox else {
+      throw LinuxVirtualMachineSharedDirectoryError.managedConfigurationLocked(
+        lease.target.machineID
+      )
+    }
     let bundleURL = try requireConfigurationMutationLease(lease)
     let current = try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
     let updated = try addingSharedDirectory(directory, to: current)
@@ -657,6 +696,11 @@ actor VirtualMachineLibrary:
   ) throws -> LinuxVirtualMachineSharedDirectoryConfiguration {
     let borrow = try lease.borrow()
     defer { borrow.release() }
+    guard !lease.machine.manifest.isHardenedLinuxBox else {
+      throw LinuxVirtualMachineSharedDirectoryError.managedConfigurationLocked(
+        lease.target.machineID
+      )
+    }
     let bundleURL = try requireConfigurationMutationLease(lease)
     let current = try bundleValidator.sharedDirectoryConfiguration(in: bundleURL)
     let updated = try removingSharedDirectory(id: id, from: current)
@@ -933,6 +977,21 @@ actor VirtualMachineLibrary:
       try? fileManager.removeItem(at: stagingURL)
       throw error
     }
+  }
+  func createManagedLinuxBox(
+    request: LinuxBoxManagedCreationRequest,
+    image: LinuxBoxImageRecord,
+    operationID: UUID
+  ) async throws -> LinuxBoxManagedCreationResult {
+    try bundleStore.ensureRootExists()
+    let accessToken = UUID()
+    try acquireOperationAccess(token: accessToken)
+    defer { releaseOperationAccess(token: accessToken) }
+    return try await managedCreationService.create(
+      request: request,
+      image: image,
+      operationID: operationID
+    )
   }
 
   func prepareMacVM(id: UUID, restoreImageURL: URL) async throws -> VirtualMachineManifest {
@@ -1240,6 +1299,9 @@ actor VirtualMachineLibrary:
     defer { releaseOperationAccess(token: accessToken) }
 
     let manifest = try bundleStore.manifest(id: id)
+    guard !manifest.isHardenedLinuxBox else {
+      throw VirtualMachineTransferError.managedLinuxBoxUnsupported
+    }
     guard manifest.installState == .stopped else {
       throw VirtualMachineTransferError.invalidSourceState(manifest.installState)
     }
@@ -1311,6 +1373,9 @@ actor VirtualMachineLibrary:
       source = try bundleStore.readManifest(in: sourceBundleURL)
     } catch {
       throw VirtualMachineTransferError.invalidPackage(error.localizedDescription)
+    }
+    guard !source.isHardenedLinuxBox else {
+      throw VirtualMachineTransferError.managedLinuxBoxUnsupported
     }
     guard source.installState == .stopped else {
       throw VirtualMachineTransferError.invalidSourceState(source.installState)
@@ -1526,6 +1591,11 @@ actor VirtualMachineLibrary:
           in: resolvedMachine.bundleURL
         )
       )
+      if machine.manifest.isManagedLinuxBox {
+        _ = try LinuxVirtualMachineConfigurationDescriptorService().descriptor(
+          for: machine
+        )
+      }
       let target = LinuxVirtualMachineRuntimeTarget(machineID: id, generation: UUID())
       let ownerURL = try writeRuntimeOwner(for: target, in: machine.bundleURL)
       let fileManager = fileManager

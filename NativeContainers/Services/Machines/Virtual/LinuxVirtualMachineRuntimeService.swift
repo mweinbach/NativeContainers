@@ -34,6 +34,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
   private let engine: any LinuxVirtualMachineRuntimeEngine
   private let savedStateService: any LinuxVirtualMachineSavedStateManaging
   private let shutdownPolicy: VirtualMachineShutdownPolicy
+  private let linuxBoxCoordinator: LinuxBoxRuntimeCoordinator
   private let observations = LinuxVirtualMachineRuntimeObservations()
   private let shutdownFallbacks: VirtualMachineShutdownFallbackRegistry
   private var sessions: [UUID: SessionRecord] = [:]
@@ -44,6 +45,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     installationStore: any LinuxVirtualMachineInstallationCompleting,
     engine: any LinuxVirtualMachineRuntimeEngine,
     savedStateService: any LinuxVirtualMachineSavedStateManaging,
+    linuxBoxCoordinator: LinuxBoxRuntimeCoordinator = LinuxBoxRuntimeCoordinator(),
     shutdownPolicy: VirtualMachineShutdownPolicy = .standard,
     shutdownScheduler: any VirtualMachineShutdownScheduling =
       ContinuousClockVirtualMachineShutdownScheduler()
@@ -52,11 +54,15 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     self.installationStore = installationStore
     self.engine = engine
     self.savedStateService = savedStateService
+    self.linuxBoxCoordinator = linuxBoxCoordinator
     self.shutdownPolicy = shutdownPolicy
     shutdownFallbacks = VirtualMachineShutdownFallbackRegistry(
       timeout: shutdownPolicy.gracefulStopTimeout,
       scheduler: shutdownScheduler
     )
+    linuxBoxCoordinator.setFailureHandler { [weak self] target, error in
+      self?.handleLinuxBoxConnectionFailure(target: target, error: error)
+    }
   }
 
   func snapshot(for machineID: UUID) -> LinuxVirtualMachineRuntimeSnapshot {
@@ -128,7 +134,15 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
       transition: .pausing,
       kind: .pause
     )
+    var didQuiesce = false
     do {
+      if record.session.isManagedLinuxBox {
+        guard !linuxBoxCoordinator.isBusy(target: target) else {
+          throw LinuxVirtualMachineRuntimeError.operationInProgress(target.machineID)
+        }
+        try await linuxBoxCoordinator.quiesce(target: target, reason: .pause)
+        didQuiesce = true
+      }
       try await record.session.pause()
       guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
         return
@@ -146,7 +160,8 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         machineID: target.machineID,
         target: target,
         state: .paused,
-        hasInstallationMedia: record.session.hasInstallationMedia
+        hasInstallationMedia: record.session.hasInstallationMedia,
+        isReady: false
       )
     } catch {
       try await recover(
@@ -154,6 +169,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         target: target,
         token: token,
         state: .running,
+        isReady: didQuiesce ? false : nil,
         operationError: error
       )
     }
@@ -175,7 +191,14 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         savedStateStatus: LinuxVirtualMachineSavedStateStatus.none,
         hasInstallationMedia: record.session.hasInstallationMedia
       )
-      try await record.session.resume()
+      if record.session.isManagedLinuxBox {
+        _ = try await linuxBoxCoordinator.resume(
+          session: record.session,
+          machine: record.lease.machine
+        )
+      } else {
+        try await record.session.resume()
+      }
       guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
         return
       }
@@ -192,16 +215,59 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         machineID: target.machineID,
         target: target,
         state: .running,
-        hasInstallationMedia: record.session.hasInstallationMedia
+        hasInstallationMedia: record.session.hasInstallationMedia,
+        isReady: record.session.isManagedLinuxBox
       )
     } catch {
-      try await recover(
-        record: record,
+      let operationError = error
+      guard record.session.isManagedLinuxBox else {
+        try await recover(
+          record: record,
+          target: target,
+          token: token,
+          state: .paused,
+          operationError: operationError
+        )
+      }
+
+      await linuxBoxCoordinator.close(target: target)
+      if finishDeferredTerminalEvent(target: target, token: token) {
+        throw operationError
+      }
+      let queuedForceStopCompleted: Bool
+      do {
+        queuedForceStopCompleted = try await finishIfForceStopWasQueued(
+          record: record,
+          target: target,
+          token: token
+        )
+      } catch let stopError {
+        markManagedForceStopUnconfirmed(
+          target: target,
+          token: token,
+          error: stopError
+        )
+        throw stopError
+      }
+      if queuedForceStopCompleted {
+        throw operationError
+      }
+      do {
+        try await record.session.forceStop()
+      } catch let stopError {
+        markManagedForceStopUnconfirmed(
+          target: target,
+          token: token,
+          error: stopError
+        )
+        throw stopError
+      }
+      finishFailedLaunch(
         target: target,
         token: token,
-        state: .paused,
-        operationError: error
+        error: operationError
       )
+      throw operationError
     }
   }
 
@@ -413,6 +479,31 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
 
   func requestStop(target: LinuxVirtualMachineRuntimeTarget) throws {
     let record = try currentRecord(for: target)
+    guard !record.lease.machine.manifest.isHardenedLinuxBox else {
+      throw LinuxVirtualMachineRuntimeError.operationUnavailable(
+        "request an unquiesced stop for"
+      )
+    }
+    try requestStop(record: record, target: target, isReady: nil)
+  }
+
+  func stop(target: LinuxVirtualMachineRuntimeTarget) async throws {
+    let record = try currentRecord(for: target)
+    if record.session.isManagedLinuxBox {
+      try await linuxBoxCoordinator.quiesce(target: target, reason: .stop)
+    }
+    try requestStop(
+      record: record,
+      target: target,
+      isReady: record.session.isManagedLinuxBox ? false : nil
+    )
+  }
+
+  private func requestStop(
+    record: SessionRecord,
+    target: LinuxVirtualMachineRuntimeTarget,
+    isReady: Bool?
+  ) throws {
     let current = snapshot(for: target.machineID)
     guard current.canRequestStop else {
       throw LinuxVirtualMachineRuntimeError.invalidState(
@@ -431,7 +522,8 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         machineID: target.machineID,
         target: target,
         state: .stopping,
-        hasInstallationMedia: current.hasInstallationMedia
+        hasInstallationMedia: current.hasInstallationMedia,
+        isReady: isReady
       )
       scheduleShutdownFallback(for: target)
     } catch {
@@ -440,12 +532,12 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         target: target,
         state: current.state,
         hasInstallationMedia: current.hasInstallationMedia,
+        isReady: isReady,
         errorMessage: error.localizedDescription
       )
       throw error
     }
   }
-
   func forceStop(target: LinuxVirtualMachineRuntimeTarget) async throws {
     let record = try currentRecord(for: target)
     let current = snapshot(for: target.machineID)
@@ -454,6 +546,9 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         target.machineID,
         current.state
       )
+    }
+    if record.session.isManagedLinuxBox {
+      try? await linuxBoxCoordinator.quiesce(target: target, reason: .stop)
     }
     cancelShutdownFallback(for: target)
 
@@ -540,6 +635,136 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
       )
       throw error
     }
+  }
+
+  func linuxBoxStatus(
+    target: LinuxVirtualMachineRuntimeTarget
+  ) async throws -> LinuxBoxGuestStatusResult {
+    let record = try currentRecord(for: target)
+    guard record.session.isManagedLinuxBox else {
+      throw LinuxVirtualMachineRuntimeError.operationUnavailable(
+        "inspect a managed guest agent for"
+      )
+    }
+    return try await linuxBoxCoordinator.status(target: target)
+  }
+
+  func verifyLinuxBox(
+    target: LinuxVirtualMachineRuntimeTarget,
+    timeoutSeconds: Int = 300
+  ) async throws -> LinuxBoxVerification {
+    let record = try currentRecord(for: target)
+    let current = snapshot(for: target.machineID)
+    guard record.session.isManagedLinuxBox,
+      current.state == .running,
+      current.isReady
+    else {
+      throw LinuxVirtualMachineRuntimeError.invalidState(
+        target.machineID,
+        current.state
+      )
+    }
+    do {
+      let verification = try await linuxBoxCoordinator.verify(
+        target: target,
+        timeoutSeconds: timeoutSeconds
+      )
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: .running,
+        hasInstallationMedia: false,
+        isReady: true
+      )
+      return verification
+    } catch {
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: .running,
+        hasInstallationMedia: false,
+        isReady: false,
+        errorMessage: error.localizedDescription
+      )
+      throw error
+    }
+  }
+
+  func refreshLinuxBox(
+    target: LinuxVirtualMachineRuntimeTarget,
+    timeoutSeconds: Int = 300
+  ) async throws -> LinuxBoxVerification {
+    let record = try currentRecord(for: target)
+    let current = snapshot(for: target.machineID)
+    guard record.session.isManagedLinuxBox,
+      current.state == .running
+    else {
+      throw LinuxVirtualMachineRuntimeError.invalidState(
+        target.machineID,
+        current.state
+      )
+    }
+    publish(
+      machineID: target.machineID,
+      target: target,
+      state: .running,
+      hasInstallationMedia: false,
+      isReady: false
+    )
+    do {
+      let verification = try await linuxBoxCoordinator.refresh(
+        session: record.session,
+        machine: record.lease.machine,
+        timeoutSeconds: timeoutSeconds
+      )
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: .running,
+        hasInstallationMedia: false,
+        isReady: true
+      )
+      return verification
+    } catch {
+      publish(
+        machineID: target.machineID,
+        target: target,
+        state: .running,
+        hasInstallationMedia: false,
+        isReady: false,
+        errorMessage: error.localizedDescription
+      )
+      throw error
+    }
+  }
+
+  func executeLinuxBox(
+    target: LinuxVirtualMachineRuntimeTarget,
+    argv: [String],
+    timeoutSeconds: Int
+  ) async throws -> LinuxBoxGuestExecResult {
+    let record = try currentRecord(for: target)
+    let current = snapshot(for: target.machineID)
+    guard record.session.isManagedLinuxBox,
+      current.state == .running,
+      current.isReady
+    else {
+      throw LinuxVirtualMachineRuntimeError.invalidState(
+        target.machineID,
+        current.state
+      )
+    }
+    return try await linuxBoxCoordinator.execute(
+      target: target,
+      argv: argv,
+      timeoutSeconds: timeoutSeconds
+    )
+  }
+
+  func lastLinuxBoxVerification(
+    target: LinuxVirtualMachineRuntimeTarget
+  ) -> LinuxBoxVerification? {
+    linuxBoxCoordinator.lastVerification(target: target)
   }
 
   func discardSavedState(id: UUID) async throws {
@@ -683,7 +908,14 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
   ) async throws {
     let target = record.lease.target
     do {
-      try await record.session.start()
+      if record.session.isManagedLinuxBox {
+        _ = try await linuxBoxCoordinator.start(
+          session: record.session,
+          machine: record.lease.machine
+        )
+      } else {
+        try await record.session.start()
+      }
       guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
         return
       }
@@ -702,10 +934,40 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         state: .running,
         savedStateStatus: LinuxVirtualMachineSavedStateStatus.none,
         saveRestoreSupport: record.session.saveRestoreSupport,
-        hasInstallationMedia: record.session.hasInstallationMedia
+        hasInstallationMedia: record.session.hasInstallationMedia,
+        isReady: record.session.isManagedLinuxBox
       )
     } catch {
       let operationError = error
+      if record.session.isManagedLinuxBox {
+        await linuxBoxCoordinator.close(target: target)
+        if finishDeferredTerminalEvent(target: target, token: token) {
+          throw operationError
+        }
+        do {
+          try await record.session.forceStop()
+        } catch let stopError {
+          guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
+            throw operationError
+          }
+          operations[target.machineID] = nil
+          publish(
+            machineID: target.machineID,
+            target: target,
+            state: .stopping,
+            isReady: false,
+            errorMessage:
+              "Managed Linux box force-stop is unconfirmed: \(stopError.localizedDescription)"
+          )
+          throw stopError
+        }
+        finishFailedLaunch(
+          target: target,
+          token: token,
+          error: operationError
+        )
+        throw operationError
+      }
       let forceStopped: Bool
       do {
         forceStopped = try await finishIfForceStopWasQueued(
@@ -861,6 +1123,25 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     return (record, token)
   }
 
+  private func handleLinuxBoxConnectionFailure(
+    target: LinuxVirtualMachineRuntimeTarget,
+    error: any Error
+  ) {
+    guard isCurrent(target) else { return }
+    operations[target.machineID] = nil
+    cancelShutdownFallback(for: target)
+    let current = snapshot(for: target.machineID)
+    publish(
+      machineID: target.machineID,
+      target: target,
+      state: .stopping,
+      hasInstallationMedia: current.hasInstallationMedia,
+      isReady: false,
+      errorMessage:
+        "Managed Linux box control connection failed: \(error.localizedDescription)"
+    )
+  }
+
   private func currentRecord(
     for target: LinuxVirtualMachineRuntimeTarget
   ) throws -> SessionRecord {
@@ -889,6 +1170,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     token: UUID,
     state: LinuxVirtualMachineRuntimeState,
     hasInstallationMedia: Bool? = nil,
+    isReady: Bool? = nil,
     operationError: any Error
   ) async throws -> Never {
     let forceStopped: Bool
@@ -904,6 +1186,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         token: token,
         state: state,
         hasInstallationMedia: hasInstallationMedia,
+        isReady: isReady,
         error: error
       )
       throw error
@@ -914,6 +1197,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
         token: token,
         state: state,
         hasInstallationMedia: hasInstallationMedia,
+        isReady: isReady,
         error: operationError
       )
     }
@@ -1028,6 +1312,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     token: UUID,
     state: LinuxVirtualMachineRuntimeState,
     hasInstallationMedia: Bool? = nil,
+    isReady: Bool? = nil,
     error: any Error
   ) {
     guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
@@ -1040,7 +1325,27 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
       target: target,
       state: state,
       hasInstallationMedia: hasInstallationMedia,
+      isReady: isReady,
       errorMessage: error.localizedDescription
+    )
+  }
+
+  private func markManagedForceStopUnconfirmed(
+    target: LinuxVirtualMachineRuntimeTarget,
+    token: UUID,
+    error: any Error
+  ) {
+    guard isCurrent(target), isCurrentOperation(token, for: target.machineID) else {
+      return
+    }
+    operations[target.machineID] = nil
+    publish(
+      machineID: target.machineID,
+      target: target,
+      state: .stopping,
+      isReady: false,
+      errorMessage:
+        "Managed Linux box force-stop is unconfirmed: \(error.localizedDescription)"
     )
   }
 
@@ -1102,6 +1407,9 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     sessions[target.machineID] = nil
     operations[target.machineID]?.forceStopTask?.cancel()
     operations[target.machineID] = nil
+    Task {
+      await linuxBoxCoordinator.close(target: target)
+    }
     record.session.eventHandler = nil
     record.session.close()
     record.lease.release()
@@ -1112,6 +1420,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
       hasInstallationMedia: snapshot(
         for: target.machineID
       ).hasInstallationMedia,
+      isReady: false,
       errorMessage: errorMessage
     )
   }
@@ -1141,6 +1450,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
     savedStateStatus: LinuxVirtualMachineSavedStateStatus? = nil,
     saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport? = nil,
     hasInstallationMedia: Bool? = nil,
+    isReady: Bool? = nil,
     isForceStopQueued: Bool = false,
     isForceStopCompleteAwaitingCleanup: Bool = false,
     errorMessage: String? = nil
@@ -1162,6 +1472,7 @@ final class LinuxVirtualMachineRuntimeService: LinuxVirtualMachineRuntimeManagin
       saveRestoreSupport: saveRestoreSupport,
       memoryBalloon: memoryBalloon,
       hasInstallationMedia: hasInstallationMedia,
+      isReady: isReady,
       isForceStopQueued: isForceStopQueued,
       isForceStopCompleteAwaitingCleanup:
         isForceStopCompleteAwaitingCleanup,

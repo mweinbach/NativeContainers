@@ -12,6 +12,8 @@ struct CreateVirtualMachineView: View {
   @State private var memoryGiB: Int
   @State private var diskGiB: Int
   @State private var installationMediaURL: URL?
+  @State private var linuxCreationSource = LinuxCreationSource.managedImage
+  @State private var linuxBoxProfile = LinuxBoxProfile.standard
   @State private var isChoosingInstallationMedia = false
   @State private var isCreating = false
   @State private var errorMessage: String?
@@ -51,17 +53,37 @@ struct CreateVirtualMachineView: View {
         WorkloadResourceConstraintNotice(constraint: resourceConstraint)
 
         if guest == .linux {
-          LabeledContent("Installation ISO") {
-            HStack(spacing: 8) {
-              if let installationMediaURL {
-                Text(installationMediaURL.lastPathComponent)
-                  .lineLimit(1)
-              } else {
-                Text("Not selected")
-                  .foregroundStyle(.secondary)
-              }
-              Button("Choose…") {
-                isChoosingInstallationMedia = true
+          Picker("Source", selection: $linuxCreationSource) {
+            Text("Managed Image").tag(LinuxCreationSource.managedImage)
+            Text("Installation ISO").tag(LinuxCreationSource.installationISO)
+          }
+          .pickerStyle(.segmented)
+
+          switch linuxCreationSource {
+          case .managedImage:
+            Picker("Profile", selection: $linuxBoxProfile) {
+              Text("Standard").tag(LinuxBoxProfile.standard)
+              Text("Residential").tag(LinuxBoxProfile.residential)
+            }
+            .pickerStyle(.segmented)
+
+            Text(profileDescription)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          case .installationISO:
+            LabeledContent("Installation ISO") {
+              HStack(spacing: 8) {
+                if let installationMediaURL {
+                  Text(installationMediaURL.lastPathComponent)
+                    .lineLimit(1)
+                } else {
+                  Text("Not selected")
+                    .foregroundStyle(.secondary)
+                }
+                Button("Choose…") {
+                  isChoosingInstallationMedia = true
+                }
               }
             }
           }
@@ -96,6 +118,16 @@ struct CreateVirtualMachineView: View {
       if name == oldDefaultName {
         name = newGuest == .macOS ? "macOS" : "Linux"
       }
+      if newGuest == .linux {
+        linuxCreationSource = .managedImage
+        linuxBoxProfile = .standard
+      }
+      errorMessage = nil
+    }
+    .onChange(of: linuxCreationSource) {
+      errorMessage = nil
+    }
+    .onChange(of: linuxBoxProfile) {
       errorMessage = nil
     }
     .fileImporter(
@@ -114,9 +146,18 @@ struct CreateVirtualMachineView: View {
   }
 
   private var canCreate: Bool {
-    !isCreating
-      && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      && (guest == .macOS || installationMediaURL != nil)
+    guard !isCreating,
+      !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      return false
+    }
+
+    switch guest {
+    case .macOS:
+      return true
+    case .linux:
+      return linuxCreationSource == .managedImage || installationMediaURL != nil
+    }
   }
 
   private var creationDescription: LocalizedStringResource {
@@ -124,7 +165,21 @@ struct CreateVirtualMachineView: View {
     case .macOS:
       "Creates a sparse VM bundle. Restore-image preparation remains a separate, cancellable operation."
     case .linux:
-      "Creates a sparse VM bundle, copies the selected ISO, and prepares persistent UEFI and machine identity artifacts as one recoverable operation."
+      switch linuxCreationSource {
+      case .managedImage:
+        "Creates a persistent Linux VM from the verified managed image."
+      case .installationISO:
+        "Creates a sparse VM bundle, copies the selected ISO, and prepares persistent UEFI and machine identity artifacts as one recoverable operation."
+      }
+    }
+  }
+
+  private var profileDescription: LocalizedStringResource {
+    switch linuxBoxProfile {
+    case .standard:
+      "Ordinary managed Linux networking and capabilities."
+    case .residential:
+      "Locked to the verified residential proxy policy."
     }
   }
 
@@ -146,14 +201,23 @@ struct CreateVirtualMachineView: View {
             resources: resources
           )
         case .linux:
-          guard let installationMediaURL else {
-            throw LinuxVirtualMachineCreationError.unavailable
+          switch linuxCreationSource {
+          case .managedImage:
+            _ = try await model.createManagedLinuxBox(
+              name: name,
+              resources: resources,
+              profile: linuxBoxProfile
+            )
+          case .installationISO:
+            guard let installationMediaURL else {
+              throw LinuxVirtualMachineCreationError.unavailable
+            }
+            try await model.createLinuxVirtualMachine(
+              name: name,
+              resources: resources,
+              installationMediaURL: installationMediaURL
+            )
           }
-          try await model.createLinuxVirtualMachine(
-            name: name,
-            resources: resources,
-            installationMediaURL: installationMediaURL
-          )
         }
         dismiss()
       } catch {
@@ -163,6 +227,11 @@ struct CreateVirtualMachineView: View {
     }
   }
 
+}
+
+private enum LinuxCreationSource {
+  case managedImage
+  case installationISO
 }
 
 #Preview("Create macOS virtual machine") {

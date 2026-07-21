@@ -6,7 +6,9 @@ struct NativeContainersApp: App {
   @State private var menuBarQuickControls: MenuBarQuickControlsController
 
   init() {
-    let model = AppModel(services: AppCompositionRoot.live())
+    let services = AppCompositionRoot.live()
+    services.applicationLifecycleCoordinator?.install()
+    let model = AppModel(services: services)
     _model = State(initialValue: model)
     _menuBarQuickControls = State(
       initialValue: MenuBarQuickControlsController(model: model)

@@ -85,6 +85,7 @@ enum VirtualMachineSharedDirectoryError: LocalizedError, Equatable, Sendable {
   case sourceIdentityChanged(String)
   case sharedDirectoryNotFound(UUID)
   case savedStateBlocksChanges(UUID)
+  case managedConfigurationLocked(UUID)
   case invalidStore(String)
   case configurationRevisionOverflow
 
@@ -108,6 +109,8 @@ enum VirtualMachineSharedDirectoryError: LocalizedError, Equatable, Sendable {
       "No shared folder with identifier \(identifier.uuidString) exists."
     case .savedStateBlocksChanges:
       "Discard the VM’s saved state before changing shared folders."
+    case .managedConfigurationLocked(let identifier):
+      "Residential Linux box \(identifier.uuidString) cannot share host folders."
     case .invalidStore(let reason):
       "The shared-folder configuration is invalid: \(reason)"
     case .configurationRevisionOverflow:

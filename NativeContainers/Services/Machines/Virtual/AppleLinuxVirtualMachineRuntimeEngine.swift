@@ -33,8 +33,13 @@ final class AppleLinuxVirtualMachineRuntimeEngine: LinuxVirtualMachineRuntimeEng
     return AppleLinuxVirtualMachineRuntimeSession(
       target: target,
       virtualMachine: virtualMachine,
-      saveRestoreSupport: runtimeConfiguration.saveRestoreSupport,
+      saveRestoreSupport: machine.manifest.isHardenedLinuxBox
+        ? .unsupported(
+          "Residential Linux boxes never serialize guest memory to a saved-state file."
+        )
+        : runtimeConfiguration.saveRestoreSupport,
       hasInstallationMedia: machine.installationMediaURL != nil,
+      isManagedLinuxBox: machine.manifest.isManagedLinuxBox,
       sharedDirectoryAccess: runtimeConfiguration.sharedDirectoryAccess,
       memoryBalloonController: memoryBalloonController
     )
@@ -52,16 +57,19 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
   let memoryBalloonController: (any VirtualMachineMemoryBalloonControlling)?
   private(set) var hasInstallationMedia: Bool
   var canForceStop: Bool { virtualMachine.canStop }
+  let isManagedLinuxBox: Bool
   var eventHandler: LinuxVirtualMachineRuntimeEventHandler?
 
   private let virtualMachine: VZVirtualMachine
   private let sharedDirectoryAccess: LinuxVirtualMachineSharedDirectoryAccess
+  private var agentTransports: [any LinuxVirtualMachineAgentTransport] = []
 
   init(
     target: LinuxVirtualMachineRuntimeTarget,
     virtualMachine: VZVirtualMachine,
     saveRestoreSupport: LinuxVirtualMachineSaveRestoreSupport,
     hasInstallationMedia: Bool,
+    isManagedLinuxBox: Bool,
     sharedDirectoryAccess: LinuxVirtualMachineSharedDirectoryAccess,
     memoryBalloonController: any VirtualMachineMemoryBalloonControlling
   ) {
@@ -69,6 +77,7 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
     self.virtualMachine = virtualMachine
     self.saveRestoreSupport = saveRestoreSupport
     self.hasInstallationMedia = hasInstallationMedia
+    self.isManagedLinuxBox = isManagedLinuxBox
     self.sharedDirectoryAccess = sharedDirectoryAccess
     self.memoryBalloonController = memoryBalloonController
     console = LinuxVirtualMachineConsole(
@@ -187,6 +196,39 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
     try await operation.value
   }
 
+  func connectAgent(
+    port: UInt32
+  ) async throws -> any LinuxVirtualMachineAgentTransport {
+    guard isManagedLinuxBox else {
+      throw LinuxVirtualMachineRuntimeError.operationUnavailable(
+        "connect a guest agent for"
+      )
+    }
+    let devices = virtualMachine.socketDevices.compactMap {
+      $0 as? VZVirtioSocketDevice
+    }
+    guard devices.count == 1 else {
+      throw LinuxVirtualMachineRuntimeError.operationUnavailable(
+        "find the managed guest-agent socket for"
+      )
+    }
+    let connection = try await devices[0].connect(toPort: port)
+    let holder = VZVirtioSocketConnectionHolder(connection)
+    do {
+      let transport = try POSIXLinuxVirtualMachineAgentTransport(
+        descriptor: connection.fileDescriptor,
+        label: "com.nativecontainers.linux-box.agent.\(target.machineID.uuidString.lowercased())"
+      ) {
+        holder.close()
+      }
+      agentTransports.append(transport)
+      return transport
+    } catch {
+      holder.close()
+      throw error
+    }
+  }
+
   func ejectInstallationMedia() async throws {
     guard hasInstallationMedia else {
       throw LinuxVirtualMachineRuntimeError.installationMediaNotAttached(
@@ -221,6 +263,10 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
   }
 
   func close() {
+    for transport in agentTransports {
+      transport.close()
+    }
+    agentTransports.removeAll()
     eventHandler = nil
     virtualMachine.delegate = nil
     console?.invalidate()
@@ -240,6 +286,7 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
     }
   }
 
+
   func guestDidStop(_ virtualMachine: VZVirtualMachine) {
     eventHandler?(.guestStopped)
   }
@@ -249,5 +296,26 @@ private final class AppleLinuxVirtualMachineRuntimeSession: NSObject,
     didStopWithError error: any Error
   ) {
     eventHandler?(.stoppedWithError(error.localizedDescription))
+  }
+}
+
+private final class VZVirtioSocketConnectionHolder: @unchecked Sendable {
+  private let connection: VZVirtioSocketConnection
+  private let lock = NSLock()
+  private var closed = false
+
+  init(_ connection: VZVirtioSocketConnection) {
+    self.connection = connection
+  }
+
+  func close() {
+    lock.lock()
+    guard !closed else {
+      lock.unlock()
+      return
+    }
+    closed = true
+    lock.unlock()
+    connection.close()
   }
 }

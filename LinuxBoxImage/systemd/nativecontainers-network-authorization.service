@@ -1,0 +1,17 @@
+[Unit]
+Description=NativeContainers network authorization gate
+Requires=nativecontainers-baseline-firewall.service nativecontainers-agent.service
+After=nativecontainers-baseline-firewall.service nativecontainers-agent.service
+Before=systemd-networkd.service network.target network-online.target nativecontainers-sing-box.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/libexec/nativecontainers_network_authorization.py
+TimeoutStartSec=0
+RemainAfterExit=yes
+StandardOutput=null
+StandardError=null
+LimitCORE=0
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes

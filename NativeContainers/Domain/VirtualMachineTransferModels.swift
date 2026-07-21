@@ -98,6 +98,7 @@ enum VirtualMachineBundleError: LocalizedError, Equatable, Sendable {
 
 enum VirtualMachineTransferError: LocalizedError, Equatable, Sendable {
   case unavailable
+  case managedLinuxBoxUnsupported
   case invalidSourceState(VirtualMachineInstallState)
   case invalidPackage(String)
   case invalidDestination(String)
@@ -111,6 +112,8 @@ enum VirtualMachineTransferError: LocalizedError, Equatable, Sendable {
     switch self {
     case .unavailable:
       "Virtual machine import and export are unavailable."
+    case .managedLinuxBoxUnsupported:
+      "Residential Linux boxes cannot be imported or exported."
     case .invalidSourceState(let state):
       "A virtual machine in the \(state.rawValue) state cannot be transferred. Shut it down first."
     case .invalidPackage(let reason):

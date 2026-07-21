@@ -561,6 +561,38 @@ final class AppModel {
     return machine
   }
 
+  @discardableResult
+  func createManagedLinuxBox(
+    name: String,
+    resources: VirtualMachineResources,
+    profile: LinuxBoxProfile
+  ) async throws -> VirtualMachineManifest {
+    guard let automation = services.linuxBoxAutomation else {
+      throw NativeContainersAutomationError.control(
+        .appUnavailable,
+        "Managed Linux box automation is unavailable."
+      )
+    }
+    let payload = LinuxBoxCreatePayload(
+      name: name,
+      cpuCount: resources.cpuCount,
+      memoryBytes: resources.memoryBytes,
+      diskBytes: resources.diskBytes,
+      profile: profile
+    )
+    let result = try await automation.create(payload)
+    virtualMachines = try await services.virtualMachineLibrary.list()
+    guard let manifest = virtualMachines.first(where: { $0.id == result.box.id.value }) else {
+      throw NativeContainersAutomationError.control(
+        .internalError,
+        "Created managed Linux box was not found in the virtual machine library."
+      )
+    }
+    publishVirtualMachineManifest(manifest)
+    navigate(to: .macOSVirtualMachine(manifest.id))
+    return manifest
+  }
+
   func discardVirtualMachine(id: UUID) async {
     await performMutation {
       try await self.services.virtualMachineLibrary.discardVirtualMachine(id: id)

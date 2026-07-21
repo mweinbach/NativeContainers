@@ -1,0 +1,21 @@
+[Unit]
+Description=NativeContainers residential tunnel
+Requires=nativecontainers-network-authorization.service network-online.target
+After=nativecontainers-network-authorization.service network-online.target
+BindsTo=nativecontainers-network-authorization.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sing-box run -c /run/nativecontainers/sing-box.json
+Restart=no
+UMask=0077
+StandardOutput=null
+StandardError=null
+LimitCORE=0
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/nativecontainers
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW

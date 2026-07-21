@@ -312,6 +312,28 @@ enum AppCompositionRoot {
       ),
       savedStateService: linuxVirtualMachineSavedState
     )
+    let linuxBoxImageService: LinuxBoxImageService
+    do {
+      linuxBoxImageService = try LinuxBoxImageService.embedded()
+    } catch {
+      fatalError("NativeContainers Linux box image catalog is unavailable: \(error)")
+    }
+    let linuxBoxAutomationRuntime = NativeContainersLinuxBoxAutomationRuntime(
+      library: virtualMachineLibrary,
+      runtime: linuxVirtualMachineRuntime,
+      imageService: linuxBoxImageService
+    )
+    let linuxBoxAutomation = LinuxBoxAutomationService(runtime: linuxBoxAutomationRuntime)
+    let nativeContainersControlServer = NativeContainersControlServer(
+      automation: linuxBoxAutomation
+    )
+    let applicationLifecycleCoordinator = NativeContainersApplicationLifecycleCoordinator(
+      server: nativeContainersControlServer,
+      runtime: NativeContainersLinuxRuntimeLifecycleAdapter(
+        library: virtualMachineLibrary,
+        runtime: linuxVirtualMachineRuntime
+      )
+    )
     let virtualMachineAudio = MacVirtualMachineAudioService(
       leasingStore: virtualMachineLibrary,
       persistence: virtualMachineLibrary,
@@ -458,7 +480,10 @@ enum AppCompositionRoot {
         AppleMacVirtualMachineAvailabilityChecker(),
       restoreImageDiscovery: MacRestoreImageService(),
       restoreImageAcquisition: restoreImageAcquisition,
-      restoreImageStoreRecovery: restoreImageStoreRecovery
+      restoreImageStoreRecovery: restoreImageStoreRecovery,
+      linuxBoxAutomation: linuxBoxAutomation,
+      nativeContainersControlServer: nativeContainersControlServer,
+      applicationLifecycleCoordinator: applicationLifecycleCoordinator
     )
   }
 }

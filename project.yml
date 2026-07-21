@@ -52,8 +52,18 @@ targets:
     sources:
       - path: NativeContainers
       - path: NativeContainersShared
+    resources:
+      - path: NativeContainers/Resources/LinuxBoxImageCatalog.json
     dependencies:
       - target: NativeContainersBuildWorker
+        embed: true
+        link: false
+        codeSign: true
+        removeHeaders: false
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
+      - target: NativeContainersCLI
         embed: true
         link: false
         codeSign: true
@@ -101,6 +111,7 @@ targets:
     scheme:
       testTargets:
         - NativeContainersTests
+        - NativeContainersCLITests
       gatherCoverageData: true
 
   NativeContainersTests:
@@ -155,3 +166,62 @@ targets:
         DEAD_CODE_STRIPPING: YES
         SKIP_INSTALL: YES
         VALIDATE_PRODUCT: YES
+  NativeContainersCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - path: NativeContainersCLI
+      - path: NativeContainersShared/Automation/NativeContainersControlProtocol.swift
+      - path: NativeContainersShared/Automation/StrictJSON.swift
+      - path: NativeContainersShared/Automation/BoundedJSONFrameCodec.swift
+    dependencies:
+      - sdk: AppKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nativecontainers.cli
+        PRODUCT_NAME: nativecontainersctl
+        PRODUCT_MODULE_NAME: NativeContainersCLI
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        DEAD_CODE_STRIPPING: YES
+        SKIP_INSTALL: YES
+        VALIDATE_PRODUCT: YES
+
+  NativeContainersCLITests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: NativeContainersCLITests
+      - path: NativeContainersCLI/NativeContainersCLI.swift
+      - path: NativeContainersShared/Automation/NativeContainersControlProtocol.swift
+      - path: NativeContainersShared/Automation/StrictJSON.swift
+      - path: NativeContainersShared/Automation/BoundedJSONFrameCodec.swift
+    dependencies:
+      - sdk: AppKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nativecontainers.cli-tests
+        GENERATE_INFOPLIST_FILE: YES
+
+  NativeContainersLinuxImageBuilder:
+    type: tool
+    platform: macOS
+    entitlements:
+      path: NativeContainersLinuxImageBuilder/NativeContainersLinuxImageBuilder.entitlements
+      properties:
+        com.apple.security.virtualization: true
+    sources:
+      - path: NativeContainersLinuxImageBuilder
+    dependencies:
+      - sdk: Virtualization.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nativecontainers.linux-image-builder
+        PRODUCT_NAME: NativeContainersLinuxImageBuilder
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        DEAD_CODE_STRIPPING: YES
+        SKIP_INSTALL: YES
+        VALIDATE_PRODUCT: YES
+    scheme:
+      testTargets: []

@@ -126,6 +126,9 @@ struct AppleLinuxVirtualMachineConfigurationFactory {
     configuration.memoryBalloonDevices = [
       VZVirtioTraditionalMemoryBalloonDeviceConfiguration()
     ]
+    if machine.manifest.isManagedLinuxBox {
+      configuration.socketDevices = [VZVirtioSocketDeviceConfiguration()]
+    }
     if linuxConfiguration.sharesClipboard {
       configuration.consoleDevices = [makeSpiceConsole()]
     }
